@@ -77,12 +77,14 @@ $$;
 
 -- profiles: anyone authenticated can read profiles of workspace co-members; users update own
 create policy profiles_self_select on public.profiles for select
-  using (auth.uid() = id or exists (
-    select 1
-    from public.workspace_members me
-    join public.workspace_members them on them.workspace_id = me.workspace_id
-    where me.user_id = auth.uid() and them.user_id = profiles.id
-  ));
+  using (
+    auth.uid() = id
+    or exists (
+      select 1 from public.workspace_members me
+      where me.user_id = auth.uid()
+        and public.is_workspace_member(me.workspace_id, profiles.id)
+    )
+  );
 
 create policy profiles_self_update on public.profiles for update
   using (auth.uid() = id) with check (auth.uid() = id);
@@ -92,7 +94,8 @@ create policy workspaces_member_select on public.workspaces for select
   using (public.is_workspace_member(workspaces.id, auth.uid()));
 
 create policy workspaces_owner_update on public.workspaces for update
-  using (public.is_workspace_admin(workspaces.id, auth.uid()));
+  using (public.is_workspace_admin(workspaces.id, auth.uid()))
+  with check (public.is_workspace_admin(workspaces.id, auth.uid()));
 
 create policy workspaces_owner_delete on public.workspaces for delete
   using (public.is_workspace_owner(workspaces.id, auth.uid()));

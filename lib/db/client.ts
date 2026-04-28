@@ -8,7 +8,9 @@ const queryClient = postgres(process.env.DATABASE_URL!, {
   max: 10,
   prepare: false,
 });
-export const db = drizzle(queryClient, { schema });
+// Internal: raw connection bypasses RLS. Never export — all callers must
+// route through dbAsUser so queries run with the calling user's JWT.
+const db = drizzle(queryClient, { schema });
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
