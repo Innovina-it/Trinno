@@ -1,7 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { afterAll, describe, it, expect } from "vitest";
 import postgres from "postgres";
 
 const sql = postgres(process.env.DATABASE_URL!);
+
+afterAll(async () => {
+  await sql.end();
+});
 
 describe("foundation schema", () => {
   it("has all foundation tables", async () => {
