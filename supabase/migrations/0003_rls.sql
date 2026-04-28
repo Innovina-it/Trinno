@@ -121,7 +121,10 @@ create policy boards_admin_write on public.boards for all
     public.is_board_admin(boards.id, auth.uid())
     or public.is_workspace_admin(boards.workspace_id, auth.uid())
   )
-  with check (public.is_workspace_admin(boards.workspace_id, auth.uid()));
+  with check (
+    public.is_board_admin(boards.id, auth.uid())
+    or public.is_workspace_admin(boards.workspace_id, auth.uid())
+  );
 
 -- board_members: same gate as boards write
 create policy board_members_select on public.board_members for select
@@ -144,7 +147,8 @@ create policy board_members_admin_write on public.board_members for all
     )
   )
   with check (
-    exists (
+    public.is_board_admin(board_members.board_id, auth.uid())
+    or exists (
       select 1 from public.boards b
       where b.id = board_members.board_id
         and public.is_workspace_admin(b.workspace_id, auth.uid())
