@@ -4,6 +4,9 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 export default defineConfig({
+  resolve: {
+    tsconfigPaths: true,
+  },
   test: {
     environment: "node",
     setupFiles: [],
