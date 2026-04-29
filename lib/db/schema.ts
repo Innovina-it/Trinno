@@ -5,6 +5,7 @@ import {
   timestamp,
   boolean,
   integer,
+  jsonb,
   primaryKey,
   pgEnum,
   check,
@@ -181,6 +182,18 @@ export const attachments = pgTable("attachments", {
   mime: text("mime").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
   uploadedBy: uuid("uploaded_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const activity = pgTable("activity", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  boardId: uuid("board_id").notNull(),
+  cardId: uuid("card_id"),
+  actorId: uuid("actor_id"),
+  type: text("type").notNull(),
+  payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
