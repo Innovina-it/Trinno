@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -20,6 +21,7 @@ import type { BoardRow } from "@/lib/queries/board-snapshot";
 import { positionBetween } from "@/lib/ordering";
 import { moveCard as moveCardAction } from "@/actions/cards";
 import { moveList as moveListAction } from "@/actions/lists";
+import { Button } from "@/components/ui/button";
 import { ListColumn } from "./list-column";
 import { AddListForm } from "./add-list-form";
 
@@ -157,6 +159,14 @@ export function BoardView({ board }: { board: BoardRow }) {
     >
       <div className="mb-4 flex items-center justify-between px-2">
         <h1 className="text-xl font-semibold text-white">{board.title}</h1>
+        <Button
+          render={<Link href={`/b/${board.id}/settings`} />}
+          nativeButton={false}
+          variant="secondary"
+          size="sm"
+        >
+          Board settings
+        </Button>
       </div>
       <DndContext
         sensors={sensors}
