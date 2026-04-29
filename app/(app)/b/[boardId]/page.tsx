@@ -35,7 +35,19 @@ export default async function BoardPage({
 
   return (
     <BoardStoreProvider
-      initial={{ boardId, lists: snap.lists, cards: snap.cards }}
+      initial={{
+        boardId,
+        lists: snap.lists,
+        cards: snap.cards,
+        labels: snap.labels,
+        cardLabels: snap.cardLabels,
+        cardMembers: snap.cardMembers,
+        checklists: snap.checklists,
+        checklistItems: snap.checklistItems,
+        comments: snap.comments,
+        attachments: snap.attachments,
+        boardProfiles: snap.boardProfiles,
+      }}
     >
       <BoardView board={snap.board} currentUser={currentUser} />
     </BoardStoreProvider>

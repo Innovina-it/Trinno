@@ -2,7 +2,17 @@
 import { useEffect } from "react";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { useBoardStore } from "@/stores/board-store";
-import type { ListRow, CardRow } from "@/lib/queries/board-snapshot";
+import type {
+  ListRow,
+  CardRow,
+  LabelRow,
+  CardLabelRow,
+  CardMemberRow,
+  ChecklistRow,
+  ChecklistItemRow,
+  CommentRow,
+  AttachmentRow,
+} from "@/lib/queries/board-snapshot";
 
 function rowToList(r: Record<string, unknown>): ListRow {
   return {
@@ -31,14 +41,112 @@ function rowToCard(r: Record<string, unknown>): CardRow {
   };
 }
 
+function rowToLabel(r: Record<string, unknown>): LabelRow {
+  return {
+    id: r.id as string,
+    boardId: r.board_id as string,
+    name: (r.name ?? "") as string,
+    color: r.color as string,
+  };
+}
+
+function rowToCardLabel(r: Record<string, unknown>): CardLabelRow {
+  return {
+    cardId: r.card_id as string,
+    labelId: r.label_id as string,
+  };
+}
+
+function rowToCardMember(r: Record<string, unknown>): CardMemberRow {
+  return {
+    cardId: r.card_id as string,
+    userId: r.user_id as string,
+  };
+}
+
+function rowToChecklist(r: Record<string, unknown>): ChecklistRow {
+  return {
+    id: r.id as string,
+    cardId: r.card_id as string,
+    boardId: r.board_id as string,
+    title: r.title as string,
+    position: r.position as string,
+    createdAt: new Date(r.created_at as string),
+  };
+}
+
+function rowToChecklistItem(r: Record<string, unknown>): ChecklistItemRow {
+  return {
+    id: r.id as string,
+    checklistId: r.checklist_id as string,
+    boardId: r.board_id as string,
+    text: r.text as string,
+    completed: (r.completed ?? false) as boolean,
+    position: r.position as string,
+    createdAt: new Date(r.created_at as string),
+  };
+}
+
+function rowToComment(r: Record<string, unknown>): CommentRow {
+  return {
+    id: r.id as string,
+    cardId: r.card_id as string,
+    boardId: r.board_id as string,
+    authorId: r.author_id as string,
+    body: r.body as string,
+    createdAt: new Date(r.created_at as string),
+    editedAt: r.edited_at ? new Date(r.edited_at as string) : null,
+  };
+}
+
+function rowToAttachment(r: Record<string, unknown>): AttachmentRow {
+  return {
+    id: r.id as string,
+    cardId: r.card_id as string,
+    boardId: r.board_id as string,
+    storagePath: r.storage_path as string,
+    filename: r.filename as string,
+    mime: r.mime as string,
+    sizeBytes: r.size_bytes as number,
+    uploadedBy: r.uploaded_by as string,
+    createdAt: new Date(r.created_at as string),
+  };
+}
+
 export function useBoardRealtime(boardId: string) {
-  const addList    = useBoardStore((s) => s.addList);
-  const addCard    = useBoardStore((s) => s.addCard);
-  const moveList   = useBoardStore((s) => s.moveList);
-  const moveCard   = useBoardStore((s) => s.moveCard);
+  const addList = useBoardStore((s) => s.addList);
+  const addCard = useBoardStore((s) => s.addCard);
+  const updateCard = useBoardStore((s) => s.updateCard);
+  const moveList = useBoardStore((s) => s.moveList);
+  const moveCard = useBoardStore((s) => s.moveCard);
   const removeList = useBoardStore((s) => s.removeList);
   const removeCard = useBoardStore((s) => s.removeCard);
   const renameList = useBoardStore((s) => s.renameList);
+
+  const addLabel = useBoardStore((s) => s.addLabel);
+  const updateLabel = useBoardStore((s) => s.updateLabel);
+  const removeLabel = useBoardStore((s) => s.removeLabel);
+
+  const addCardLabel = useBoardStore((s) => s.addCardLabel);
+  const removeCardLabel = useBoardStore((s) => s.removeCardLabel);
+
+  const addCardMember = useBoardStore((s) => s.addCardMember);
+  const removeCardMember = useBoardStore((s) => s.removeCardMember);
+
+  const addChecklist = useBoardStore((s) => s.addChecklist);
+  const updateChecklist = useBoardStore((s) => s.updateChecklist);
+  const removeChecklist = useBoardStore((s) => s.removeChecklist);
+
+  const addChecklistItem = useBoardStore((s) => s.addChecklistItem);
+  const updateChecklistItem = useBoardStore((s) => s.updateChecklistItem);
+  const removeChecklistItem = useBoardStore((s) => s.removeChecklistItem);
+
+  const addComment = useBoardStore((s) => s.addComment);
+  const updateComment = useBoardStore((s) => s.updateComment);
+  const removeComment = useBoardStore((s) => s.removeComment);
+
+  const addAttachment = useBoardStore((s) => s.addAttachment);
+  const removeAttachment = useBoardStore((s) => s.removeAttachment);
 
   useEffect(() => {
     const supa = createSupabaseBrowser();
@@ -101,12 +209,163 @@ export function useBoardRealtime(boardId: string) {
               const r = payload.new;
               if (r.archived) {
                 removeCard(r.id);
-              } else if (r.list_id && r.position) {
-                moveCard(r.id, r.list_id, r.position);
+              } else {
+                const next = rowToCard(r);
+                // Patch in place so non-position fields (title, description,
+                // due_date, due_complete, cover_color) propagate too.
+                updateCard(next.id, next);
+                if (r.list_id && r.position) {
+                  moveCard(r.id, r.list_id, r.position);
+                }
               }
             } else if (payload.eventType === "DELETE" && payload.old) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               removeCard((payload.old as any).id);
+            }
+          },
+        )
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "labels",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addLabel(rowToLabel(payload.new));
+            } else if (payload.eventType === "UPDATE" && payload.new) {
+              const l = rowToLabel(payload.new);
+              updateLabel(l.id, l);
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              removeLabel((payload.old as any).id);
+            }
+          },
+        )
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "card_labels",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addCardLabel(rowToCardLabel(payload.new));
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              const o = payload.old as Record<string, unknown>;
+              removeCardLabel(o.card_id as string, o.label_id as string);
+            }
+          },
+        )
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "card_members",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addCardMember(rowToCardMember(payload.new));
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              const o = payload.old as Record<string, unknown>;
+              removeCardMember(o.card_id as string, o.user_id as string);
+            }
+          },
+        )
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "checklists",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addChecklist(rowToChecklist(payload.new));
+            } else if (payload.eventType === "UPDATE" && payload.new) {
+              const c = rowToChecklist(payload.new);
+              updateChecklist(c.id, c);
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              removeChecklist((payload.old as any).id);
+            }
+          },
+        )
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "checklist_items",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addChecklistItem(rowToChecklistItem(payload.new));
+            } else if (payload.eventType === "UPDATE" && payload.new) {
+              const i = rowToChecklistItem(payload.new);
+              updateChecklistItem(i.id, i);
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              removeChecklistItem((payload.old as any).id);
+            }
+          },
+        )
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "comments",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addComment(rowToComment(payload.new));
+            } else if (payload.eventType === "UPDATE" && payload.new) {
+              const c = rowToComment(payload.new);
+              updateComment(c.id, c);
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              removeComment((payload.old as any).id);
+            }
+          },
+        )
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "attachments",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addAttachment(rowToAttachment(payload.new));
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              removeAttachment((payload.old as any).id);
             }
           },
         )
@@ -121,10 +380,29 @@ export function useBoardRealtime(boardId: string) {
     boardId,
     addList,
     addCard,
+    updateCard,
     moveList,
     moveCard,
     removeList,
     removeCard,
     renameList,
+    addLabel,
+    updateLabel,
+    removeLabel,
+    addCardLabel,
+    removeCardLabel,
+    addCardMember,
+    removeCardMember,
+    addChecklist,
+    updateChecklist,
+    removeChecklist,
+    addChecklistItem,
+    updateChecklistItem,
+    removeChecklistItem,
+    addComment,
+    updateComment,
+    removeComment,
+    addAttachment,
+    removeAttachment,
   ]);
 }

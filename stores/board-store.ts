@@ -7,47 +7,139 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import type { ListRow, CardRow } from "@/lib/queries/board-snapshot";
+import type {
+  ListRow,
+  CardRow,
+  LabelRow,
+  CardLabelRow,
+  CardMemberRow,
+  ChecklistRow,
+  ChecklistItemRow,
+  CommentRow,
+  AttachmentRow,
+  BoardProfile,
+} from "@/lib/queries/board-snapshot";
+
+export type BoardSnapshotInit = {
+  boardId: string;
+  lists: ListRow[];
+  cards: CardRow[];
+  labels: LabelRow[];
+  cardLabels: CardLabelRow[];
+  cardMembers: CardMemberRow[];
+  checklists: ChecklistRow[];
+  checklistItems: ChecklistItemRow[];
+  comments: CommentRow[];
+  attachments: AttachmentRow[];
+  boardProfiles: BoardProfile[];
+};
 
 export type BoardState = {
   boardId: string;
   lists: ListRow[];
   cards: CardRow[];
-  setSnapshot: (s: { lists: ListRow[]; cards: CardRow[] }) => void;
+  labels: LabelRow[];
+  cardLabels: CardLabelRow[];
+  cardMembers: CardMemberRow[];
+  checklists: ChecklistRow[];
+  checklistItems: ChecklistItemRow[];
+  comments: CommentRow[];
+  attachments: AttachmentRow[];
+  boardProfiles: BoardProfile[];
+
+  setSnapshot: (s: Omit<BoardSnapshotInit, "boardId">) => void;
+
   addList: (list: ListRow) => void;
   addCard: (card: CardRow) => void;
+  updateCard: (id: string, patch: Partial<CardRow>) => void;
   moveCard: (id: string, listId: string, position: string) => void;
   moveList: (id: string, position: string) => void;
   renameList: (id: string, title: string) => void;
   removeCard: (id: string) => void;
   removeList: (id: string) => void;
+
+  addLabel: (l: LabelRow) => void;
+  updateLabel: (id: string, patch: Partial<LabelRow>) => void;
+  removeLabel: (id: string) => void;
+
+  addCardLabel: (x: CardLabelRow) => void;
+  removeCardLabel: (cardId: string, labelId: string) => void;
+
+  addCardMember: (x: CardMemberRow) => void;
+  removeCardMember: (cardId: string, userId: string) => void;
+
+  addChecklist: (c: ChecklistRow) => void;
+  updateChecklist: (id: string, patch: Partial<ChecklistRow>) => void;
+  removeChecklist: (id: string) => void;
+
+  addChecklistItem: (i: ChecklistItemRow) => void;
+  updateChecklistItem: (id: string, patch: Partial<ChecklistItemRow>) => void;
+  removeChecklistItem: (id: string) => void;
+
+  addComment: (c: CommentRow) => void;
+  updateComment: (id: string, patch: Partial<CommentRow>) => void;
+  removeComment: (id: string) => void;
+
+  addAttachment: (a: AttachmentRow) => void;
+  removeAttachment: (id: string) => void;
 };
 
 function sortByPosition<T extends { position: string }>(rows: T[]): T[] {
   return rows.slice().sort((a, b) => (a.position < b.position ? -1 : 1));
 }
 
-export function createBoardStore(initial: {
-  boardId: string;
-  lists: ListRow[];
-  cards: CardRow[];
-}) {
+function sortByCreatedAt<T extends { createdAt: Date }>(rows: T[]): T[] {
+  return rows
+    .slice()
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+}
+
+export function createBoardStore(initial: BoardSnapshotInit) {
   return createStore<BoardState>((set) => ({
     boardId: initial.boardId,
     lists: sortByPosition(initial.lists),
     cards: sortByPosition(initial.cards),
+    labels: initial.labels,
+    cardLabels: initial.cardLabels,
+    cardMembers: initial.cardMembers,
+    checklists: sortByPosition(initial.checklists),
+    checklistItems: sortByPosition(initial.checklistItems),
+    comments: sortByCreatedAt(initial.comments),
+    attachments: initial.attachments,
+    boardProfiles: initial.boardProfiles,
 
     setSnapshot: (s) =>
       set({
         lists: sortByPosition(s.lists),
         cards: sortByPosition(s.cards),
+        labels: s.labels,
+        cardLabels: s.cardLabels,
+        cardMembers: s.cardMembers,
+        checklists: sortByPosition(s.checklists),
+        checklistItems: sortByPosition(s.checklistItems),
+        comments: sortByCreatedAt(s.comments),
+        attachments: s.attachments,
+        boardProfiles: s.boardProfiles,
       }),
 
     addList: (list) =>
-      set((state) => ({ lists: sortByPosition([...state.lists, list]) })),
+      set((state) =>
+        state.lists.some((l) => l.id === list.id)
+          ? state
+          : { lists: sortByPosition([...state.lists, list]) },
+      ),
 
     addCard: (card) =>
-      set((state) => ({ cards: sortByPosition([...state.cards, card]) })),
+      set((state) =>
+        state.cards.some((c) => c.id === card.id)
+          ? state
+          : { cards: sortByPosition([...state.cards, card]) },
+      ),
+
+    updateCard: (id, patch) =>
+      set((state) => ({
+        cards: state.cards.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+      })),
 
     moveCard: (id, listId, position) =>
       set((state) => ({
@@ -78,6 +170,132 @@ export function createBoardStore(initial: {
         lists: state.lists.filter((l) => l.id !== id),
         cards: state.cards.filter((c) => c.listId !== id),
       })),
+
+    addLabel: (l) =>
+      set((state) =>
+        state.labels.some((x) => x.id === l.id)
+          ? state
+          : { labels: [...state.labels, l] },
+      ),
+
+    updateLabel: (id, patch) =>
+      set((state) => ({
+        labels: state.labels.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+      })),
+
+    removeLabel: (id) =>
+      set((state) => ({
+        labels: state.labels.filter((l) => l.id !== id),
+        cardLabels: state.cardLabels.filter((cl) => cl.labelId !== id),
+      })),
+
+    addCardLabel: (x) =>
+      set((state) =>
+        state.cardLabels.some(
+          (cl) => cl.cardId === x.cardId && cl.labelId === x.labelId,
+        )
+          ? state
+          : { cardLabels: [...state.cardLabels, x] },
+      ),
+
+    removeCardLabel: (cardId, labelId) =>
+      set((state) => ({
+        cardLabels: state.cardLabels.filter(
+          (cl) => !(cl.cardId === cardId && cl.labelId === labelId),
+        ),
+      })),
+
+    addCardMember: (x) =>
+      set((state) =>
+        state.cardMembers.some(
+          (cm) => cm.cardId === x.cardId && cm.userId === x.userId,
+        )
+          ? state
+          : { cardMembers: [...state.cardMembers, x] },
+      ),
+
+    removeCardMember: (cardId, userId) =>
+      set((state) => ({
+        cardMembers: state.cardMembers.filter(
+          (cm) => !(cm.cardId === cardId && cm.userId === userId),
+        ),
+      })),
+
+    addChecklist: (c) =>
+      set((state) =>
+        state.checklists.some((x) => x.id === c.id)
+          ? state
+          : { checklists: sortByPosition([...state.checklists, c]) },
+      ),
+
+    updateChecklist: (id, patch) =>
+      set((state) => ({
+        checklists: sortByPosition(
+          state.checklists.map((c) =>
+            c.id === id ? { ...c, ...patch } : c,
+          ),
+        ),
+      })),
+
+    removeChecklist: (id) =>
+      set((state) => ({
+        checklists: state.checklists.filter((c) => c.id !== id),
+        checklistItems: state.checklistItems.filter(
+          (i) => i.checklistId !== id,
+        ),
+      })),
+
+    addChecklistItem: (i) =>
+      set((state) =>
+        state.checklistItems.some((x) => x.id === i.id)
+          ? state
+          : { checklistItems: sortByPosition([...state.checklistItems, i]) },
+      ),
+
+    updateChecklistItem: (id, patch) =>
+      set((state) => ({
+        checklistItems: sortByPosition(
+          state.checklistItems.map((i) =>
+            i.id === id ? { ...i, ...patch } : i,
+          ),
+        ),
+      })),
+
+    removeChecklistItem: (id) =>
+      set((state) => ({
+        checklistItems: state.checklistItems.filter((i) => i.id !== id),
+      })),
+
+    addComment: (c) =>
+      set((state) =>
+        state.comments.some((x) => x.id === c.id)
+          ? state
+          : { comments: sortByCreatedAt([...state.comments, c]) },
+      ),
+
+    updateComment: (id, patch) =>
+      set((state) => ({
+        comments: state.comments.map((c) =>
+          c.id === id ? { ...c, ...patch } : c,
+        ),
+      })),
+
+    removeComment: (id) =>
+      set((state) => ({
+        comments: state.comments.filter((c) => c.id !== id),
+      })),
+
+    addAttachment: (a) =>
+      set((state) =>
+        state.attachments.some((x) => x.id === a.id)
+          ? state
+          : { attachments: [...state.attachments, a] },
+      ),
+
+    removeAttachment: (id) =>
+      set((state) => ({
+        attachments: state.attachments.filter((a) => a.id !== id),
+      })),
   }));
 }
 
@@ -89,7 +307,7 @@ export function BoardStoreProvider({
   initial,
   children,
 }: {
-  initial: { boardId: string; lists: ListRow[]; cards: CardRow[] };
+  initial: BoardSnapshotInit;
   children: ReactNode;
 }) {
   const ref = useRef<BoardStore | null>(null);
