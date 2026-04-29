@@ -42,7 +42,7 @@ test("workspace+board lifecycle", async ({ page }) => {
   const email = `wb-${Date.now()}@example.com`;
   await signupAndLand(page, email);
 
-  // Open workspace switcher in nav, click "New workspace"
+  // Open workspace switcher in nav, click "New workspace".
   // The switcher button shows the current workspace name (e.g. "wb-1234567's Workspace") + chevron.
   // It is the FIRST <button> inside <header> (Log out is the second).
   await page.locator("header").getByRole("button").first().click();
