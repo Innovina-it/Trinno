@@ -81,3 +81,27 @@ export const boardMembers = pgTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.boardId, t.userId] }) }),
 );
+
+export const lists = pgTable("lists", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  boardId: uuid("board_id").notNull(),
+  title: text("title").notNull(),
+  position: text("position").notNull(),
+  archived: boolean("archived").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const cards = pgTable("cards", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  listId: uuid("list_id").notNull(),
+  boardId: uuid("board_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  position: text("position").notNull(),
+  archived: boolean("archived").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
