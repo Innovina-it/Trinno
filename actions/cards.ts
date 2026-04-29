@@ -29,12 +29,25 @@ export async function createCardImpl(token: string, input: { listId: string; tit
 }
 
 export async function updateCardImpl(token: string, input: {
-  id: string; title?: string; description?: string | null;
+  id: string;
+  title?: string;
+  description?: string | null;
+  dueDate?: Date | string | null;
+  dueComplete?: boolean;
 }) {
   const parsed = UpdateCardInput.parse(input);
   const patch: Record<string, unknown> = {};
   if (parsed.title !== undefined) patch.title = parsed.title;
   if (parsed.description !== undefined) patch.description = parsed.description;
+  if (parsed.dueDate !== undefined) {
+    patch.dueDate =
+      parsed.dueDate === null
+        ? null
+        : parsed.dueDate instanceof Date
+          ? parsed.dueDate
+          : new Date(parsed.dueDate);
+  }
+  if (parsed.dueComplete !== undefined) patch.dueComplete = parsed.dueComplete;
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(cards).set(patch)
       .where(eq(cards.id, parsed.id)).returning();

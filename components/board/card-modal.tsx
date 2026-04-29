@@ -12,6 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { updateCard } from "@/actions/cards";
+import { LabelsSection } from "./card/labels-section";
+import { DueSection } from "./card/due-section";
+import { CommentsSection } from "./card/comments-section";
 
 export type CardModalCard = {
   id: string;
@@ -77,7 +80,7 @@ export function CardModal({
   }
 
   const body = (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="space-y-1.5">
         <Label htmlFor="card-title">Title</Label>
         <Input
@@ -101,6 +104,11 @@ export function CardModal({
           placeholder="Add a more detailed description..."
         />
       </div>
+
+      <LabelsSection cardId={card.id} />
+      <DueSection cardId={card.id} />
+      <CommentsSection cardId={card.id} />
+
       <div className="flex justify-end">
         <Button type="button" variant="outline" onClick={close} disabled={pending}>
           Close
@@ -125,7 +133,7 @@ export function CardModal({
         if (!o) close();
       }}
     >
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Card</DialogTitle>
         </DialogHeader>

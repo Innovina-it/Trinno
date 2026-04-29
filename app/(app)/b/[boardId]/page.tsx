@@ -4,7 +4,6 @@ import { requireUser, getSessionToken } from "@/lib/auth";
 import { getBoardSnapshot } from "@/lib/queries/board-snapshot";
 import { dbAsUser } from "@/lib/db/client";
 import { profiles } from "@/lib/db/schema";
-import { BoardStoreProvider } from "@/stores/board-store";
 import { BoardView } from "@/components/board/board-view";
 
 export default async function BoardPage({
@@ -33,23 +32,5 @@ export default async function BoardPage({
     avatarUrl: me?.avatarUrl ?? null,
   };
 
-  return (
-    <BoardStoreProvider
-      initial={{
-        boardId,
-        lists: snap.lists,
-        cards: snap.cards,
-        labels: snap.labels,
-        cardLabels: snap.cardLabels,
-        cardMembers: snap.cardMembers,
-        checklists: snap.checklists,
-        checklistItems: snap.checklistItems,
-        comments: snap.comments,
-        attachments: snap.attachments,
-        boardProfiles: snap.boardProfiles,
-      }}
-    >
-      <BoardView board={snap.board} currentUser={currentUser} />
-    </BoardStoreProvider>
-  );
+  return <BoardView board={snap.board} currentUser={currentUser} />;
 }
