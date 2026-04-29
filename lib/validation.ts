@@ -71,3 +71,12 @@ export const RemoveChecklistItemInput = z.object({ id: Uuid });
 export const CreateCommentInput = z.object({ cardId: Uuid, body: z.string().trim().min(1).max(20_000) });
 export const EditCommentInput = z.object({ id: Uuid, body: z.string().trim().min(1).max(20_000) });
 export const DeleteCommentInput = z.object({ id: Uuid });
+
+export const RegisterAttachmentInput = z.object({
+  cardId: Uuid,
+  storagePath: z.string().min(1).max(500),
+  filename: z.string().min(1).max(255),
+  mime: z.string().min(1).max(120),
+  sizeBytes: z.number().int().nonnegative().max(50 * 1024 * 1024),
+});
+export const DeleteAttachmentInput = z.object({ id: Uuid });

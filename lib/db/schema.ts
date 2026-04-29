@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   boolean,
+  integer,
   primaryKey,
   pgEnum,
   check,
@@ -169,4 +170,18 @@ export const comments = pgTable("comments", {
     .notNull()
     .defaultNow(),
   editedAt: timestamp("edited_at", { withTimezone: true }),
+});
+
+export const attachments = pgTable("attachments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  cardId: uuid("card_id").notNull(),
+  boardId: uuid("board_id").notNull(),
+  storagePath: text("storage_path").notNull(),
+  filename: text("filename").notNull(),
+  mime: text("mime").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  uploadedBy: uuid("uploaded_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
