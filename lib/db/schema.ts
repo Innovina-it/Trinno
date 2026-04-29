@@ -108,3 +108,20 @@ export const cards = pgTable("cards", {
   dueComplete: boolean("due_complete").notNull().default(false),
   coverColor: text("cover_color"),
 });
+
+export const labels = pgTable("labels", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  boardId: uuid("board_id").notNull(),
+  name: text("name").notNull().default(""),
+  color: text("color").notNull(),
+});
+
+export const cardLabels = pgTable(
+  "card_labels",
+  {
+    cardId: uuid("card_id").notNull(),
+    labelId: uuid("label_id").notNull(),
+    boardId: uuid("board_id").notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.cardId, t.labelId] }) }),
+);

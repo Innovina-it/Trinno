@@ -49,3 +49,12 @@ export const MoveCardInput = z.object({
   id: Uuid, listId: Uuid, position: z.string().min(1).max(64),
 });
 export const ArchiveCardInput = z.object({ id: Uuid, archived: z.boolean() });
+
+export const CreateLabelInput = z.object({
+  boardId: Uuid,
+  name: z.string().trim().max(60).default(""),
+  color: z.string().min(1).max(32),
+});
+export const RenameLabelInput = z.object({ id: Uuid, name: z.string().trim().max(60), color: z.string().min(1).max(32) });
+export const DeleteLabelInput = z.object({ id: Uuid });
+export const ToggleCardLabelInput = z.object({ cardId: Uuid, labelId: Uuid });
