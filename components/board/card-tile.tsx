@@ -5,6 +5,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 import { LabelStripes } from "./card/label-stripes";
 import { DuePill } from "./card/due-pill";
+import { TileIndicators } from "./card/tile-indicators";
 
 export function CardTile({
   card,
@@ -44,6 +45,7 @@ export function CardTile({
           <DuePill card={card} />
         </div>
       )}
+      <TileIndicators cardId={card.id} />
     </Link>
   );
 }
