@@ -67,3 +67,7 @@ export const DeleteChecklistInput = z.object({ id: Uuid });
 export const AddChecklistItemInput = z.object({ checklistId: Uuid, text: z.string().trim().min(1).max(500) });
 export const ToggleChecklistItemInput = z.object({ id: Uuid, completed: z.boolean() });
 export const RemoveChecklistItemInput = z.object({ id: Uuid });
+
+export const CreateCommentInput = z.object({ cardId: Uuid, body: z.string().trim().min(1).max(20_000) });
+export const EditCommentInput = z.object({ id: Uuid, body: z.string().trim().min(1).max(20_000) });
+export const DeleteCommentInput = z.object({ id: Uuid });

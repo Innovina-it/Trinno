@@ -158,3 +158,15 @@ export const checklistItems = pgTable("checklist_items", {
     .notNull()
     .defaultNow(),
 });
+
+export const comments = pgTable("comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  cardId: uuid("card_id").notNull(),
+  boardId: uuid("board_id").notNull(),
+  authorId: uuid("author_id").notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+});
