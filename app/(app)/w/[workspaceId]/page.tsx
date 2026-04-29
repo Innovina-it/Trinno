@@ -1,0 +1,33 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { requireUser, getSessionToken } from "@/lib/auth";
+import { getWorkspace, listBoardsInWorkspace } from "@/lib/queries/workspaces";
+import { BoardGrid } from "@/components/workspace/board-grid";
+import { CreateBoardButton } from "@/components/workspace/create-board-dialog";
+import { Button } from "@/components/ui/button";
+
+export default async function WorkspacePage({
+  params,
+}: { params: Promise<{ workspaceId: string }> }) {
+  const { workspaceId } = await params;
+  await requireUser();
+  const token = (await getSessionToken())!;
+  const ws = await getWorkspace(token, workspaceId);
+  if (!ws) notFound();
+  const boards = await listBoardsInWorkspace(token, workspaceId);
+
+  return (
+    <main className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">{ws.name}</h1>
+        <div className="flex items-center gap-2">
+          <Button render={<Link href={`/w/${workspaceId}/settings`} />} variant="ghost" size="sm">
+            Settings
+          </Button>
+          <CreateBoardButton workspaceId={workspaceId} />
+        </div>
+      </div>
+      <BoardGrid boards={boards} />
+    </main>
+  );
+}

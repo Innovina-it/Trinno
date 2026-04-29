@@ -1,27 +1,20 @@
-import { dbAsUser } from "@/lib/db/client";
-import { workspaces } from "@/lib/db/schema";
-import { getSessionToken, requireUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { requireUser, getSessionToken } from "@/lib/auth";
+import { listWorkspaces } from "@/lib/queries/workspaces";
 
 export default async function Home() {
   await requireUser();
   const token = (await getSessionToken())!;
-  const ws = await dbAsUser(token, async (tx) =>
-    tx.select({ id: workspaces.id, name: workspaces.name }).from(workspaces)
-  );
-
-  return (
-    <main className="space-y-4">
-      <h1 className="text-2xl font-semibold">Your workspaces</h1>
-      <ul className="space-y-2">
-        {ws.map(w => (
-          <li key={w.id} className="rounded border p-3">{w.name}</li>
-        ))}
-      </ul>
-      {ws.length === 0 && (
+  const ws = await listWorkspaces(token);
+  if (ws.length === 0) {
+    return (
+      <main className="space-y-4">
+        <h1 className="text-2xl font-semibold">No workspaces yet</h1>
         <p className="text-sm text-muted-foreground">
-          No workspaces yet (UI to create them ships in plan #2).
+          Use the workspace switcher in the top nav to create one.
         </p>
-      )}
-    </main>
-  );
+      </main>
+    );
+  }
+  redirect(`/w/${ws[0].id}`);
 }
