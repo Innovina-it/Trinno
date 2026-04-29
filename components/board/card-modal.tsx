@@ -25,9 +25,11 @@ export type CardModalCard = {
 export function CardModal({
   card,
   asDialog = false,
+  children,
 }: {
   card: CardModalCard;
   asDialog?: boolean;
+  children?: React.ReactNode;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(card.title);
@@ -108,6 +110,8 @@ export function CardModal({
       <LabelsSection cardId={card.id} />
       <DueSection cardId={card.id} />
       <CommentsSection cardId={card.id} />
+
+      {children}
 
       <div className="flex justify-end">
         <Button type="button" variant="outline" onClick={close} disabled={pending}>

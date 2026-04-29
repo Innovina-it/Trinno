@@ -43,9 +43,11 @@ function decodeId(
 export function BoardView({
   board,
   currentUser,
+  children,
 }: {
   board: BoardRow;
   currentUser: Viewer;
+  children?: React.ReactNode;
 }) {
   const router = useRouter();
   const lists = useBoardStore((s) => s.lists);
@@ -183,23 +185,28 @@ export function BoardView({
           </Button>
         </div>
       </div>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragEnd={onDragEnd}
-      >
-        <div className="flex items-start gap-3 overflow-x-auto px-2 pb-4">
-          <SortableContext
-            items={listSortableIds}
-            strategy={horizontalListSortingStrategy}
+      <div className="flex items-start gap-4">
+        <div className="flex-1 min-w-0">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragEnd={onDragEnd}
           >
-            {lists.map((list) => (
-              <ListColumn key={list.id} list={list} boardId={board.id} />
-            ))}
-          </SortableContext>
-          <AddListForm boardId={board.id} />
+            <div className="flex items-start gap-3 overflow-x-auto px-2 pb-4">
+              <SortableContext
+                items={listSortableIds}
+                strategy={horizontalListSortingStrategy}
+              >
+                {lists.map((list) => (
+                  <ListColumn key={list.id} list={list} boardId={board.id} />
+                ))}
+              </SortableContext>
+              <AddListForm boardId={board.id} />
+            </div>
+          </DndContext>
         </div>
-      </DndContext>
+        {children}
+      </div>
     </div>
   );
 }

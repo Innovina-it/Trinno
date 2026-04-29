@@ -4,6 +4,7 @@ import { dbAsUser } from "@/lib/db/client";
 import { cards } from "@/lib/db/schema";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { CardModal } from "@/components/board/card-modal";
+import { CardActivity } from "@/components/board/card/card-activity";
 
 export default async function InterceptedCardPage({
   params,
@@ -22,6 +23,8 @@ export default async function InterceptedCardPage({
     <CardModal
       asDialog
       card={{ id: c.id, title: c.title, description: c.description }}
-    />
+    >
+      <CardActivity cardId={c.id} />
+    </CardModal>
   );
 }

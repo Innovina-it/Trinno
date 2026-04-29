@@ -5,6 +5,7 @@ import { getBoardSnapshot } from "@/lib/queries/board-snapshot";
 import { dbAsUser } from "@/lib/db/client";
 import { profiles } from "@/lib/db/schema";
 import { BoardView } from "@/components/board/board-view";
+import { ActivityFeed } from "@/components/board/activity-feed";
 
 export default async function BoardPage({
   params,
@@ -32,5 +33,9 @@ export default async function BoardPage({
     avatarUrl: me?.avatarUrl ?? null,
   };
 
-  return <BoardView board={snap.board} currentUser={currentUser} />;
+  return (
+    <BoardView board={snap.board} currentUser={currentUser}>
+      <ActivityFeed boardId={boardId} />
+    </BoardView>
+  );
 }

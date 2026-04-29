@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { logout } from "@/actions/auth";
 import { WorkspaceSwitcher, type WorkspaceLite } from "@/components/workspace/workspace-switcher";
+import { SearchBox } from "@/components/nav/search-box";
 
 export function TopNav({
   email, workspaces, activeWorkspaceId,
@@ -19,6 +20,7 @@ export function TopNav({
           <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspaceId} />
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <SearchBox />
           <span className="text-muted-foreground">{email}</span>
           <form action={logout}>
             <Button type="submit" variant="ghost" size="sm">Log out</Button>
