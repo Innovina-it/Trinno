@@ -135,3 +135,26 @@ export const cardMembers = pgTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.cardId, t.userId] }) }),
 );
+
+export const checklists = pgTable("checklists", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  cardId: uuid("card_id").notNull(),
+  boardId: uuid("board_id").notNull(),
+  title: text("title").notNull(),
+  position: text("position").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const checklistItems = pgTable("checklist_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  checklistId: uuid("checklist_id").notNull(),
+  boardId: uuid("board_id").notNull(),
+  text: text("text").notNull(),
+  completed: boolean("completed").notNull().default(false),
+  position: text("position").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

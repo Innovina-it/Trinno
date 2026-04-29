@@ -60,3 +60,10 @@ export const DeleteLabelInput = z.object({ id: Uuid });
 export const ToggleCardLabelInput = z.object({ cardId: Uuid, labelId: Uuid });
 
 export const ToggleCardMemberInput = z.object({ cardId: Uuid, userId: Uuid });
+
+export const CreateChecklistInput = z.object({ cardId: Uuid, title: Title });
+export const RenameChecklistInput = z.object({ id: Uuid, title: Title });
+export const DeleteChecklistInput = z.object({ id: Uuid });
+export const AddChecklistItemInput = z.object({ checklistId: Uuid, text: z.string().trim().min(1).max(500) });
+export const ToggleChecklistItemInput = z.object({ id: Uuid, completed: z.boolean() });
+export const RemoveChecklistItemInput = z.object({ id: Uuid });
