@@ -42,26 +42,44 @@ export async function ActivityFeed({ boardId }: { boardId: string }) {
   const rows = await listActivityForBoard(token, boardId, 30);
   return (
     <aside
-      className="w-72 shrink-0 rounded-xl bg-black/35 p-3 text-white text-sm space-y-3 max-h-[calc(100vh-8rem)] overflow-y-auto ring-1 ring-white/10 backdrop-blur-sm shadow-sm"
+      className="w-72 shrink-0 border border-ink bg-paper text-ink max-h-[calc(100vh-9rem)] overflow-y-auto"
       data-testid="activity-feed"
     >
-      <h2 className="font-semibold tracking-tight">Activity</h2>
+      <div className="border-b border-rule px-3 py-2.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="serif-display text-xl text-ink leading-none">Activity</h2>
+          <span className="mono-meta-sm text-ink/40">LOG</span>
+        </div>
+        <p className="mono-meta-sm text-ink/45 mt-1">{rows.length} ENTRIES</p>
+      </div>
+
       {rows.length === 0 && (
-        <div className="rounded-lg border border-dashed border-white/15 bg-white/5 px-3 py-4 text-center">
-          <p className="text-xs text-white/70">No activity yet.</p>
-          <p className="mt-0.5 text-[10px] text-white/40">Changes show up here in real time.</p>
+        <div className="px-4 py-8 text-center">
+          <p className="serif-display text-2xl text-ink/70 italic">
+            &ldquo;Nothing yet.&rdquo;
+          </p>
+          <p className="mono-meta-sm mt-2 text-ink/40">
+            Updates appear here in real time.
+          </p>
         </div>
       )}
-      <ul className="space-y-2.5">
+
+      <ul className="divide-y divide-[color:var(--rule)]">
         {rows.map((r) => (
           <li
             key={r.id}
-            className="text-xs leading-relaxed rounded-md px-1.5 py-1 transition-colors duration-150 hover:bg-white/5"
+            className="px-3 py-2 transition-colors duration-150 hover:bg-paper-shadow"
             data-testid={`activity-${r.type}`}
           >
-            <span className="font-medium">{r.actorName ?? "Someone"}</span>
-            {" "}{humanType(r.type)}
-            <div className="text-white/50">{rel(r.createdAt as unknown as string)}</div>
+            {/* Mono-uppercase visual via CSS only — text stays lowercase so
+                substring tests like toContainText("created list") still match. */}
+            <div className="mono-meta-sm text-ink/55">{humanType(r.type)}</div>
+            <div className="text-sm leading-snug mt-0.5">
+              <span className="font-medium text-ink">{r.actorName ?? "Someone"}</span>
+            </div>
+            <div className="mono-meta-sm text-ink/40 mt-0.5">
+              {rel(r.createdAt as unknown as string)}
+            </div>
           </li>
         ))}
       </ul>

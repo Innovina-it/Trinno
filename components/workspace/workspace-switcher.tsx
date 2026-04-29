@@ -21,29 +21,43 @@ export function WorkspaceSwitcher({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="ghost" size="sm" className="gap-1 font-medium max-w-[180px]" />}>
-          {active?.name ?? "Workspaces"} <ChevronDown className="size-4 transition-transform duration-150 group-aria-expanded/button:rotate-180" />
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 max-w-[200px] px-1.5 normal-case tracking-normal text-base"
+            />
+          }
+        >
+          <span className="serif-display text-lg italic text-ink truncate normal-case tracking-normal">
+            {active?.name ?? "Workspaces"}
+          </span>
+          <ChevronDown className="size-3.5 text-ink/50 transition-transform duration-150 group-aria-expanded/button:rotate-180" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">
           <DropdownMenuGroup>
-            <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+            <DropdownMenuLabel>
+              <span className="mono-meta text-ink/60">Workspaces</span>
+            </DropdownMenuLabel>
             {workspaces.map(w => {
               const isActive = w.id === active?.id;
               return (
                 <DropdownMenuItem
                   key={w.id}
                   render={<Link href={`/w/${w.id}`} />}
-                  className={isActive ? "bg-accent/60 font-semibold text-accent-foreground" : undefined}
+                  className={isActive ? "bg-paper-shadow text-ink" : undefined}
                 >
-                  <span className="flex-1 truncate">{w.name}</span>
-                  {isActive && <Check className="size-4 text-primary" />}
+                  <span className="flex-1 truncate text-sm">{w.name}</span>
+                  {isActive && <Check className="size-3.5 text-signal" />}
                 </DropdownMenuItem>
               );
             })}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setOpenCreate(true)}>
-            <Plus className="size-4 mr-2" /> New workspace
+            <Plus className="size-3.5 mr-2 text-signal" />
+            <span className="mono-meta">New workspace</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

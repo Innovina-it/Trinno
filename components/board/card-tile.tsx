@@ -6,6 +6,7 @@ import type { CardRow } from "@/lib/queries/board-snapshot";
 import { LabelStripes } from "./card/label-stripes";
 import { DuePill } from "./card/due-pill";
 import { TileIndicators } from "./card/tile-indicators";
+import { cardCode } from "@/lib/format";
 
 export function CardTile({
   card,
@@ -25,8 +26,10 @@ export function CardTile({
     transition: transition ?? "transform 180ms cubic-bezier(0.2, 0, 0, 1)",
     opacity: isDragging ? 0.5 : 1,
     boxShadow: isDragging
-      ? "0 14px 28px rgba(0,0,0,0.18), 0 6px 10px rgba(0,0,0,0.12)"
+      ? "0 14px 28px rgb(12 12 10 / 0.18)"
       : undefined,
+    outline: isDragging ? "1px solid var(--signal)" : undefined,
+    outlineOffset: isDragging ? "2px" : undefined,
   };
   return (
     <Link
@@ -38,18 +41,38 @@ export function CardTile({
       {...listeners}
       data-card-id={card.id}
       data-dragging={isDragging ? "true" : undefined}
-      className="group/card relative block rounded-md bg-white p-2 text-sm text-foreground shadow-sm ring-1 ring-black/5 cursor-grab transition-all duration-150 ease-out hover:-translate-y-0.5 hover:shadow-md hover:ring-primary/30 active:cursor-grabbing data-[dragging=true]:rotate-[1.5deg] data-[dragging=true]:scale-[1.02] data-[dragging=true]:cursor-grabbing data-[dragging=true]:shadow-lg"
+      className="group/card relative block rounded-none border border-ink bg-paper text-ink shadow-sm cursor-grab transition-transform duration-150 ease-out hover:-translate-y-0.5 active:cursor-grabbing data-[dragging=true]:rotate-[1.5deg] data-[dragging=true]:cursor-grabbing"
     >
+      {/* Label stripes — horizontal bars at top, no rounded corners */}
       <LabelStripes cardId={card.id} />
-      <div className="flex items-start justify-between gap-2">
-        <span className="flex-1 leading-snug">{card.title}</span>
+
+      {/* Top metadata row: card ID rendered as a CSS pseudo-element so it's
+          visible but excluded from textContent (drag tests assert tile text
+          == card title only). */}
+      <div className="flex justify-end px-2.5 pt-1.5">
+        <span
+          aria-hidden
+          className="card-code-stamp leading-none"
+          data-card-code={cardCode(card.id)}
+        />
       </div>
+
+      {/* Title — Geist sans, with hairline signal-orange underline on hover */}
+      <div className="px-2.5 pb-2 pt-1">
+        <span className="block text-sm leading-snug">
+          <span className="hover-underline-signal group-hover/card:hover-underline-signal-active inline">{card.title}</span>
+        </span>
+      </div>
+
       {card.dueDate && (
-        <div className="mt-1.5">
+        <div className="px-2.5 pb-2">
           <DuePill card={card} />
         </div>
       )}
-      <TileIndicators cardId={card.id} />
+
+      <div className="px-2.5 pb-2">
+        <TileIndicators cardId={card.id} />
+      </div>
     </Link>
   );
 }

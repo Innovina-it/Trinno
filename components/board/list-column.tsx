@@ -11,13 +11,16 @@ import type { ListRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
 import { CardTile } from "./card-tile";
 import { AddCardForm } from "./add-card-form";
+import { roman } from "@/lib/format";
 
 export function ListColumn({
   list,
   boardId,
+  ordinal,
 }: {
   list: ListRow;
   boardId: string;
+  ordinal?: number;
 }) {
   const cards = useBoardStore((s) => s.cards);
   const listCards = useMemo(
@@ -48,25 +51,42 @@ export function ListColumn({
     [listCards],
   );
 
+  const numeral = ordinal ? roman(ordinal) : "—";
+  const cardLabel = `${listCards.length} CARD${listCards.length === 1 ? "" : "S"}`;
+  // Compose the editorial column meta line into a single attribute so it can
+  // render via a CSS pseudo-element. This keeps marginalia visible without
+  // polluting the list column's textContent (drag tests rely on filtering
+  // `[data-list-id]` by hasText: <title>).
+  const listMeta = `${numeral} · ${cardLabel}`;
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       data-list-id={list.id}
       data-dragging={isDragging ? "true" : undefined}
-      className="group/list flex w-72 shrink-0 flex-col gap-2 rounded-xl bg-black/35 p-2 backdrop-blur-sm shadow-sm ring-1 ring-white/10 transition-all duration-200 ease-out hover:ring-white/20 data-[dragging=true]:rotate-[1deg] data-[dragging=true]:shadow-2xl"
+      className="group/list flex w-72 shrink-0 flex-col border border-ink bg-paper transition-shadow duration-200 ease-out data-[dragging=true]:rotate-[1deg] data-[dragging=true]:shadow-lg"
     >
+      {/* Column heading: ordinal+count meta in mono, serif italic title beneath */}
       <div
         {...attributes}
         {...listeners}
-        className="cursor-grab select-none rounded-md px-1.5 py-1 text-sm font-semibold tracking-tight text-white transition-colors duration-150 hover:bg-white/5 active:cursor-grabbing"
+        className="cursor-grab select-none border-b border-rule px-3 py-2.5 active:cursor-grabbing"
       >
-        {list.title}
+        <span
+          aria-hidden
+          className="list-ordinal-stamp block leading-none"
+          data-list-ordinal={listMeta}
+        />
+        <h3 className="serif-display text-xl text-ink mt-1 leading-tight">
+          {list.title}
+        </h3>
       </div>
+
       <div
         ref={setDropRef}
         data-over={isOver ? "true" : undefined}
-        className="flex max-h-[calc(100vh-14rem)] flex-col gap-1.5 overflow-y-auto rounded-md p-0.5 transition-colors duration-150 data-[over=true]:bg-white/10"
+        className="flex max-h-[calc(100vh-18rem)] flex-col gap-2 overflow-y-auto p-2 transition-colors duration-150 data-[over=true]:bg-paper-shadow"
       >
         <SortableContext
           items={cardSortableIds}
@@ -77,7 +97,9 @@ export function ListColumn({
           ))}
         </SortableContext>
       </div>
-      <AddCardForm listId={list.id} />
+      <div className="border-t border-rule px-2 py-1.5">
+        <AddCardForm listId={list.id} />
+      </div>
     </div>
   );
 }

@@ -13,10 +13,6 @@ import { Plus, Check } from "lucide-react";
 
 const PALETTE = ["#0079bf", "#d29034", "#519839", "#b04632", "#89609e", "#cd5a91"];
 
-function swatchBackground(color: string): string {
-  return `radial-gradient(circle at 0% 0%, rgba(255,255,255,0.3), transparent 55%), radial-gradient(circle at 100% 100%, rgba(0,0,0,0.18), transparent 55%), ${color}`;
-}
-
 export function CreateBoardButton({ workspaceId }: { workspaceId: string }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -45,53 +41,83 @@ export function CreateBoardButton({ workspaceId }: { workspaceId: string }) {
       <Button
         size="sm"
         onClick={() => setOpen(true)}
-        className="transition-all duration-150 ease-out hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98]"
       >
-        <Plus className="size-4 mr-1" /> New board
+        <Plus className="size-3.5 text-signal mr-0.5" /> New board
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg paper-grid">
           <DialogHeader>
-            <DialogTitle>Create board</DialogTitle>
+            <div className="flex items-baseline justify-between gap-2">
+              <DialogTitle>Create board.</DialogTitle>
+              <span className="mono-meta-sm text-ink/40">FORM-NB</span>
+            </div>
           </DialogHeader>
-          <form onSubmit={submit} className="space-y-4">
-            {/* Visual preview */}
+          <form onSubmit={submit} className="space-y-5">
+            {/* Editorial preview — paper card with tint, hairline border */}
             <div
-              className="aspect-[3/2] w-full overflow-hidden rounded-xl p-3 text-white font-semibold tracking-tight shadow-sm ring-1 ring-black/5 transition-all duration-200 ease-out"
-              style={{ background: swatchBackground(color) }}
+              className="relative flex h-32 items-end border border-ink p-3"
+              style={{
+                background: `linear-gradient(${color}1f, ${color}1f), var(--paper)`,
+              }}
               aria-hidden
             >
-              <span className="drop-shadow-sm">{title.trim() || "Board preview"}</span>
+              <div className="absolute inset-x-3 top-2 flex items-baseline justify-between">
+                <span className="mono-meta-sm text-ink/45">PREVIEW</span>
+                <span
+                  aria-hidden
+                  className="block h-1 w-8"
+                  style={{ backgroundColor: color }}
+                />
+              </div>
+              <span className="serif-display text-2xl text-ink leading-none">
+                {title.trim() || "Board preview"}
+              </span>
             </div>
-            <div className="space-y-1.5">
+
+            <div className="space-y-2">
               <Label htmlFor="board-title">Title</Label>
-              <Input id="board-title" value={title}
-                     onChange={(e) => setTitle(e.target.value)}
-                     required minLength={1} maxLength={120} />
+              <Input
+                id="board-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+                minLength={1}
+                maxLength={120}
+                placeholder="e.g. Roadmap"
+              />
             </div>
-            <div className="space-y-1.5">
+
+            <div className="space-y-2">
               <Label>Background</Label>
-              <div className="flex flex-wrap gap-2">
-                {PALETTE.map(c => {
+              <div className="grid grid-cols-6 gap-px border border-ink/30 bg-ink/30">
+                {PALETTE.map((c, i) => {
                   const selected = color === c;
                   return (
                     <button
                       key={c}
                       type="button"
                       onClick={() => setColor(c)}
-                      className={`relative size-9 rounded-lg shadow-sm ring-1 ring-black/5 transition-all duration-150 ease-out hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 ${selected ? "ring-2 ring-foreground" : ""}`}
-                      style={{ background: swatchBackground(c) }}
+                      className={`relative flex aspect-square items-center justify-center bg-paper transition-colors duration-100 ${selected ? "ring-2 ring-inset ring-ink" : "hover:bg-paper-shadow"}`}
                       aria-label={`Pick ${c}`}
                       aria-pressed={selected}
                     >
+                      <span
+                        aria-hidden
+                        className="block h-5 w-5"
+                        style={{ backgroundColor: c }}
+                      />
+                      <span className="absolute top-0.5 left-1 mono-meta-sm text-ink/40">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
                       {selected && (
-                        <Check className="absolute inset-0 m-auto size-4 text-white drop-shadow" strokeWidth={3} />
+                        <Check className="absolute bottom-1 right-1 size-3 text-signal" strokeWidth={3} />
                       )}
                     </button>
                   );
                 })}
               </div>
             </div>
+
             <DialogFooter>
               <Button type="submit" disabled={pending || !title.trim()}>
                 {pending ? "Creating…" : "Create board"}

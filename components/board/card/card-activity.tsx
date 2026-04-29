@@ -41,15 +41,24 @@ export async function CardActivity({ cardId }: { cardId: string }) {
   const token = (await getSessionToken())!;
   const rows = await listActivityForCard(token, cardId, 30);
   return (
-    <div className="space-y-2" data-testid="card-activity">
-      <h3 className="font-medium">Activity</h3>
-      {rows.length === 0 && <p className="text-xs text-muted-foreground">No activity yet.</p>}
-      <ul className="space-y-1.5 text-xs">
+    <div className="space-y-3" data-testid="card-activity">
+      <div className="flex items-baseline justify-between border-b border-rule pb-1">
+        <h3 className="mono-meta text-ink/70">Activity</h3>
+        <span className="mono-meta-sm text-ink/35">LOG</span>
+      </div>
+      {rows.length === 0 && (
+        <p className="font-serif italic text-sm text-ink/50">No activity yet.</p>
+      )}
+      <ul className="divide-y divide-[color:var(--rule)]">
         {rows.map((r) => (
-          <li key={r.id}>
-            <span className="font-medium">{r.actorName ?? "Someone"}</span>{" "}
-            {humanType(r.type)}{" "}
-            <span className="text-muted-foreground">{rel(r.createdAt as unknown as string)}</span>
+          <li key={r.id} className="py-1.5">
+            <div className="mono-meta-sm text-ink/55">{humanType(r.type)}</div>
+            <div className="text-xs text-ink leading-snug mt-0.5">
+              <span className="font-medium">{r.actorName ?? "Someone"}</span>
+              <span className="ml-2 mono-meta-sm text-ink/45">
+                {rel(r.createdAt as unknown as string)}
+              </span>
+            </div>
           </li>
         ))}
       </ul>

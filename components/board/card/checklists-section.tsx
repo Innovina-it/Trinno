@@ -47,7 +47,10 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
 
   return (
     <section className="space-y-3" data-testid="checklists-section">
-      <h3 className="text-sm font-semibold">Checklists</h3>
+      <div className="flex items-baseline justify-between border-b border-rule pb-1">
+        <h3 className="mono-meta text-ink/70">Checklists</h3>
+        <span className="mono-meta-sm text-ink/35">CL</span>
+      </div>
 
       {checklists.map((cl) => {
         const items = itemsByChecklist.filter((i) => i.checklistId === cl.id);
@@ -55,16 +58,16 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
         return (
           <div
             key={cl.id}
-            className="space-y-2 rounded border p-3"
+            className="space-y-2 border border-rule bg-paper-shadow/40 p-3"
             data-checklist-id={cl.id}
           >
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="text-sm font-medium">{cl.title}</h4>
-              <span className="text-xs text-muted-foreground">
+            <div className="flex items-center justify-between gap-2 border-b border-rule pb-2">
+              <h4 className="serif-display text-lg text-ink leading-none">{cl.title}</h4>
+              <span className="mono-meta-sm text-ink/55 tabular-nums">
                 {done} / {items.length}
               </span>
               <Button
-                size="sm"
+                size="icon-sm"
                 variant="ghost"
                 disabled={pending}
                 onClick={() =>
@@ -78,7 +81,7 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
                   })
                 }
               >
-                <X className="size-4" />
+                <X className="size-3.5" />
               </Button>
             </div>
             <ul className="space-y-1.5">
@@ -106,12 +109,13 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
                         }
                       });
                     }}
+                    className="size-3.5"
                   />
                   <span
                     className={
                       it.completed
-                        ? "text-muted-foreground line-through"
-                        : ""
+                        ? "text-moss line-through decoration-moss/60"
+                        : "text-ink"
                     }
                   >
                     {it.text}

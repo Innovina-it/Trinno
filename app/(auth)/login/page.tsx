@@ -3,30 +3,62 @@ import { LoginForm } from "@/components/auth/login-form";
 
 export default function LoginPage() {
   return (
-    <main className="bg-auth-gradient relative min-h-screen overflow-hidden p-6">
-      {/* Decorative blurs */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-32 -left-32 size-80 rounded-full bg-primary/10 blur-3xl"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-32 -right-32 size-96 rounded-full bg-purple-500/10 blur-3xl"
-      />
-      <div className="relative grid min-h-[calc(100vh-3rem)] place-items-center">
-        <div className="w-full max-w-sm space-y-6 rounded-2xl border border-border/60 bg-background/85 p-7 shadow-xl ring-1 ring-black/5 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
-          <div className="space-y-1.5 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
-            <p className="text-sm text-muted-foreground">Sign in to continue to your boards</p>
-          </div>
-          <LoginForm />
-          <p className="text-center text-sm text-muted-foreground">
-            New here?{" "}
-            <Link href="/signup" className="font-medium text-foreground underline underline-offset-4 hover:no-underline">
-              Create an account
-            </Link>
-          </p>
+    <main className="bg-auth-paper relative min-h-screen overflow-hidden">
+      {/* Top marginalia strip — workspace-agnostic route metadata */}
+      <div className="border-b border-rule">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
+          <span className="mono-meta text-ink/70">
+            TRINNOVINA <span className="text-ink/30">/</span>{" "}
+            <span className="text-ink/50">AUTH</span>{" "}
+            <span className="text-ink/30">/</span>{" "}
+            <span className="text-ink">LOGIN</span>
+          </span>
+          <span className="mono-meta-sm text-ink/40 hidden sm:inline">
+            VOL. 01 — ISSUE 04 / 29
+          </span>
         </div>
+      </div>
+
+      <div className="mx-auto grid min-h-[calc(100vh-3.5rem)] max-w-6xl grid-cols-1 items-center gap-10 px-6 py-12 lg:grid-cols-12">
+        {/* Hero side — oversized italic serif */}
+        <section className="lg:col-span-7 space-y-6">
+          <span className="mono-meta text-ink/50 block">No. 01 — Returning</span>
+          <h1 className="serif-display text-[clamp(4rem,12vw,8rem)] text-ink">
+            Sign in.
+          </h1>
+          <p className="max-w-md text-ink/70 leading-relaxed">
+            Pick up where the work left off. Boards, lists, and cards remain
+            exactly as you set them down.
+          </p>
+          <div className="rule mt-10 w-24" />
+          <p className="mono-meta text-ink/40">
+            Editorial · Industrial · Kanban
+          </p>
+        </section>
+
+        {/* Form side */}
+        <section className="lg:col-span-5">
+          <div className="border border-ink bg-paper p-7 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="mb-6 flex items-baseline justify-between border-b border-rule pb-3">
+              <h2 className="mono-meta text-ink">Credentials</h2>
+              <span className="mono-meta-sm text-ink/40">FORM-A</span>
+            </div>
+            <LoginForm />
+          </div>
+
+          {/* Footer pull-quote linking to signup */}
+          <div className="mt-8 text-center">
+            <p className="serif-display text-2xl text-ink/80 italic">
+              &ldquo;New here?&rdquo;
+            </p>
+            <Link
+              href="/signup"
+              className="mono-meta mt-2 inline-block text-ink underline underline-offset-4 decoration-ink/40 hover:decoration-signal hover:text-signal"
+            >
+              Create an account &rarr;
+            </Link>
+          </div>
+        </section>
       </div>
     </main>
   );

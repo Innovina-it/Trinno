@@ -53,25 +53,28 @@ export function CommentsSection({ cardId }: { cardId: string }) {
   }
 
   return (
-    <section className="space-y-2" data-testid="comments-section">
-      <h3 className="text-sm font-semibold">Comments</h3>
+    <section className="space-y-3" data-testid="comments-section">
+      <div className="flex items-baseline justify-between border-b border-rule pb-1">
+        <h3 className="mono-meta text-ink/70">Comments</h3>
+        <span className="mono-meta-sm text-ink/35">CM</span>
+      </div>
       <ul className="space-y-2" data-testid="comments-list">
         {cardComments.length === 0 && (
-          <li className="text-xs text-muted-foreground">No comments yet.</li>
+          <li className="font-serif italic text-sm text-ink/50">No comments yet.</li>
         )}
         {cardComments.map((c) => (
           <li
             key={c.id}
             data-comment-id={c.id}
-            className="rounded border border-border bg-muted/30 p-2 text-sm"
+            className="border border-rule bg-paper-shadow/50 p-3 text-sm"
           >
-            <div className="mb-0.5 flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">
+            <div className="mb-1.5 flex items-baseline justify-between gap-2 border-b border-rule pb-1">
+              <span className="mono-meta text-ink">
                 {profileById.get(c.authorId) ?? "Unknown"}
               </span>
-              <time>{fmt(c.createdAt)}</time>
+              <time className="mono-meta-sm text-ink/45">{fmt(c.createdAt)}</time>
             </div>
-            <p className="whitespace-pre-wrap">{c.body}</p>
+            <p className="whitespace-pre-wrap text-ink">{c.body}</p>
           </li>
         ))}
       </ul>
@@ -83,10 +86,10 @@ export function CommentsSection({ cardId }: { cardId: string }) {
           rows={3}
           maxLength={20_000}
           aria-label="New comment"
-          className="w-full rounded-lg border border-input bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="w-full rounded-none border border-ink/70 bg-paper-shadow p-2.5 text-sm font-sans outline-none transition-colors focus-visible:border-ink focus-visible:bg-paper placeholder:font-serif placeholder:italic placeholder:text-ink/45"
         />
         <div className="flex justify-end">
-          <Button type="submit" disabled={pending || body.trim().length === 0}>
+          <Button type="submit" size="sm" disabled={pending || body.trim().length === 0}>
             Save
           </Button>
         </div>

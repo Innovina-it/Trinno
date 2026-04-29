@@ -73,22 +73,25 @@ export function AttachmentsSection({ cardId }: { cardId: string }) {
   }
 
   return (
-    <section className="space-y-2" data-testid="attachments-section">
-      <h3 className="text-sm font-semibold">Attachments</h3>
+    <section className="space-y-3" data-testid="attachments-section">
+      <div className="flex items-baseline justify-between border-b border-rule pb-1">
+        <h3 className="mono-meta text-ink/70">Attachments</h3>
+        <span className="mono-meta-sm text-ink/35">AT</span>
+      </div>
       <ul className="space-y-1">
         {attachments.map((a) => (
           <li
             key={a.id}
-            className="flex items-center gap-2 text-sm"
+            className="flex items-center gap-2 border-b border-rule pb-1.5 text-sm"
             data-attachment-id={a.id}
           >
-            <Paperclip className="size-4 text-muted-foreground" />
-            <span className="flex-1">{a.filename}</span>
-            <span className="text-xs text-muted-foreground">
+            <Paperclip className="size-3.5 text-ink/50" />
+            <span className="flex-1 truncate text-ink">{a.filename}</span>
+            <span className="mono-meta-sm text-ink/55 tabular-nums">
               {formatSize(a.sizeBytes)}
             </span>
             <Button
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               disabled={pending}
               onClick={() => remove(a.id)}
@@ -105,7 +108,7 @@ export function AttachmentsSection({ cardId }: { cardId: string }) {
         disabled={uploading}
         onClick={() => inputRef.current?.click()}
       >
-        <Paperclip className="mr-1 size-4" />{" "}
+        <Paperclip className="mr-1 size-3.5" />{" "}
         {uploading ? "Uploading…" : "Add attachment"}
       </Button>
     </section>

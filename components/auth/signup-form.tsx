@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { ArrowRight, Loader2, MailCheck } from "lucide-react";
+import { ChevronRight, Loader2, MailCheck } from "lucide-react";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,11 +28,11 @@ export function SignupForm() {
 
   if (sent) {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-lg border border-border/60 bg-muted/40 p-6 text-center animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+      <div className="flex flex-col items-center gap-3 border border-rule bg-paper-shadow p-6 text-center animate-in fade-in slide-in-from-bottom-1 duration-200">
+        <div className="flex size-10 items-center justify-center border border-ink text-ink">
           <MailCheck className="size-5" />
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="mono-meta text-ink/70">
           Check your email for a confirmation link.
         </p>
       </div>
@@ -40,31 +40,45 @@ export function SignupForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 w-full">
-      <div className="space-y-1.5">
+    <form onSubmit={onSubmit} className="space-y-5 w-full">
+      <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
-        <Input id="email" type="email" required value={email}
-               onChange={(e) => setEmail(e.target.value)} />
+        <Input
+          id="email"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@studio.com"
+        />
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <Label htmlFor="password">Password</Label>
-        <Input id="password" type="password" required minLength={8}
-               value={password} onChange={(e) => setPassword(e.target.value)} />
+        <Input
+          id="password"
+          type="password"
+          required
+          minLength={8}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="8+ characters"
+        />
       </div>
       <Button
         type="submit"
+        size="lg"
         disabled={submitting}
-        className="w-full transition-all duration-150 ease-out hover:shadow-md active:scale-[0.98]"
+        className="w-full"
       >
         {submitting ? (
           <>
             <Loader2 className="size-4 animate-spin" />
-            Creating account…
+            <span>Creating account</span>
           </>
         ) : (
           <>
-            Sign up
-            <ArrowRight className="size-4 transition-transform duration-150 group-hover/button:translate-x-0.5" />
+            <span>Sign up</span>
+            <ChevronRight className="size-4 text-signal transition-transform duration-150 group-hover/button:translate-x-0.5" />
           </>
         )}
       </Button>

@@ -75,12 +75,15 @@ export function LabelsSection({ cardId }: { cardId: string }) {
   }
 
   return (
-    <section className="space-y-2" data-testid="labels-section">
-      <h3 className="text-sm font-semibold">Labels</h3>
+    <section className="space-y-3" data-testid="labels-section">
+      <div className="flex items-baseline justify-between border-b border-rule pb-1">
+        <h3 className="mono-meta text-ink/70">Labels</h3>
+        <span className="mono-meta-sm text-ink/35">L</span>
+      </div>
       {labels.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No labels yet.</p>
+        <p className="font-serif italic text-sm text-ink/50">No labels yet.</p>
       ) : (
-        <ul className="flex flex-wrap gap-2">
+        <ul className="flex flex-wrap gap-1.5">
           {labels.map((l) => {
             const attached = attachedIds.has(l.id);
             return (
@@ -91,24 +94,26 @@ export function LabelsSection({ cardId }: { cardId: string }) {
                   data-label-id={l.id}
                   data-attached={attached ? "true" : "false"}
                   disabled={pending}
-                  className="flex items-center gap-2 rounded px-2 py-1 text-xs text-white"
+                  className="mono-meta-sm flex items-center gap-1.5 border px-2 py-1 text-paper transition-opacity hover:opacity-90 disabled:opacity-60"
                   style={{
                     backgroundColor: l.color,
-                    outline: attached ? "2px solid #111" : "none",
+                    borderColor: attached ? "var(--ink)" : l.color,
+                    outline: attached ? "1px solid var(--ink)" : "none",
+                    outlineOffset: attached ? "1px" : "0",
                   }}
                   title={attached ? "Click to detach" : "Click to attach"}
                 >
-                  <span>{l.name || l.color}</span>
-                  <span aria-hidden>{attached ? "✓" : "+"}</span>
+                  <span className="tracking-wider">{l.name || l.color}</span>
+                  <span aria-hidden className="text-paper/85">{attached ? "✓" : "+"}</span>
                 </button>
               </li>
             );
           })}
         </ul>
       )}
-      <div className="space-y-1.5 pt-2">
+      <div className="space-y-2 pt-2">
         <Label htmlFor="new-label">New label</Label>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <Input
             id="new-label"
             value={name}
@@ -121,7 +126,7 @@ export function LabelsSection({ cardId }: { cardId: string }) {
             value={color}
             onChange={(e) => setColor(e.target.value)}
             aria-label="Label color"
-            className="rounded-md border border-input bg-transparent px-2 py-1.5 text-sm"
+            className="h-9 rounded-none border border-ink/70 bg-paper-shadow px-2 text-sm font-mono"
           >
             {PALETTE.map((c) => (
               <option key={c} value={c} style={{ backgroundColor: c }}>
@@ -129,7 +134,7 @@ export function LabelsSection({ cardId }: { cardId: string }) {
               </option>
             ))}
           </select>
-          <Button type="button" onClick={onAdd} disabled={pending}>
+          <Button type="button" size="sm" onClick={onAdd} disabled={pending}>
             Add
           </Button>
         </div>

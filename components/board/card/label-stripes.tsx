@@ -2,6 +2,9 @@
 import { useMemo } from "react";
 import { useBoardStore } from "@/stores/board-store";
 
+// Editorial-industrial label rendering: full-width horizontal stripes at the
+// top edge of the card tile (like ledger tabs), no rounded corners. Stripes
+// stack flush against each other to read as a single colour-coded margin.
 export function LabelStripes({ cardId }: { cardId: string }) {
   const cardLabels = useBoardStore((s) => s.cardLabels);
   const labels = useBoardStore((s) => s.labels);
@@ -14,12 +17,12 @@ export function LabelStripes({ cardId }: { cardId: string }) {
 
   if (attached.length === 0) return null;
   return (
-    <div className="mb-1 flex flex-wrap gap-1" data-testid="label-stripes">
+    <div className="flex w-full" data-testid="label-stripes">
       {attached.map((l) => (
         <span
           key={l.id}
           data-label-id={l.id}
-          className="inline-block h-2 w-10 rounded"
+          className="block h-1.5 flex-1"
           style={{ backgroundColor: l.color }}
           title={l.name || l.color}
         />

@@ -12,21 +12,25 @@ export function TopNav({
   activeWorkspaceId?: string;
 }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-[0_1px_0_0_rgba(0,0,0,0.02)]">
-      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
+    <header className="sticky top-0 z-40 border-b border-ink bg-paper">
+      <div className="max-w-6xl mx-auto px-4 h-12 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Wordmark — JetBrains Mono uppercase, tight tracking.
+              The accessible name "Trello Clone" is preserved via aria-label
+              for downstream tests; the visible mark is the Trinnovina brand. */}
           <Link
             href="/"
-            className="font-semibold tracking-tight transition-opacity duration-150 hover:opacity-80"
+            aria-label="Trello Clone"
+            className="mono-meta text-ink tracking-[0.18em] hover:text-signal transition-colors"
           >
-            Trello Clone
+            TRINNOVINA
           </Link>
-          <span className="text-muted-foreground/60">/</span>
+          <span className="text-ink/30 select-none" aria-hidden>/</span>
           <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspaceId} />
         </div>
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-3">
           <SearchBox />
-          <span className="hidden md:inline text-muted-foreground truncate max-w-[180px]">
+          <span className="hidden md:inline mono-meta-sm text-ink/50 truncate max-w-[160px]">
             {email}
           </span>
           <form action={logout}>

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { X } from "lucide-react";
+import { X, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createList } from "@/actions/lists";
@@ -33,8 +33,9 @@ export function AddListForm({ boardId }: { boardId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-72 shrink-0 rounded-xl bg-white/10 px-3 py-2 text-left text-sm font-medium text-white ring-1 ring-white/15 backdrop-blur-sm transition-all duration-150 ease-out hover:-translate-y-0.5 hover:bg-white/20 hover:ring-white/25 active:scale-[0.99]"
+        className="group/add w-72 shrink-0 border border-dashed border-ink/40 bg-paper/50 px-3 py-3 text-left mono-meta text-ink/55 transition-colors duration-150 ease-out hover:border-ink hover:bg-paper hover:text-ink"
       >
+        <Plus className="mr-1.5 inline-block size-3 align-text-bottom text-ink/40 transition-colors group-hover/add:text-signal" />
         + Add a list
       </button>
     );
@@ -43,8 +44,9 @@ export function AddListForm({ boardId }: { boardId: string }) {
   return (
     <form
       onSubmit={submit}
-      className="w-72 shrink-0 space-y-2 rounded-xl bg-white p-2 shadow-md ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150"
+      className="w-72 shrink-0 space-y-2 border border-ink bg-paper p-3 animate-in fade-in slide-in-from-bottom-1 duration-150"
     >
+      <div className="mono-meta-sm text-ink/45 mb-1">NEW LIST</div>
       <Input
         autoFocus
         value={title}
@@ -54,7 +56,7 @@ export function AddListForm({ boardId }: { boardId: string }) {
         minLength={1}
         maxLength={120}
       />
-      <div className="flex gap-1">
+      <div className="flex gap-1.5">
         <Button type="submit" size="sm" disabled={pending || !title.trim()}>
           Add list
         </Button>
@@ -67,7 +69,7 @@ export function AddListForm({ boardId }: { boardId: string }) {
             setTitle("");
           }}
         >
-          <X className="size-4" />
+          <X className="size-3.5" />
         </Button>
       </div>
     </form>

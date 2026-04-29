@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ChevronRight, Loader2 } from "lucide-react";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,31 +26,44 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 w-full">
-      <div className="space-y-1.5">
+    <form onSubmit={onSubmit} className="space-y-5 w-full">
+      <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
-        <Input id="email" type="email" required value={email}
-               onChange={(e) => setEmail(e.target.value)} />
+        <Input
+          id="email"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@studio.com"
+        />
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <Label htmlFor="password">Password</Label>
-        <Input id="password" type="password" required value={password}
-               onChange={(e) => setPassword(e.target.value)} />
+        <Input
+          id="password"
+          type="password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="••••••••"
+        />
       </div>
       <Button
         type="submit"
+        size="lg"
         disabled={submitting}
-        className="w-full transition-all duration-150 ease-out hover:shadow-md active:scale-[0.98]"
+        className="w-full"
       >
         {submitting ? (
           <>
             <Loader2 className="size-4 animate-spin" />
-            Signing in…
+            <span>Signing in</span>
           </>
         ) : (
           <>
-            Log in
-            <ArrowRight className="size-4 transition-transform duration-150 group-hover/button:translate-x-0.5" />
+            <span>Log in</span>
+            <ChevronRight className="size-4 text-signal transition-transform duration-150 group-hover/button:translate-x-0.5" />
           </>
         )}
       </Button>

@@ -34,9 +34,12 @@ export function MembersSection({ cardId }: { cardId: string }) {
 
   if (profiles.length === 0) return null;
   return (
-    <section className="space-y-2" data-testid="members-section">
-      <h3 className="text-sm font-semibold">Members</h3>
-      <ul className="flex flex-wrap gap-2">
+    <section className="space-y-3" data-testid="members-section">
+      <div className="flex items-baseline justify-between border-b border-rule pb-1">
+        <h3 className="mono-meta text-ink/70">Members</h3>
+        <span className="mono-meta-sm text-ink/35">MB</span>
+      </div>
+      <ul className="flex flex-wrap gap-1.5">
         {profiles.map((p) => {
           const on = assigned.has(p.id);
           return (
@@ -49,10 +52,10 @@ export function MembersSection({ cardId }: { cardId: string }) {
                 onClick={() => toggle(p.id)}
                 data-user-id={p.id}
                 data-assigned={on}
-                className="gap-2"
+                className="gap-1.5 normal-case tracking-normal"
               >
-                <Avatar size="sm">
-                  <AvatarFallback>
+                <Avatar size="sm" className="rounded-none border border-current">
+                  <AvatarFallback className="rounded-none bg-transparent text-current text-[10px] tracking-widest">
                     {p.displayName.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>

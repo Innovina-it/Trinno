@@ -1,7 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { X } from "lucide-react";
+import { X, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createCard } from "@/actions/cards";
@@ -33,15 +33,19 @@ export function AddCardForm({ listId }: { listId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-md px-2 py-1.5 text-left text-xs font-medium text-white/70 transition-colors duration-150 ease-out hover:bg-white/10 hover:text-white"
+        className="group/addcard w-full border border-dashed border-ink/30 bg-transparent px-2 py-1.5 text-left mono-meta-sm text-ink/55 transition-colors duration-150 ease-out hover:border-ink hover:bg-paper-shadow hover:text-ink"
       >
+        <Plus className="mr-1 inline-block size-3 align-text-bottom text-ink/40 transition-colors group-hover/addcard:text-signal" />
         + Add a card
       </button>
     );
   }
 
   return (
-    <form onSubmit={submit} className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+    <form
+      onSubmit={submit}
+      className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-150"
+    >
       <Input
         autoFocus
         value={title}
@@ -50,9 +54,9 @@ export function AddCardForm({ listId }: { listId: string }) {
         required
         minLength={1}
         maxLength={120}
-        className="bg-white text-foreground shadow-sm"
+        className="bg-paper"
       />
-      <div className="flex gap-1">
+      <div className="flex gap-1.5">
         <Button type="submit" size="sm" disabled={pending || !title.trim()}>
           Add
         </Button>
@@ -60,13 +64,12 @@ export function AddCardForm({ listId }: { listId: string }) {
           type="button"
           variant="ghost"
           size="sm"
-          className="text-white/80 hover:bg-white/10 hover:text-white"
           onClick={() => {
             setOpen(false);
             setTitle("");
           }}
         >
-          <X className="size-4" />
+          <X className="size-3.5" />
         </Button>
       </div>
     </form>

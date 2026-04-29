@@ -36,41 +36,43 @@ export function TileIndicators({ cardId }: { cardId: string }) {
   if (!hasAny) return null;
 
   return (
-    <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-      <div className="flex items-center gap-2">
+    <div className="mt-1 flex items-center justify-between gap-2 mono-meta-sm text-ink/55">
+      <div className="flex items-center gap-2.5">
         {itemTotal > 0 && (
           <span
-            className={`inline-flex items-center gap-1 ${itemDone === itemTotal ? "text-green-600 font-medium" : ""}`}
+            className={`inline-flex items-center gap-1 ${itemDone === itemTotal ? "text-moss" : ""}`}
             data-testid="tile-checklist"
           >
-            <CheckSquare className="size-3.5" />
-            {itemDone}/{itemTotal}
+            <CheckSquare className="size-3" />
+            <span className="tabular-nums">
+              {itemDone}/{itemTotal}
+            </span>
           </span>
         )}
         {commentCount > 0 && (
           <span className="inline-flex items-center gap-1" data-testid="tile-comments">
-            <MessageSquare className="size-3.5" />
-            {commentCount}
+            <MessageSquare className="size-3" />
+            <span className="tabular-nums">{commentCount}</span>
           </span>
         )}
         {attachmentCount > 0 && (
           <span className="inline-flex items-center gap-1" data-testid="tile-attachments">
-            <Paperclip className="size-3.5" />
-            {attachmentCount}
+            <Paperclip className="size-3" />
+            <span className="tabular-nums">{attachmentCount}</span>
           </span>
         )}
       </div>
       {memberProfiles.length > 0 && (
-        <div className="flex -space-x-1.5" data-testid="tile-members">
+        <div className="flex -space-x-1" data-testid="tile-members">
           {memberProfiles.slice(0, 3).map((p) => (
-            <Avatar key={p.id} className="size-5 ring-2 ring-white">
-              <AvatarFallback className="text-[10px]">
+            <Avatar key={p.id} className="size-5 ring-2 ring-paper rounded-none">
+              <AvatarFallback className="rounded-none bg-ink text-paper text-[9px] tracking-widest">
                 {p.displayName.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
           ))}
           {memberProfiles.length > 3 && (
-            <span className="ml-2 self-center text-[10px]">+{memberProfiles.length - 3}</span>
+            <span className="ml-1.5 self-center mono-meta-sm">+{memberProfiles.length - 3}</span>
           )}
         </div>
       )}

@@ -4,12 +4,32 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* -------------------------------------------------------------------------
+   Editorial-industrial design tokens
+   --------------------------------------------------------------------------
+   Newspaper ink on warm paper, blueprint grid, single signal-orange accent.
+   - Hairline rules over rounded shadows.
+   - Tight serif-italic display; mono for technical metadata.
+   - Sparing use of --signal: active states, due-date warnings, hover marks.
+   ------------------------------------------------------------------------ */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  /* Editorial palette mapped into Tailwind colour utilities */
+  --color-paper: var(--paper);
+  --color-paper-shadow: var(--paper-shadow);
+  --color-ink: var(--ink);
+  --color-rule: var(--rule);
+  --color-signal: var(--signal);
+  --color-moss: var(--moss);
+
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-heading: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jb-mono), var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-heading: var(--font-instrument), Georgia, "Times New Roman", serif;
+  --font-serif: var(--font-instrument), Georgia, "Times New Roman", serif;
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,82 +59,101 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-sm: 0.125rem;
+  --radius-md: 0.1875rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.25rem;
+  --radius-2xl: 0.25rem;
+  --radius-3xl: 0.25rem;
+  --radius-4xl: 0.25rem;
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* Editorial palette */
+  --paper: #f1ebde;
+  --paper-shadow: #e2dac8;
+  --ink: #0c0c0a;
+  --rule: rgb(12 12 10 / 0.12);
+  --signal: #ff4d12;
+  --moss: #1f3933;
+
+  /* Map the editorial tokens onto the existing shadcn channel */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --popover: var(--paper);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: var(--paper-shadow);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-shadow);
+  --muted-foreground: rgb(12 12 10 / 0.6);
+  --accent: var(--paper-shadow);
+  --accent-foreground: var(--ink);
+  --destructive: var(--signal);
+  --border: var(--rule);
+  --input: rgb(12 12 10 / 0.5);
+  --ring: var(--ink);
+
+  --chart-1: var(--ink);
+  --chart-2: var(--moss);
+  --chart-3: var(--signal);
+  --chart-4: rgb(12 12 10 / 0.6);
+  --chart-5: rgb(12 12 10 / 0.35);
+  --radius: 0.1875rem;
+
+  --sidebar: var(--paper);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--ink);
+  --sidebar-primary-foreground: var(--paper);
+  --sidebar-accent: var(--paper-shadow);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--ink);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --paper: #0c0c0a;
+  --paper-shadow: #1a1a16;
+  --ink: #f1ebde;
+  --rule: rgb(241 235 222 / 0.18);
+  --signal: #ff5a23;
+  --moss: #c8d6cd;
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --popover: var(--paper);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: var(--paper-shadow);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-shadow);
+  --muted-foreground: rgb(241 235 222 / 0.65);
+  --accent: var(--paper-shadow);
+  --accent-foreground: var(--ink);
+  --destructive: var(--signal);
+  --border: var(--rule);
+  --input: rgb(241 235 222 / 0.45);
+  --ring: var(--ink);
+  --chart-1: var(--ink);
+  --chart-2: var(--moss);
+  --chart-3: var(--signal);
+  --chart-4: rgb(241 235 222 / 0.6);
+  --chart-5: rgb(241 235 222 / 0.4);
+
+  --sidebar: var(--paper);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--ink);
+  --sidebar-primary-foreground: var(--paper);
+  --sidebar-accent: var(--paper-shadow);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--ink);
 }
 
 @layer base {
@@ -126,18 +165,22 @@
   }
   body {
     @apply text-foreground;
-    background-color: var(--background);
-    background-image:
-      radial-gradient(circle at 0% 0%, oklch(0.97 0.02 250 / 0.7), transparent 45%),
-      radial-gradient(circle at 100% 0%, oklch(0.97 0.02 320 / 0.5), transparent 50%),
-      radial-gradient(circle at 50% 100%, oklch(0.96 0.02 200 / 0.45), transparent 55%);
+    background-color: var(--paper);
+    /* Blueprint dotted grid: 1px ink dots @ 24px intervals, 8% opacity */
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      rgb(12 12 10 / 0.08) 1px,
+      transparent 0
+    );
+    background-size: 24px 24px;
     background-attachment: fixed;
   }
   .dark body {
-    background-image:
-      radial-gradient(circle at 0% 0%, oklch(0.25 0.04 260 / 0.6), transparent 45%),
-      radial-gradient(circle at 100% 0%, oklch(0.22 0.05 320 / 0.5), transparent 50%),
-      radial-gradient(circle at 50% 100%, oklch(0.22 0.04 200 / 0.4), transparent 55%);
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      rgb(241 235 222 / 0.1) 1px,
+      transparent 0
+    );
   }
 
   /* Smoother focus ring transition */
@@ -147,58 +190,184 @@
       border-color 150ms ease-out;
   }
 
-  /* Custom scrollbars */
+  /* Editorial scrollbars: hairline ink, no rounding */
   * {
     scrollbar-width: thin;
-    scrollbar-color: oklch(0.7 0 0 / 0.35) transparent;
+    scrollbar-color: rgb(12 12 10 / 0.35) transparent;
   }
   *::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
   }
   *::-webkit-scrollbar-track {
     background: transparent;
   }
   *::-webkit-scrollbar-thumb {
-    background-color: oklch(0.7 0 0 / 0.35);
-    border-radius: 999px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
+    background-color: rgb(12 12 10 / 0.35);
+    border-radius: 0;
     transition: background-color 150ms ease-out;
   }
   *::-webkit-scrollbar-thumb:hover {
-    background-color: oklch(0.55 0 0 / 0.55);
-    background-clip: padding-box;
+    background-color: rgb(12 12 10 / 0.6);
   }
   .dark *::-webkit-scrollbar-thumb {
-    background-color: oklch(1 0 0 / 0.18);
+    background-color: rgb(241 235 222 / 0.22);
   }
   .dark *::-webkit-scrollbar-thumb:hover {
-    background-color: oklch(1 0 0 / 0.32);
+    background-color: rgb(241 235 222 / 0.4);
+  }
+
+  /* Native form controls inherit ink colour for date/checkbox glyphs. */
+  input[type="date"],
+  input[type="checkbox"] {
+    accent-color: var(--ink);
+  }
+  .dark input[type="date"] {
+    color-scheme: dark;
   }
 }
 
-/* Soft elevation utility */
-@utility shadow-elevated {
-  box-shadow:
-    0 1px 2px oklch(0 0 0 / 0.06),
-    0 8px 24px oklch(0 0 0 / 0.08);
+/* -------------------------------------------------------------------------
+   Editorial utilities
+   ------------------------------------------------------------------------ */
+
+/* Dotted blueprint grid used as page/section background. */
+@utility paper-grid {
+  background-color: var(--paper);
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgb(12 12 10 / 0.08) 1px,
+    transparent 0
+  );
+  background-size: 24px 24px;
+}
+.dark .paper-grid {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgb(241 235 222 / 0.1) 1px,
+    transparent 0
+  );
 }
 
-/* Auth gradient backdrop */
-@utility bg-auth-gradient {
-  background-color: var(--background);
-  background-image:
-    radial-gradient(circle at 15% 20%, oklch(0.85 0.12 255 / 0.45), transparent 45%),
-    radial-gradient(circle at 85% 80%, oklch(0.86 0.13 320 / 0.4), transparent 50%),
-    radial-gradient(circle at 50% 50%, oklch(0.95 0.05 200 / 0.3), transparent 60%);
+/* 1px hairline border at 100% ink — used to outline cards, inputs, modals */
+@utility hairline {
+  border: 1px solid var(--ink);
 }
 
-/* Drag preview emphasis: applied while a sortable item is dragging */
+/* 12% rule, used to separate sections without shouting */
+@utility rule {
+  border-top: 1px solid var(--rule);
+}
+
+@utility rule-b {
+  border-bottom: 1px solid var(--rule);
+}
+
+/* Mono uppercase metadata stamp — IDs, dates, route crumbs, section heads */
+@utility mono-meta {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@utility mono-meta-sm {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Serif display: italic, tight tracking — for hero h1/h2, modal titles */
+@utility serif-display {
+  font-family: var(--font-serif);
+  font-style: italic;
+  letter-spacing: -0.02em;
+  font-weight: 400;
+  line-height: 0.95;
+}
+
+/* Pull-quote: oversized italic serif, centered — for empty states */
+@utility pull-quote {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
+}
+
+/* Drag preview emphasis: card rotates + signal-orange hairline ring */
 @utility drag-active {
   cursor: grabbing !important;
+  outline: 1px solid var(--signal);
+  outline-offset: 2px;
+  transform: rotate(1.5deg);
+  box-shadow: 0 14px 28px rgb(12 12 10 / 0.18);
+}
+
+/* Soft elevation utility (kept for skeletons / cards that still want lift) */
+@utility shadow-elevated {
   box-shadow:
-    0 14px 28px oklch(0 0 0 / 0.18),
-    0 6px 10px oklch(0 0 0 / 0.12);
-  transform: rotate(1.5deg) scale(1.02);
+    0 1px 0 0 var(--rule),
+    0 0 0 1px var(--rule);
+}
+
+/* Auth backdrop: cream paper + blueprint dot grid */
+@utility bg-auth-paper {
+  background-color: var(--paper);
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgb(12 12 10 / 0.08) 1px,
+    transparent 0
+  );
+  background-size: 24px 24px;
+}
+
+/* Card hover: 1px signal-orange underline appears under card title */
+@utility hover-underline-signal {
+  background-image: linear-gradient(to right, var(--signal), var(--signal));
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  background-size: 0% 1px;
+  transition: background-size 200ms ease-out;
+}
+@utility hover-underline-signal-active {
+  background-size: 100% 1px;
+}
+
+/* Card code stamp: renders the card's TR/BD code via a CSS pseudo-element so
+   it appears visually but is excluded from DOM textContent. This keeps the
+   editorial-industrial part-number marginalia without polluting the Link's
+   text content (which would break drag-test card-title assertions). */
+@utility card-code-stamp {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgb(12 12 10 / 0.45);
+  pointer-events: none;
+  user-select: none;
+}
+.card-code-stamp::after {
+  content: "#" attr(data-card-code);
+}
+.dark .card-code-stamp {
+  color: rgb(241 235 222 / 0.5);
+}
+
+@utility list-ordinal-stamp {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgb(12 12 10 / 0.4);
+  pointer-events: none;
+  user-select: none;
+}
+.list-ordinal-stamp::after {
+  content: attr(data-list-ordinal);
+}
+.dark .list-ordinal-stamp {
+  color: rgb(241 235 222 / 0.45);
 }

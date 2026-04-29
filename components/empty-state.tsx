@@ -1,5 +1,7 @@
 import { cn } from "@/lib/utils";
 
+// Editorial pull-quote empty state. Big italic serif headline, mono caption
+// below, optional action. Hairline border in place of a soft container.
 export function EmptyState({
   icon,
   title,
@@ -16,25 +18,22 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border/70 bg-muted/30 px-6 py-12 text-center",
-        "transition-colors duration-200 hover:border-border hover:bg-muted/50",
+        "flex flex-col items-center justify-center gap-4 border border-rule paper-grid px-6 py-16 text-center",
         className,
       )}
     >
       {icon && (
-        <div className="flex size-12 items-center justify-center rounded-full bg-background text-muted-foreground shadow-sm ring-1 ring-border/60 [&_svg]:size-6">
+        <div className="flex size-10 items-center justify-center border border-ink text-ink [&_svg]:size-5">
           {icon}
         </div>
       )}
-      <div className="space-y-1">
-        <h3 className="text-base font-semibold text-foreground">{title}</h3>
-        {description && (
-          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            {description}
-          </p>
-        )}
-      </div>
-      {action && <div className="pt-1">{action}</div>}
+      <p className="pull-quote text-4xl md:text-5xl text-ink/85">
+        &ldquo;{title}&rdquo;
+      </p>
+      {description && (
+        <p className="mono-meta mx-auto max-w-md text-ink/55">{description}</p>
+      )}
+      {action && <div className="pt-2">{action}</div>}
     </div>
   );
 }

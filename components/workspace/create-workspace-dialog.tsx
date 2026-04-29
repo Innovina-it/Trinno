@@ -33,16 +33,25 @@ export function CreateWorkspaceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="paper-grid">
         <DialogHeader>
-          <DialogTitle>Create workspace</DialogTitle>
+          <div className="flex items-baseline justify-between gap-2">
+            <DialogTitle>New workspace.</DialogTitle>
+            <span className="mono-meta-sm text-ink/40">FORM-NW</span>
+          </div>
         </DialogHeader>
-        <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-1.5">
+        <form onSubmit={submit} className="space-y-5">
+          <div className="space-y-2">
             <Label htmlFor="ws-name">Name</Label>
-            <Input id="ws-name" value={name}
-                   onChange={(e) => setName(e.target.value)}
-                   placeholder="Acme team" required minLength={1} maxLength={120} />
+            <Input
+              id="ws-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Acme team"
+              required
+              minLength={1}
+              maxLength={120}
+            />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={pending || !name.trim()}>

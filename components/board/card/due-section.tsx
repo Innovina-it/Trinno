@@ -66,8 +66,11 @@ export function DueSection({ cardId }: { cardId: string }) {
   }
 
   return (
-    <section className="space-y-2" data-testid="due-section">
-      <h3 className="text-sm font-semibold">Due date</h3>
+    <section className="space-y-3" data-testid="due-section">
+      <div className="flex items-baseline justify-between border-b border-rule pb-1">
+        <h3 className="mono-meta text-ink/70">Due date</h3>
+        <span className="mono-meta-sm text-ink/35">DT</span>
+      </div>
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="date"
@@ -75,16 +78,17 @@ export function DueSection({ cardId }: { cardId: string }) {
           value={value}
           onChange={(e) => persistDate(e.target.value)}
           disabled={pending}
-          className="rounded-md border border-input bg-transparent px-2 py-1.5 text-sm"
+          className="h-9 rounded-none border border-ink/70 bg-paper-shadow px-2.5 py-1 text-sm font-mono text-ink transition-colors focus:border-ink focus:bg-paper outline-none"
         />
         {card.dueDate && (
           <>
-            <label className="flex items-center gap-1.5 text-sm">
+            <label className="flex items-center gap-1.5 mono-meta text-ink/75">
               <input
                 type="checkbox"
                 checked={card.dueComplete}
                 onChange={(e) => toggleComplete(e.target.checked)}
                 disabled={pending}
+                className="size-3.5"
               />
               Mark complete
             </label>

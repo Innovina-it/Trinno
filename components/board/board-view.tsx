@@ -27,6 +27,7 @@ import { AddListForm } from "./add-list-form";
 import { useBoardRealtime } from "@/hooks/use-board-realtime";
 import { useBoardPresence, type Viewer } from "@/hooks/use-board-presence";
 import { PresenceAvatars } from "./presence-avatars";
+import { boardCode } from "@/lib/format";
 
 function decodeId(
   sortableId: string,
@@ -165,45 +166,66 @@ export function BoardView({
 
   const baseColor =
     board.backgroundKind === "color" ? board.backgroundValue : "#0079bf";
-  // Add a subtle radial highlight on top of the chosen color to make boards feel less flat.
-  const bg = `radial-gradient(circle at 0% 0%, rgba(255,255,255,0.18), transparent 55%), radial-gradient(circle at 100% 100%, rgba(0,0,0,0.18), transparent 55%), ${baseColor}`;
+  // Editorial layering: cream paper underneath, 12% tint in the user's chosen
+  // hue, and the blueprint dot grid on top so the colour is felt rather than seen.
+  const bg = `radial-gradient(circle at 1px 1px, rgb(12 12 10 / 0.08) 1px, transparent 0) 0 0 / 24px 24px, linear-gradient(${baseColor}1f, ${baseColor}1f), var(--paper)`;
 
   return (
     <div
-      className="-m-6 min-h-[calc(100vh-3rem)] p-4"
+      className="-m-6 min-h-[calc(100vh-3rem)] flex flex-col"
       style={{ background: bg }}
     >
-      <div className="mb-4 flex items-center justify-between px-2">
-        <h1 className="text-xl font-semibold tracking-tight text-white drop-shadow-sm">
-          {board.title}
-        </h1>
-        <div className="flex items-center gap-3">
-          <PresenceAvatars viewers={viewers} />
-          <Button
-            render={<Link href={`/b/${board.id}/settings`} />}
-            nativeButton={false}
-            variant="secondary"
-            size="sm"
-            className="bg-white/85 hover:bg-white shadow-sm transition-all duration-150 ease-out hover:-translate-y-0.5 hover:shadow-md"
-          >
-            Board settings
-          </Button>
+      {/* Marginalia / editorial masthead */}
+      <div className="border-b border-rule px-6 py-4 bg-paper/60">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="space-y-1.5 min-w-0">
+            <div className="mono-meta-sm flex items-center gap-2 text-ink/45">
+              <span>BOARD</span>
+              <span className="text-ink/30">/</span>
+              <span className="text-ink/70">#{boardCode(board.id)}</span>
+              <span
+                aria-hidden
+                className="block h-1 w-5"
+                style={{ backgroundColor: baseColor }}
+              />
+            </div>
+            <h1 className="serif-display text-[clamp(2rem,5vw,3.5rem)] text-ink leading-none">
+              {board.title}
+            </h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <PresenceAvatars viewers={viewers} />
+            <Button
+              render={<Link href={`/b/${board.id}/settings`} />}
+              nativeButton={false}
+              variant="outline"
+              size="sm"
+            >
+              Board settings
+            </Button>
+          </div>
         </div>
       </div>
-      <div className="flex items-start gap-4">
+
+      <div className="flex flex-1 items-start gap-4 p-4">
         <div className="flex-1 min-w-0">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCorners}
             onDragEnd={onDragEnd}
           >
-            <div className="flex items-start gap-3 overflow-x-auto px-2 pb-4 [&>*]:animate-in [&>*]:fade-in [&>*]:slide-in-from-bottom-2 [&>*]:duration-200">
+            <div className="flex items-start gap-3 overflow-x-auto px-2 pb-4 [&>*]:animate-in [&>*]:fade-in [&>*]:slide-in-from-bottom-2 [&>*]:duration-300">
               <SortableContext
                 items={listSortableIds}
                 strategy={horizontalListSortingStrategy}
               >
-                {lists.map((list) => (
-                  <ListColumn key={list.id} list={list} boardId={board.id} />
+                {lists.map((list, idx) => (
+                  <ListColumn
+                    key={list.id}
+                    list={list}
+                    boardId={board.id}
+                    ordinal={idx + 1}
+                  />
                 ))}
               </SortableContext>
               <AddListForm boardId={board.id} />
