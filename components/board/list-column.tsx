@@ -52,6 +52,7 @@ export function ListColumn({
     <div
       ref={setNodeRef}
       style={style}
+      data-list-id={list.id}
       className="flex w-72 shrink-0 flex-col gap-2 rounded-md bg-black/40 p-2"
     >
       <div

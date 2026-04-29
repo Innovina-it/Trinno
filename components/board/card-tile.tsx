@@ -30,6 +30,7 @@ export function CardTile({
       style={style}
       {...attributes}
       {...listeners}
+      data-card-id={card.id}
       className="block rounded bg-white p-2 text-sm text-foreground shadow-sm cursor-grab active:cursor-grabbing hover:ring-2 hover:ring-primary/40"
     >
       {card.title}
