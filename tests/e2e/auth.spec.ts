@@ -38,10 +38,8 @@ test("signup → confirm → home → logout", async ({ page }) => {
 
   const link = await fetchConfirmLink(email);
   await page.goto(link);
-  await expect(page).toHaveURL(/\/$/);
-  await expect(
-    page.getByRole("heading", { name: /your workspaces/i })
-  ).toBeVisible();
+  // After signup, "/" redirects to the user's default workspace.
+  await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}/);
   await expect(page.getByText(/Workspace$/)).toBeVisible();
 
   await page.getByRole("button", { name: /log out/i }).click();

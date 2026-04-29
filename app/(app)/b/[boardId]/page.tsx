@@ -25,6 +25,7 @@ export default async function BoardPage({
         <h1 className="text-2xl font-semibold">{b.title}</h1>
         <Button
           render={<Link href={`/b/${boardId}/settings`} />}
+          nativeButton={false}
           variant="secondary"
           size="sm"
         >
