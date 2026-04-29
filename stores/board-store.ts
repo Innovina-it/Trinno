@@ -1,112 +1,108 @@
 "use client";
-import { create } from "zustand";
-import type { BoardSnapshot } from "@/lib/queries/board-data";
+import { createStore, useStore } from "zustand";
+import {
+  createContext,
+  createElement,
+  useContext,
+  useRef,
+  type ReactNode,
+} from "react";
+import type { ListRow, CardRow } from "@/lib/queries/board-snapshot";
 
-type ListT = BoardSnapshot["lists"][number];
-type CardT = BoardSnapshot["cards"][number];
-
-type State = {
+export type BoardState = {
   boardId: string;
-  lists: Record<string, ListT>;
-  cards: Record<string, CardT>;
-  listOrder: string[];
-  cardOrderByList: Record<string, string[]>;
-
-  setSnapshot: (snap: BoardSnapshot) => void;
-  applyMoveCard: (
-    cardId: string,
-    toListId: string,
-    newPosition: string,
-  ) => void;
-  applyMoveList: (listId: string, newPosition: string) => void;
-  applyAddList: (list: ListT) => void;
-  applyAddCard: (card: CardT) => void;
-  applyUpdateCard: (id: string, patch: Partial<CardT>) => void;
+  lists: ListRow[];
+  cards: CardRow[];
+  setSnapshot: (s: { lists: ListRow[]; cards: CardRow[] }) => void;
+  addList: (list: ListRow) => void;
+  addCard: (card: CardRow) => void;
+  moveCard: (id: string, listId: string, position: string) => void;
+  moveList: (id: string, position: string) => void;
+  renameList: (id: string, title: string) => void;
+  removeCard: (id: string) => void;
+  removeList: (id: string) => void;
 };
 
-export const useBoardStore = create<State>((set, get) => ({
-  boardId: "",
-  lists: {},
-  cards: {},
-  listOrder: [],
-  cardOrderByList: {},
+function sortByPosition<T extends { position: string }>(rows: T[]): T[] {
+  return rows.slice().sort((a, b) => (a.position < b.position ? -1 : 1));
+}
 
-  setSnapshot(snap) {
-    const lists: Record<string, ListT> = {};
-    const cards: Record<string, CardT> = {};
-    const cardOrderByList: Record<string, string[]> = {};
-    for (const l of snap.lists) lists[l.id] = l;
-    for (const c of snap.cards) {
-      cards[c.id] = c;
-      (cardOrderByList[c.listId] ??= []).push(c.id);
-    }
-    set({
-      boardId: snap.board.id,
-      lists,
-      cards,
-      cardOrderByList,
-      listOrder: snap.lists.filter((l) => !l.archived).map((l) => l.id),
-    });
-  },
+export function createBoardStore(initial: {
+  boardId: string;
+  lists: ListRow[];
+  cards: CardRow[];
+}) {
+  return createStore<BoardState>((set) => ({
+    boardId: initial.boardId,
+    lists: sortByPosition(initial.lists),
+    cards: sortByPosition(initial.cards),
 
-  applyMoveCard(cardId, toListId, newPosition) {
-    const { cards, cardOrderByList } = get();
-    const card = cards[cardId];
-    if (!card) return;
-    const fromList = card.listId;
-    const newCards = {
-      ...cards,
-      [cardId]: { ...card, listId: toListId, position: newPosition },
-    };
-    const newOrder = { ...cardOrderByList };
-    newOrder[fromList] = (newOrder[fromList] ?? []).filter(
-      (id) => id !== cardId,
-    );
-    const target = (newOrder[toListId] ?? []).filter((id) => id !== cardId);
-    target.push(cardId);
-    target.sort((a, b) =>
-      newCards[a].position < newCards[b].position ? -1 : 1,
-    );
-    newOrder[toListId] = target;
-    set({ cards: newCards, cardOrderByList: newOrder });
-  },
+    setSnapshot: (s) =>
+      set({
+        lists: sortByPosition(s.lists),
+        cards: sortByPosition(s.cards),
+      }),
 
-  applyMoveList(listId, newPosition) {
-    const { lists, listOrder } = get();
-    if (!lists[listId]) return;
-    const newLists = {
-      ...lists,
-      [listId]: { ...lists[listId], position: newPosition },
-    };
-    const newOrder = listOrder
-      .slice()
-      .sort((a, b) => (newLists[a].position < newLists[b].position ? -1 : 1));
-    set({ lists: newLists, listOrder: newOrder });
-  },
+    addList: (list) =>
+      set((state) => ({ lists: sortByPosition([...state.lists, list]) })),
 
-  applyAddList(list) {
-    const { lists, listOrder, cardOrderByList } = get();
-    set({
-      lists: { ...lists, [list.id]: list },
-      listOrder: [...listOrder, list.id],
-      cardOrderByList: { ...cardOrderByList, [list.id]: [] },
-    });
-  },
+    addCard: (card) =>
+      set((state) => ({ cards: sortByPosition([...state.cards, card]) })),
 
-  applyAddCard(card) {
-    const { cards, cardOrderByList } = get();
-    set({
-      cards: { ...cards, [card.id]: card },
-      cardOrderByList: {
-        ...cardOrderByList,
-        [card.listId]: [...(cardOrderByList[card.listId] ?? []), card.id],
-      },
-    });
-  },
+    moveCard: (id, listId, position) =>
+      set((state) => ({
+        cards: sortByPosition(
+          state.cards.map((c) =>
+            c.id === id ? { ...c, listId, position } : c,
+          ),
+        ),
+      })),
 
-  applyUpdateCard(id, patch) {
-    const { cards } = get();
-    if (!cards[id]) return;
-    set({ cards: { ...cards, [id]: { ...cards[id], ...patch } } });
-  },
-}));
+    moveList: (id, position) =>
+      set((state) => ({
+        lists: sortByPosition(
+          state.lists.map((l) => (l.id === id ? { ...l, position } : l)),
+        ),
+      })),
+
+    renameList: (id, title) =>
+      set((state) => ({
+        lists: state.lists.map((l) => (l.id === id ? { ...l, title } : l)),
+      })),
+
+    removeCard: (id) =>
+      set((state) => ({ cards: state.cards.filter((c) => c.id !== id) })),
+
+    removeList: (id) =>
+      set((state) => ({
+        lists: state.lists.filter((l) => l.id !== id),
+        cards: state.cards.filter((c) => c.listId !== id),
+      })),
+  }));
+}
+
+export type BoardStore = ReturnType<typeof createBoardStore>;
+
+export const BoardStoreContext = createContext<BoardStore | null>(null);
+
+export function BoardStoreProvider({
+  initial,
+  children,
+}: {
+  initial: { boardId: string; lists: ListRow[]; cards: CardRow[] };
+  children: ReactNode;
+}) {
+  const ref = useRef<BoardStore | null>(null);
+  if (!ref.current) ref.current = createBoardStore(initial);
+  return createElement(
+    BoardStoreContext.Provider,
+    { value: ref.current },
+    children,
+  );
+}
+
+export function useBoardStore<T>(selector: (s: BoardState) => T): T {
+  const store = useContext(BoardStoreContext);
+  if (!store) throw new Error("BoardStoreProvider missing");
+  return useStore(store, selector);
+}
