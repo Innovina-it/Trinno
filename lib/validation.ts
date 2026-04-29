@@ -29,3 +29,23 @@ export const CreateBoardInput = z.object({
 export const RenameBoardInput = z.object({ id: Uuid, title: Title });
 export const SetBoardArchivedInput = z.object({ id: Uuid, archived: z.boolean() });
 export const DeleteBoardInput = z.object({ id: Uuid });
+
+export const CreateListInput = z.object({
+  boardId: Uuid, title: Title,
+});
+export const RenameListInput = z.object({ id: Uuid, title: Title });
+export const MoveListInput   = z.object({ id: Uuid, position: z.string().min(1).max(64) });
+export const ArchiveListInput= z.object({ id: Uuid, archived: z.boolean() });
+
+export const CreateCardInput = z.object({
+  listId: Uuid, title: Title,
+});
+export const UpdateCardInput = z.object({
+  id: Uuid,
+  title: Title.optional(),
+  description: z.string().max(20_000).nullable().optional(),
+});
+export const MoveCardInput = z.object({
+  id: Uuid, listId: Uuid, position: z.string().min(1).max(64),
+});
+export const ArchiveCardInput = z.object({ id: Uuid, archived: z.boolean() });
