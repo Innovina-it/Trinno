@@ -24,6 +24,9 @@ import { moveList as moveListAction } from "@/actions/lists";
 import { Button } from "@/components/ui/button";
 import { ListColumn } from "./list-column";
 import { AddListForm } from "./add-list-form";
+import { useBoardRealtime } from "@/hooks/use-board-realtime";
+import { useBoardPresence, type Viewer } from "@/hooks/use-board-presence";
+import { PresenceAvatars } from "./presence-avatars";
 
 function decodeId(
   sortableId: string,
@@ -37,13 +40,22 @@ function decodeId(
   return null;
 }
 
-export function BoardView({ board }: { board: BoardRow }) {
+export function BoardView({
+  board,
+  currentUser,
+}: {
+  board: BoardRow;
+  currentUser: Viewer;
+}) {
   const router = useRouter();
   const lists = useBoardStore((s) => s.lists);
   const cards = useBoardStore((s) => s.cards);
   const moveListLocal = useBoardStore((s) => s.moveList);
   const moveCardLocal = useBoardStore((s) => s.moveCard);
   const [, start] = useTransition();
+
+  useBoardRealtime(board.id);
+  const viewers = useBoardPresence(board.id, currentUser);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -159,14 +171,17 @@ export function BoardView({ board }: { board: BoardRow }) {
     >
       <div className="mb-4 flex items-center justify-between px-2">
         <h1 className="text-xl font-semibold text-white">{board.title}</h1>
-        <Button
-          render={<Link href={`/b/${board.id}/settings`} />}
-          nativeButton={false}
-          variant="secondary"
-          size="sm"
-        >
-          Board settings
-        </Button>
+        <div className="flex items-center gap-3">
+          <PresenceAvatars viewers={viewers} />
+          <Button
+            render={<Link href={`/b/${board.id}/settings`} />}
+            nativeButton={false}
+            variant="secondary"
+            size="sm"
+          >
+            Board settings
+          </Button>
+        </div>
       </div>
       <DndContext
         sensors={sensors}
