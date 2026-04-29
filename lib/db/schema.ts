@@ -104,4 +104,7 @@ export const cards = pgTable("cards", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  dueDate: timestamp("due_date", { withTimezone: true }),
+  dueComplete: boolean("due_complete").notNull().default(false),
+  coverColor: text("cover_color"),
 });
