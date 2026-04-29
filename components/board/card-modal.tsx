@@ -14,6 +14,9 @@ import { Button } from "@/components/ui/button";
 import { updateCard } from "@/actions/cards";
 import { LabelsSection } from "./card/labels-section";
 import { DueSection } from "./card/due-section";
+import { MembersSection } from "./card/members-section";
+import { ChecklistsSection } from "./card/checklists-section";
+import { AttachmentsSection } from "./card/attachments-section";
 import { CommentsSection } from "./card/comments-section";
 
 export type CardModalCard = {
@@ -109,6 +112,9 @@ export function CardModal({
 
       <LabelsSection cardId={card.id} />
       <DueSection cardId={card.id} />
+      <MembersSection cardId={card.id} />
+      <ChecklistsSection cardId={card.id} />
+      <AttachmentsSection cardId={card.id} />
       <CommentsSection cardId={card.id} />
 
       {children}
