@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { requireUser, getSessionToken } from "@/lib/auth";
@@ -6,6 +7,7 @@ import { dbAsUser } from "@/lib/db/client";
 import { profiles } from "@/lib/db/schema";
 import { BoardView } from "@/components/board/board-view";
 import { ActivityFeed } from "@/components/board/activity-feed";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default async function BoardPage({
   params,
@@ -35,7 +37,18 @@ export default async function BoardPage({
 
   return (
     <BoardView board={snap.board} currentUser={currentUser}>
-      <ActivityFeed boardId={boardId} />
+      <Suspense
+        fallback={
+          <aside className="w-72 shrink-0 rounded-xl bg-black/30 p-3 space-y-2">
+            <Skeleton className="h-4 w-24 bg-white/20" />
+            <Skeleton className="h-3 w-full bg-white/10" />
+            <Skeleton className="h-3 w-5/6 bg-white/10" />
+            <Skeleton className="h-3 w-4/6 bg-white/10" />
+          </aside>
+        }
+      >
+        <ActivityFeed boardId={boardId} />
+      </Suspense>
     </BoardView>
   );
 }
