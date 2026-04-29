@@ -125,3 +125,13 @@ export const cardLabels = pgTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.cardId, t.labelId] }) }),
 );
+
+export const cardMembers = pgTable(
+  "card_members",
+  {
+    cardId: uuid("card_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    boardId: uuid("board_id").notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.cardId, t.userId] }) }),
+);

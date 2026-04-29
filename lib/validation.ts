@@ -58,3 +58,5 @@ export const CreateLabelInput = z.object({
 export const RenameLabelInput = z.object({ id: Uuid, name: z.string().trim().max(60), color: z.string().min(1).max(32) });
 export const DeleteLabelInput = z.object({ id: Uuid });
 export const ToggleCardLabelInput = z.object({ cardId: Uuid, labelId: Uuid });
+
+export const ToggleCardMemberInput = z.object({ cardId: Uuid, userId: Uuid });

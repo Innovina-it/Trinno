@@ -25,6 +25,9 @@ function rowToCard(r: Record<string, unknown>): CardRow {
     position: r.position as string,
     archived: r.archived as boolean,
     createdAt: new Date(r.created_at as string),
+    dueDate: r.due_date ? new Date(r.due_date as string) : null,
+    dueComplete: (r.due_complete ?? false) as boolean,
+    coverColor: (r.cover_color ?? null) as string | null,
   };
 }
 
@@ -39,58 +42,89 @@ export function useBoardRealtime(boardId: string) {
 
   useEffect(() => {
     const supa = createSupabaseBrowser();
-    const channel = supa.channel(`board:${boardId}`);
+    let cancelled = false;
+    let channel: ReturnType<typeof supa.channel> | null = null;
 
-    channel
-      .on(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        "postgres_changes" as any,
-        { event: "*", schema: "public", table: "lists",
-          filter: `board_id=eq.${boardId}` },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (payload: any) => {
-          if (payload.eventType === "INSERT" && payload.new) {
-            addList(rowToList(payload.new));
-          } else if (payload.eventType === "UPDATE" && payload.new) {
-            const r = payload.new;
-            if (r.archived) {
-              removeList(r.id);
-            } else {
-              if (r.position) moveList(r.id, r.position);
-              if (typeof r.title === "string") renameList(r.id, r.title);
+    (async () => {
+      // Make sure the realtime socket carries the user's JWT before joining.
+      // postgres_changes evaluates the table's RLS policy as the JWT subject,
+      // so without this the join uses anon and the channel receives nothing.
+      const { data } = await supa.auth.getSession();
+      const token = data.session?.access_token;
+      if (token) await supa.realtime.setAuth(token);
+      if (cancelled) return;
+
+      const ch = supa.channel(`board:${boardId}`);
+      channel = ch;
+      ch
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "lists",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addList(rowToList(payload.new));
+            } else if (payload.eventType === "UPDATE" && payload.new) {
+              const r = payload.new;
+              if (r.archived) {
+                removeList(r.id);
+              } else {
+                if (r.position) moveList(r.id, r.position);
+                if (typeof r.title === "string") renameList(r.id, r.title);
+              }
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              removeList((payload.old as any).id);
             }
-          } else if (payload.eventType === "DELETE" && payload.old) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            removeList((payload.old as any).id);
-          }
-        },
-      )
-      .on(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        "postgres_changes" as any,
-        { event: "*", schema: "public", table: "cards",
-          filter: `board_id=eq.${boardId}` },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (payload: any) => {
-          if (payload.eventType === "INSERT" && payload.new) {
-            addCard(rowToCard(payload.new));
-          } else if (payload.eventType === "UPDATE" && payload.new) {
-            const r = payload.new;
-            if (r.archived) {
-              removeCard(r.id);
-            } else if (r.list_id && r.position) {
-              moveCard(r.id, r.list_id, r.position);
+          },
+        )
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "cards",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addCard(rowToCard(payload.new));
+            } else if (payload.eventType === "UPDATE" && payload.new) {
+              const r = payload.new;
+              if (r.archived) {
+                removeCard(r.id);
+              } else if (r.list_id && r.position) {
+                moveCard(r.id, r.list_id, r.position);
+              }
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              removeCard((payload.old as any).id);
             }
-          } else if (payload.eventType === "DELETE" && payload.old) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            removeCard((payload.old as any).id);
-          }
-        },
-      )
-      .subscribe();
+          },
+        )
+        .subscribe();
+    })();
 
     return () => {
-      supa.removeChannel(channel);
+      cancelled = true;
+      if (channel) supa.removeChannel(channel);
     };
-  }, [boardId, addList, addCard, moveList, moveCard, removeList, removeCard, renameList]);
+  }, [
+    boardId,
+    addList,
+    addCard,
+    moveList,
+    moveCard,
+    removeList,
+    removeCard,
+    renameList,
+  ]);
 }
