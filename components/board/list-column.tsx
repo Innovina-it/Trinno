@@ -32,15 +32,15 @@ export function ListColumn({
       data: { type: "list", listId: list.id },
     });
 
-  const { setNodeRef: setDropRef } = useDroppable({
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: `list-drop:${list.id}`,
     data: { type: "list-drop", listId: list.id },
   });
 
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
+    transition: transition ?? "transform 200ms cubic-bezier(0.2, 0, 0, 1)",
+    opacity: isDragging ? 0.6 : 1,
   };
 
   const cardSortableIds = useMemo(
@@ -53,18 +53,20 @@ export function ListColumn({
       ref={setNodeRef}
       style={style}
       data-list-id={list.id}
-      className="flex w-72 shrink-0 flex-col gap-2 rounded-md bg-black/40 p-2"
+      data-dragging={isDragging ? "true" : undefined}
+      className="group/list flex w-72 shrink-0 flex-col gap-2 rounded-xl bg-black/35 p-2 backdrop-blur-sm shadow-sm ring-1 ring-white/10 transition-all duration-200 ease-out hover:ring-white/20 data-[dragging=true]:rotate-[1deg] data-[dragging=true]:shadow-2xl"
     >
       <div
         {...attributes}
         {...listeners}
-        className="cursor-grab px-1 text-sm font-medium text-white active:cursor-grabbing"
+        className="cursor-grab select-none rounded-md px-1.5 py-1 text-sm font-semibold tracking-tight text-white transition-colors duration-150 hover:bg-white/5 active:cursor-grabbing"
       >
         {list.title}
       </div>
       <div
         ref={setDropRef}
-        className="flex max-h-[calc(100vh-14rem)] flex-col gap-1.5 overflow-y-auto"
+        data-over={isOver ? "true" : undefined}
+        className="flex max-h-[calc(100vh-14rem)] flex-col gap-1.5 overflow-y-auto rounded-md p-0.5 transition-colors duration-150 data-[over=true]:bg-white/10"
       >
         <SortableContext
           items={cardSortableIds}

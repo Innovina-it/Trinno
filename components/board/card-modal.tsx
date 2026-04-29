@@ -143,9 +143,9 @@ export function CardModal({
         if (!o) close();
       }}
     >
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto data-open:duration-200 data-closed:duration-150">
         <DialogHeader>
-          <DialogTitle>Card</DialogTitle>
+          <DialogTitle className="text-base font-semibold">Card</DialogTitle>
         </DialogHeader>
         {body}
       </DialogContent>

@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { ArrowRight, Loader2, MailCheck } from "lucide-react";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,14 +28,19 @@ export function SignupForm() {
 
   if (sent) {
     return (
-      <p className="text-sm text-muted-foreground">
-        Check your email for a confirmation link.
-      </p>
+      <div className="flex flex-col items-center gap-3 rounded-lg border border-border/60 bg-muted/40 p-6 text-center animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <MailCheck className="size-5" />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Check your email for a confirmation link.
+        </p>
+      </div>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 w-full max-w-sm">
+    <form onSubmit={onSubmit} className="space-y-4 w-full">
       <div className="space-y-1.5">
         <Label htmlFor="email">Email</Label>
         <Input id="email" type="email" required value={email}
@@ -45,8 +51,22 @@ export function SignupForm() {
         <Input id="password" type="password" required minLength={8}
                value={password} onChange={(e) => setPassword(e.target.value)} />
       </div>
-      <Button type="submit" disabled={submitting} className="w-full">
-        {submitting ? "Creating account…" : "Sign up"}
+      <Button
+        type="submit"
+        disabled={submitting}
+        className="w-full transition-all duration-150 ease-out hover:shadow-md active:scale-[0.98]"
+      >
+        {submitting ? (
+          <>
+            <Loader2 className="size-4 animate-spin" />
+            Creating account…
+          </>
+        ) : (
+          <>
+            Sign up
+            <ArrowRight className="size-4 transition-transform duration-150 group-hover/button:translate-x-0.5" />
+          </>
+        )}
       </Button>
     </form>
   );

@@ -163,8 +163,10 @@ export function BoardView({
     }
   }
 
-  const bg =
+  const baseColor =
     board.backgroundKind === "color" ? board.backgroundValue : "#0079bf";
+  // Add a subtle radial highlight on top of the chosen color to make boards feel less flat.
+  const bg = `radial-gradient(circle at 0% 0%, rgba(255,255,255,0.18), transparent 55%), radial-gradient(circle at 100% 100%, rgba(0,0,0,0.18), transparent 55%), ${baseColor}`;
 
   return (
     <div
@@ -172,7 +174,9 @@ export function BoardView({
       style={{ background: bg }}
     >
       <div className="mb-4 flex items-center justify-between px-2">
-        <h1 className="text-xl font-semibold text-white">{board.title}</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-white drop-shadow-sm">
+          {board.title}
+        </h1>
         <div className="flex items-center gap-3">
           <PresenceAvatars viewers={viewers} />
           <Button
@@ -180,6 +184,7 @@ export function BoardView({
             nativeButton={false}
             variant="secondary"
             size="sm"
+            className="bg-white/85 hover:bg-white shadow-sm transition-all duration-150 ease-out hover:-translate-y-0.5 hover:shadow-md"
           >
             Board settings
           </Button>
@@ -192,7 +197,7 @@ export function BoardView({
             collisionDetection={closestCorners}
             onDragEnd={onDragEnd}
           >
-            <div className="flex items-start gap-3 overflow-x-auto px-2 pb-4">
+            <div className="flex items-start gap-3 overflow-x-auto px-2 pb-4 [&>*]:animate-in [&>*]:fade-in [&>*]:slide-in-from-bottom-2 [&>*]:duration-200">
               <SortableContext
                 items={listSortableIds}
                 strategy={horizontalListSortingStrategy}

@@ -33,7 +33,7 @@ export function AddCardForm({ listId }: { listId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded px-2 py-1 text-left text-xs text-white/70 hover:bg-white/10 hover:text-white"
+        className="w-full rounded-md px-2 py-1.5 text-left text-xs font-medium text-white/70 transition-colors duration-150 ease-out hover:bg-white/10 hover:text-white"
       >
         + Add a card
       </button>
@@ -41,7 +41,7 @@ export function AddCardForm({ listId }: { listId: string }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-1">
+    <form onSubmit={submit} className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
       <Input
         autoFocus
         value={title}
@@ -50,7 +50,7 @@ export function AddCardForm({ listId }: { listId: string }) {
         required
         minLength={1}
         maxLength={120}
-        className="bg-white text-foreground"
+        className="bg-white text-foreground shadow-sm"
       />
       <div className="flex gap-1">
         <Button type="submit" size="sm" disabled={pending || !title.trim()}>
@@ -60,6 +60,7 @@ export function AddCardForm({ listId }: { listId: string }) {
           type="button"
           variant="ghost"
           size="sm"
+          className="text-white/80 hover:bg-white/10 hover:text-white"
           onClick={() => {
             setOpen(false);
             setTitle("");

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 w-full max-w-sm">
+    <form onSubmit={onSubmit} className="space-y-4 w-full">
       <div className="space-y-1.5">
         <Label htmlFor="email">Email</Label>
         <Input id="email" type="email" required value={email}
@@ -36,8 +37,22 @@ export function LoginForm() {
         <Input id="password" type="password" required value={password}
                onChange={(e) => setPassword(e.target.value)} />
       </div>
-      <Button type="submit" disabled={submitting} className="w-full">
-        {submitting ? "Signing in…" : "Log in"}
+      <Button
+        type="submit"
+        disabled={submitting}
+        className="w-full transition-all duration-150 ease-out hover:shadow-md active:scale-[0.98]"
+      >
+        {submitting ? (
+          <>
+            <Loader2 className="size-4 animate-spin" />
+            Signing in…
+          </>
+        ) : (
+          <>
+            Log in
+            <ArrowRight className="size-4 transition-transform duration-150 group-hover/button:translate-x-0.5" />
+          </>
+        )}
       </Button>
     </form>
   );

@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, Plus, Check } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
@@ -21,17 +21,25 @@ export function WorkspaceSwitcher({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="ghost" size="sm" className="gap-1" />}>
-          {active?.name ?? "Workspaces"} <ChevronDown className="size-4" />
+        <DropdownMenuTrigger render={<Button variant="ghost" size="sm" className="gap-1 font-medium max-w-[180px]" />}>
+          {active?.name ?? "Workspaces"} <ChevronDown className="size-4 transition-transform duration-150 group-aria-expanded/button:rotate-180" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">
           <DropdownMenuGroup>
             <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
-            {workspaces.map(w => (
-              <DropdownMenuItem key={w.id} render={<Link href={`/w/${w.id}`} />}>
-                {w.name}
-              </DropdownMenuItem>
-            ))}
+            {workspaces.map(w => {
+              const isActive = w.id === active?.id;
+              return (
+                <DropdownMenuItem
+                  key={w.id}
+                  render={<Link href={`/w/${w.id}`} />}
+                  className={isActive ? "bg-accent/60 font-semibold text-accent-foreground" : undefined}
+                >
+                  <span className="flex-1 truncate">{w.name}</span>
+                  {isActive && <Check className="size-4 text-primary" />}
+                </DropdownMenuItem>
+              );
+            })}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setOpenCreate(true)}>

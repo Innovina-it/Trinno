@@ -12,16 +12,23 @@ export function TopNav({
   activeWorkspaceId?: string;
 }) {
   return (
-    <header className="border-b">
-      <div className="max-w-6xl mx-auto px-4 h-12 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Link href="/" className="font-semibold">Trello Clone</Link>
-          <span className="text-muted-foreground">/</span>
+    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-[0_1px_0_0_rgba(0,0,0,0.02)]">
+      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Link
+            href="/"
+            className="font-semibold tracking-tight transition-opacity duration-150 hover:opacity-80"
+          >
+            Trello Clone
+          </Link>
+          <span className="text-muted-foreground/60">/</span>
           <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspaceId} />
         </div>
         <div className="flex items-center gap-3 text-sm">
           <SearchBox />
-          <span className="text-muted-foreground">{email}</span>
+          <span className="hidden md:inline text-muted-foreground truncate max-w-[180px]">
+            {email}
+          </span>
           <form action={logout}>
             <Button type="submit" variant="ghost" size="sm">Log out</Button>
           </form>

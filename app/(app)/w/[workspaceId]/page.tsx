@@ -18,8 +18,15 @@ export default async function WorkspacePage({
 
   return (
     <main className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{ws.name}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{ws.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            {boards.filter(b => !b.archived).length === 0
+              ? "Create a board to start organizing work."
+              : `${boards.filter(b => !b.archived).length} board${boards.filter(b => !b.archived).length === 1 ? "" : "s"}`}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <Button render={<Link href={`/w/${workspaceId}/settings`} />} nativeButton={false} variant="ghost" size="sm">
             Settings
