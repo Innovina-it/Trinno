@@ -48,6 +48,7 @@ function rel(d: string) {
 export function NotificationBell({ userId }: { userId: string }) {
   const [items, setItems] = useState<N[]>([]);
   const [unread, setUnread] = useState(0);
+  const [subscribed, setSubscribed] = useState(false);
   const [, start] = useTransition();
 
   useEffect(() => {
@@ -78,7 +79,10 @@ export function NotificationBell({ userId }: { userId: string }) {
           void refresh();
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (cancelled) return;
+        setSubscribed(status === "SUBSCRIBED");
+      });
     return () => {
       cancelled = true;
       void supa.removeChannel(ch);
@@ -106,6 +110,7 @@ export function NotificationBell({ userId }: { userId: string }) {
       <DropdownMenuTrigger
         className="relative inline-flex items-center justify-center size-8 rounded-full text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)] transition-colors"
         aria-label={`Notifications${unread ? ` (${unread} unread)` : ""}`}
+        data-realtime-ready={subscribed ? "true" : undefined}
       >
         <Bell className="size-4" />
         {unread > 0 && (
