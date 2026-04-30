@@ -20,6 +20,8 @@ export function parseFilters(sp: URLSearchParams): Filters {
   const types = (sp.get("type") || "").split(",").map((s) => s.trim()).filter(Boolean);
   const labelIds = (sp.get("label") || "").split(",").map((s) => s.trim()).filter(Boolean);
   const due = sp.get("due") as Filters["due"];
+  // Canonical query key is `assignee=me` (matches Jira convention).
+  // `me=1` is NOT supported.
   const assignedToMe = sp.get("assignee") === "me";
   return {
     types,
