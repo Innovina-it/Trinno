@@ -99,3 +99,29 @@ export const CreateCardLinkInput = z.object({
   kind: LinkKind,
 });
 export const DeleteCardLinkInput = z.object({ id: Uuid });
+
+export const SprintStateZ = z.enum(["planned", "active", "completed"]);
+export const CreateSprintInput = z.object({
+  workspaceId: Uuid,
+  name: Title,
+  goal: z.string().trim().max(500).optional().nullable(),
+  startDate: z.union([z.string(), z.date()]).optional().nullable(),
+  endDate: z.union([z.string(), z.date()]).optional().nullable(),
+});
+export const UpdateSprintInput = z.object({
+  id: Uuid,
+  name: Title.optional(),
+  goal: z.string().trim().max(500).nullable().optional(),
+  startDate: z.union([z.string(), z.date()]).nullable().optional(),
+  endDate: z.union([z.string(), z.date()]).nullable().optional(),
+});
+export const DeleteSprintInput = z.object({ id: Uuid });
+export const StartSprintInput = z.object({ id: Uuid });
+export const CompleteSprintInput = z.object({
+  id: Uuid,
+  carryoverTo: z.union([z.literal("backlog"), Uuid]).default("backlog"),
+});
+export const AssignCardToSprintInput = z.object({
+  cardId: Uuid,
+  sprintId: Uuid.nullable(),
+});
