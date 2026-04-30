@@ -37,6 +37,10 @@ import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { RoadmapBar } from "./roadmap-bar";
 import { DependencyArrows, type BarBox } from "./dependency-arrows";
 import { CriticalPathOverlay } from "./critical-path-overlay";
+import {
+  CascadeConfirmDialog,
+  type CascadeAffectedCard,
+} from "./cascade-confirm-dialog";
 import { SprintOverlay } from "./sprint-overlay";
 
 const ZOOMS: Zoom[] = ["week", "month", "quarter"];
@@ -146,6 +150,46 @@ export function RoadmapView({
   // intentionally not URL-synced because the overlay is a per-session
   // analysis tool, not a shareable view state.
   const [showCriticalPath, setShowCriticalPath] = useState(false);
+
+  // Plan #16b-γ-A (#4) — auto-cascade toggle (per-workspace, persisted in
+  // localStorage). When true, a forward target_date drag opens a confirm
+  // dialog listing every transitively blocked dependent we'd shift by the
+  // same delta. The dialog calls the server action; the originating drag
+  // has already persisted on its own.
+  const AUTO_CASCADE_KEY = `roadmap:${workspaceId}:autoCascade`;
+  const [autoCascade, setAutoCascade] = useState(false);
+  const autoCascadeRef = useRef(autoCascade);
+  autoCascadeRef.current = autoCascade;
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(AUTO_CASCADE_KEY);
+      if (raw === "1") setAutoCascade(true);
+    } catch {
+      /* ignore */
+    }
+    // Mount-only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [AUTO_CASCADE_KEY]);
+  const toggleAutoCascade = useCallback(() => {
+    setAutoCascade((p) => {
+      const next = !p;
+      try {
+        window.localStorage.setItem(AUTO_CASCADE_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, [AUTO_CASCADE_KEY]);
+
+  // Cascade dialog state.
+  const [cascadeState, setCascadeState] = useState<{
+    open: boolean;
+    rootCardId: string | null;
+    deltaDays: number;
+    affected: CascadeAffectedCard[];
+  }>({ open: false, rootCardId: null, deltaDays: 0, affected: [] });
 
   const { subscribed } = useWorkspaceRealtime(workspaceId);
 
@@ -353,6 +397,41 @@ export function RoadmapView({
   const dragRef = useRef<DragState | null>(null);
   const [, startTransition] = useTransition();
 
+  // Refs for cascade detection — read latest store data inside async drag
+  // commit without re-binding the callback.
+  const storeCardsRef = useRef(storeCards);
+  storeCardsRef.current = storeCards;
+  const storeLinksRef = useRef(storeLinks);
+  storeLinksRef.current = storeLinks;
+
+  const collectDependents = useCallback(
+    (rootId: string): CascadeAffectedCard[] => {
+      const cardById = new Map(storeCardsRef.current.map((c) => [c.id, c]));
+      const visited = new Set<string>([rootId]);
+      const out: CascadeAffectedCard[] = [];
+      let frontier: string[] = [rootId];
+      for (let depth = 0; depth < 50; depth++) {
+        if (frontier.length === 0) break;
+        const next: string[] = [];
+        for (const l of storeLinksRef.current) {
+          if (l.kind !== "is_blocked_by") continue;
+          if (!frontier.includes(l.toCardId)) continue;
+          // l: from is blocked by to. We're walking from blocker (to) to
+          // dependent (from).
+          const depId = l.fromCardId;
+          if (visited.has(depId)) continue;
+          visited.add(depId);
+          const c = cardById.get(depId);
+          out.push({ id: depId, title: c?.title ?? depId });
+          next.push(depId);
+        }
+        frontier = next;
+      }
+      return out;
+    },
+    [],
+  );
+
   const persistDates = useCallback(
     async (
       cardId: string,
@@ -365,6 +444,23 @@ export function RoadmapView({
           startDate: next.start.toISOString(),
           targetDate: next.target.toISOString(),
         });
+        // Plan #16b-γ-A (#4) — if auto-cascade is on and the target_date
+        // moved forward, surface a confirmation dialog listing every
+        // transitively blocked dependent the same delta would shift.
+        const targetDeltaMs =
+          next.target.getTime() - orig.target.getTime();
+        const deltaDays = Math.round(targetDeltaMs / 86_400_000);
+        if (autoCascadeRef.current && deltaDays > 0) {
+          const affected = collectDependents(cardId);
+          if (affected.length > 0) {
+            setCascadeState({
+              open: true,
+              rootCardId: cardId,
+              deltaDays,
+              affected,
+            });
+          }
+        }
         // Don't manually re-set the store: the realtime CDC echo will
         // reconcile via `useWorkspaceRealtime`. Server-side
         // `revalidatePath` also refreshes the SSR snapshot on next nav.
@@ -374,7 +470,7 @@ export function RoadmapView({
         toast.error((err as Error).message);
       }
     },
-    [patchCardInStore],
+    [patchCardInStore, collectDependents],
   );
 
   const onPointerMove = useCallback(
@@ -752,6 +848,19 @@ export function RoadmapView({
           >
             CRITICAL PATH: {showCriticalPath ? "ON" : "OFF"}
           </button>
+          <button
+            type="button"
+            onClick={toggleAutoCascade}
+            data-testid="roadmap-auto-cascade-toggle"
+            data-active={autoCascade ? "true" : "false"}
+            aria-pressed={autoCascade}
+            title="Reschedule blocked dependents after a forward target_date drag"
+            className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
+              autoCascade ? "ring-1 ring-fg/40" : ""
+            }`}
+          >
+            AUTO-RESCHEDULE: {autoCascade ? "ON" : "OFF"}
+          </button>
         </div>
         <span className="mono-meta-sm text-fg-faint">
           {gridStart.toISOString().slice(0, 10)} →{" "}
@@ -1089,6 +1198,15 @@ export function RoadmapView({
           </div>
         </div>
       )}
+      <CascadeConfirmDialog
+        open={cascadeState.open}
+        onOpenChange={(next) =>
+          setCascadeState((s) => ({ ...s, open: next }))
+        }
+        rootCardId={cascadeState.rootCardId}
+        deltaDays={cascadeState.deltaDays}
+        affectedCards={cascadeState.affected}
+      />
     </div>
   );
 }

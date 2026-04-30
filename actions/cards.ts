@@ -1,12 +1,13 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { cards } from "@/lib/db/schema";
+import { cards, cardLinks } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { positionBetween } from "@/lib/ordering";
 import {
   CreateCardInput, UpdateCardInput, MoveCardInput, ArchiveCardInput,
+  CascadeShiftBlockedInput,
 } from "@/lib/validation";
 
 export async function createCardImpl(token: string, input: { listId: string; title: string }) {
@@ -105,6 +106,88 @@ export async function archiveCardImpl(token: string, input: { id: string; archiv
   });
 }
 
+const CASCADE_DEPTH_CAP = 50;
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * Plan #16b-γ-A (#4) — shift the start_date and target_date of every
+ * card transitively blocked by `cardId` by `deltaDays`. We follow
+ * `card_links.kind = 'is_blocked_by'` rows where `to_card_id = current`
+ * (the row says "from is blocked by to") so the *dependents* are the
+ * `from` side. Visited set prevents cycles; depth cap prevents pathological
+ * graphs from running away. Single transaction so all-or-nothing.
+ *
+ * Returns the list of shifted ids with the applied deltaDays so the UI
+ * can show a confirmation summary.
+ */
+export async function cascadeShiftBlockedAfterImpl(
+  token: string,
+  input: { cardId: string; deltaDays: number },
+): Promise<{ shifted: { id: string; deltaDays: number }[] }> {
+  const parsed = CascadeShiftBlockedInput.parse(input);
+  if (parsed.deltaDays === 0) return { shifted: [] };
+  return dbAsUser(token, async (tx) => {
+    const visited = new Set<string>([parsed.cardId]);
+    const dependents: string[] = [];
+    let frontier: string[] = [parsed.cardId];
+    for (let depth = 0; depth < CASCADE_DEPTH_CAP; depth++) {
+      if (frontier.length === 0) break;
+      // For each card in the frontier, find rows where it is the BLOCKER
+      // (`to_card_id`); the `from_card_id` side is the dependent.
+      const rows = await tx
+        .select({
+          fromId: cardLinks.fromCardId,
+          toId: cardLinks.toCardId,
+        })
+        .from(cardLinks)
+        .where(
+          and(
+            inArray(cardLinks.toCardId, frontier),
+            eq(cardLinks.kind, "is_blocked_by"),
+          ),
+        );
+      const next: string[] = [];
+      for (const r of rows) {
+        if (visited.has(r.fromId)) continue;
+        visited.add(r.fromId);
+        dependents.push(r.fromId);
+        next.push(r.fromId);
+      }
+      frontier = next;
+    }
+    if (dependents.length === 0) return { shifted: [] };
+
+    // Read current dates for everyone we're shifting, then write back the
+    // new values in one round-trip.
+    const rows = await tx
+      .select({
+        id: cards.id,
+        startDate: cards.startDate,
+        targetDate: cards.targetDate,
+      })
+      .from(cards)
+      .where(inArray(cards.id, dependents));
+
+    const shiftMs = parsed.deltaDays * MS_PER_DAY;
+    const updated: { id: string; deltaDays: number }[] = [];
+    for (const r of rows) {
+      const patch: Record<string, Date | null> = {};
+      if (r.startDate)
+        patch.startDate = new Date(r.startDate.getTime() + shiftMs);
+      if (r.targetDate)
+        patch.targetDate = new Date(r.targetDate.getTime() + shiftMs);
+      if (Object.keys(patch).length === 0) continue;
+      const [u] = await tx
+        .update(cards)
+        .set(patch)
+        .where(eq(cards.id, r.id))
+        .returning();
+      if (u) updated.push({ id: r.id, deltaDays: parsed.deltaDays });
+    }
+    return { shifted: updated };
+  });
+}
+
 export async function createCard(input: { listId: string; title: string }) {
   await requireUser();
   const t = (await getSessionToken())!;
@@ -131,5 +214,14 @@ export async function archiveCard(input: { id: string; archived: boolean }) {
   const t = (await getSessionToken())!;
   const r = await archiveCardImpl(t, input);
   revalidatePath(`/b/${r.boardId}`);
+  return r;
+}
+
+export async function cascadeShiftBlockedAfter(
+  input: Parameters<typeof cascadeShiftBlockedAfterImpl>[1],
+) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const r = await cascadeShiftBlockedAfterImpl(t, input);
   return r;
 }

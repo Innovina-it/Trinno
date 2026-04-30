@@ -56,6 +56,14 @@ export const SetListStatusKindInput = z.object({
   statusKind: ListStatusKindZ.nullable(),
 });
 
+// Plan #16b-γ-A (#4) — cascade-shift dependents of a card by N days. The
+// recursive walk is server-side and capped at depth 50 with cycle
+// protection; values outside ±365 days are rejected.
+export const CascadeShiftBlockedInput = z.object({
+  cardId: Uuid,
+  deltaDays: z.number().int().min(-365).max(365),
+});
+
 export const CreateCardInput = z.object({
   listId: Uuid, title: Title,
 });
