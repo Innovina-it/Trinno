@@ -5,6 +5,7 @@ import { listSlaPoliciesForBoard } from "@/lib/queries/sla";
 import { BoardSettingsForm } from "@/components/board/board-settings-form";
 import { ListsAdminPanel } from "@/components/board/lists-admin-panel";
 import { SlaPoliciesPanel } from "@/components/board/sla-policies-panel";
+import { ComponentsPanel } from "@/components/components/components-panel";
 
 export default async function BoardSettingsPage({
   params,
@@ -50,6 +51,10 @@ export default async function BoardSettingsPage({
             enabled: p.enabled,
           }))}
         />
+      </section>
+      <section className="space-y-4">
+        <h2 className="mono-meta">Components</h2>
+        <ComponentsPanel boardId={boardId} />
       </section>
     </div>
   );
