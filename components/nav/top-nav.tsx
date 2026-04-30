@@ -13,6 +13,7 @@ export function TopNav({
   workspaces: WorkspaceLite[];
   activeWorkspaceId?: string;
 }) {
+  const wsForLinks = activeWorkspaceId ?? workspaces[0]?.id;
   return (
     <header className="sticky top-0 z-40 border-b border-hairline bg-[color:rgb(15_8_42/0.55)] backdrop-blur-2xl">
       {/* Soft violet wash inside the bar — adds atmospheric tint */}
@@ -34,25 +35,25 @@ export function TopNav({
           </Link>
           <span className="text-fg-faint select-none" aria-hidden>/</span>
           <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspaceId} />
-          {activeWorkspaceId && (
+          {wsForLinks && (
             <>
               <span className="text-fg-faint select-none" aria-hidden>/</span>
               <Link
-                href={`/w/${activeWorkspaceId}/backlog`}
+                href={`/w/${wsForLinks}/backlog`}
                 className="mono-meta-sm tracking-[0.18em] text-fg-muted hover:text-fg transition-colors"
               >
                 BACKLOG
               </Link>
               <span className="text-fg-faint select-none" aria-hidden>/</span>
               <Link
-                href={`/w/${activeWorkspaceId}/roadmap`}
+                href={`/w/${wsForLinks}/roadmap`}
                 className="mono-meta-sm tracking-[0.18em] text-fg-muted hover:text-fg transition-colors"
               >
                 ROADMAP
               </Link>
               <span className="text-fg-faint select-none" aria-hidden>/</span>
               <Link
-                href={`/w/${activeWorkspaceId}/versions`}
+                href={`/w/${wsForLinks}/versions`}
                 className="mono-meta-sm tracking-[0.18em] text-fg-muted hover:text-fg transition-colors"
               >
                 VERSIONS
