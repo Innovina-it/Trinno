@@ -45,6 +45,13 @@ export function TopNav({
               </Link>
               <span className="text-fg-faint select-none" aria-hidden>/</span>
               <Link
+                href={`/w/${activeWorkspaceId}/roadmap`}
+                className="mono-meta-sm tracking-[0.18em] text-fg-muted hover:text-fg transition-colors"
+              >
+                ROADMAP
+              </Link>
+              <span className="text-fg-faint select-none" aria-hidden>/</span>
+              <Link
                 href={`/w/${activeWorkspaceId}/versions`}
                 className="mono-meta-sm tracking-[0.18em] text-fg-muted hover:text-fg transition-colors"
               >
