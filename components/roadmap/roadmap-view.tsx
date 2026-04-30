@@ -146,6 +146,7 @@ export function RoadmapView({
   const storeCards = useWorkspaceStore((s) => s.cards);
   const storeBoards = useWorkspaceStore((s) => s.boards);
   const storeLinks = useWorkspaceStore((s) => s.cardLinks);
+  const storeSprints = useWorkspaceStore((s) => s.sprints);
   const patchCardInStore = useWorkspaceStore((s) => s.patchCard);
 
   const cards = useMemo<RoadmapCard[]>(() => {
@@ -388,6 +389,42 @@ export function RoadmapView({
     [ppd, patchCardInStore],
   );
 
+  // Plan #16b-α (#10) — snap-to-week-Monday + snap-to-sprint-end on
+  // pointer release. Window: within 4 days of a candidate snap target,
+  // we snap to the nearest one; otherwise the rounded-to-day position
+  // (preserved by the drag delta math) is kept as-is. Sprint end_dates
+  // come from the workspace store; weeks are computed deterministically
+  // off the dragged date itself.
+  const snapDate = useCallback(
+    (d: Date): Date => {
+      const candidates: Date[] = [];
+      // Nearest Monday (UTC).
+      const day = d.getUTCDay();
+      const sinceMonday = (day + 6) % 7; // Mon=0
+      const prevMonday = addDays(startOfDay(d), -sinceMonday);
+      const nextMonday = addDays(prevMonday, 7);
+      candidates.push(prevMonday, nextMonday);
+      // Sprint end_dates.
+      for (const s of storeSprints) {
+        if (s.endDate)
+          candidates.push(
+            startOfDay(s.endDate instanceof Date ? s.endDate : new Date(s.endDate)),
+          );
+      }
+      let best: Date | null = null;
+      let bestDiff = Number.POSITIVE_INFINITY;
+      for (const c of candidates) {
+        const diff = Math.abs(dayDiff(d, c));
+        if (diff <= 4 && diff < bestDiff) {
+          best = c;
+          bestDiff = diff;
+        }
+      }
+      return best ?? startOfDay(d);
+    },
+    [storeSprints],
+  );
+
   const onPointerUp = useCallback(() => {
     const d = dragRef.current;
     if (!d) return;
@@ -402,14 +439,56 @@ export function RoadmapView({
     ) {
       return; // no-op
     }
+
+    // Apply snap depending on drag mode. In move-mode we snap the
+    // edge that's closest to a target, preserving the duration; in
+    // resize modes we snap only the dragged edge.
+    let snappedStart = startOfDay(current.startDate);
+    let snappedTarget = startOfDay(current.targetDate);
+    if (d.mode === "resize-left") {
+      snappedStart = snapDate(snappedStart);
+    } else if (d.mode === "resize-right") {
+      snappedTarget = snapDate(snappedTarget);
+    } else {
+      const startSnap = snapDate(snappedStart);
+      const targetSnap = snapDate(snappedTarget);
+      const startDelta = Math.abs(dayDiff(snappedStart, startSnap));
+      const targetDelta = Math.abs(dayDiff(snappedTarget, targetSnap));
+      // Prefer the edge that snapped (smaller delta), then translate
+      // both ends to preserve duration.
+      if (startDelta <= targetDelta && startDelta <= 4) {
+        const shift = dayDiff(snappedStart, startSnap);
+        snappedStart = startSnap;
+        snappedTarget = addDays(snappedTarget, shift);
+      } else if (targetDelta <= 4) {
+        const shift = dayDiff(snappedTarget, targetSnap);
+        snappedTarget = targetSnap;
+        snappedStart = addDays(snappedStart, shift);
+      }
+    }
+    if (snappedStart.getTime() > snappedTarget.getTime()) {
+      snappedStart = snappedTarget;
+    }
+
+    // Reflect snap in the store immediately so the bar visually settles.
+    if (
+      snappedStart.getTime() !== current.startDate.getTime() ||
+      snappedTarget.getTime() !== current.targetDate.getTime()
+    ) {
+      patchCardInStore(d.cardId, {
+        startDate: snappedStart,
+        targetDate: snappedTarget,
+      });
+    }
+
     startTransition(() => {
       void persistDates(
         d.cardId,
         { start: d.origStart, target: d.origTarget },
-        { start: current.startDate, target: current.targetDate },
+        { start: snappedStart, target: snappedTarget },
       );
     });
-  }, [onPointerMove, persistDates]);
+  }, [onPointerMove, persistDates, snapDate, patchCardInStore]);
 
   const beginDrag = useCallback(
     (mode: DragMode, e: React.PointerEvent, cardId: string) => {
