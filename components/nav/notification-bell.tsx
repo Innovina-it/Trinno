@@ -49,11 +49,14 @@ export function NotificationBell({ userId }: { userId: string }) {
   const [items, setItems] = useState<N[]>([]);
   const [unread, setUnread] = useState(0);
   const [subscribed, setSubscribed] = useState(false);
+  const [pulse, setPulse] = useState(false);
   const [, start] = useTransition();
 
   useEffect(() => {
     const supa = createSupabaseBrowser();
     let cancelled = false;
+    let initialFetchDone = false;
+    let pulseTimer: ReturnType<typeof setTimeout> | null = null;
     async function refresh() {
       const r = await fetch("/api/notifications/recent", {
         cache: "no-store",
@@ -64,7 +67,9 @@ export function NotificationBell({ userId }: { userId: string }) {
       setItems(data.items);
       setUnread(data.unread);
     }
-    void refresh();
+    void refresh().then(() => {
+      initialFetchDone = true;
+    });
     const ch = supa
       .channel(`notif:${userId}`)
       .on(
@@ -77,6 +82,13 @@ export function NotificationBell({ userId }: { userId: string }) {
         },
         () => {
           void refresh();
+          // Only pulse for realtime arrivals (not the initial fetch).
+          if (!initialFetchDone || cancelled) return;
+          setPulse(true);
+          if (pulseTimer) clearTimeout(pulseTimer);
+          pulseTimer = setTimeout(() => {
+            if (!cancelled) setPulse(false);
+          }, 1000);
         },
       )
       .subscribe((status) => {
@@ -85,6 +97,7 @@ export function NotificationBell({ userId }: { userId: string }) {
       });
     return () => {
       cancelled = true;
+      if (pulseTimer) clearTimeout(pulseTimer);
       void supa.removeChannel(ch);
     };
   }, [userId]);
@@ -112,7 +125,7 @@ export function NotificationBell({ userId }: { userId: string }) {
         aria-label={`Notifications${unread ? ` (${unread} unread)` : ""}`}
         data-realtime-ready={subscribed ? "true" : undefined}
       >
-        <Bell className="size-4" />
+        <Bell className={`size-4 ${pulse ? "animate-pulse" : ""}`} />
         {unread > 0 && (
           <span className="absolute -top-0.5 -right-0.5 chip tabular-nums px-1.5 py-0 text-[10px] bg-fg/15 text-fg ring-1 ring-fg/40">
             {unread > 99 ? "99+" : unread}
