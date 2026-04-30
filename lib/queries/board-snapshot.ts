@@ -13,6 +13,7 @@ import {
   attachments,
   boardMembers,
   profiles,
+  cardLinks,
 } from "@/lib/db/schema";
 
 export type BoardRow = typeof boards.$inferSelect;
@@ -25,6 +26,7 @@ export type ChecklistRow = typeof checklists.$inferSelect;
 export type ChecklistItemRow = typeof checklistItems.$inferSelect;
 export type CommentRow = typeof comments.$inferSelect;
 export type AttachmentRow = typeof attachments.$inferSelect;
+export type CardLinkRow = typeof cardLinks.$inferSelect;
 export type BoardProfile = { id: string; displayName: string };
 
 export type BoardSnapshot = {
@@ -38,6 +40,7 @@ export type BoardSnapshot = {
   checklistItems: ChecklistItemRow[];
   comments: CommentRow[];
   attachments: AttachmentRow[];
+  cardLinks: CardLinkRow[];
   boardProfiles: BoardProfile[];
 };
 
@@ -62,6 +65,7 @@ export async function getBoardSnapshot(
       checklistItemRows,
       commentRows,
       attachmentRows,
+      cardLinkRows,
       memberRows,
     ] = await Promise.all([
       tx
@@ -103,6 +107,7 @@ export async function getBoardSnapshot(
         .from(attachments)
         .where(eq(attachments.boardId, boardId))
         .orderBy(asc(attachments.createdAt)),
+      tx.select().from(cardLinks).where(eq(cardLinks.boardId, boardId)),
       tx
         .select({ userId: boardMembers.userId })
         .from(boardMembers)
@@ -129,6 +134,7 @@ export async function getBoardSnapshot(
       checklistItems: checklistItemRows,
       comments: commentRows,
       attachments: attachmentRows,
+      cardLinks: cardLinkRows,
       boardProfiles: profileRows,
     };
   });

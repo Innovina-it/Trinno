@@ -12,6 +12,7 @@ import type {
   ChecklistItemRow,
   CommentRow,
   AttachmentRow,
+  CardLinkRow,
 } from "@/lib/queries/board-snapshot";
 
 function rowToList(r: Record<string, unknown>): ListRow {
@@ -115,6 +116,18 @@ function rowToAttachment(r: Record<string, unknown>): AttachmentRow {
   };
 }
 
+function rowToCardLink(r: Record<string, unknown>): CardLinkRow {
+  return {
+    id: r.id as string,
+    fromCardId: r.from_card_id as string,
+    toCardId: r.to_card_id as string,
+    kind: r.kind as CardLinkRow["kind"],
+    boardId: r.board_id as string,
+    createdBy: (r.created_by ?? null) as string | null,
+    createdAt: new Date(r.created_at as string),
+  };
+}
+
 export function useBoardRealtime(boardId: string) {
   const addList = useBoardStore((s) => s.addList);
   const addCard = useBoardStore((s) => s.addCard);
@@ -149,6 +162,9 @@ export function useBoardRealtime(boardId: string) {
 
   const addAttachment = useBoardStore((s) => s.addAttachment);
   const removeAttachment = useBoardStore((s) => s.removeAttachment);
+
+  const addCardLink = useBoardStore((s) => s.addCardLink);
+  const removeCardLink = useBoardStore((s) => s.removeCardLink);
 
   useEffect(() => {
     const supa = createSupabaseBrowser();
@@ -371,6 +387,25 @@ export function useBoardRealtime(boardId: string) {
             }
           },
         )
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "card_links",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addCardLink(rowToCardLink(payload.new));
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              removeCardLink((payload.old as any).id);
+            }
+          },
+        )
         .subscribe();
     })();
 
@@ -406,5 +441,7 @@ export function useBoardRealtime(boardId: string) {
     removeComment,
     addAttachment,
     removeAttachment,
+    addCardLink,
+    removeCardLink,
   ]);
 }

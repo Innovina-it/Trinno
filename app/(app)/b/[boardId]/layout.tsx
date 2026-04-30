@@ -31,6 +31,7 @@ export default async function BoardLayout({
         checklistItems: snap.checklistItems,
         comments: snap.comments,
         attachments: snap.attachments,
+        cardLinks: snap.cardLinks,
         boardProfiles: snap.boardProfiles,
       }}
     >

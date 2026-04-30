@@ -17,6 +17,7 @@ import type {
   ChecklistItemRow,
   CommentRow,
   AttachmentRow,
+  CardLinkRow,
   BoardProfile,
 } from "@/lib/queries/board-snapshot";
 
@@ -31,6 +32,7 @@ export type BoardSnapshotInit = {
   checklistItems: ChecklistItemRow[];
   comments: CommentRow[];
   attachments: AttachmentRow[];
+  cardLinks: CardLinkRow[];
   boardProfiles: BoardProfile[];
 };
 
@@ -45,6 +47,7 @@ export type BoardState = {
   checklistItems: ChecklistItemRow[];
   comments: CommentRow[];
   attachments: AttachmentRow[];
+  cardLinks: CardLinkRow[];
   boardProfiles: BoardProfile[];
 
   setSnapshot: (s: Omit<BoardSnapshotInit, "boardId">) => void;
@@ -82,6 +85,9 @@ export type BoardState = {
 
   addAttachment: (a: AttachmentRow) => void;
   removeAttachment: (id: string) => void;
+
+  addCardLink: (l: CardLinkRow) => void;
+  removeCardLink: (id: string) => void;
 };
 
 function sortByPosition<T extends { position: string }>(rows: T[]): T[] {
@@ -106,6 +112,7 @@ export function createBoardStore(initial: BoardSnapshotInit) {
     checklistItems: sortByPosition(initial.checklistItems),
     comments: sortByCreatedAt(initial.comments),
     attachments: initial.attachments,
+    cardLinks: initial.cardLinks,
     boardProfiles: initial.boardProfiles,
 
     setSnapshot: (s) =>
@@ -119,6 +126,7 @@ export function createBoardStore(initial: BoardSnapshotInit) {
         checklistItems: sortByPosition(s.checklistItems),
         comments: sortByCreatedAt(s.comments),
         attachments: s.attachments,
+        cardLinks: s.cardLinks,
         boardProfiles: s.boardProfiles,
       }),
 
@@ -295,6 +303,18 @@ export function createBoardStore(initial: BoardSnapshotInit) {
     removeAttachment: (id) =>
       set((state) => ({
         attachments: state.attachments.filter((a) => a.id !== id),
+      })),
+
+    addCardLink: (l) =>
+      set((state) =>
+        state.cardLinks.some((x) => x.id === l.id)
+          ? state
+          : { cardLinks: [...state.cardLinks, l] },
+      ),
+
+    removeCardLink: (id) =>
+      set((state) => ({
+        cardLinks: state.cardLinks.filter((l) => l.id !== id),
       })),
   }));
 }
