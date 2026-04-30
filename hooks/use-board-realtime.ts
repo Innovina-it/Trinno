@@ -38,6 +38,8 @@ function rowToCard(r: Record<string, unknown>): CardRow {
     dueDate: r.due_date ? new Date(r.due_date as string) : null,
     dueComplete: (r.due_complete ?? false) as boolean,
     coverColor: (r.cover_color ?? null) as string | null,
+    type: (r.type ?? "task") as string,
+    parentCardId: (r.parent_card_id ?? null) as string | null,
   };
 }
 
