@@ -19,6 +19,7 @@ import { ChecklistsSection } from "./card/checklists-section";
 import { AttachmentsSection } from "./card/attachments-section";
 import { CommentsSection } from "./card/comments-section";
 import { TypePicker } from "./card/type-picker";
+import { PriorityPicker, type CardPriority } from "./card/priority-picker";
 import { ParentPicker } from "./card/parent-picker";
 import { WatchToggle } from "./card/watch-toggle";
 import { SubtasksSection } from "./card/subtasks-section";
@@ -46,6 +47,7 @@ export type CardModalCard = {
   spentMin?: number | null;
   startDate?: Date | string | null;
   targetDate?: Date | string | null;
+  priority?: CardPriority | null;
 };
 
 export function CardModal({
@@ -116,13 +118,17 @@ export function CardModal({
 
   const body = (
     <div className="space-y-7">
-      {/* Type + Parent + Sprint row — at the very top */}
+      {/* Type + Priority + Parent + Sprint row — at the very top */}
       {(card.type !== undefined || card.boardId) && (
         <div className="flex flex-wrap items-center gap-2">
           <TypePicker
             cardId={card.id}
             type={card.type ?? "task"}
             parentCardId={card.parentCardId ?? null}
+          />
+          <PriorityPicker
+            cardId={card.id}
+            priority={card.priority ?? null}
           />
           {card.boardId && (
             <ParentPicker

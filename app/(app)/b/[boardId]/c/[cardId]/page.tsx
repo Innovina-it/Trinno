@@ -44,6 +44,7 @@ export default async function CardPage({
         spentMin: c.spentMin,
         startDate: c.startDate,
         targetDate: c.targetDate,
+        priority: c.priority,
       }}
       sprints={sprints.map((s) => ({ id: s.id, name: s.name, state: s.state }))}
       workspaceId={board?.workspaceId}

@@ -108,6 +108,14 @@ export const lists = pgTable("lists", {
   statusKind: listStatusKind("status_kind"),
 });
 
+export const cardPriority = pgEnum("card_priority", [
+  "p0",
+  "p1",
+  "p2",
+  "p3",
+  "p4",
+]);
+
 export const cards = pgTable("cards", {
   id: uuid("id").primaryKey().defaultRandom(),
   listId: uuid("list_id").notNull(),
@@ -130,6 +138,7 @@ export const cards = pgTable("cards", {
   spentMin: integer("spent_min").notNull().default(0),
   startDate: timestamp("start_date", { withTimezone: true }),
   targetDate: timestamp("target_date", { withTimezone: true }),
+  priority: cardPriority("priority"),
 });
 
 export const labels = pgTable("labels", {

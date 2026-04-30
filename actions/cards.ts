@@ -41,6 +41,7 @@ export async function updateCardImpl(token: string, input: {
   estimateMin?: number | null;
   startDate?: Date | string | null;
   targetDate?: Date | string | null;
+  priority?: "p0" | "p1" | "p2" | "p3" | "p4" | null;
 }) {
   const parsed = UpdateCardInput.parse(input);
   const patch: Record<string, unknown> = {};
@@ -75,6 +76,7 @@ export async function updateCardImpl(token: string, input: {
           ? parsed.targetDate
           : new Date(parsed.targetDate);
   }
+  if (parsed.priority !== undefined) patch.priority = parsed.priority;
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(cards).set(patch)
       .where(eq(cards.id, parsed.id)).returning();

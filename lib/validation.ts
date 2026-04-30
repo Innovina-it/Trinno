@@ -79,6 +79,8 @@ export const CreateCardInput = z.object({
   listId: Uuid, title: Title,
 });
 export const CardType = z.enum(["epic", "story", "task", "subtask", "bug"]);
+// Plan #16b-γ-C (#1) — card priority. Mirrors the SQL enum.
+export const CardPriority = z.enum(["p0", "p1", "p2", "p3", "p4"]);
 export const UpdateCardInput = z.object({
   id: Uuid,
   title: Title.optional(),
@@ -91,6 +93,7 @@ export const UpdateCardInput = z.object({
   estimateMin: z.number().int().nonnegative().nullable().optional(),
   startDate: z.union([z.string(), z.date()]).nullable().optional(),
   targetDate: z.union([z.string(), z.date()]).nullable().optional(),
+  priority: CardPriority.nullable().optional(),
 });
 export const MoveCardInput = z.object({
   id: Uuid, listId: Uuid, position: z.string().min(1).max(64),
@@ -391,3 +394,4 @@ export const DeleteGadgetInput = z.object({ id: Uuid });
 // Plan #16b-γ-B (#7) — no input fields; the action stamps `now()` on the
 // caller's own profile row and RLS prevents writing anyone else's row.
 export const MarkOnboardingCompletedInput = z.object({});
+

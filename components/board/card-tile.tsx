@@ -13,6 +13,7 @@ import { TypeIcon } from "./card/type-picker";
 import { BlockedBadge } from "./card/blocked-badge";
 import { StoryPointsChip } from "./card/story-points-chip";
 import { TimeChip } from "./card/time-chip";
+import { PriorityChip, type CardPriority } from "./card/priority-picker";
 import { cardCode } from "@/lib/format";
 
 function fmtShortDate(d: Date | string): string {
@@ -84,6 +85,9 @@ export function CardTile({
         <div className="flex items-center gap-1.5">
           <TypeIcon type={card.type ?? "task"} className="size-3 text-fg-faint" />
           <BlockedBadge cardId={card.id} />
+          {card.priority && (
+            <PriorityChip priority={card.priority as CardPriority} />
+          )}
           <StoryPointsChip cardId={card.id} />
           <TimeChip cardId={card.id} />
         </div>

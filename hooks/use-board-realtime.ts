@@ -52,6 +52,7 @@ function rowToCard(r: Record<string, unknown>): CardRow {
     spentMin: (r.spent_min ?? 0) as number,
     startDate: r.start_date ? new Date(r.start_date as string) : null,
     targetDate: r.target_date ? new Date(r.target_date as string) : null,
+    priority: (r.priority ?? null) as CardRow["priority"],
   };
 }
 
