@@ -11,14 +11,15 @@ import { toast } from "sonner";
 import { createBoard } from "@/actions/boards";
 import { Plus, Check } from "lucide-react";
 
-// Studio-plastic palette: jewel tones + signature accents
-const PALETTE = ["#00e5ff", "#8b5cf6", "#ff2bd6", "#c3f73a", "#ffb020", "#ff6b6b"];
-
-function hexToRgb(hex: string): [number, number, number] {
-  const m = hex.replace("#", "");
-  const num = parseInt(m, 16);
-  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
-}
+// Monochrome palette: shades of grey only. Picker still functional but no chroma.
+const PALETTE = [
+  "#fafafa",
+  "#d4d4d4",
+  "#a3a3a3",
+  "#737373",
+  "#404040",
+  "#171717",
+];
 
 export function CreateBoardButton({ workspaceId }: { workspaceId: string }) {
   const [open, setOpen] = useState(false);
@@ -43,16 +44,9 @@ export function CreateBoardButton({ workspaceId }: { workspaceId: string }) {
     });
   }
 
-  const [r, g, b] = hexToRgb(color);
-  const previewBg = `linear-gradient(135deg, rgb(${r} ${g} ${b} / 0.45) 0%, rgb(${r} ${g} ${b} / 0.12) 70%, rgb(255 255 255 / 0.04) 100%)`;
-  const previewGlow = `0 1px 0 0 rgb(255 255 255 / 0.12) inset, 0 24px 50px -12px rgb(${r} ${g} ${b} / 0.45)`;
-
   return (
     <>
-      <Button
-        size="sm"
-        onClick={() => setOpen(true)}
-      >
+      <Button size="sm" onClick={() => setOpen(true)}>
         <Plus className="size-3.5 mr-0.5" /> New board
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -64,17 +58,16 @@ export function CreateBoardButton({ workspaceId }: { workspaceId: string }) {
             </div>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-5">
-            {/* Live preview tile — mirrors the actual board grid card aesthetic */}
+            {/* Live preview tile — neutral mono surface */}
             <div
-              className="relative flex h-36 items-end overflow-hidden rounded-2xl border border-[color:var(--hairline)] p-4 backdrop-blur-xl"
-              style={{ background: previewBg, boxShadow: previewGlow }}
+              className="glass relative flex h-36 items-end overflow-hidden rounded-2xl p-4"
               aria-hidden
             >
               <div className="absolute inset-x-4 top-3 flex items-baseline justify-between">
                 <span className="mono-meta-sm text-fg-faint">PREVIEW</span>
                 <span
-                  className="block size-3 rounded-full"
-                  style={{ backgroundColor: color, boxShadow: `0 0 12px ${color}` }}
+                  className="block size-3 rounded-full border border-hairline-hi"
+                  style={{ backgroundColor: color }}
                 />
               </div>
               <span className="serif-display text-2xl text-fg leading-none">
@@ -96,35 +89,32 @@ export function CreateBoardButton({ workspaceId }: { workspaceId: string }) {
             </div>
 
             <div className="space-y-3">
-              <Label>Background</Label>
+              <Label>Tone</Label>
               <div className="grid grid-cols-6 gap-2">
                 {PALETTE.map((c, i) => {
                   const selected = color === c;
-                  const [pr, pg, pb] = hexToRgb(c);
                   return (
                     <button
                       key={c}
                       type="button"
                       onClick={() => setColor(c)}
-                      className={`group/swatch relative flex aspect-square items-center justify-center rounded-2xl border transition-all duration-200 ${
+                      className={`group/swatch relative flex aspect-square items-center justify-center rounded-xl border transition-all duration-150 ${
                         selected
-                          ? "border-[color:var(--hairline-hi)] scale-105"
-                          : "border-[color:var(--hairline)] hover:scale-105 hover:border-[color:var(--hairline-hi)]"
+                          ? "border-fg/70 scale-105"
+                          : "border-hairline hover:border-hairline-hi"
                       }`}
-                      style={{
-                        background: `radial-gradient(circle at 30% 30%, rgb(${pr} ${pg} ${pb} / 0.7), rgb(${pr} ${pg} ${pb} / 0.18))`,
-                        boxShadow: selected
-                          ? `0 0 0 2px rgb(${pr} ${pg} ${pb} / 0.6), 0 12px 24px -8px rgb(${pr} ${pg} ${pb} / 0.5)`
-                          : undefined,
-                      }}
+                      style={{ backgroundColor: c }}
                       aria-label={`Pick ${c}`}
                       aria-pressed={selected}
                     >
-                      <span className="absolute top-1 left-1.5 mono-meta-sm text-white/60">
+                      <span className="absolute top-1 left-1.5 mono-meta-sm text-black/60 mix-blend-difference">
                         {String(i + 1).padStart(2, "0")}
                       </span>
                       {selected && (
-                        <Check className="absolute bottom-1.5 right-1.5 size-3.5 text-white drop-shadow" strokeWidth={3} />
+                        <Check
+                          className="absolute bottom-1 right-1 size-3.5 mix-blend-difference text-white"
+                          strokeWidth={3}
+                        />
                       )}
                     </button>
                   );

@@ -41,13 +41,6 @@ function decodeId(
   return null;
 }
 
-function hexToRgb(hex: string): [number, number, number] {
-  const m = hex.replace("#", "");
-  const v = m.length === 3 ? m.split("").map((c) => c + c).join("") : m;
-  const num = parseInt(v, 16);
-  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
-}
-
 export function BoardView({
   board,
   currentUser,
@@ -171,14 +164,9 @@ export function BoardView({
     }
   }
 
-  const baseColor =
-    board.backgroundKind === "color" ? board.backgroundValue : "#8b5cf6";
-  const [r, g, b] = hexToRgb(baseColor);
-  // Layered: deep mesh + colored wash from board.backgroundValue at ~18% opacity
-  const bg = `radial-gradient(60rem 40rem at 8% 12%,  rgb(139 92 246 / 0.45), transparent 60%),
-              radial-gradient(50rem 36rem at 92% 88%, rgb(255 43 214 / 0.30), transparent 60%),
-              radial-gradient(40rem 30rem at 50% 50%, rgb(0 229 255 / 0.16), transparent 60%),
-              radial-gradient(50rem 35rem at 50% 0%, rgb(${r} ${g} ${b} / 0.18), transparent 60%),
+  // Strict monochrome: ignore user's chosen board color, render neutral dark.
+  const bg = `radial-gradient(70rem 50rem at 10% 0%,  rgb(255 255 255 / 0.04), transparent 60%),
+              radial-gradient(60rem 40rem at 90% 100%, rgb(255 255 255 / 0.03), transparent 60%),
               var(--bg-deep)`;
 
   return (
@@ -198,7 +186,7 @@ export function BoardView({
       />
 
       {/* Board masthead — glass strip with gradient title accent */}
-      <div className="relative border-b border-hairline px-6 py-5 backdrop-blur-xl bg-[color:rgb(15_8_42/0.40)]">
+      <div className="relative border-b border-hairline px-6 py-5 backdrop-blur-xl bg-[color:rgb(10_10_10/0.55)]">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="space-y-2.5 min-w-0">
             <div className="mono-meta-sm flex items-center gap-2 text-fg-faint">
@@ -206,11 +194,7 @@ export function BoardView({
               <span className="text-fg/60">#{boardCode(board.id)}</span>
               <span
                 aria-hidden
-                className="block h-2 w-8 rounded-full"
-                style={{
-                  backgroundColor: baseColor,
-                  boxShadow: `0 0 12px ${baseColor}`,
-                }}
+                className="block h-1.5 w-6 rounded-full bg-fg/30"
               />
             </div>
             <h1 className="serif-display text-[clamp(2rem,5vw,3.5rem)] leading-[0.95]">
