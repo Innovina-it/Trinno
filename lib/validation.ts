@@ -85,3 +85,17 @@ export const RegisterAttachmentInput = z.object({
   sizeBytes: z.number().int().nonnegative().max(50 * 1024 * 1024),
 });
 export const DeleteAttachmentInput = z.object({ id: Uuid });
+
+export const LinkKind = z.enum([
+  "blocks",
+  "is_blocked_by",
+  "relates_to",
+  "duplicates",
+  "is_duplicated_by",
+]);
+export const CreateCardLinkInput = z.object({
+  fromCardId: Uuid,
+  toCardId: Uuid,
+  kind: LinkKind,
+});
+export const DeleteCardLinkInput = z.object({ id: Uuid });
