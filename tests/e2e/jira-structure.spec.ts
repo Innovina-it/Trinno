@@ -147,8 +147,10 @@ test("card type, parent breadcrumb, sub-tasks, links, components, versions all p
     .locator("[data-card-id]")
     .filter({ hasText: "Add OAuth" })
     .first();
-  // The parent breadcrumb renders as a small "#<code>" text under the title.
-  await expect(oauthTile).toContainText("#");
+  // The parent breadcrumb renders the parent's title (or "#<code>" fallback).
+  await expect(
+    oauthTile.getByTestId("tile-parent-breadcrumb"),
+  ).toBeVisible();
 
   // 6. Open "Login flow" — sub-tasks section lists "Add OAuth".
   await openCardModal(page, "Login flow");

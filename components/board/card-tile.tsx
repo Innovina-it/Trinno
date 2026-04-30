@@ -4,6 +4,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CornerLeftUp } from "lucide-react";
 import type { CardRow } from "@/lib/queries/board-snapshot";
+import { useBoardStore } from "@/stores/board-store";
 import { LabelStripes } from "./card/label-stripes";
 import { DuePill } from "./card/due-pill";
 import { TileIndicators } from "./card/tile-indicators";
@@ -21,6 +22,9 @@ export function CardTile({
   boardId: string;
 }) {
   const sortableId = `card:${card.id}`;
+  const parentCard = useBoardStore((s) =>
+    card.parentCardId ? s.cards.find((c) => c.id === card.parentCardId) : null,
+  );
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
       id: sortableId,
@@ -86,11 +90,14 @@ export function CardTile({
         </span>
         {card.parentCardId && (
           <span
-            className="mt-1 inline-flex items-center gap-1 mono-meta-sm text-fg-faint"
+            className="mt-1 inline-flex items-center gap-1 mono-meta-sm text-fg-faint max-w-full"
             data-testid="tile-parent-breadcrumb"
+            title={parentCard?.title ?? `#${cardCode(card.parentCardId)}`}
           >
-            <CornerLeftUp className="size-3" />
-            #{cardCode(card.parentCardId)}
+            <CornerLeftUp className="size-3 shrink-0" />
+            <span className="truncate max-w-[8rem]">
+              {parentCard?.title ?? `#${cardCode(card.parentCardId)}`}
+            </span>
           </span>
         )}
       </div>
