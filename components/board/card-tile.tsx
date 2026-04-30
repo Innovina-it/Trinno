@@ -2,10 +2,12 @@
 import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { CornerLeftUp } from "lucide-react";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 import { LabelStripes } from "./card/label-stripes";
 import { DuePill } from "./card/due-pill";
 import { TileIndicators } from "./card/tile-indicators";
+import { TypeIcon } from "./card/type-picker";
 import { cardCode } from "@/lib/format";
 
 export function CardTile({
@@ -57,8 +59,9 @@ export function CardTile({
       {/* Label stripes — top */}
       <LabelStripes cardId={card.id} />
 
-      {/* Top metadata row: card ID via pseudo-element to keep textContent clean */}
-      <div className="flex justify-end px-3 pt-2">
+      {/* Top metadata row: type icon + card ID via pseudo-element */}
+      <div className="flex items-center justify-between px-3 pt-2">
+        <TypeIcon type={card.type ?? "task"} className="size-3 text-fg-faint" />
         <span
           aria-hidden
           className="card-code-stamp leading-none"
@@ -73,6 +76,12 @@ export function CardTile({
             {card.title}
           </span>
         </span>
+        {card.parentCardId && (
+          <span className="mt-1 inline-flex items-center gap-1 mono-meta-sm text-fg-faint">
+            <CornerLeftUp className="size-3" />
+            #{cardCode(card.parentCardId)}
+          </span>
+        )}
       </div>
 
       {card.dueDate && (

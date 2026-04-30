@@ -17,12 +17,19 @@ import { MembersSection } from "./card/members-section";
 import { ChecklistsSection } from "./card/checklists-section";
 import { AttachmentsSection } from "./card/attachments-section";
 import { CommentsSection } from "./card/comments-section";
+import { TypePicker } from "./card/type-picker";
+import { ParentPicker } from "./card/parent-picker";
+import { SubtasksSection } from "./card/subtasks-section";
 import { cardCode } from "@/lib/format";
 
 export type CardModalCard = {
   id: string;
   title: string;
   description: string | null;
+  type?: string;
+  parentCardId?: string | null;
+  listId?: string;
+  boardId?: string;
 };
 
 export function CardModal({
@@ -86,6 +93,24 @@ export function CardModal({
 
   const body = (
     <div className="space-y-7">
+      {/* Type + Parent row — at the very top */}
+      {(card.type !== undefined || card.boardId) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <TypePicker
+            cardId={card.id}
+            type={card.type ?? "task"}
+            parentCardId={card.parentCardId ?? null}
+          />
+          {card.boardId && (
+            <ParentPicker
+              cardId={card.id}
+              parentCardId={card.parentCardId ?? null}
+              boardId={card.boardId}
+            />
+          )}
+        </div>
+      )}
+
       {/* Title — editable, serif italic, large editorial display, gradient on focus */}
       <div className="space-y-2">
         <Label htmlFor="card-title">Title</Label>
@@ -124,6 +149,9 @@ export function CardModal({
       <DueSection cardId={card.id} />
       <MembersSection cardId={card.id} />
       <ChecklistsSection cardId={card.id} />
+      {card.listId && card.boardId && (
+        <SubtasksSection cardId={card.id} listId={card.listId} boardId={card.boardId} />
+      )}
       <AttachmentsSection cardId={card.id} />
       <CommentsSection cardId={card.id} />
 

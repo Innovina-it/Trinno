@@ -22,7 +22,15 @@ export default async function InterceptedCardPage({
   return (
     <CardModal
       asDialog
-      card={{ id: c.id, title: c.title, description: c.description }}
+      card={{
+        id: c.id,
+        title: c.title,
+        description: c.description,
+        type: c.type,
+        parentCardId: c.parentCardId,
+        listId: c.listId,
+        boardId: c.boardId,
+      }}
     >
       <CardActivity cardId={c.id} />
     </CardModal>
