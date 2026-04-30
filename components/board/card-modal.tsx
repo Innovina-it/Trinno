@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { errorBus } from "@/lib/errors/error-bus";
 import {
   Dialog,
   DialogContent,
@@ -88,11 +89,19 @@ export function CardModal({
     const trimmed = title.trim();
     if (!trimmed || trimmed === lastSavedTitle.current) return;
     lastSavedTitle.current = trimmed;
+    const retry = async () => {
+      await updateCard({ id: card.id, title: trimmed });
+    };
     start(async () => {
       try {
-        await updateCard({ id: card.id, title: trimmed });
+        await retry();
       } catch (err) {
-        toast.error((err as Error).message);
+        const msg = (err as Error).message;
+        toast.error(msg);
+        errorBus.push({
+          message: `Title save failed: ${msg}`,
+          retry,
+        });
       }
     });
   }
@@ -103,14 +112,22 @@ export function CardModal({
     descTimer.current = setTimeout(() => {
       if (next === lastSavedDesc.current) return;
       lastSavedDesc.current = next;
+      const retry = async () => {
+        await updateCard({
+          id: card.id,
+          description: next.length === 0 ? null : next,
+        });
+      };
       start(async () => {
         try {
-          await updateCard({
-            id: card.id,
-            description: next.length === 0 ? null : next,
-          });
+          await retry();
         } catch (err) {
-          toast.error((err as Error).message);
+          const msg = (err as Error).message;
+          toast.error(msg);
+          errorBus.push({
+            message: `Description save failed: ${msg}`,
+            retry,
+          });
         }
       });
     }, 600);

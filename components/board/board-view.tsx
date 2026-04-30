@@ -17,6 +17,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { useBoardStore } from "@/stores/board-store";
+import { errorBus } from "@/lib/errors/error-bus";
 import type { BoardRow } from "@/lib/queries/board-snapshot";
 import { positionBetween } from "@/lib/ordering";
 import { moveCard as moveCardAction } from "@/actions/cards";
@@ -133,11 +134,16 @@ export function BoardView({
       const newPos = positionBetween(before, after);
 
       moveListLocal(activeKey.id, newPos);
+      const retryMoveList = async () => {
+        await moveListAction({ id: activeKey.id, position: newPos });
+      };
       start(async () => {
         try {
           await moveListAction({ id: activeKey.id, position: newPos });
         } catch (err) {
-          toast.error("Failed to move list: " + (err as Error).message);
+          const msg = "Failed to move list: " + (err as Error).message;
+          toast.error(msg);
+          errorBus.push({ message: msg, retry: retryMoveList });
           router.refresh();
         }
       });
@@ -191,6 +197,13 @@ export function BoardView({
       const newPos = positionBetween(prevPos, nextPos);
       const targetListId = toListId;
       moveCardLocal(activeKey.id, targetListId, newPos);
+      const retryMoveCard = async () => {
+        await moveCardAction({
+          id: activeKey.id,
+          listId: targetListId,
+          position: newPos,
+        });
+      };
       start(async () => {
         try {
           await moveCardAction({
@@ -199,7 +212,9 @@ export function BoardView({
             position: newPos,
           });
         } catch (err) {
-          toast.error("Failed to move card: " + (err as Error).message);
+          const msg = "Failed to move card: " + (err as Error).message;
+          toast.error(msg);
+          errorBus.push({ message: msg, retry: retryMoveCard });
           router.refresh();
         }
       });
