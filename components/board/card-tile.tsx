@@ -26,9 +26,21 @@ export function CardTile({
     transition: transition ?? "transform 200ms cubic-bezier(0.2, 0, 0, 1)",
     opacity: isDragging ? 0.55 : 1,
     boxShadow: isDragging
-      ? "0 0 0 1px rgb(255 43 214 / 0.6), 0 24px 50px -12px rgb(255 43 214 / 0.55), 0 0 0 4px rgb(255 43 214 / 0.18)"
+      ? "0 0 0 1px rgb(255 255 255 / 0.55), 0 24px 50px -12px rgb(0 0 0 / 0.7), 0 0 0 4px rgb(255 255 255 / 0.10)"
       : undefined,
+    // Lift dragged tile above siblings so it's never visually buried.
+    zIndex: isDragging ? 50 : undefined,
   };
+
+  // Suppress Link navigation if a drag actually occurred (browser still fires
+  // click after a tiny move below the activation threshold otherwise).
+  const handleClick = (e: React.MouseEvent) => {
+    if (isDragging) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
   return (
     <Link
       ref={setNodeRef}
@@ -37,9 +49,10 @@ export function CardTile({
       style={style}
       {...attributes}
       {...listeners}
+      onClick={handleClick}
       data-card-id={card.id}
       data-dragging={isDragging ? "true" : undefined}
-      className="group/card relative block rounded-xl bg-[color:var(--surface-strong)] backdrop-blur-md border border-[color:var(--hairline)] text-fg cursor-grab transition-all duration-200 ease-out shadow-[0_1px_0_0_rgb(255_255_255/0.06)_inset,0_8px_20px_-12px_rgb(0_0_0_/_0.5)] hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[color:var(--surface-hi)] hover:shadow-[0_1px_0_0_rgb(255_255_255/0.10)_inset,0_18px_36px_-12px_rgb(0_229_255/0.25),0_0_0_1px_rgb(0_229_255/0.18)] active:cursor-grabbing data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02] data-[dragging=true]:cursor-grabbing"
+      className="group/card relative block rounded-xl bg-[color:var(--surface-strong)] backdrop-blur-md border border-[color:var(--hairline)] text-fg cursor-grab transition-all duration-200 ease-out shadow-[0_1px_0_0_rgb(255_255_255/0.06)_inset,0_8px_20px_-12px_rgb(0_0_0_/_0.5)] hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[color:var(--surface-hi)] hover:shadow-[0_1px_0_0_rgb(255_255_255/0.10)_inset,0_12px_28px_-12px_rgb(0_0_0/0.6)] active:cursor-grabbing data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02] data-[dragging=true]:cursor-grabbing"
     >
       {/* Label stripes — top */}
       <LabelStripes cardId={card.id} />

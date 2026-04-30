@@ -60,8 +60,10 @@ export function BoardView({
   useBoardRealtime(board.id);
   const viewers = useBoardPresence(board.id, currentUser);
 
+  // Distance-based activation needs enough travel to disambiguate click-to-open
+  // vs drag-to-move. Too small → Link clicks steal the gesture. 8px feels right.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
   const listSortableIds = useMemo(

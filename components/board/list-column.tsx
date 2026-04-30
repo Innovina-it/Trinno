@@ -13,14 +13,13 @@ import { CardTile } from "./card-tile";
 import { AddCardForm } from "./add-card-form";
 import { roman } from "@/lib/format";
 
-// Per-list accent — deterministic from list id so each column has its own
-// jewel-tone. Five-stop palette spreads across the studio-plastic accents.
+// Per-list accent — deterministic from list id, monochrome shades.
 const ACCENT_PALETTE = [
-  "#00e5ff", // cyan
-  "#8b5cf6", // violet
-  "#ff2bd6", // magenta
-  "#c3f73a", // lime
-  "#ffb020", // amber
+  "rgb(250 250 250 / 0.85)",
+  "rgb(250 250 250 / 0.55)",
+  "rgb(250 250 250 / 0.35)",
+  "rgb(250 250 250 / 0.70)",
+  "rgb(250 250 250 / 0.45)",
 ];
 
 function hashId(id: string): number {
@@ -86,10 +85,9 @@ export function ListColumn({
       {/* Per-list accent strip — vertical bar on the left edge, fades top-to-bottom */}
       <span
         aria-hidden
-        className="pointer-events-none absolute left-0 top-0 bottom-0 w-[3px]"
+        className="pointer-events-none absolute left-0 top-0 bottom-0 w-[2px]"
         style={{
-          background: `linear-gradient(180deg, ${accent} 0%, ${accent}55 50%, transparent 100%)`,
-          boxShadow: `0 0 18px ${accent}66`,
+          background: `linear-gradient(180deg, ${accent} 0%, transparent 100%)`,
         }}
       />
 
