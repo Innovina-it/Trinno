@@ -5,6 +5,7 @@ import { WorkspaceSettingsForm } from "@/components/workspace/workspace-settings
 import { MemberList } from "@/components/workspace/member-list";
 import { InviteMemberForm } from "@/components/workspace/invite-member-form";
 import { Separator } from "@/components/ui/separator";
+import { VersionsPanel } from "@/components/versions/versions-panel";
 
 export default async function WorkspaceSettingsPage({
   params,
@@ -33,6 +34,13 @@ export default async function WorkspaceSettingsPage({
         <h2 className="font-medium">Members</h2>
         <InviteMemberForm workspaceId={workspaceId} />
         <MemberList workspaceId={workspaceId} members={members} />
+      </section>
+
+      <Separator />
+
+      <section className="space-y-4">
+        <h2 className="font-medium">Versions</h2>
+        <VersionsPanel workspaceId={workspaceId} />
       </section>
     </div>
   );
