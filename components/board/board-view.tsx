@@ -171,7 +171,7 @@ export function BoardView({
 
   return (
     <div
-      className="-m-6 min-h-[calc(100vh-3rem)] flex flex-col relative"
+      className="min-h-[calc(100vh-3.5rem)] flex flex-col relative"
       style={{ background: bg }}
     >
       {/* Soft noise overlay layered over the colored mesh */}

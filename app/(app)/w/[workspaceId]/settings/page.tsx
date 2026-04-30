@@ -19,7 +19,7 @@ export default async function WorkspaceSettingsPage({
   const members = await listMembers(token, workspaceId);
 
   return (
-    <main className="space-y-8 max-w-2xl">
+    <div className="mx-auto max-w-2xl space-y-8 px-6 py-10">
       <h1 className="text-2xl font-semibold">{ws.name} — Settings</h1>
 
       <section className="space-y-4">
@@ -34,6 +34,6 @@ export default async function WorkspaceSettingsPage({
         <InviteMemberForm workspaceId={workspaceId} />
         <MemberList workspaceId={workspaceId} members={members} />
       </section>
-    </main>
+    </div>
   );
 }

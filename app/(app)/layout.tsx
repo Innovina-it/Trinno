@@ -20,7 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         workspaces={ws.map(w => ({ id: w.id, name: w.name }))}
         activeWorkspaceId={activeWorkspaceId}
       />
-      <div className="max-w-6xl mx-auto p-6">{children}</div>
+      <main className="min-h-[calc(100vh-3.5rem)]">{children}</main>
     </>
   );
 }

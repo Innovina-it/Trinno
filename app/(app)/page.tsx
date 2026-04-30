@@ -8,7 +8,7 @@ export default async function Home() {
   const ws = await listWorkspaces(token);
   if (ws.length === 0) {
     return (
-      <main className="space-y-12 py-8">
+      <div className="mx-auto max-w-7xl space-y-12 px-6 py-12">
         <header className="space-y-3">
           <span className="chip">No. 00 — Onboarding</span>
           <h1 className="serif-display text-7xl">
@@ -29,7 +29,7 @@ export default async function Home() {
             top strip to draft your first one.
           </p>
         </div>
-      </main>
+      </div>
     );
   }
   redirect(`/w/${ws[0].id}`);

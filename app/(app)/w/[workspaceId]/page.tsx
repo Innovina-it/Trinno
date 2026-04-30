@@ -20,7 +20,7 @@ export default async function WorkspacePage({
   const today = shortDate(new Date());
 
   return (
-    <main className="space-y-10 py-4">
+    <div className="mx-auto max-w-7xl space-y-10 px-6 py-10">
       {/* Hero header — oversized italic serif workspace name with gradient noun */}
       <header className="space-y-4">
         <div className="flex items-baseline gap-3">
@@ -52,6 +52,6 @@ export default async function WorkspacePage({
       </header>
 
       <BoardGrid boards={boards} />
-    </main>
+    </div>
   );
 }

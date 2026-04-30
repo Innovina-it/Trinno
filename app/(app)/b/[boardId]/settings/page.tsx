@@ -14,7 +14,7 @@ export default async function BoardSettingsPage({
   const b = await getBoard(token, boardId);
   if (!b) notFound();
   return (
-    <main className="max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 px-6 py-10">
       <h1 className="text-2xl font-semibold">{b.title} — Board settings</h1>
       <BoardSettingsForm
         board={{
@@ -24,6 +24,6 @@ export default async function BoardSettingsPage({
           workspaceId: b.workspaceId,
         }}
       />
-    </main>
+    </div>
   );
 }
