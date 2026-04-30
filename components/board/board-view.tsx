@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -24,10 +24,18 @@ import { moveList as moveListAction } from "@/actions/lists";
 import { Button } from "@/components/ui/button";
 import { ListColumn } from "./list-column";
 import { AddListForm } from "./add-list-form";
+import { BoardFilterBar } from "./board-filter-bar";
+import { SwimlaneRow } from "./swimlane-row";
 import { useBoardRealtime } from "@/hooks/use-board-realtime";
 import { useBoardPresence, type Viewer } from "@/hooks/use-board-presence";
 import { PresenceAvatars } from "./presence-avatars";
 import { boardCode } from "@/lib/format";
+import {
+  parseFilters,
+  applyFilters,
+  partitionLanes,
+  type LaneMode,
+} from "@/lib/board-filters";
 
 function decodeId(
   sortableId: string,
@@ -51,14 +59,46 @@ export function BoardView({
   children?: React.ReactNode;
 }) {
   const router = useRouter();
+  const sp = useSearchParams();
   const lists = useBoardStore((s) => s.lists);
   const cards = useBoardStore((s) => s.cards);
+  const cardLabels = useBoardStore((s) => s.cardLabels);
+  const cardMembers = useBoardStore((s) => s.cardMembers);
+  const labels = useBoardStore((s) => s.labels);
+  const boardProfiles = useBoardStore((s) => s.boardProfiles);
   const moveListLocal = useBoardStore((s) => s.moveList);
   const moveCardLocal = useBoardStore((s) => s.moveCard);
   const [, start] = useTransition();
 
   useBoardRealtime(board.id);
   const viewers = useBoardPresence(board.id, currentUser);
+
+  const filters = useMemo(
+    () => parseFilters(new URLSearchParams(sp.toString())),
+    [sp],
+  );
+  const laneMode = ((sp.get("lanes") as LaneMode | null) ?? "none") as LaneMode;
+
+  const visibleCards = useMemo(
+    () =>
+      applyFilters(
+        cards,
+        { cardLabels, cardMembers, currentUserId: currentUser.userId },
+        filters,
+      ),
+    [cards, cardLabels, cardMembers, currentUser.userId, filters],
+  );
+
+  const lanesPartitioned = useMemo(
+    () =>
+      partitionLanes(visibleCards, laneMode, {
+        cardMembers,
+        cardLabels,
+        profiles: boardProfiles,
+        labels,
+      }),
+    [visibleCards, laneMode, cardMembers, cardLabels, boardProfiles, labels],
+  );
 
   // Distance-based activation needs enough travel to disambiguate click-to-open
   // vs drag-to-move. Too small → Link clicks steal the gesture. 8px feels right.
@@ -217,6 +257,8 @@ export function BoardView({
         </div>
       </div>
 
+      <BoardFilterBar currentUserId={currentUser.userId} />
+
       <div className="relative flex flex-1 items-start gap-4 p-4">
         <div className="flex-1 min-w-0">
           <DndContext
@@ -224,22 +266,64 @@ export function BoardView({
             collisionDetection={closestCorners}
             onDragEnd={onDragEnd}
           >
-            <div className="flex items-start gap-4 overflow-x-auto px-2 pb-4 [&>*]:animate-in [&>*]:fade-in [&>*]:slide-in-from-bottom-3 [&>*]:duration-400">
-              <SortableContext
-                items={listSortableIds}
-                strategy={horizontalListSortingStrategy}
-              >
-                {lists.map((list, idx) => (
-                  <ListColumn
-                    key={list.id}
-                    list={list}
-                    boardId={board.id}
-                    ordinal={idx + 1}
-                  />
-                ))}
-              </SortableContext>
-              <AddListForm boardId={board.id} />
-            </div>
+            {laneMode === "none" ? (
+              <div className="flex items-start gap-4 overflow-x-auto px-2 pb-4 [&>*]:animate-in [&>*]:fade-in [&>*]:slide-in-from-bottom-3 [&>*]:duration-400">
+                <SortableContext
+                  items={listSortableIds}
+                  strategy={horizontalListSortingStrategy}
+                >
+                  {lists.map((list, idx) => (
+                    <ListColumn
+                      key={list.id}
+                      list={list}
+                      boardId={board.id}
+                      ordinal={idx + 1}
+                      cardIdFilter={
+                        filters.types.length ||
+                        filters.labelIds.length ||
+                        filters.due ||
+                        filters.assignedToMe
+                          ? new Set(visibleCards.map((c) => c.id))
+                          : undefined
+                      }
+                    />
+                  ))}
+                </SortableContext>
+                <AddListForm boardId={board.id} />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {lanesPartitioned.map((lane) => {
+                  const laneSet = new Set(lane.cardIds);
+                  return (
+                    <SwimlaneRow
+                      key={`lane:${laneMode}:${lane.key || "_empty"}`}
+                      lane={lane}
+                    >
+                      <div className="flex items-start gap-4 overflow-x-auto px-2 pb-4">
+                        <SortableContext
+                          items={listSortableIds}
+                          strategy={horizontalListSortingStrategy}
+                        >
+                          {lists.map((list, idx) => (
+                            <ListColumn
+                              key={`${lane.key || "_empty"}:${list.id}`}
+                              list={list}
+                              boardId={board.id}
+                              ordinal={idx + 1}
+                              cardIdFilter={laneSet}
+                            />
+                          ))}
+                        </SortableContext>
+                      </div>
+                    </SwimlaneRow>
+                  );
+                })}
+                <div className="px-2">
+                  <AddListForm boardId={board.id} />
+                </div>
+              </div>
+            )}
           </DndContext>
         </div>
         {children}

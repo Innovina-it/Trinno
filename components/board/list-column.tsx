@@ -34,15 +34,21 @@ export function ListColumn({
   list,
   boardId,
   ordinal,
+  cardIdFilter,
 }: {
   list: ListRow;
   boardId: string;
   ordinal?: number;
+  cardIdFilter?: Set<string>;
 }) {
   const cards = useBoardStore((s) => s.cards);
   const listCards = useMemo(
     () => cards.filter((c) => c.listId === list.id),
     [cards, list.id],
+  );
+  const filtered = useMemo(
+    () => (cardIdFilter ? listCards.filter((c) => cardIdFilter.has(c.id)) : listCards),
+    [listCards, cardIdFilter],
   );
 
   const sortableId = `list:${list.id}`;
@@ -66,13 +72,14 @@ export function ListColumn({
   };
 
   const cardSortableIds = useMemo(
-    () => listCards.map((c) => `card:${c.id}`),
-    [listCards],
+    () => filtered.map((c) => `card:${c.id}`),
+    [filtered],
   );
 
   const numeral = ordinal ? roman(ordinal) : "—";
-  const cardLabel = `${listCards.length} CARD${listCards.length === 1 ? "" : "S"}`;
+  const cardLabel = `${filtered.length} CARD${filtered.length === 1 ? "" : "S"}`;
   const listMeta = `${numeral} · ${cardLabel}`;
+  const overLimit = list.wipLimit != null && filtered.length > list.wipLimit;
 
   return (
     <div
@@ -103,6 +110,12 @@ export function ListColumn({
             className="list-ordinal-stamp block leading-none"
             data-list-ordinal={listMeta}
           />
+          <span
+            data-testid="list-wip-chip"
+            className={`chip tabular-nums ${overLimit ? "bg-red-900/40 text-red-200 ring-1 ring-red-500/30" : ""}`}
+          >
+            {filtered.length}{list.wipLimit != null ? `/${list.wipLimit}` : ""}
+          </span>
         </div>
         <h3
           className="serif-display text-2xl text-fg mt-1.5 leading-tight transition-all duration-200 group-hover/list:gradient-text-static"
@@ -121,7 +134,7 @@ export function ListColumn({
           items={cardSortableIds}
           strategy={verticalListSortingStrategy}
         >
-          {listCards.map((card) => (
+          {filtered.map((card) => (
             <CardTile key={card.id} card={card} boardId={boardId} />
           ))}
         </SortableContext>
