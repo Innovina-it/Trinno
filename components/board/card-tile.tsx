@@ -14,6 +14,7 @@ import { BlockedBadge } from "./card/blocked-badge";
 import { StoryPointsChip } from "./card/story-points-chip";
 import { TimeChip } from "./card/time-chip";
 import { PriorityChip, type CardPriority } from "./card/priority-picker";
+import { CardCover } from "./card/cover-picker";
 import { cardCode } from "@/lib/format";
 
 function fmtShortDate(d: Date | string): string {
@@ -77,6 +78,12 @@ export function CardTile({
       data-dragging={isDragging ? "true" : undefined}
       className="group/card relative block rounded-xl bg-[color:var(--surface-strong)] backdrop-blur-md border border-[color:var(--hairline)] text-fg cursor-grab transition-all duration-200 ease-out shadow-[0_1px_0_0_rgb(255_255_255/0.06)_inset,0_8px_20px_-12px_rgb(0_0_0_/_0.5)] hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[color:var(--surface-hi)] hover:shadow-[0_1px_0_0_rgb(255_255_255/0.10)_inset,0_12px_28px_-12px_rgb(0_0_0/0.6)] active:cursor-grabbing data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02] data-[dragging=true]:cursor-grabbing"
     >
+      {/* Cover (color stripe or image header) — sits above label stripes */}
+      <CardCover
+        coverKind={(card.coverKind ?? "none") as "none" | "color" | "image"}
+        coverValue={card.coverValue ?? null}
+      />
+
       {/* Label stripes — top */}
       <LabelStripes cardId={card.id} />
 

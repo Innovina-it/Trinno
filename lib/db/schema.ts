@@ -139,6 +139,8 @@ export const cards = pgTable("cards", {
   startDate: timestamp("start_date", { withTimezone: true }),
   targetDate: timestamp("target_date", { withTimezone: true }),
   priority: cardPriority("priority"),
+  coverKind: text("cover_kind").notNull().default("none"),
+  coverValue: text("cover_value"),
 });
 
 export const labels = pgTable("labels", {

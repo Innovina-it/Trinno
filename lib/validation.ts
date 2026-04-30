@@ -94,6 +94,11 @@ export const UpdateCardInput = z.object({
   startDate: z.union([z.string(), z.date()]).nullable().optional(),
   targetDate: z.union([z.string(), z.date()]).nullable().optional(),
   priority: CardPriority.nullable().optional(),
+  // Plan #16b-γ-C (#2) — card cover. `coverKind` defaults to 'none' at DB
+  // level; `coverValue` carries either an rgba shade or a Storage path
+  // depending on kind.
+  coverKind: z.enum(["none", "color", "image"]).optional(),
+  coverValue: z.string().max(500).nullable().optional(),
 });
 export const MoveCardInput = z.object({
   id: Uuid, listId: Uuid, position: z.string().min(1).max(64),

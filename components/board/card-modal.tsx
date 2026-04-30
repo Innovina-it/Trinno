@@ -20,6 +20,7 @@ import { AttachmentsSection } from "./card/attachments-section";
 import { CommentsSection } from "./card/comments-section";
 import { TypePicker } from "./card/type-picker";
 import { PriorityPicker, type CardPriority } from "./card/priority-picker";
+import { CoverPicker, type CoverKind } from "./card/cover-picker";
 import { ParentPicker } from "./card/parent-picker";
 import { WatchToggle } from "./card/watch-toggle";
 import { SubtasksSection } from "./card/subtasks-section";
@@ -48,6 +49,8 @@ export type CardModalCard = {
   startDate?: Date | string | null;
   targetDate?: Date | string | null;
   priority?: CardPriority | null;
+  coverKind?: CoverKind;
+  coverValue?: string | null;
 };
 
 export function CardModal({
@@ -118,6 +121,13 @@ export function CardModal({
 
   const body = (
     <div className="space-y-7">
+      {/* Cover (color or image) — at the very top above the type row */}
+      <CoverPicker
+        cardId={card.id}
+        coverKind={card.coverKind ?? "none"}
+        coverValue={card.coverValue ?? null}
+      />
+
       {/* Type + Priority + Parent + Sprint row — at the very top */}
       {(card.type !== undefined || card.boardId) && (
         <div className="flex flex-wrap items-center gap-2">

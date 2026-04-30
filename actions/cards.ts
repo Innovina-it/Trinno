@@ -42,6 +42,8 @@ export async function updateCardImpl(token: string, input: {
   startDate?: Date | string | null;
   targetDate?: Date | string | null;
   priority?: "p0" | "p1" | "p2" | "p3" | "p4" | null;
+  coverKind?: "none" | "color" | "image";
+  coverValue?: string | null;
 }) {
   const parsed = UpdateCardInput.parse(input);
   const patch: Record<string, unknown> = {};
@@ -77,6 +79,8 @@ export async function updateCardImpl(token: string, input: {
           : new Date(parsed.targetDate);
   }
   if (parsed.priority !== undefined) patch.priority = parsed.priority;
+  if (parsed.coverKind !== undefined) patch.coverKind = parsed.coverKind;
+  if (parsed.coverValue !== undefined) patch.coverValue = parsed.coverValue;
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(cards).set(patch)
       .where(eq(cards.id, parsed.id)).returning();

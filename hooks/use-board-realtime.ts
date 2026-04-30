@@ -53,6 +53,8 @@ function rowToCard(r: Record<string, unknown>): CardRow {
     startDate: r.start_date ? new Date(r.start_date as string) : null,
     targetDate: r.target_date ? new Date(r.target_date as string) : null,
     priority: (r.priority ?? null) as CardRow["priority"],
+    coverKind: ((r.cover_kind as string) ?? "none") as CardRow["coverKind"],
+    coverValue: (r.cover_value ?? null) as string | null,
   };
 }
 
