@@ -232,7 +232,7 @@ test("card type, parent breadcrumb, sub-tasks, links, components, versions all p
 
   await page.goto(boardUrl);
   await openCardModal(page, "Login flow");
-  const versionsSection = page.getByTestId("versions-section");
+  const versionsSection = page.getByTestId("version-card-section");
   await expect(versionsSection).toBeVisible();
   // Open the FIXES picker (label-based aria-label).
   await versionsSection.getByLabel("Add fixes version").click();
@@ -252,7 +252,7 @@ test("card type, parent breadcrumb, sub-tasks, links, components, versions all p
   await openCardModal(page, "Login flow");
   await expect(
     page
-      .getByTestId("versions-section")
+      .getByTestId("version-card-section")
       .locator('[data-version-id][data-version-kind="fixes"]'),
   ).toBeVisible({ timeout: 5000 });
 });

@@ -137,7 +137,7 @@ export function VersionCardSection({
   }
 
   return (
-    <section className="space-y-3" data-testid="versions-section">
+    <section className="space-y-3" data-testid="version-card-section">
       <div className="flex items-baseline justify-between border-b border-rule pb-1">
         <h3 className="mono-meta text-ink/70">Versions</h3>
         <span className="mono-meta-sm text-ink/35">V</span>
