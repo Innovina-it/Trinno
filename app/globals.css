@@ -48,9 +48,9 @@
   --color-fg-faint: var(--fg-faint);
 
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: var(--font-jb-mono), var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-heading: var(--font-instrument), Georgia, "Times New Roman", serif;
-  --font-serif: var(--font-instrument), Georgia, "Times New Roman", serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-heading: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -93,27 +93,28 @@
 }
 
 :root {
-  /* Studio-plastic palette — dark by default */
-  --bg-deep:        #0a0712;
-  --bg-1:           #15102a;
-  --bg-2:           #1d1340;
-  --bg-3:           #28114a;
+  /* Monochrome dark — pure greyscale, no chroma */
+  --bg-deep:        #0a0a0a;
+  --bg-1:           #111111;
+  --bg-2:           #161616;
+  --bg-3:           #1c1c1c;
 
-  --surface:        rgb(255 255 255 / 0.04);
-  --surface-strong: rgb(255 255 255 / 0.08);
-  --surface-hi:     rgb(255 255 255 / 0.12);
-  --hairline:       rgb(255 255 255 / 0.10);
-  --hairline-hi:    rgb(255 255 255 / 0.20);
+  --surface:        rgb(255 255 255 / 0.03);
+  --surface-strong: rgb(255 255 255 / 0.06);
+  --surface-hi:     rgb(255 255 255 / 0.10);
+  --hairline:       rgb(255 255 255 / 0.08);
+  --hairline-hi:    rgb(255 255 255 / 0.18);
 
-  --fg:             #f5f3fb;
-  --fg-muted:       rgb(245 243 251 / 0.65);
-  --fg-faint:       rgb(245 243 251 / 0.4);
+  --fg:             #fafafa;
+  --fg-muted:       rgb(250 250 250 / 0.60);
+  --fg-faint:       rgb(250 250 250 / 0.35);
 
-  --accent-cyan:    #00e5ff;
-  --accent-magenta: #ff2bd6;
-  --accent-violet:  #8b5cf6;
-  --accent-lime:    #c3f73a;
-  --accent-amber:   #ffb020;
+  /* Accents collapsed to white shades — single tone discipline */
+  --accent-cyan:    #fafafa;
+  --accent-magenta: #fafafa;
+  --accent-violet:  #fafafa;
+  --accent-lime:    rgb(250 250 250 / 0.85);
+  --accent-amber:   rgb(250 250 250 / 0.70);
 
   /* Legacy editorial tokens — remapped onto studio palette */
   --paper:          var(--bg-deep);
@@ -226,18 +227,18 @@
   body {
     color: var(--fg);
     background-color: var(--bg-deep);
-    /* Layered animated gradient mesh — three large soft blobs over deep base. */
+    /* Subtle monochrome wash — three soft white-glow vignettes */
     background-image:
-      radial-gradient(60rem 40rem at 8% 12%,  rgb(139 92 246 / 0.55), transparent 60%),
-      radial-gradient(50rem 36rem at 92% 88%, rgb(255 43 214 / 0.35), transparent 60%),
-      radial-gradient(40rem 30rem at 50% 50%, rgb(0 229 255 / 0.18), transparent 60%);
+      radial-gradient(70rem 50rem at 10% 0%,  rgb(255 255 255 / 0.04), transparent 60%),
+      radial-gradient(60rem 40rem at 90% 100%, rgb(255 255 255 / 0.03), transparent 60%),
+      radial-gradient(40rem 30rem at 50% 50%, rgb(255 255 255 / 0.02), transparent 70%);
     background-attachment: fixed;
     background-repeat: no-repeat;
     min-height: 100vh;
     position: relative;
   }
 
-  /* Drift the mesh slowly — calm + ambient, never jittery. */
+  /* Drift the wash slowly — calm + ambient, never jittery. */
   body::before {
     content: "";
     position: fixed;
@@ -245,8 +246,8 @@
     pointer-events: none;
     z-index: -1;
     background-image:
-      radial-gradient(40rem 30rem at 75% 25%, rgb(195 247 58 / 0.10), transparent 60%),
-      radial-gradient(35rem 28rem at 25% 75%, rgb(255 176 32 / 0.10), transparent 60%);
+      radial-gradient(35rem 28rem at 75% 25%, rgb(255 255 255 / 0.025), transparent 60%),
+      radial-gradient(30rem 24rem at 25% 75%, rgb(255 255 255 / 0.02), transparent 60%);
     animation: mesh-drift 18s ease-in-out infinite alternate;
   }
 
@@ -362,29 +363,24 @@
     0 24px 60px -16px rgb(0 0 0 / 0.55);
 }
 
-/* Tri-stop accent gradient text — used on hero headlines + dialog titles. */
+/* Mono fade — replaces the rainbow gradient. White → translucent. */
 @utility gradient-text {
   background-image: linear-gradient(
-    135deg,
-    var(--accent-cyan) 0%,
-    var(--accent-magenta) 50%,
-    var(--accent-violet) 100%
+    180deg,
+    rgb(250 250 250 / 1) 0%,
+    rgb(250 250 250 / 0.55) 100%
   );
-  background-size: 200% 200%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  animation: gradient-pan 8s ease-in-out infinite;
 }
 
-/* Static gradient text (no animation) — for body / list titles. */
 @utility gradient-text-static {
   background-image: linear-gradient(
-    135deg,
-    var(--accent-cyan) 0%,
-    var(--accent-magenta) 60%,
-    var(--accent-violet) 100%
+    180deg,
+    rgb(250 250 250 / 1) 0%,
+    rgb(250 250 250 / 0.55) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -392,32 +388,27 @@
   -webkit-text-fill-color: transparent;
 }
 
-/* Gradient pill button — saturated magenta→violet with shimmer sweep on hover. */
+/* Primary button — solid white on dark, inverts on hover */
 @utility shimmer-cta {
   position: relative;
-  background-image: linear-gradient(
-    135deg,
-    var(--accent-magenta) 0%,
-    var(--accent-violet) 100%
-  );
-  color: #ffffff;
-  background-size: 200% 200%;
-  background-position: 0% 50%;
+  background-color: var(--fg);
+  color: var(--bg-deep);
+  font-weight: 600;
+  letter-spacing: -0.005em;
   box-shadow:
     0 1px 0 0 rgb(255 255 255 / 0.25) inset,
-    0 12px 30px -8px rgb(255 43 214 / 0.45),
-    0 0 0 1px rgb(255 255 255 / 0.08);
+    0 8px 24px -8px rgb(0 0 0 / 0.6);
   transition:
-    background-position 400ms ease-out,
+    background-color 180ms ease-out,
+    color 180ms ease-out,
     box-shadow 200ms ease-out,
     transform 120ms ease-out;
 }
 .shimmer-cta:hover {
-  background-position: 100% 50%;
+  background-color: rgb(250 250 250 / 0.92);
   box-shadow:
-    0 1px 0 0 rgb(255 255 255 / 0.30) inset,
-    0 18px 40px -8px rgb(255 43 214 / 0.55),
-    0 0 0 1px rgb(255 255 255 / 0.12);
+    0 1px 0 0 rgb(255 255 255 / 0.35) inset,
+    0 12px 32px -8px rgb(0 0 0 / 0.75);
 }
 .shimmer-cta:active { transform: translateY(1px); }
 
@@ -494,33 +485,33 @@
   text-transform: uppercase;
 }
 
-/* Serif display: italic, tight tracking — for hero h1/h2, modal titles */
+/* Display: bold sans, tight tracking — for hero h1/h2, modal titles */
 @utility serif-display {
-  font-family: var(--font-serif);
-  font-style: italic;
-  letter-spacing: -0.02em;
-  font-weight: 400;
+  font-family: var(--font-sans);
+  font-style: normal;
+  letter-spacing: -0.035em;
+  font-weight: 800;
   line-height: 0.95;
 }
 
-/* Pull-quote: oversized italic serif, centered — for empty states */
+/* Pull-quote: oversized bold sans, centered — for empty states */
 @utility pull-quote {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 400;
-  letter-spacing: -0.02em;
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: -0.035em;
   line-height: 1;
   color: var(--fg);
 }
 
-/* Drag preview emphasis: card glows magenta, slight rotate + scale. */
+/* Drag preview emphasis: card lifts with white halo. */
 @utility drag-active {
   cursor: grabbing !important;
   transform: rotate(2deg) scale(1.02);
   box-shadow:
-    0 0 0 1px rgb(255 43 214 / 0.6),
-    0 24px 50px -12px rgb(255 43 214 / 0.55),
-    0 0 0 4px rgb(255 43 214 / 0.18);
+    0 0 0 1px rgb(255 255 255 / 0.55),
+    0 24px 50px -12px rgb(0 0 0 / 0.7),
+    0 0 0 4px rgb(255 255 255 / 0.10);
 }
 
 /* Soft elevation utility — kept for legacy callers. */
