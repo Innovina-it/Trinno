@@ -134,6 +134,14 @@ export const AssignCardToSprintInput = z.object({
   sprintId: Uuid.nullable(),
 });
 
+// Plan #16b-β — bulk-shift card start/target dates after a sprint start
+// flagged date conflicts. Capped at 50 cards per call so a single
+// transaction stays bounded.
+export const BulkShiftCardDatesInput = z.object({
+  cardIds: z.array(Uuid).min(1).max(50),
+  deltaMinutes: z.number().int(),
+});
+
 export const MarkNotificationReadInput = z.object({
   id: Uuid,
   read: z.boolean(),

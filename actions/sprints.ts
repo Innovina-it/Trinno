@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { sprints, cards } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
@@ -11,7 +11,19 @@ import {
   StartSprintInput,
   CompleteSprintInput,
   AssignCardToSprintInput,
+  BulkShiftCardDatesInput,
 } from "@/lib/validation";
+
+// Plan #16b-β — type for the conflict-card payload returned by
+// `startSprintImpl`. A "conflict" is a card whose dates fall outside the
+// just-started sprint window so it would visually drift on the roadmap.
+export type SprintConflictCard = {
+  id: string;
+  title: string;
+  boardId: string;
+  startDate: Date | null;
+  targetDate: Date | null;
+};
 
 function asDate(v: string | Date | null | undefined): Date | null | undefined {
   if (v === undefined) return undefined;
@@ -84,7 +96,13 @@ export async function deleteSprintImpl(token: string, input: { id: string }) {
   });
 }
 
-export async function startSprintImpl(token: string, input: { id: string }) {
+export async function startSprintImpl(
+  token: string,
+  input: { id: string },
+): Promise<{
+  sprint: typeof sprints.$inferSelect;
+  conflictCards: SprintConflictCard[];
+}> {
   const p = StartSprintInput.parse(input);
   return dbAsUser(token, async (tx) => {
     // Postgres' partial unique index will reject if another active sprint exists.
@@ -97,7 +115,72 @@ export async function startSprintImpl(token: string, input: { id: string }) {
       throw new Error(
         "Cannot start: not planned, or another sprint is already active",
       );
-    return row;
+    // Plan #16b-β — surface cards whose start/target dates fall outside
+    // the (now-known) sprint window so the UI can offer a bulk shift.
+    let conflictCards: SprintConflictCard[] = [];
+    if (row.startDate && row.endDate) {
+      const sprintStart = row.startDate;
+      const sprintEnd = row.endDate;
+      const cardRows = await tx
+        .select({
+          id: cards.id,
+          title: cards.title,
+          boardId: cards.boardId,
+          startDate: cards.startDate,
+          targetDate: cards.targetDate,
+        })
+        .from(cards)
+        .where(
+          and(eq(cards.sprintId, row.id), eq(cards.archived, false)),
+        );
+      conflictCards = cardRows.filter((c) => {
+        const startsBefore =
+          c.startDate !== null && c.startDate < sprintStart;
+        const endsAfter =
+          c.targetDate !== null && c.targetDate > sprintEnd;
+        return startsBefore || endsAfter;
+      });
+    }
+    return { sprint: row, conflictCards };
+  });
+}
+
+// Plan #16b-β — shift start/target dates by `deltaMinutes` for a set of
+// cards. Runs in a single transaction so partial failure can't leave
+// half-shifted state. RLS still scopes the update to rows the caller can
+// modify.
+export async function bulkShiftCardDatesImpl(
+  token: string,
+  input: { cardIds: string[]; deltaMinutes: number },
+): Promise<{ updated: number }> {
+  const p = BulkShiftCardDatesInput.parse(input);
+  if (p.cardIds.length === 0) return { updated: 0 };
+  return dbAsUser(token, async (tx) => {
+    const rows = await tx
+      .select({
+        id: cards.id,
+        startDate: cards.startDate,
+        targetDate: cards.targetDate,
+      })
+      .from(cards)
+      .where(inArray(cards.id, p.cardIds));
+    const deltaMs = p.deltaMinutes * 60_000;
+    let updated = 0;
+    for (const r of rows) {
+      const patch: Record<string, unknown> = {};
+      if (r.startDate)
+        patch.startDate = new Date(r.startDate.getTime() + deltaMs);
+      if (r.targetDate)
+        patch.targetDate = new Date(r.targetDate.getTime() + deltaMs);
+      if (Object.keys(patch).length === 0) continue;
+      const result = await tx
+        .update(cards)
+        .set(patch)
+        .where(eq(cards.id, r.id))
+        .returning({ id: cards.id });
+      if (result.length > 0) updated += 1;
+    }
+    return { updated };
   });
 }
 
@@ -177,8 +260,16 @@ export async function startSprint(
   await requireUser();
   const t = (await getSessionToken())!;
   const r = await startSprintImpl(t, input);
-  revalidatePath(`/w/${r.workspaceId}/backlog`);
+  revalidatePath(`/w/${r.sprint.workspaceId}/backlog`);
   return r;
+}
+
+export async function bulkShiftCardDates(
+  input: Parameters<typeof bulkShiftCardDatesImpl>[1],
+) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  return bulkShiftCardDatesImpl(t, input);
 }
 export async function completeSprint(
   input: Parameters<typeof completeSprintImpl>[1],

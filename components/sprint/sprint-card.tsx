@@ -1,10 +1,12 @@
 "use client";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { startSprint, deleteSprint } from "@/actions/sprints";
+import type { SprintConflictCard } from "@/actions/sprints";
 import { CompleteSprintDialog } from "./complete-sprint-dialog";
 import { SprintPicker, type SprintLite } from "./sprint-picker";
+import { SprintDateConflictDialog } from "./sprint-date-conflict-dialog";
 import { Play, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,11 +41,25 @@ export function SprintCard({
   activeExists,
 }: SprintCardProps) {
   const [pending, start] = useTransition();
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const [conflictCards, setConflictCards] = useState<SprintConflictCard[]>([]);
+  const [startedEndDate, setStartedEndDate] = useState<Date | null>(null);
 
   function onStart() {
     start(async () => {
       try {
-        await startSprint({ id: sprint.id });
+        const r = await startSprint({ id: sprint.id });
+        if (r.conflictCards.length > 0) {
+          setConflictCards(
+            r.conflictCards.map((c) => ({
+              ...c,
+              startDate: c.startDate ? new Date(c.startDate) : null,
+              targetDate: c.targetDate ? new Date(c.targetDate) : null,
+            })),
+          );
+          setStartedEndDate(r.sprint.endDate ? new Date(r.sprint.endDate) : null);
+          setConflictOpen(true);
+        }
       } catch (err) {
         toast.error((err as Error).message);
       }
@@ -72,6 +88,13 @@ export function SprintCard({
   const visibleCards = cards.filter((c) => !c.archived);
 
   return (
+    <>
+    <SprintDateConflictDialog
+      open={conflictOpen}
+      onOpenChange={setConflictOpen}
+      conflictCards={conflictCards}
+      sprintEndDate={startedEndDate}
+    />
     <div
       className={`glass rounded-2xl ${isActive ? "ring-1 ring-fg/40" : ""}`}
       data-testid={`sprint-card-${sprint.id}`}
@@ -181,5 +204,6 @@ export function SprintCard({
         ))}
       </ul>
     </div>
+    </>
   );
 }
