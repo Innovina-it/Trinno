@@ -1,8 +1,8 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { slaPolicies, cardSla } from "@/lib/db/schema";
+import { slaPolicies } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
   CreateSlaPolicyInput,
@@ -77,51 +77,21 @@ export async function deleteSlaPolicyImpl(
 // Scan: for each enabled policy on board, find non-archived cards where
 // (now() - cards.created_at) > target_min and there's no active card_sla row,
 // insert one and mark breached_at = now(). For cards now archived, mark
-// existing card_sla.resolved_at.
+// existing card_sla.resolved_at. Delegates to SECURITY DEFINER SQL function
+// so writes can bypass the no-user-write RLS policy on card_sla.
 export async function scanBoardSlaImpl(
   token: string,
   input: { boardId: string },
 ) {
   const p = ScanBoardSlaInput.parse(input);
   return dbAsUser(token, async (tx) => {
-    // Resolve already-resolved breaches first
-    await tx.execute(sql`
-      update public.card_sla cs
-        set resolved_at = now()
-        where cs.board_id = ${p.boardId}
-          and cs.resolved_at is null
-          and exists (
-            select 1 from public.cards c where c.id = cs.card_id and c.archived = true
-          )
-    `);
-
-    // Insert breach rows for each policy/card combination that has crossed target.
-    await tx.execute(sql`
-      insert into public.card_sla (card_id, sla_id, board_id, started_at, breached_at)
-      select c.id, p.id, c.board_id, c.created_at, now()
-      from public.cards c
-      join public.sla_policies p on p.board_id = c.board_id
-      where p.board_id = ${p.boardId}
-        and p.enabled = true
-        and c.archived = false
-        and (extract(epoch from now() - c.created_at) / 60) > p.target_min
-        and not exists (
-          select 1 from public.card_sla cs
-            where cs.card_id = c.id and cs.sla_id = p.id
-        )
-      on conflict (card_id, sla_id) do nothing
-    `);
-
-    const breached = await tx
-      .select({
-        cardId: cardSla.cardId,
-        slaId: cardSla.slaId,
-        breachedAt: cardSla.breachedAt,
-      })
-      .from(cardSla)
-      .where(and(eq(cardSla.boardId, p.boardId), isNull(cardSla.resolvedAt)));
-
-    return { breachedActive: breached.length };
+    const result = await tx.execute(
+      sql`select public.scan_board_sla(${p.boardId}::uuid) as active`,
+    );
+    // postgres-js returns rows as a flat array
+    const rows = result as unknown as Array<{ active: number }>;
+    const active = rows[0]?.active ?? 0;
+    return { breachedActive: Number(active) };
   });
 }
 
