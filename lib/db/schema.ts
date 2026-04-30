@@ -112,6 +112,7 @@ export const cards = pgTable("cards", {
   type: text("type").notNull().default("task"),
   parentCardId: uuid("parent_card_id"),
   sprintId: uuid("sprint_id"),
+  storyPoints: integer("story_points"),
 });
 
 export const labels = pgTable("labels", {
