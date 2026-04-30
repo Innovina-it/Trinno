@@ -115,21 +115,21 @@ test("watchers, mentions, inbox, time tracking, dashboards", async ({
 
   // 2. Open Bug X → click Watch toggle. Should toggle from WATCH → WATCHING.
   await openCardModal(a, "Bug X");
-  // The watch toggle initial state is fetched async; wait for the WATCH button.
-  await expect(
-    a.getByRole("button", { name: /^WATCH$/ }),
-  ).toBeVisible({ timeout: 5000 });
-  await a.getByRole("button", { name: /^WATCH$/ }).click();
-  await expect(
-    a.getByRole("button", { name: /WATCHING/ }),
-  ).toBeVisible({ timeout: 5000 });
+  // The watch toggle initial state is fetched async; wait for the toggle to render
+  // and reach the not-yet-watching state (visible label "WATCH").
+  const watchToggleA = a.getByTestId("watch-toggle");
+  await expect(watchToggleA).toBeVisible({ timeout: 5000 });
+  await expect(watchToggleA).toContainText("WATCH", { timeout: 5000 });
+  await expect(watchToggleA).not.toContainText("WATCHING");
+  await watchToggleA.click();
+  await expect(watchToggleA).toContainText("WATCHING", { timeout: 5000 });
   await closeCardModal(a);
 
   // 3. Re-open → still watching.
   await openCardModal(a, "Bug X");
   await expect(
-    a.getByRole("button", { name: /WATCHING/ }),
-  ).toBeVisible({ timeout: 5000 });
+    a.getByTestId("watch-toggle"),
+  ).toContainText("WATCHING", { timeout: 5000 });
   await closeCardModal(a);
 
   // 4. User B signs up in a separate context.

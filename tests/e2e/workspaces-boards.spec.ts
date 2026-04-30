@@ -73,6 +73,9 @@ test("workspace+board lifecycle", async ({ page }) => {
   // Navigate back to the workspace via the breadcrumb-style link
   await page.getByRole("link", { name: "Trello Clone" }).click();
   await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}/);
-  // Roadmap should not appear in the grid (archived boards filtered out)
-  await expect(page.getByText("Roadmap")).toHaveCount(0);
+  // Roadmap should not appear in the grid (archived boards filtered out).
+  // Scope the assertion to board tiles so it doesn't match the ROADMAP nav link.
+  await expect(
+    page.locator("[data-board-id]").filter({ hasText: "Roadmap" }),
+  ).toHaveCount(0);
 });
