@@ -121,7 +121,7 @@ export async function seedDemoWorkspaceImpl(
   // larger umbrella bar.
   const sprint = await createSprintImpl(token, {
     workspaceId: ws.id,
-    name: "Sprint 1",
+    name: "Demo Sprint 1",
     startDate: plus(1),
     endDate: plus(14),
   });
