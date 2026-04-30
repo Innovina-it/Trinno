@@ -93,6 +93,7 @@ export const lists = pgTable("lists", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  wipLimit: integer("wip_limit"),
 });
 
 export const cards = pgTable("cards", {

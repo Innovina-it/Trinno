@@ -23,6 +23,7 @@ function rowToList(r: Record<string, unknown>): ListRow {
     position: r.position as string,
     archived: r.archived as boolean,
     createdAt: new Date(r.created_at as string),
+    wipLimit: (r.wip_limit ?? null) as number | null,
   };
 }
 
