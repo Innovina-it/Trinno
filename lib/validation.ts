@@ -26,6 +26,17 @@ export const CreateBoardInput = z.object({
   backgroundKind: z.enum(["color", "image"]).default("color"),
   backgroundValue: z.string().min(1).default("#0079bf"),
 });
+// Plan #16b-γ-B (#2) — extends CreateBoardInput with a templateId so the
+// caller picks one of the predeclared seeds in lib/board-templates.ts.
+export const BoardTemplateIdZ = z.enum([
+  "blank",
+  "standup",
+  "bug_triage",
+  "okr_sprint",
+]);
+export const CreateBoardFromTemplateInput = CreateBoardInput.extend({
+  templateId: BoardTemplateIdZ,
+});
 export const RenameBoardInput = z.object({ id: Uuid, title: Title });
 export const SetBoardArchivedInput = z.object({ id: Uuid, archived: z.boolean() });
 export const DeleteBoardInput = z.object({ id: Uuid });

@@ -6,10 +6,17 @@ import { boards, boardMembers } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
   CreateBoardInput,
+  CreateBoardFromTemplateInput,
   DeleteBoardInput,
   RenameBoardInput,
   SetBoardArchivedInput,
 } from "@/lib/validation";
+import {
+  BOARD_TEMPLATES,
+  type BoardTemplateId,
+} from "@/lib/board-templates";
+import { createListImpl, setListStatusKindImpl } from "@/actions/lists";
+import { createLabelImpl } from "@/actions/labels";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -94,6 +101,69 @@ export async function deleteBoardImpl(
   });
 }
 
+/**
+ * Plan #16b-γ-B (#2) — Create a board pre-populated from a named template.
+ *
+ * Sequence (no shared transaction — each impl manages its own dbAsUser
+ * scope):
+ *   1. createBoardImpl → board row + admin board_member.
+ *   2. For each template list (in declared order) call createListImpl. The
+ *      impl's `desc(position)` lookup means each subsequent list lands at
+ *      the tail, preserving the declared order.
+ *   3. Map each new list's statusKind via setListStatusKindImpl when the
+ *      template specifies one.
+ *   4. Insert each label via createLabelImpl.
+ *
+ * Returns the board row plus the ordered list ids so the caller (typically
+ * the new-board dialog) can navigate or seed cards.
+ */
+export async function createBoardFromTemplateImpl(
+  token: string,
+  input: {
+    workspaceId: string;
+    title: string;
+    backgroundKind: "color" | "image";
+    backgroundValue: string;
+    templateId: BoardTemplateId;
+  },
+) {
+  const parsed = CreateBoardFromTemplateInput.parse(input);
+  const tpl = BOARD_TEMPLATES.find((t) => t.id === parsed.templateId);
+  if (!tpl) throw new Error(`Unknown template: ${parsed.templateId}`);
+
+  const board = await createBoardImpl(token, {
+    workspaceId: parsed.workspaceId,
+    title: parsed.title,
+    backgroundKind: parsed.backgroundKind,
+    backgroundValue: parsed.backgroundValue,
+  });
+
+  const listIds: string[] = [];
+  for (const spec of tpl.lists) {
+    const row = await createListImpl(token, {
+      boardId: board.id,
+      title: spec.title,
+    });
+    listIds.push(row.id);
+    if (spec.statusKind) {
+      await setListStatusKindImpl(token, {
+        id: row.id,
+        statusKind: spec.statusKind,
+      });
+    }
+  }
+
+  for (const lab of tpl.labels) {
+    await createLabelImpl(token, {
+      boardId: board.id,
+      name: lab.name,
+      color: lab.color,
+    });
+  }
+
+  return { board, listIds };
+}
+
 export async function createBoard(
   input: Parameters<typeof createBoardImpl>[1],
 ) {
@@ -102,6 +172,16 @@ export async function createBoard(
   const b = await createBoardImpl(token, input);
   revalidatePath(`/w/${input.workspaceId}`);
   return b;
+}
+
+export async function createBoardFromTemplate(
+  input: Parameters<typeof createBoardFromTemplateImpl>[1],
+) {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  const r = await createBoardFromTemplateImpl(token, input);
+  revalidatePath(`/w/${input.workspaceId}`);
+  return r;
 }
 
 export async function renameBoard(
