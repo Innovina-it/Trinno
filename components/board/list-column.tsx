@@ -33,11 +33,13 @@ function hashId(id: string): number {
 export function ListColumn({
   list,
   boardId,
+  workspaceId,
   ordinal,
   cardIdFilter,
 }: {
   list: ListRow;
   boardId: string;
+  workspaceId?: string;
   ordinal?: number;
   cardIdFilter?: Set<string>;
 }) {
@@ -135,7 +137,12 @@ export function ListColumn({
           strategy={verticalListSortingStrategy}
         >
           {filtered.map((card) => (
-            <CardTile key={card.id} card={card} boardId={boardId} />
+            <CardTile
+              key={card.id}
+              card={card}
+              boardId={boardId}
+              workspaceId={workspaceId}
+            />
           ))}
         </SortableContext>
       </div>

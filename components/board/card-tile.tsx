@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CornerLeftUp } from "lucide-react";
+import { CornerLeftUp, CalendarRange } from "lucide-react";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
 import { LabelStripes } from "./card/label-stripes";
@@ -14,13 +15,25 @@ import { StoryPointsChip } from "./card/story-points-chip";
 import { TimeChip } from "./card/time-chip";
 import { cardCode } from "@/lib/format";
 
+function fmtShortDate(d: Date | string): string {
+  const date = d instanceof Date ? d : new Date(d);
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export function CardTile({
   card,
   boardId,
+  workspaceId,
 }: {
   card: CardRow;
   boardId: string;
+  workspaceId?: string;
 }) {
+  const router = useRouter();
   const sortableId = `card:${card.id}`;
   const parentCard = useBoardStore((s) =>
     card.parentCardId ? s.cards.find((c) => c.id === card.parentCardId) : null,
@@ -105,6 +118,28 @@ export function CardTile({
       {card.dueDate && (
         <div className="px-3 pb-2.5">
           <DuePill card={card} />
+        </div>
+      )}
+
+      {(card.startDate || card.targetDate) && workspaceId && (
+        <div className="px-3 pb-2.5">
+          <button
+            type="button"
+            data-testid="tile-schedule"
+            onClick={(e) => {
+              // Don't open the card route — go to roadmap instead.
+              e.preventDefault();
+              e.stopPropagation();
+              router.push(`/w/${workspaceId}/roadmap?focus=${card.id}`);
+            }}
+            className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
+            title="View on roadmap"
+          >
+            <CalendarRange className="size-3" />
+            {card.startDate ? fmtShortDate(card.startDate) : "?"}
+            {" → "}
+            {card.targetDate ? fmtShortDate(card.targetDate) : "?"}
+          </button>
         </div>
       )}
 

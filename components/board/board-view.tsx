@@ -277,6 +277,7 @@ export function BoardView({
                       key={list.id}
                       list={list}
                       boardId={board.id}
+                      workspaceId={board.workspaceId}
                       ordinal={idx + 1}
                       cardIdFilter={
                         filters.types.length ||
@@ -310,6 +311,7 @@ export function BoardView({
                               key={`${lane.key || "_empty"}:${list.id}`}
                               list={list}
                               boardId={board.id}
+                              workspaceId={board.workspaceId}
                               ordinal={idx + 1}
                               cardIdFilter={laneSet}
                             />
