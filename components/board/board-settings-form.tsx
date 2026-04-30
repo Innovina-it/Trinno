@@ -17,9 +17,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { renameBoard, setBoardArchived, deleteBoard } from "@/actions/boards";
 import { toast } from "sonner";
+import { FavoriteToggle } from "@/components/workspace/favorite-toggle";
 
 export function BoardSettingsForm({
   board,
+  favorited = false,
 }: {
   board: {
     id: string;
@@ -27,6 +29,7 @@ export function BoardSettingsForm({
     archived: boolean;
     workspaceId: string;
   };
+  favorited?: boolean;
 }) {
   const [title, setTitle] = useState(board.title);
   const [pending, start] = useTransition();
@@ -66,6 +69,10 @@ export function BoardSettingsForm({
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="mono-meta-sm text-fg-faint">BOARD ACTIONS</span>
+        <FavoriteToggle boardId={board.id} initial={favorited} />
+      </div>
       <form onSubmit={rename} className="space-y-2">
         <Label htmlFor="board-rename">Title</Label>
         <div className="flex gap-2">

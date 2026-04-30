@@ -400,3 +400,7 @@ export const DeleteGadgetInput = z.object({ id: Uuid });
 // caller's own profile row and RLS prevents writing anyone else's row.
 export const MarkOnboardingCompletedInput = z.object({});
 
+// Plan #16b-γ-C (#4) — toggle a board favorite. Server checks via RLS
+// that the caller is a board member before the INSERT lands.
+export const ToggleFavoriteBoardInput = z.object({ boardId: Uuid });
+

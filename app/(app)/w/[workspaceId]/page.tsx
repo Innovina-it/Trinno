@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { shortDate } from "@/lib/format";
 import { computeVelocity } from "@/lib/queries/sprints-stats";
 import { VelocityStrip } from "@/components/sprint/velocity-strip";
+import { listFavoriteBoardIds } from "@/lib/queries/favorites";
 
 export default async function WorkspacePage({
   params,
@@ -21,6 +22,7 @@ export default async function WorkspacePage({
   const visibleCount = boards.filter((b) => !b.archived).length;
   const today = shortDate(new Date());
   const velocity = await computeVelocity(token, workspaceId, 6);
+  const favoritedIds = await listFavoriteBoardIds(token);
 
   return (
     <div className="mx-auto max-w-7xl space-y-10 px-6 py-10">
@@ -56,7 +58,7 @@ export default async function WorkspacePage({
 
       <VelocityStrip data={velocity} />
 
-      <BoardGrid boards={boards} />
+      <BoardGrid boards={boards} favoritedIds={favoritedIds} />
     </div>
   );
 }

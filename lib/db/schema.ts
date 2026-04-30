@@ -443,6 +443,23 @@ export const cardVersions = pgTable(
   (t) => ({ pk: primaryKey({ columns: [t.cardId, t.versionId, t.kind] }) }),
 );
 
+// Plan #16b-γ-C (#4) — favorite boards.
+//
+// Per-(user, board) row keyed by composite PK. Cross-workspace; nav
+// dropdown lists favorites flat across the whole boards graph the user
+// can see. RLS gates SELECT/INSERT/DELETE to the row owner.
+export const boardFavorites = pgTable(
+  "board_favorites",
+  {
+    userId: uuid("user_id").notNull(),
+    boardId: uuid("board_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.userId, t.boardId] }) }),
+);
+
 // Plan #16 — Dashboards + Gadgets.
 export const dashboardScope = pgEnum("dashboard_scope", [
   "personal",

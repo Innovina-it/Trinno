@@ -4,14 +4,16 @@ import { logout } from "@/actions/auth";
 import { WorkspaceSwitcher, type WorkspaceLite } from "@/components/workspace/workspace-switcher";
 import { SearchBox } from "@/components/nav/search-box";
 import { NotificationBell } from "@/components/nav/notification-bell";
+import { FavoritesDropdown, type FavoriteEntry } from "@/components/nav/favorites-dropdown";
 
 export function TopNav({
-  email, userId, workspaces, activeWorkspaceId,
+  email, userId, workspaces, activeWorkspaceId, favorites,
 }: {
   email: string;
   userId: string;
   workspaces: WorkspaceLite[];
   activeWorkspaceId?: string;
+  favorites: FavoriteEntry[];
 }) {
   const wsForLinks = activeWorkspaceId ?? workspaces[0]?.id;
   return (
@@ -76,6 +78,8 @@ export function TopNav({
           >
             INBOX
           </Link>
+          <span className="text-fg-faint select-none" aria-hidden>/</span>
+          <FavoritesDropdown favorites={favorites} />
         </div>
         <div className="flex items-center gap-3">
           <SearchBox />

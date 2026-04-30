@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { boardCode } from "@/lib/format";
+import { FavoriteToggle } from "./favorite-toggle";
 
 export type BoardTile = {
   id: string;
@@ -9,8 +10,15 @@ export type BoardTile = {
   archived: boolean;
 };
 
-export function BoardGrid({ boards }: { boards: BoardTile[] }) {
+export function BoardGrid({
+  boards,
+  favoritedIds = [],
+}: {
+  boards: BoardTile[];
+  favoritedIds?: string[];
+}) {
   const visible = boards.filter((b) => !b.archived);
+  const favSet = new Set(favoritedIds);
 
   if (visible.length === 0) {
     return (
@@ -35,12 +43,19 @@ export function BoardGrid({ boards }: { boards: BoardTile[] }) {
             data-board-id={b.id}
             className="group/board glass relative flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-2xl p-5 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[rgb(255_255_255/0.06)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
           >
-            {/* Top strip: index + ID badge */}
+            {/* Top strip: index + ID badge + favorite star */}
             <div className="flex items-baseline justify-between gap-2">
               <span className="mono-meta-sm text-fg-faint">
                 {String(i + 1).padStart(2, "0")}
               </span>
-              <span className="chip">#{boardCode(b.id)}</span>
+              <div className="flex items-center gap-1.5">
+                <FavoriteToggle
+                  boardId={b.id}
+                  initial={favSet.has(b.id)}
+                  size="sm"
+                />
+                <span className="chip">#{boardCode(b.id)}</span>
+              </div>
             </div>
 
             {/* Center: bold sans board title */}
