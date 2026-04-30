@@ -243,3 +243,42 @@ export const sprints = pgTable("sprints", {
     .defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });
+
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  recipientUserId: uuid("recipient_user_id").notNull(),
+  kind: text("kind").notNull(),
+  payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
+  relatedCardId: uuid("related_card_id"),
+  relatedBoardId: uuid("related_board_id"),
+  actorUserId: uuid("actor_user_id"),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const cardWatchers = pgTable(
+  "card_watchers",
+  {
+    cardId: uuid("card_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    boardId: uuid("board_id").notNull(),
+    auto: boolean("auto").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.cardId, t.userId] }) }),
+);
+
+export const userNotificationPrefs = pgTable(
+  "user_notification_prefs",
+  {
+    userId: uuid("user_id").notNull(),
+    kind: text("kind").notNull(),
+    channel: text("channel").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.userId, t.kind, t.channel] }) }),
+);
