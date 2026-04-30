@@ -75,4 +75,14 @@ describe("partitionLanes", () => {
     const c2Children = out.find((l) => l.key === "c2");
     expect(c2Children?.cardIds).toEqual(["c3"]);
   });
+
+  it("partitions by type in canonical order, omitting empty lanes", () => {
+    const out = partitionLanes(cards, "type", {});
+    // Order: epic, story, task, subtask, bug — only present types appear.
+    expect(out.map((l) => l.key)).toEqual(["story", "task", "bug"]);
+    expect(out.map((l) => l.label)).toEqual(["Story", "Task", "Bug"]);
+    expect(out.find((l) => l.key === "story")?.cardIds).toEqual(["c2"]);
+    expect(out.find((l) => l.key === "task")?.cardIds).toEqual(["c3"]);
+    expect(out.find((l) => l.key === "bug")?.cardIds).toEqual(["c1"]);
+  });
 });

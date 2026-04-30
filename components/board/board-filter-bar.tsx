@@ -20,6 +20,7 @@ const LANE_OPTIONS: { id: LaneMode; label: string }[] = [
   { id: "parent",   label: "By parent" },
   { id: "label",    label: "By label" },
   { id: "sprint",   label: "By sprint" },
+  { id: "type",     label: "By type" },
 ];
 
 const TYPE_OPTIONS = ["epic", "story", "task", "subtask", "bug"];

@@ -1,4 +1,4 @@
-export type LaneMode = "none" | "assignee" | "parent" | "label" | "sprint";
+export type LaneMode = "none" | "assignee" | "parent" | "label" | "sprint" | "type";
 
 export type Filters = {
   types: string[];
@@ -182,6 +182,35 @@ export function partitionLanes(
       out.push({ key: k, label, cardIds: ids });
     }
     return sortLanes(out);
+  }
+
+  if (mode === "type") {
+    const TYPE_ORDER = ["epic", "story", "task", "subtask", "bug"] as const;
+    const TYPE_LABELS: Record<string, string> = {
+      epic: "Epic",
+      story: "Story",
+      task: "Task",
+      subtask: "Sub-task",
+      bug: "Bug",
+    };
+    for (const c of cards) {
+      const t = c.type ?? "task";
+      ensure(t).push(c.id);
+    }
+    const out: Lane[] = [];
+    for (const t of TYPE_ORDER) {
+      const ids = lanes.get(t);
+      if (!ids || ids.length === 0) continue;
+      out.push({ key: t, label: TYPE_LABELS[t], cardIds: ids });
+    }
+    // Surface any unknown types after the canonical order, alphabetised.
+    const extras: Lane[] = [];
+    for (const [k, ids] of lanes) {
+      if ((TYPE_ORDER as readonly string[]).includes(k)) continue;
+      extras.push({ key: k, label: TYPE_LABELS[k] ?? k, cardIds: ids });
+    }
+    extras.sort((a, b) => a.label.localeCompare(b.label));
+    return [...out, ...extras];
   }
 
   return [{ key: "", label: "", cardIds: cards.map((c) => c.id) }];
