@@ -10,6 +10,7 @@ import { TileIndicators } from "./card/tile-indicators";
 import { TypeIcon } from "./card/type-picker";
 import { BlockedBadge } from "./card/blocked-badge";
 import { StoryPointsChip } from "./card/story-points-chip";
+import { TimeChip } from "./card/time-chip";
 import { cardCode } from "@/lib/format";
 
 export function CardTile({
@@ -67,6 +68,7 @@ export function CardTile({
           <TypeIcon type={card.type ?? "task"} className="size-3 text-fg-faint" />
           <BlockedBadge cardId={card.id} />
           <StoryPointsChip cardId={card.id} />
+          <TimeChip cardId={card.id} />
         </div>
         <span
           aria-hidden

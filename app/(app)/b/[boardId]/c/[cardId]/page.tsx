@@ -40,6 +40,8 @@ export default async function CardPage({
         boardId: c.boardId,
         sprintId: c.sprintId,
         storyPoints: c.storyPoints,
+        estimateMin: c.estimateMin,
+        spentMin: c.spentMin,
       }}
       sprints={sprints.map((s) => ({ id: s.id, name: s.name, state: s.state }))}
     >
