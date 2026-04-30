@@ -82,11 +82,19 @@ create policy card_components_member_write on public.card_components for all
     select 1 from public.board_members bm
     where bm.board_id = card_components.board_id and bm.user_id = auth.uid()
   ))
-  with check (exists (
-    select 1 from public.cards c
-    join public.board_members bm on bm.board_id = c.board_id
-    where c.id = card_components.card_id and bm.user_id = auth.uid()
-  ));
+  with check (
+    exists (
+      select 1 from public.cards c
+      join public.board_members bm on bm.board_id = c.board_id
+      where c.id = card_components.card_id and bm.user_id = auth.uid()
+    )
+    and exists (
+      -- Block cross-board attaches: the component must live on the card's board.
+      select 1 from public.components co
+      join public.cards c on c.id = card_components.card_id
+      where co.id = card_components.component_id and co.board_id = c.board_id
+    )
+  );
 
 alter publication supabase_realtime add table public.components;
 alter publication supabase_realtime add table public.card_components;
