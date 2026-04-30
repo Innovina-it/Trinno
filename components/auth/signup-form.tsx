@@ -10,12 +10,22 @@ import { toast } from "sonner";
 export function SignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [seedDemo, setSeedDemo] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
+
+    // Plan #16b-γ-B (#6) — set the `tr_seed_demo=1` cookie BEFORE we kick
+    // off the supabase signup. The user clicks the email link minutes
+    // later; the cookie persists on the same origin so the auth callback
+    // can detect the request to seed.
+    if (seedDemo) {
+      document.cookie = "tr_seed_demo=1; path=/; max-age=600; samesite=lax";
+    }
+
     const supa = createSupabaseBrowser();
     const { error } = await supa.auth.signUp({
       email, password,
@@ -70,6 +80,18 @@ export function SignupForm() {
           placeholder="8+ characters"
         />
       </div>
+      <label className="flex items-start gap-2.5 select-none cursor-pointer">
+        <input
+          type="checkbox"
+          checked={seedDemo}
+          onChange={(e) => setSeedDemo(e.target.checked)}
+          className="mt-0.5 size-3.5 rounded-sm border-hairline-hi bg-transparent accent-fg"
+        />
+        <span className="mono-meta-sm text-fg-muted leading-snug">
+          Seed a demo workspace so I can explore boards, roadmap, and
+          dashboards immediately.
+        </span>
+      </label>
       <Button
         type="submit"
         size="lg"
