@@ -3,11 +3,13 @@ import { Button } from "@/components/ui/button";
 import { logout } from "@/actions/auth";
 import { WorkspaceSwitcher, type WorkspaceLite } from "@/components/workspace/workspace-switcher";
 import { SearchBox } from "@/components/nav/search-box";
+import { NotificationBell } from "@/components/nav/notification-bell";
 
 export function TopNav({
-  email, workspaces, activeWorkspaceId,
+  email, userId, workspaces, activeWorkspaceId,
 }: {
   email: string;
+  userId: string;
   workspaces: WorkspaceLite[];
   activeWorkspaceId?: string;
 }) {
@@ -46,6 +48,7 @@ export function TopNav({
         </div>
         <div className="flex items-center gap-3">
           <SearchBox />
+          <NotificationBell userId={userId} />
           <span className="hidden md:inline mono-meta-sm text-fg-faint truncate max-w-[160px]">
             {email}
           </span>

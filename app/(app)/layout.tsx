@@ -17,6 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <>
       <TopNav
         email={user.email ?? ""}
+        userId={user.id}
         workspaces={ws.map(w => ({ id: w.id, name: w.name }))}
         activeWorkspaceId={activeWorkspaceId}
       />
