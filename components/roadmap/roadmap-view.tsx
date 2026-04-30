@@ -29,6 +29,7 @@ import {
   type Zoom,
 } from "@/lib/roadmap/dates";
 import { groupByEpic, stackInLane } from "@/lib/roadmap/layout";
+import { getCardStatusKind, type StatusKind } from "@/lib/roadmap/status";
 import { updateCard } from "@/actions/cards";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
@@ -145,9 +146,20 @@ export function RoadmapView({
   // RoadmapCard shape the layout helpers expect.
   const storeCards = useWorkspaceStore((s) => s.cards);
   const storeBoards = useWorkspaceStore((s) => s.boards);
+  const storeLists = useWorkspaceStore((s) => s.lists);
   const storeLinks = useWorkspaceStore((s) => s.cardLinks);
   const storeSprints = useWorkspaceStore((s) => s.sprints);
   const patchCardInStore = useWorkspaceStore((s) => s.patchCard);
+
+  // Plan #16b-γ-A (#2) — index card → status kind via list mapping. We
+  // recompute when either list mappings or the visible cards change.
+  const cardStatusById = useMemo(() => {
+    const out = new Map<string, StatusKind | null>();
+    for (const c of storeCards) {
+      out.set(c.id, getCardStatusKind(c, storeLists));
+    }
+    return out;
+  }, [storeCards, storeLists]);
 
   const cards = useMemo<RoadmapCard[]>(() => {
     const boardTitleById = new Map(storeBoards.map((b) => [b.id, b.title]));
@@ -935,6 +947,7 @@ export function RoadmapView({
                         row={0}
                         isHeader={isHeader}
                         focused={flashFocus === c.id}
+                        status={cardStatusById.get(c.id) ?? null}
                         onMoveStart={handleMoveStart}
                         onResizeLeftStart={handleResizeLeftStart}
                         onResizeRightStart={handleResizeRightStart}

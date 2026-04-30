@@ -18,6 +18,7 @@ import type { WorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 // that doesn't travel across boards.
 
 type Card = WorkspaceSnapshot["cards"][number];
+type List = WorkspaceSnapshot["lists"][number];
 type Sprint = WorkspaceSnapshot["sprints"][number];
 type Component = WorkspaceSnapshot["components"][number];
 type CardComponent = WorkspaceSnapshot["cardComponents"][number];
@@ -30,6 +31,7 @@ type Board = WorkspaceSnapshot["boards"][number];
 export type WorkspaceState = {
   workspaceId: string;
   boards: Board[];
+  lists: List[];
   cards: Card[];
   sprints: Sprint[];
   components: Component[];
@@ -40,6 +42,10 @@ export type WorkspaceState = {
   workspaceProfiles: Profile[];
 
   setSnapshot: (s: Omit<WorkspaceSnapshot, "workspaceId">) => void;
+
+  upsertList: (l: List) => void;
+  patchList: (id: string, patch: Partial<List>) => void;
+  removeList: (id: string) => void;
 
   upsertCard: (c: Card) => void;
   patchCard: (id: string, patch: Partial<Card>) => void;
@@ -68,6 +74,7 @@ export function createWorkspaceStore(initial: WorkspaceSnapshot) {
   return createStore<WorkspaceState>((set) => ({
     workspaceId: initial.workspaceId,
     boards: initial.boards,
+    lists: initial.lists,
     cards: initial.cards,
     sprints: initial.sprints,
     components: initial.components,
@@ -78,6 +85,19 @@ export function createWorkspaceStore(initial: WorkspaceSnapshot) {
     workspaceProfiles: initial.workspaceProfiles,
 
     setSnapshot: (s) => set({ ...s }),
+
+    upsertList: (l) =>
+      set((st) => ({
+        lists: st.lists.some((x) => x.id === l.id)
+          ? st.lists.map((x) => (x.id === l.id ? { ...x, ...l } : x))
+          : [...st.lists, l],
+      })),
+    patchList: (id, patch) =>
+      set((st) => ({
+        lists: st.lists.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+      })),
+    removeList: (id) =>
+      set((st) => ({ lists: st.lists.filter((l) => l.id !== id) })),
 
     upsertCard: (c) =>
       set((st) => ({

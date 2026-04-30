@@ -40,6 +40,9 @@ export function useWorkspaceRealtime(workspaceId: string) {
   const upsertCard = useWorkspaceStore((s) => s.upsertCard);
   const patchCard = useWorkspaceStore((s) => s.patchCard);
   const removeCard = useWorkspaceStore((s) => s.removeCard);
+  const upsertList = useWorkspaceStore((s) => s.upsertList);
+  const patchList = useWorkspaceStore((s) => s.patchList);
+  const removeList = useWorkspaceStore((s) => s.removeList);
   const upsertSprint = useWorkspaceStore((s) => s.upsertSprint);
   const patchSprint = useWorkspaceStore((s) => s.patchSprint);
   const removeSprint = useWorkspaceStore((s) => s.removeSprint);
@@ -74,6 +77,54 @@ export function useWorkspaceRealtime(workspaceId: string) {
       channel = ch;
 
       for (const b of boards) {
+        ch.on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "lists",
+            filter: `board_id=eq.${b.id}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              const r = payload.new as Record<string, unknown>;
+              upsertList({
+                id: r.id as string,
+                boardId: b.id,
+                title: r.title as string,
+                statusKind:
+                  (r.status_kind as
+                    | "todo"
+                    | "in_progress"
+                    | "review"
+                    | "done"
+                    | "blocked"
+                    | null) ?? null,
+              });
+            } else if (payload.eventType === "UPDATE" && payload.new) {
+              const r = payload.new as Record<string, unknown>;
+              if (r.archived) {
+                removeList(r.id as string);
+              } else {
+                patchList(r.id as string, {
+                  title: r.title as string,
+                  statusKind:
+                    (r.status_kind as
+                      | "todo"
+                      | "in_progress"
+                      | "review"
+                      | "done"
+                      | "blocked"
+                      | null) ?? null,
+                });
+              }
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              removeList((payload.old as { id: string }).id);
+            }
+          },
+        );
         ch.on(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           "postgres_changes" as any,
@@ -248,6 +299,9 @@ export function useWorkspaceRealtime(workspaceId: string) {
     upsertCard,
     patchCard,
     removeCard,
+    upsertList,
+    patchList,
+    removeList,
     upsertSprint,
     patchSprint,
     removeSprint,

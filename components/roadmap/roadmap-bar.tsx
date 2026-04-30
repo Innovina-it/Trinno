@@ -4,6 +4,7 @@ import type React from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, MousePointerClick } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
+import type { StatusKind } from "@/lib/roadmap/status";
 
 const TYPE_DOT: Record<string, string> = {
   epic: "bg-fg",
@@ -12,6 +13,62 @@ const TYPE_DOT: Record<string, string> = {
   subtask: "bg-fg/40",
   bug: "bg-fg/70",
 };
+
+// Plan #16b-γ-A (#2) — status fills are monochrome (white at varying
+// opacity) except the `blocked` ring, which is the only chroma allowed.
+// `bgClass` and `bgStyle` are applied additively, so a hatch/stripe
+// `repeating-linear-gradient` lives in `bgStyle` while plain fills land in
+// `bgClass`. Tooltip text is appended to the existing date range.
+const STATUS_LABEL: Record<StatusKind, string> = {
+  todo: "to do",
+  in_progress: "in progress",
+  review: "review",
+  done: "done",
+  blocked: "blocked",
+};
+
+function statusFill(status: StatusKind | null, isHeader: boolean): {
+  className: string;
+  style: CSSProperties;
+} {
+  if (!status) {
+    return {
+      className: isHeader ? "bg-fg/15" : "bg-fg/8",
+      style: {},
+    };
+  }
+  switch (status) {
+    case "todo":
+      return { className: "bg-fg/15", style: {} };
+    case "in_progress":
+      return {
+        className:
+          "bg-fg/40 ring-1 ring-fg/30 ring-inset animate-pulse",
+        style: {},
+      };
+    case "review":
+      return {
+        className: "bg-fg/15",
+        style: {
+          backgroundImage:
+            "repeating-linear-gradient(45deg, rgb(255 255 255 / 0.2) 0 4px, transparent 4px 8px)",
+        },
+      };
+    case "done":
+      return {
+        className: "bg-fg/15",
+        style: {
+          backgroundImage:
+            "repeating-linear-gradient(0deg, rgb(255 255 255 / 0.3) 0 2px, transparent 2px 6px)",
+        },
+      };
+    case "blocked":
+      return {
+        className: `${isHeader ? "bg-fg/15" : "bg-fg/8"} ring-2 ring-red-500/60 ring-inset`,
+        style: {},
+      };
+  }
+}
 
 type ContextMenu = { x: number; y: number };
 
@@ -22,6 +79,7 @@ export function RoadmapBar({
   row,
   isHeader = false,
   focused = false,
+  status = null,
   onMoveStart,
   onResizeLeftStart,
   onResizeRightStart,
@@ -33,6 +91,7 @@ export function RoadmapBar({
   row: number;
   isHeader?: boolean;
   focused?: boolean;
+  status?: StatusKind | null;
   onMoveStart: (e: React.PointerEvent, cardId: string) => void;
   onResizeLeftStart: (e: React.PointerEvent, cardId: string) => void;
   onResizeRightStart: (e: React.PointerEvent, cardId: string) => void;
@@ -71,6 +130,8 @@ export function RoadmapBar({
     ? { position: "fixed", top: menu.y, left: menu.x, zIndex: 100 }
     : undefined;
 
+  const fill = statusFill(status, isHeader);
+  const statusLabel = status ? STATUS_LABEL[status] : null;
   return (
     <>
       <div
@@ -78,11 +139,12 @@ export function RoadmapBar({
           left: x,
           width: Math.max(width, 12),
           top: row * 36 + 4,
+          ...fill.style,
         }}
         className={`absolute h-7 rounded-md border border-fg/30 backdrop-blur-sm
                    hover:border-fg/60 transition-colors cursor-grab active:cursor-grabbing
                    flex items-center px-2 select-none group/bar
-                   ${isHeader ? "bg-fg/15" : "bg-fg/8"}
+                   ${fill.className}
                    ${focused ? "ring-2 ring-fg/50" : ""}`}
         onPointerDown={(e) => {
           // Don't begin a drag from a right-button (context-menu) press.
@@ -96,8 +158,9 @@ export function RoadmapBar({
         data-card-id={card.id}
         data-roadmap-focus={card.id}
         data-testid="roadmap-bar"
+        data-status={status ?? "unmapped"}
         aria-label={`Roadmap bar for ${card.title}`}
-        title={`${card.title} — ${card.startDate.toISOString().slice(0, 10)} → ${card.targetDate.toISOString().slice(0, 10)}`}
+        title={`${card.title} — ${card.startDate.toISOString().slice(0, 10)} → ${card.targetDate.toISOString().slice(0, 10)}${statusLabel ? ` — ${statusLabel}` : ""}`}
       >
         {/* Wider hit-zone (12px) for the left edge resize handle, with a hover-only chevron. */}
         <span

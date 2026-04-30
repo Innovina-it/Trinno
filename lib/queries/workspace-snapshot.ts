@@ -3,6 +3,7 @@ import { dbAsUser } from "@/lib/db/client";
 import {
   boards,
   cards,
+  lists,
   sprints,
   components,
   versions,
@@ -28,6 +29,18 @@ export type WorkspaceSnapshot = {
     archived: boolean;
     backgroundKind: string;
     backgroundValue: string;
+  }>;
+  lists: Array<{
+    id: string;
+    boardId: string;
+    title: string;
+    statusKind:
+      | "todo"
+      | "in_progress"
+      | "review"
+      | "done"
+      | "blocked"
+      | null;
   }>;
   cards: Array<{
     id: string;
@@ -134,6 +147,7 @@ export async function getWorkspaceSnapshot(
       return {
         workspaceId,
         boards: [],
+        lists: [],
         cards: [],
         sprints: sprintRows,
         components: [],
@@ -148,6 +162,7 @@ export async function getWorkspaceSnapshot(
     const boardIds = boardRows.map((b) => b.id);
 
     const [
+      listRows,
       cardRows,
       sprintRows,
       componentRows,
@@ -157,6 +172,15 @@ export async function getWorkspaceSnapshot(
       cardLinkRows,
       memberRows,
     ] = await Promise.all([
+      tx
+        .select({
+          id: lists.id,
+          boardId: lists.boardId,
+          title: lists.title,
+          statusKind: lists.statusKind,
+        })
+        .from(lists)
+        .where(inArray(lists.boardId, boardIds)),
       tx
         .select({
           id: cards.id,
@@ -262,6 +286,7 @@ export async function getWorkspaceSnapshot(
     return {
       workspaceId,
       boards: boardRows,
+      lists: listRows,
       cards: cardRows,
       sprints: sprintRows,
       components: componentRows,
