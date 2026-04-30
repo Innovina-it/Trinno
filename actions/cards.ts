@@ -34,6 +34,8 @@ export async function updateCardImpl(token: string, input: {
   description?: string | null;
   dueDate?: Date | string | null;
   dueComplete?: boolean;
+  type?: "epic" | "story" | "task" | "subtask" | "bug";
+  parentCardId?: string | null;
 }) {
   const parsed = UpdateCardInput.parse(input);
   const patch: Record<string, unknown> = {};
@@ -48,6 +50,8 @@ export async function updateCardImpl(token: string, input: {
           : new Date(parsed.dueDate);
   }
   if (parsed.dueComplete !== undefined) patch.dueComplete = parsed.dueComplete;
+  if (parsed.type !== undefined) patch.type = parsed.type;
+  if (parsed.parentCardId !== undefined) patch.parentCardId = parsed.parentCardId;
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(cards).set(patch)
       .where(eq(cards.id, parsed.id)).returning();

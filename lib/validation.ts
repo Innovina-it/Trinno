@@ -40,12 +40,15 @@ export const ArchiveListInput= z.object({ id: Uuid, archived: z.boolean() });
 export const CreateCardInput = z.object({
   listId: Uuid, title: Title,
 });
+export const CardType = z.enum(["epic", "story", "task", "subtask", "bug"]);
 export const UpdateCardInput = z.object({
   id: Uuid,
   title: Title.optional(),
   description: z.string().max(20_000).nullable().optional(),
   dueDate: z.union([z.string(), z.date()]).nullable().optional(),
   dueComplete: z.boolean().optional(),
+  type: CardType.optional(),
+  parentCardId: Uuid.nullable().optional(),
 });
 export const MoveCardInput = z.object({
   id: Uuid, listId: Uuid, position: z.string().min(1).max(64),
