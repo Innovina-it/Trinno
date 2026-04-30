@@ -18,6 +18,9 @@ import type {
   CommentRow,
   AttachmentRow,
   CardLinkRow,
+  ComponentRow,
+  CardComponentRow,
+  CardVersionRow,
   BoardProfile,
 } from "@/lib/queries/board-snapshot";
 
@@ -33,6 +36,9 @@ export type BoardSnapshotInit = {
   comments: CommentRow[];
   attachments: AttachmentRow[];
   cardLinks: CardLinkRow[];
+  components: ComponentRow[];
+  cardComponents: CardComponentRow[];
+  cardVersions: CardVersionRow[];
   boardProfiles: BoardProfile[];
 };
 
@@ -48,6 +54,9 @@ export type BoardState = {
   comments: CommentRow[];
   attachments: AttachmentRow[];
   cardLinks: CardLinkRow[];
+  components: ComponentRow[];
+  cardComponents: CardComponentRow[];
+  cardVersions: CardVersionRow[];
   boardProfiles: BoardProfile[];
 
   setSnapshot: (s: Omit<BoardSnapshotInit, "boardId">) => void;
@@ -88,6 +97,20 @@ export type BoardState = {
 
   addCardLink: (l: CardLinkRow) => void;
   removeCardLink: (id: string) => void;
+
+  addComponent: (c: ComponentRow) => void;
+  updateComponent: (id: string, patch: Partial<ComponentRow>) => void;
+  removeComponent: (id: string) => void;
+
+  addCardComponent: (x: CardComponentRow) => void;
+  removeCardComponent: (cardId: string, componentId: string) => void;
+
+  addCardVersion: (x: CardVersionRow) => void;
+  removeCardVersion: (
+    cardId: string,
+    versionId: string,
+    kind: CardVersionRow["kind"],
+  ) => void;
 };
 
 function sortByPosition<T extends { position: string }>(rows: T[]): T[] {
@@ -113,6 +136,9 @@ export function createBoardStore(initial: BoardSnapshotInit) {
     comments: sortByCreatedAt(initial.comments),
     attachments: initial.attachments,
     cardLinks: initial.cardLinks,
+    components: initial.components,
+    cardComponents: initial.cardComponents,
+    cardVersions: initial.cardVersions,
     boardProfiles: initial.boardProfiles,
 
     setSnapshot: (s) =>
@@ -127,6 +153,9 @@ export function createBoardStore(initial: BoardSnapshotInit) {
         comments: sortByCreatedAt(s.comments),
         attachments: s.attachments,
         cardLinks: s.cardLinks,
+        components: s.components,
+        cardComponents: s.cardComponents,
+        cardVersions: s.cardVersions,
         boardProfiles: s.boardProfiles,
       }),
 
@@ -315,6 +344,69 @@ export function createBoardStore(initial: BoardSnapshotInit) {
     removeCardLink: (id) =>
       set((state) => ({
         cardLinks: state.cardLinks.filter((l) => l.id !== id),
+      })),
+
+    addComponent: (c) =>
+      set((state) =>
+        state.components.some((x) => x.id === c.id)
+          ? state
+          : { components: [...state.components, c] },
+      ),
+
+    updateComponent: (id, patch) =>
+      set((state) => ({
+        components: state.components.map((c) =>
+          c.id === id ? { ...c, ...patch } : c,
+        ),
+      })),
+
+    removeComponent: (id) =>
+      set((state) => ({
+        components: state.components.filter((c) => c.id !== id),
+        cardComponents: state.cardComponents.filter(
+          (cc) => cc.componentId !== id,
+        ),
+      })),
+
+    addCardComponent: (x) =>
+      set((state) =>
+        state.cardComponents.some(
+          (cc) =>
+            cc.cardId === x.cardId && cc.componentId === x.componentId,
+        )
+          ? state
+          : { cardComponents: [...state.cardComponents, x] },
+      ),
+
+    removeCardComponent: (cardId, componentId) =>
+      set((state) => ({
+        cardComponents: state.cardComponents.filter(
+          (cc) => !(cc.cardId === cardId && cc.componentId === componentId),
+        ),
+      })),
+
+    addCardVersion: (x) =>
+      set((state) =>
+        state.cardVersions.some(
+          (cv) =>
+            cv.cardId === x.cardId &&
+            cv.versionId === x.versionId &&
+            cv.kind === x.kind,
+        )
+          ? state
+          : { cardVersions: [...state.cardVersions, x] },
+      ),
+
+    removeCardVersion: (cardId, versionId, kind) =>
+      set((state) => ({
+        cardVersions: state.cardVersions.filter(
+          (cv) =>
+            !(
+              cv.cardId === cardId &&
+              cv.versionId === versionId &&
+              cv.kind === kind
+            ),
+        ),
       })),
   }));
 }

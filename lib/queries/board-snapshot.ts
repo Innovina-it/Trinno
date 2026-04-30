@@ -14,6 +14,9 @@ import {
   boardMembers,
   profiles,
   cardLinks,
+  components,
+  cardComponents,
+  cardVersions,
 } from "@/lib/db/schema";
 
 export type BoardRow = typeof boards.$inferSelect;
@@ -27,6 +30,9 @@ export type ChecklistItemRow = typeof checklistItems.$inferSelect;
 export type CommentRow = typeof comments.$inferSelect;
 export type AttachmentRow = typeof attachments.$inferSelect;
 export type CardLinkRow = typeof cardLinks.$inferSelect;
+export type ComponentRow = typeof components.$inferSelect;
+export type CardComponentRow = typeof cardComponents.$inferSelect;
+export type CardVersionRow = typeof cardVersions.$inferSelect;
 export type BoardProfile = { id: string; displayName: string };
 
 export type BoardSnapshot = {
@@ -41,6 +47,9 @@ export type BoardSnapshot = {
   comments: CommentRow[];
   attachments: AttachmentRow[];
   cardLinks: CardLinkRow[];
+  components: ComponentRow[];
+  cardComponents: CardComponentRow[];
+  cardVersions: CardVersionRow[];
   boardProfiles: BoardProfile[];
 };
 
@@ -67,6 +76,9 @@ export async function getBoardSnapshot(
       attachmentRows,
       cardLinkRows,
       memberRows,
+      componentRows,
+      cardComponentRows,
+      cardVersionRows,
     ] = await Promise.all([
       tx
         .select()
@@ -112,6 +124,19 @@ export async function getBoardSnapshot(
         .select({ userId: boardMembers.userId })
         .from(boardMembers)
         .where(eq(boardMembers.boardId, boardId)),
+      tx
+        .select()
+        .from(components)
+        .where(eq(components.boardId, boardId))
+        .orderBy(asc(components.name)),
+      tx
+        .select()
+        .from(cardComponents)
+        .where(eq(cardComponents.boardId, boardId)),
+      tx
+        .select()
+        .from(cardVersions)
+        .where(eq(cardVersions.workspaceId, board.workspaceId)),
     ]);
 
     const memberIds = memberRows.map((m) => m.userId);
@@ -135,6 +160,9 @@ export async function getBoardSnapshot(
       comments: commentRows,
       attachments: attachmentRows,
       cardLinks: cardLinkRows,
+      components: componentRows,
+      cardComponents: cardComponentRows,
+      cardVersions: cardVersionRows,
       boardProfiles: profileRows,
     };
   });

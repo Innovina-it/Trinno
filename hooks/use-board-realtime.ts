@@ -13,6 +13,9 @@ import type {
   CommentRow,
   AttachmentRow,
   CardLinkRow,
+  ComponentRow,
+  CardComponentRow,
+  CardVersionRow,
 } from "@/lib/queries/board-snapshot";
 
 function rowToList(r: Record<string, unknown>): ListRow {
@@ -133,7 +136,34 @@ function rowToCardLink(r: Record<string, unknown>): CardLinkRow {
   };
 }
 
-export function useBoardRealtime(boardId: string) {
+function rowToComponent(r: Record<string, unknown>): ComponentRow {
+  return {
+    id: r.id as string,
+    boardId: r.board_id as string,
+    name: r.name as string,
+    leadUserId: (r.lead_user_id ?? null) as string | null,
+    createdAt: new Date(r.created_at as string),
+  };
+}
+
+function rowToCardComponent(r: Record<string, unknown>): CardComponentRow {
+  return {
+    cardId: r.card_id as string,
+    componentId: r.component_id as string,
+    boardId: r.board_id as string,
+  };
+}
+
+function rowToCardVersion(r: Record<string, unknown>): CardVersionRow {
+  return {
+    cardId: r.card_id as string,
+    versionId: r.version_id as string,
+    kind: r.kind as CardVersionRow["kind"],
+    workspaceId: r.workspace_id as string,
+  };
+}
+
+export function useBoardRealtime(boardId: string, workspaceId?: string) {
   const addList = useBoardStore((s) => s.addList);
   const addCard = useBoardStore((s) => s.addCard);
   const updateCard = useBoardStore((s) => s.updateCard);
@@ -170,6 +200,16 @@ export function useBoardRealtime(boardId: string) {
 
   const addCardLink = useBoardStore((s) => s.addCardLink);
   const removeCardLink = useBoardStore((s) => s.removeCardLink);
+
+  const addComponent = useBoardStore((s) => s.addComponent);
+  const updateComponent = useBoardStore((s) => s.updateComponent);
+  const removeComponent = useBoardStore((s) => s.removeComponent);
+
+  const addCardComponent = useBoardStore((s) => s.addCardComponent);
+  const removeCardComponent = useBoardStore((s) => s.removeCardComponent);
+
+  const addCardVersion = useBoardStore((s) => s.addCardVersion);
+  const removeCardVersion = useBoardStore((s) => s.removeCardVersion);
 
   useEffect(() => {
     const supa = createSupabaseBrowser();
@@ -411,7 +451,78 @@ export function useBoardRealtime(boardId: string) {
             }
           },
         )
-        .subscribe();
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "components",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addComponent(rowToComponent(payload.new));
+            } else if (payload.eventType === "UPDATE" && payload.new) {
+              const c = rowToComponent(payload.new);
+              updateComponent(c.id, c);
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              removeComponent((payload.old as any).id);
+            }
+          },
+        )
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "card_components",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addCardComponent(rowToCardComponent(payload.new));
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              const o = payload.old as Record<string, unknown>;
+              removeCardComponent(
+                o.card_id as string,
+                o.component_id as string,
+              );
+            }
+          },
+        );
+
+      if (workspaceId) {
+        ch.on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "card_versions",
+            filter: `workspace_id=eq.${workspaceId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              addCardVersion(rowToCardVersion(payload.new));
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              const o = payload.old as Record<string, unknown>;
+              removeCardVersion(
+                o.card_id as string,
+                o.version_id as string,
+                o.kind as CardVersionRow["kind"],
+              );
+            }
+          },
+        );
+      }
+
+      ch.subscribe();
     })();
 
     return () => {
@@ -420,6 +531,7 @@ export function useBoardRealtime(boardId: string) {
     };
   }, [
     boardId,
+    workspaceId,
     addList,
     addCard,
     updateCard,
@@ -448,5 +560,12 @@ export function useBoardRealtime(boardId: string) {
     removeAttachment,
     addCardLink,
     removeCardLink,
+    addComponent,
+    updateComponent,
+    removeComponent,
+    addCardComponent,
+    removeCardComponent,
+    addCardVersion,
+    removeCardVersion,
   ]);
 }

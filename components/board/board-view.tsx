@@ -70,7 +70,7 @@ export function BoardView({
   const moveCardLocal = useBoardStore((s) => s.moveCard);
   const [, start] = useTransition();
 
-  useBoardRealtime(board.id);
+  useBoardRealtime(board.id, board.workspaceId);
   const viewers = useBoardPresence(board.id, currentUser);
 
   const filters = useMemo(

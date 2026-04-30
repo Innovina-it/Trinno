@@ -32,6 +32,9 @@ export default async function BoardLayout({
         comments: snap.comments,
         attachments: snap.attachments,
         cardLinks: snap.cardLinks,
+        components: snap.components,
+        cardComponents: snap.cardComponents,
+        cardVersions: snap.cardVersions,
         boardProfiles: snap.boardProfiles,
       }}
     >
