@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { getBoardSnapshot } from "@/lib/queries/board-snapshot";
+import { listSlaPoliciesForBoard } from "@/lib/queries/sla";
 import { BoardSettingsForm } from "@/components/board/board-settings-form";
 import { ListsAdminPanel } from "@/components/board/lists-admin-panel";
+import { SlaPoliciesPanel } from "@/components/board/sla-policies-panel";
 
 export default async function BoardSettingsPage({
   params,
@@ -15,6 +17,7 @@ export default async function BoardSettingsPage({
   const snap = await getBoardSnapshot(token, boardId);
   if (!snap) notFound();
   const b = snap.board;
+  const slaPolicies = await listSlaPoliciesForBoard(token, boardId);
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-6 py-10">
       <h1 className="text-2xl font-semibold">{b.title} — Board settings</h1>
@@ -33,6 +36,18 @@ export default async function BoardSettingsPage({
             id: l.id,
             title: l.title,
             wipLimit: l.wipLimit ?? null,
+          }))}
+        />
+      </section>
+      <section className="space-y-4">
+        <h2 className="mono-meta">SLAs</h2>
+        <SlaPoliciesPanel
+          boardId={boardId}
+          initial={slaPolicies.map((p) => ({
+            id: p.id,
+            name: p.name,
+            targetMin: p.targetMin,
+            enabled: p.enabled,
           }))}
         />
       </section>
