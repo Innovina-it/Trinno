@@ -67,6 +67,7 @@ export type BoardState = {
   moveCard: (id: string, listId: string, position: string) => void;
   moveList: (id: string, position: string) => void;
   renameList: (id: string, title: string) => void;
+  updateList: (id: string, patch: Partial<ListRow>) => void;
   removeCard: (id: string) => void;
   removeList: (id: string) => void;
 
@@ -197,6 +198,11 @@ export function createBoardStore(initial: BoardSnapshotInit) {
     renameList: (id, title) =>
       set((state) => ({
         lists: state.lists.map((l) => (l.id === id ? { ...l, title } : l)),
+      })),
+
+    updateList: (id, patch) =>
+      set((state) => ({
+        lists: state.lists.map((l) => (l.id === id ? { ...l, ...patch } : l)),
       })),
 
     removeCard: (id) =>

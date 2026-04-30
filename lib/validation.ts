@@ -41,6 +41,21 @@ export const SetWipLimitInput = z.object({
   wipLimit: z.number().int().positive().max(999).nullable(),
 });
 
+// Plan #16b-γ-A — map a list to a roadmap status kind. Null clears the
+// mapping (the list becomes "unmapped" and roadmap bars fall back to the
+// default fill).
+export const ListStatusKindZ = z.enum([
+  "todo",
+  "in_progress",
+  "review",
+  "done",
+  "blocked",
+]);
+export const SetListStatusKindInput = z.object({
+  id: Uuid,
+  statusKind: ListStatusKindZ.nullable(),
+});
+
 export const CreateCardInput = z.object({
   listId: Uuid, title: Title,
 });

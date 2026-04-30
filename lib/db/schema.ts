@@ -84,6 +84,14 @@ export const boardMembers = pgTable(
   (t) => ({ pk: primaryKey({ columns: [t.boardId, t.userId] }) }),
 );
 
+export const listStatusKind = pgEnum("list_status_kind", [
+  "todo",
+  "in_progress",
+  "review",
+  "done",
+  "blocked",
+]);
+
 export const lists = pgTable("lists", {
   id: uuid("id").primaryKey().defaultRandom(),
   boardId: uuid("board_id").notNull(),
@@ -94,6 +102,7 @@ export const lists = pgTable("lists", {
     .notNull()
     .defaultNow(),
   wipLimit: integer("wip_limit"),
+  statusKind: listStatusKind("status_kind"),
 });
 
 export const cards = pgTable("cards", {

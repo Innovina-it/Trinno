@@ -27,6 +27,7 @@ function rowToList(r: Record<string, unknown>): ListRow {
     archived: r.archived as boolean,
     createdAt: new Date(r.created_at as string),
     wipLimit: (r.wip_limit ?? null) as number | null,
+    statusKind: (r.status_kind ?? null) as ListRow["statusKind"],
   };
 }
 
@@ -174,6 +175,7 @@ export function useBoardRealtime(boardId: string, workspaceId?: string) {
   const removeList = useBoardStore((s) => s.removeList);
   const removeCard = useBoardStore((s) => s.removeCard);
   const renameList = useBoardStore((s) => s.renameList);
+  const updateList = useBoardStore((s) => s.updateList);
 
   const addLabel = useBoardStore((s) => s.addLabel);
   const updateLabel = useBoardStore((s) => s.updateLabel);
@@ -250,6 +252,8 @@ export function useBoardRealtime(boardId: string, workspaceId?: string) {
               } else {
                 if (r.position) moveList(r.id, r.position);
                 if (typeof r.title === "string") renameList(r.id, r.title);
+                // Propagate non-positional fields too (wip_limit, status_kind).
+                updateList(r.id, rowToList(r));
               }
             } else if (payload.eventType === "DELETE" && payload.old) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -542,6 +546,7 @@ export function useBoardRealtime(boardId: string, workspaceId?: string) {
     removeList,
     removeCard,
     renameList,
+    updateList,
     addLabel,
     updateLabel,
     removeLabel,

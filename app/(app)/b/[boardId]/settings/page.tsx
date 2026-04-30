@@ -37,6 +37,7 @@ export default async function BoardSettingsPage({
             id: l.id,
             title: l.title,
             wipLimit: l.wipLimit ?? null,
+            statusKind: l.statusKind ?? null,
           }))}
         />
       </section>

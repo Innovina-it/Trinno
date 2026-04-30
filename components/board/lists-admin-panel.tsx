@@ -2,10 +2,26 @@
 import { useState, useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { setWipLimit } from "@/actions/lists";
+import { setWipLimit, setListStatusKind } from "@/actions/lists";
 import { toast } from "sonner";
 
-type ListLite = { id: string; title: string; wipLimit: number | null };
+type StatusKind = "todo" | "in_progress" | "review" | "done" | "blocked";
+
+type ListLite = {
+  id: string;
+  title: string;
+  wipLimit: number | null;
+  statusKind: StatusKind | null;
+};
+
+const STATUS_OPTIONS: { value: StatusKind | ""; label: string }[] = [
+  { value: "", label: "unmapped" },
+  { value: "todo", label: "to do" },
+  { value: "in_progress", label: "in progress" },
+  { value: "review", label: "review" },
+  { value: "done", label: "done" },
+  { value: "blocked", label: "blocked" },
+];
 
 export function ListsAdminPanel({ lists }: { lists: ListLite[] }) {
   return (
@@ -13,6 +29,7 @@ export function ListsAdminPanel({ lists }: { lists: ListLite[] }) {
       {lists.map((l) => (
         <li key={l.id} className="px-4 py-3 flex items-center gap-3">
           <span className="serif-display text-lg flex-1">{l.title}</span>
+          <StatusSetter listId={l.id} initial={l.statusKind} />
           <WipSetter listId={l.id} initial={l.wipLimit ?? null} />
         </li>
       ))}
@@ -45,6 +62,52 @@ function WipSetter({ listId, initial }: { listId: string; initial: number | null
         className="h-8 w-20 text-center"
       />
       <Button size="xs" onClick={save} disabled={pending}>SAVE</Button>
+    </div>
+  );
+}
+
+function StatusSetter({
+  listId,
+  initial,
+}: {
+  listId: string;
+  initial: StatusKind | null;
+}) {
+  const [v, setV] = useState<StatusKind | "">(initial ?? "");
+  const [pending, start] = useTransition();
+
+  function onChange(next: string) {
+    const nextKind = (next === "" ? null : (next as StatusKind));
+    setV(next as StatusKind | "");
+    start(async () => {
+      try {
+        await setListStatusKind({ id: listId, statusKind: nextKind });
+      } catch (err) {
+        toast.error((err as Error).message);
+        // revert
+        setV(initial ?? "");
+      }
+    });
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="mono-meta-sm text-fg-faint">STATUS</span>
+      <select
+        value={v}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={pending}
+        aria-label="List status mapping"
+        data-testid="list-status-select"
+        data-list-id={listId}
+        className="h-8 rounded-md border border-hairline bg-[color:var(--surface)] px-2 text-sm text-fg outline-none focus:border-fg/50"
+      >
+        {STATUS_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
