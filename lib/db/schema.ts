@@ -114,6 +114,8 @@ export const cards = pgTable("cards", {
   parentCardId: uuid("parent_card_id"),
   sprintId: uuid("sprint_id"),
   storyPoints: integer("story_points"),
+  estimateMin: integer("estimate_min"),
+  spentMin: integer("spent_min").notNull().default(0),
 });
 
 export const labels = pgTable("labels", {
@@ -281,4 +283,46 @@ export const userNotificationPrefs = pgTable(
     enabled: boolean("enabled").notNull().default(true),
   },
   (t) => ({ pk: primaryKey({ columns: [t.userId, t.kind, t.channel] }) }),
+);
+
+export const worklogs = pgTable("worklogs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  cardId: uuid("card_id").notNull(),
+  boardId: uuid("board_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  minutes: integer("minutes").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  comment: text("comment"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const slaPolicies = pgTable("sla_policies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  boardId: uuid("board_id").notNull(),
+  name: text("name").notNull(),
+  targetMin: integer("target_min").notNull(),
+  appliesWhen: jsonb("applies_when").notNull().default(sql`'{}'::jsonb`),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const cardSla = pgTable(
+  "card_sla",
+  {
+    cardId: uuid("card_id").notNull(),
+    slaId: uuid("sla_id").notNull(),
+    boardId: uuid("board_id").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    breachedAt: timestamp("breached_at", { withTimezone: true }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.cardId, t.slaId] }) }),
 );
