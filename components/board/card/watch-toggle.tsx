@@ -39,6 +39,7 @@ export function WatchToggle({ cardId }: { cardId: string }) {
       onClick={toggle}
       disabled={pending || watching === null}
       title={watching ? "Watching" : "Watch"}
+      data-testid="watch-toggle"
     >
       {watching ? (
         <Eye className="size-3.5 mr-1" />
