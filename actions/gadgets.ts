@@ -23,7 +23,8 @@ export async function createGadgetImpl(
       | "velocity"
       | "burndown"
       | "cards_by_type"
-      | "markdown_note";
+      | "markdown_note"
+      | "on_roadmap";
     config?: Record<string, unknown>;
     size?: "1x1" | "2x1" | "2x2" | "3x1" | "3x2";
   },

@@ -246,3 +246,36 @@ export function resolveMarkdownNote(
 ): Promise<{ body: string }> {
   return Promise.resolve({ body: c.body ?? "" });
 }
+
+// Plan #16b-β — counts of cards across the workspace by their roadmap-
+// readiness state. `scheduled` includes cards with at least one of
+// (start_date, target_date) set; `unscheduled` is the complement;
+// `overdue` counts non-archived, not-yet-complete cards whose target
+// date has already passed.
+export async function resolveOnRoadmap(
+  token: string,
+  c: { workspaceId: string },
+): Promise<{
+  total: number;
+  scheduled: number;
+  unscheduled: number;
+  overdue: number;
+}> {
+  return dbAsUser(token, async (tx) => {
+    const rows = await tx
+      .select({
+        total: sql<number>`count(*)::int`,
+        scheduled: sql<number>`count(*) filter (where ${cards.startDate} is not null or ${cards.targetDate} is not null)::int`,
+        unscheduled: sql<number>`count(*) filter (where ${cards.startDate} is null and ${cards.targetDate} is null)::int`,
+        overdue: sql<number>`count(*) filter (where ${cards.targetDate} is not null and ${cards.targetDate} < now() and ${cards.dueComplete} = false)::int`,
+      })
+      .from(cards)
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .where(
+        and(eq(boards.workspaceId, c.workspaceId), eq(cards.archived, false)),
+      );
+    return (
+      rows[0] ?? { total: 0, scheduled: 0, unscheduled: 0, overdue: 0 }
+    );
+  });
+}

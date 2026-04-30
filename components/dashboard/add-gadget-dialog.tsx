@@ -23,7 +23,8 @@ type GadgetType =
   | "velocity"
   | "burndown"
   | "cards_by_type"
-  | "markdown_note";
+  | "markdown_note"
+  | "on_roadmap";
 
 type GadgetSize = "1x1" | "2x1" | "2x2" | "3x1" | "3x2";
 
@@ -90,6 +91,13 @@ const GADGET_TYPES: Array<{
     needsWorkspace: false,
     defaultSize: "2x1",
   },
+  {
+    type: "on_roadmap",
+    label: "On roadmap",
+    description: "Counts of total / scheduled / unscheduled / overdue cards.",
+    needsWorkspace: true,
+    defaultSize: "2x1",
+  },
 ];
 
 export function AddGadgetButton({
@@ -150,6 +158,8 @@ export function AddGadgetButton({
       case "velocity":
         return { workspaceId, n };
       case "burndown":
+        return { workspaceId };
+      case "on_roadmap":
         return { workspaceId };
       case "markdown_note":
         return { body };

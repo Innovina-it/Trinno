@@ -329,6 +329,7 @@ export const GadgetType = z.enum([
   "burndown",
   "cards_by_type",
   "markdown_note",
+  "on_roadmap",
 ]);
 
 export const GadgetSize = z.enum(["1x1", "2x1", "2x2", "3x1", "3x2"]);

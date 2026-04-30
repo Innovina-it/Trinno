@@ -9,6 +9,7 @@ import {
   resolveBurndown,
   resolveCardsByType,
   resolveMarkdownNote,
+  resolveOnRoadmap,
 } from "@/lib/dashboards/resolvers";
 import { GadgetShell } from "@/components/dashboard/gadgets/gadget-shell";
 import { GadgetCount } from "@/components/dashboard/gadgets/gadget-count";
@@ -19,6 +20,7 @@ import { GadgetVelocity } from "@/components/dashboard/gadgets/gadget-velocity";
 import { GadgetBurndown } from "@/components/dashboard/gadgets/gadget-burndown";
 import { GadgetCardsByType } from "@/components/dashboard/gadgets/gadget-cards-by-type";
 import { GadgetMarkdownNote } from "@/components/dashboard/gadgets/gadget-markdown-note";
+import { GadgetOnRoadmap } from "@/components/dashboard/gadgets/gadget-on-roadmap";
 
 type GadgetRow = {
   id: string;
@@ -137,6 +139,15 @@ export async function DashboardGrid({
             const data = await resolveMarkdownNote(token, {
               body: (config.body as string | undefined) ?? "",
             });
+            return { gadget: g, type: g.type, data };
+          }
+          case "on_roadmap": {
+            const wsId =
+              (config.workspaceId as string | undefined) ??
+              workspaceId ??
+              undefined;
+            if (!wsId) return { gadget: g, type: g.type, data: null };
+            const data = await resolveOnRoadmap(token, { workspaceId: wsId });
             return { gadget: g, type: g.type, data };
           }
           default:
@@ -281,6 +292,19 @@ function renderGadgetBody(type: string, data: unknown) {
     case "markdown_note":
       return (
         <GadgetMarkdownNote body={(data as { body: string } | null)?.body ?? ""} />
+      );
+    case "on_roadmap":
+      return (
+        <GadgetOnRoadmap
+          data={
+            data as {
+              total: number;
+              scheduled: number;
+              unscheduled: number;
+              overdue: number;
+            } | null
+          }
+        />
       );
     default:
       return (
