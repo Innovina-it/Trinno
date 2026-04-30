@@ -41,6 +41,7 @@ function rowToCard(r: Record<string, unknown>): CardRow {
     coverColor: (r.cover_color ?? null) as string | null,
     type: (r.type ?? "task") as string,
     parentCardId: (r.parent_card_id ?? null) as string | null,
+    sprintId: (r.sprint_id ?? null) as string | null,
   };
 }
 
