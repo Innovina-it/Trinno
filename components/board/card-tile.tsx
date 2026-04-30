@@ -8,6 +8,7 @@ import { LabelStripes } from "./card/label-stripes";
 import { DuePill } from "./card/due-pill";
 import { TileIndicators } from "./card/tile-indicators";
 import { TypeIcon } from "./card/type-picker";
+import { BlockedBadge } from "./card/blocked-badge";
 import { cardCode } from "@/lib/format";
 
 export function CardTile({
@@ -61,7 +62,10 @@ export function CardTile({
 
       {/* Top metadata row: type icon + card ID via pseudo-element */}
       <div className="flex items-center justify-between px-3 pt-2">
-        <TypeIcon type={card.type ?? "task"} className="size-3 text-fg-faint" />
+        <div className="flex items-center gap-1.5">
+          <TypeIcon type={card.type ?? "task"} className="size-3 text-fg-faint" />
+          <BlockedBadge cardId={card.id} />
+        </div>
         <span
           aria-hidden
           className="card-code-stamp leading-none"

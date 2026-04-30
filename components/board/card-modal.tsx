@@ -20,6 +20,7 @@ import { CommentsSection } from "./card/comments-section";
 import { TypePicker } from "./card/type-picker";
 import { ParentPicker } from "./card/parent-picker";
 import { SubtasksSection } from "./card/subtasks-section";
+import { CardLinksSection } from "./card/card-links-section";
 import { cardCode } from "@/lib/format";
 
 export type CardModalCard = {
@@ -151,6 +152,9 @@ export function CardModal({
       <ChecklistsSection cardId={card.id} />
       {card.listId && card.boardId && (
         <SubtasksSection cardId={card.id} listId={card.listId} boardId={card.boardId} />
+      )}
+      {card.boardId && (
+        <CardLinksSection cardId={card.id} boardId={card.boardId} />
       )}
       <AttachmentsSection cardId={card.id} />
       <CommentsSection cardId={card.id} />
