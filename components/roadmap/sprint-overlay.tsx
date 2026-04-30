@@ -1,4 +1,5 @@
 "use client";
+import { useMemo } from "react";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { dayDiff, pixelsPerDay, startOfDay, type Zoom } from "@/lib/roadmap/dates";
 
@@ -17,8 +18,14 @@ export function SprintOverlay({
   gridEnd: Date;
   height: number;
 }) {
-  const sprints = useWorkspaceStore((s) =>
-    s.sprints.filter((sp) => sp.state !== "completed"),
+  // Select the unfiltered slice — zustand's `useStore` re-renders on
+  // identity change. Filtering inside the selector creates a fresh array
+  // every render and triggers React's "getSnapshot must be cached"
+  // infinite-loop guard. Memoize the projection downstream instead.
+  const allSprints = useWorkspaceStore((s) => s.sprints);
+  const sprints = useMemo(
+    () => allSprints.filter((sp) => sp.state !== "completed"),
+    [allSprints],
   );
   const ppd = pixelsPerDay(zoom);
   const totalDays = Math.max(0, dayDiff(gridStart, gridEnd));
