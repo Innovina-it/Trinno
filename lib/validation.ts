@@ -166,3 +166,123 @@ export const UpdateSlaPolicyInput = z.object({
 });
 export const DeleteSlaPolicyInput = z.object({ id: Uuid });
 export const ScanBoardSlaInput = z.object({ boardId: Uuid });
+
+// Plan #18 — Automation Rules.
+const RuleTriggerSchema = z
+  .object({
+    kind: z.enum([
+      "card.create",
+      "card.move",
+      "card.archive",
+      "card.unarchive",
+      "card.due",
+      "card.label.add",
+      "card.label.remove",
+      "card.member.assign",
+      "card.member.unassign",
+      "comment.create",
+    ]),
+    from_list: Uuid.optional(),
+    to_list: Uuid.optional(),
+    label_id: Uuid.optional(),
+  })
+  .passthrough();
+
+const PredicateSchema = z.object({
+  field: z.string(),
+  op: z.string(),
+  value: z.union([z.string(), z.number()]),
+});
+const ConditionsSchema = z.union([
+  z.object({ all: z.array(PredicateSchema) }),
+  z.object({ any: z.array(PredicateSchema) }),
+  z.object({}).strict(),
+]);
+
+const ActionSchema = z
+  .object({
+    kind: z.enum([
+      "set_label",
+      "remove_label",
+      "assign",
+      "unassign",
+      "move_to_list",
+      "set_type",
+      "add_comment",
+      "set_due_complete",
+      "webhook_post",
+    ]),
+  })
+  .passthrough();
+
+export {
+  RuleTriggerSchema,
+  ConditionsSchema as RuleConditionsSchema,
+  ActionSchema as RuleActionSchema,
+};
+
+export const CreateRuleInput = z.object({
+  boardId: Uuid,
+  name: z.string().trim().min(1).max(120),
+  trigger: RuleTriggerSchema,
+  conditions: ConditionsSchema.default({}),
+  actions: z.array(ActionSchema).min(1).max(20),
+});
+
+export const UpdateRuleInput = z.object({
+  id: Uuid,
+  name: z.string().trim().min(1).max(120).optional(),
+  trigger: RuleTriggerSchema.optional(),
+  conditions: ConditionsSchema.optional(),
+  actions: z.array(ActionSchema).min(1).max(20).optional(),
+});
+
+export const DeleteRuleInput = z.object({ id: Uuid });
+export const ToggleRuleInput = z.object({ id: Uuid, enabled: z.boolean() });
+
+// Plan #10 — Components + Versions + Releases.
+export const CreateComponentInput = z.object({
+  boardId: Uuid,
+  name: z.string().trim().min(1).max(60),
+  leadUserId: Uuid.nullable().optional(),
+});
+export const UpdateComponentInput = z.object({
+  id: Uuid,
+  name: z.string().trim().min(1).max(60).optional(),
+  leadUserId: Uuid.nullable().optional(),
+});
+export const DeleteComponentInput = z.object({ id: Uuid });
+export const ToggleCardComponentInput = z.object({
+  cardId: Uuid,
+  componentId: Uuid,
+});
+
+export const VersionStateZ = z.enum(["unreleased", "released", "archived"]);
+export const CardVersionKindZ = z.enum(["affects", "fixes"]);
+
+export const CreateVersionInput = z.object({
+  workspaceId: Uuid,
+  name: z.string().trim().min(1).max(60),
+  semver: z.string().trim().max(40).nullable().optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  releaseDate: z.union([z.string(), z.date()]).nullable().optional(),
+});
+export const UpdateVersionInput = z.object({
+  id: Uuid,
+  name: z.string().trim().min(1).max(60).optional(),
+  semver: z.string().trim().max(40).nullable().optional(),
+  state: VersionStateZ.optional(),
+  releaseDate: z.union([z.string(), z.date()]).nullable().optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+});
+export const DeleteVersionInput = z.object({ id: Uuid });
+export const SetCardVersionInput = z.object({
+  cardId: Uuid,
+  versionId: Uuid,
+  kind: CardVersionKindZ,
+});
+export const ClearCardVersionInput = z.object({
+  cardId: Uuid,
+  versionId: Uuid,
+  kind: CardVersionKindZ,
+});
