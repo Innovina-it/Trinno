@@ -36,6 +36,10 @@ export const CreateListInput = z.object({
 export const RenameListInput = z.object({ id: Uuid, title: Title });
 export const MoveListInput   = z.object({ id: Uuid, position: z.string().min(1).max(64) });
 export const ArchiveListInput= z.object({ id: Uuid, archived: z.boolean() });
+export const SetWipLimitInput = z.object({
+  id: Uuid,
+  wipLimit: z.number().int().positive().max(999).nullable(),
+});
 
 export const CreateCardInput = z.object({
   listId: Uuid, title: Title,

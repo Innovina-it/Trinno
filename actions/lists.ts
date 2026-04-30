@@ -7,6 +7,7 @@ import { getSessionToken, requireUser } from "@/lib/auth";
 import { positionBetween } from "@/lib/ordering";
 import {
   CreateListInput, RenameListInput, MoveListInput, ArchiveListInput,
+  SetWipLimitInput,
 } from "@/lib/validation";
 
 export async function createListImpl(token: string, input: { boardId: string; title: string }) {
@@ -55,6 +56,16 @@ export async function archiveListImpl(token: string, input: { id: string; archiv
   });
 }
 
+export async function setWipLimitImpl(token: string, input: { id: string; wipLimit: number | null }) {
+  const p = SetWipLimitInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const [row] = await tx.update(lists).set({ wipLimit: p.wipLimit })
+      .where(eq(lists.id, p.id)).returning();
+    if (!row) throw new Error("Forbidden");
+    return row;
+  });
+}
+
 export async function createList(input: { boardId: string; title: string }) {
   await requireUser();
   const t = (await getSessionToken())!;
@@ -81,5 +92,14 @@ export async function archiveList(input: { id: string; archived: boolean }) {
   const t = (await getSessionToken())!;
   const r = await archiveListImpl(t, input);
   revalidatePath(`/b/${r.boardId}`);
+  return r;
+}
+
+export async function setWipLimit(input: Parameters<typeof setWipLimitImpl>[1]) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const r = await setWipLimitImpl(t, input);
+  revalidatePath(`/b/${r.boardId}`);
+  revalidatePath(`/b/${r.boardId}/settings`);
   return r;
 }
