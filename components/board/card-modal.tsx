@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { updateCard } from "@/actions/cards";
 import { LabelsSection } from "./card/labels-section";
 import { DueSection } from "./card/due-section";
+import { RoadmapDatesSection } from "./card/roadmap-dates-section";
 import { MembersSection } from "./card/members-section";
 import { ChecklistsSection } from "./card/checklists-section";
 import { AttachmentsSection } from "./card/attachments-section";
@@ -172,6 +173,7 @@ export function CardModal({
         <VersionCardSection cardId={card.id} workspaceId={workspaceId} />
       )}
       <DueSection cardId={card.id} />
+      <RoadmapDatesSection cardId={card.id} />
       <StoryPointsPicker cardId={card.id} storyPoints={card.storyPoints ?? null} />
       <TimeSection
         cardId={card.id}

@@ -2,6 +2,10 @@
 // Group flat list of roadmap cards by epic, stack overlapping bars into
 // vertical sub-rows ("Linear-style"). Both functions are pure so they're
 // trivial to unit-test.
+//
+// `RoadmapCard` is the minimal shape these helpers need; the queries
+// helper (`@/lib/queries/roadmap`) returns a superset, which is
+// structurally compatible.
 
 export type RoadmapCard = {
   id: string;
@@ -13,22 +17,22 @@ export type RoadmapCard = {
   boardId: string;
 };
 
-export type Lane = {
+export type Lane<C extends RoadmapCard = RoadmapCard> = {
   id: string;
   title: string;
   kind: "epic" | "uncategorized";
   /** The epic card itself (header bar). Null for the Uncategorized lane. */
-  headerCard: RoadmapCard | null;
+  headerCard: C | null;
   /** Children of this epic (or orphan stories for Uncategorized). */
-  cards: RoadmapCard[];
+  cards: C[];
 };
 
 export const UNCATEGORIZED_LANE_ID = "uncategorized";
 
-export function groupByEpic(cards: RoadmapCard[]): Lane[] {
-  const epics = new Map<string, RoadmapCard>();
-  const childrenByEpic = new Map<string, RoadmapCard[]>();
-  const orphans: RoadmapCard[] = [];
+export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
+  const epics = new Map<string, C>();
+  const childrenByEpic = new Map<string, C[]>();
+  const orphans: C[] = [];
 
   for (const c of cards) {
     if (c.type === "epic") {
@@ -45,9 +49,9 @@ export function groupByEpic(cards: RoadmapCard[]): Lane[] {
     }
   }
 
-  const epicLanes: Lane[] = [...epics.values()]
+  const epicLanes: Lane<C>[] = [...epics.values()]
     .sort((a, b) => a.title.localeCompare(b.title))
-    .map<Lane>((e) => ({
+    .map<Lane<C>>((e) => ({
       id: e.id,
       title: e.title,
       kind: "epic",
@@ -69,20 +73,23 @@ export function groupByEpic(cards: RoadmapCard[]): Lane[] {
   ];
 }
 
-export type PlacedCard = { card: RoadmapCard; row: number };
+export type PlacedCard<C extends RoadmapCard = RoadmapCard> = {
+  card: C;
+  row: number;
+};
 
 /**
  * Greedy stacking: sort by startDate ascending, then for each card place it
  * in the lowest existing row whose last bar ended at-or-before this card's
  * start. If none qualifies, open a new row.
  */
-export function stackInLane(cards: RoadmapCard[]): PlacedCard[] {
+export function stackInLane<C extends RoadmapCard>(cards: C[]): PlacedCard<C>[] {
   if (cards.length === 0) return [];
   const sorted = [...cards].sort(
     (a, b) => a.startDate.getTime() - b.startDate.getTime(),
   );
   const rowEnds: number[] = []; // last targetDate.getTime() per row
-  const placed: PlacedCard[] = [];
+  const placed: PlacedCard<C>[] = [];
   for (const c of sorted) {
     const startMs = c.startDate.getTime();
     let row = rowEnds.findIndex((end) => end <= startMs);
