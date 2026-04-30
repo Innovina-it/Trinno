@@ -42,6 +42,7 @@ function rowToCard(r: Record<string, unknown>): CardRow {
     type: (r.type ?? "task") as string,
     parentCardId: (r.parent_card_id ?? null) as string | null,
     sprintId: (r.sprint_id ?? null) as string | null,
+    storyPoints: (r.story_points ?? null) as number | null,
   };
 }
 

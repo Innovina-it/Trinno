@@ -49,6 +49,7 @@ export const UpdateCardInput = z.object({
   dueComplete: z.boolean().optional(),
   type: CardType.optional(),
   parentCardId: Uuid.nullable().optional(),
+  storyPoints: z.number().int().min(0).max(999).nullable().optional(),
 });
 export const MoveCardInput = z.object({
   id: Uuid, listId: Uuid, position: z.string().min(1).max(64),

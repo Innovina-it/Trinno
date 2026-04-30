@@ -36,6 +36,7 @@ export async function updateCardImpl(token: string, input: {
   dueComplete?: boolean;
   type?: "epic" | "story" | "task" | "subtask" | "bug";
   parentCardId?: string | null;
+  storyPoints?: number | null;
 }) {
   const parsed = UpdateCardInput.parse(input);
   const patch: Record<string, unknown> = {};
@@ -52,6 +53,7 @@ export async function updateCardImpl(token: string, input: {
   if (parsed.dueComplete !== undefined) patch.dueComplete = parsed.dueComplete;
   if (parsed.type !== undefined) patch.type = parsed.type;
   if (parsed.parentCardId !== undefined) patch.parentCardId = parsed.parentCardId;
+  if (parsed.storyPoints !== undefined) patch.storyPoints = parsed.storyPoints;
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(cards).set(patch)
       .where(eq(cards.id, parsed.id)).returning();
