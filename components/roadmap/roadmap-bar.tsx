@@ -16,6 +16,7 @@ export function RoadmapBar({
   width,
   row,
   isHeader = false,
+  focused = false,
   onMoveStart,
   onResizeLeftStart,
   onResizeRightStart,
@@ -26,6 +27,7 @@ export function RoadmapBar({
   width: number;
   row: number;
   isHeader?: boolean;
+  focused?: boolean;
   onMoveStart: (e: React.PointerEvent, cardId: string) => void;
   onResizeLeftStart: (e: React.PointerEvent, cardId: string) => void;
   onResizeRightStart: (e: React.PointerEvent, cardId: string) => void;
@@ -42,10 +44,12 @@ export function RoadmapBar({
       className={`absolute h-7 rounded-md border border-fg/30 backdrop-blur-sm
                  hover:border-fg/60 transition-colors cursor-grab active:cursor-grabbing
                  flex items-center px-2 select-none group/bar
-                 ${isHeader ? "bg-fg/15" : "bg-fg/8"}`}
+                 ${isHeader ? "bg-fg/15" : "bg-fg/8"}
+                 ${focused ? "ring-2 ring-fg/50" : ""}`}
       onPointerDown={(e) => onMoveStart(e, card.id)}
       onDoubleClick={() => onOpen?.(card.id, card.boardId)}
       data-card-id={card.id}
+      data-roadmap-focus={card.id}
       data-testid="roadmap-bar"
       aria-label={`Roadmap bar for ${card.title}`}
       title={`${card.title} — ${card.startDate.toISOString().slice(0, 10)} → ${card.targetDate.toISOString().slice(0, 10)}`}

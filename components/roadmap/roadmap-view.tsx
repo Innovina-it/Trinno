@@ -131,6 +131,13 @@ export function RoadmapView({
   const zoom: Zoom = (ZOOMS as string[]).includes(zoomParam ?? "")
     ? (zoomParam as Zoom)
     : "month";
+  const focusParam = sp.get("focus");
+
+  // Plan #16b-α (#6 / #4) — flash an outline ring on the focused bar for
+  // 1.5s after mount / focus-param change. Cleared when the timeout fires
+  // or the param changes again.
+  const [flashFocus, setFlashFocus] = useState<string | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   const { subscribed } = useWorkspaceRealtime(workspaceId);
 
@@ -452,6 +459,38 @@ export function RoadmapView({
     };
   }, [onPointerMove, onPointerUp]);
 
+  // Plan #16b-α (#4) — when the URL carries `?focus=<cardId>`, scroll the
+  // matching bar into view and flash a 1.5s outline ring. We re-run when the
+  // param changes OR when the bar list lands (cards in store) so deep-links
+  // still focus once data arrives. The card is a regular dependency so we
+  // don't require an explicit "data ready" signal.
+  useEffect(() => {
+    if (!focusParam) return;
+    const exists = cards.some((c) => c.id === focusParam);
+    if (!exists) return;
+    // rAF gives layout one tick to settle so scrollIntoView lands correctly.
+    const raf = requestAnimationFrame(() => {
+      const scroller = scrollerRef.current;
+      if (!scroller) return;
+      const bar = scroller.querySelector<HTMLElement>(
+        `[data-roadmap-focus="${focusParam}"]`,
+      );
+      if (bar) {
+        bar.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+          inline: "center",
+        });
+      }
+      setFlashFocus(focusParam);
+    });
+    const timer = setTimeout(() => setFlashFocus(null), 1500);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [focusParam, cards]);
+
   // Keep the dependency-arrows links list filtered to visible bars only.
   const visibleLinks = useMemo(
     () =>
@@ -553,7 +592,11 @@ export function RoadmapView({
           </div>
 
           {/* Scrollable canvas */}
-          <div className="flex-1 overflow-x-auto overflow-y-hidden">
+          <div
+            ref={scrollerRef}
+            className="flex-1 overflow-x-auto overflow-y-hidden"
+            data-testid="roadmap-scroller"
+          >
             <div
               className="relative"
               style={{ width, height: totalHeight }}
@@ -733,6 +776,7 @@ export function RoadmapView({
                         width={w}
                         row={0}
                         isHeader={isHeader}
+                        focused={flashFocus === c.id}
                         onMoveStart={handleMoveStart}
                         onResizeLeftStart={handleResizeLeftStart}
                         onResizeRightStart={handleResizeRightStart}
