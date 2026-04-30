@@ -288,3 +288,59 @@ export const ClearCardVersionInput = z.object({
   versionId: Uuid,
   kind: CardVersionKindZ,
 });
+
+// Plan #16 — Dashboards + Gadgets.
+export const DashboardScope = z.enum(["personal", "workspace"]);
+
+export const CreateDashboardInput = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    scope: DashboardScope,
+    workspaceId: Uuid.nullable().optional(),
+  })
+  .refine(
+    (v) =>
+      (v.scope === "personal" && !v.workspaceId) ||
+      (v.scope === "workspace" && !!v.workspaceId),
+    { message: "workspaceId required for workspace scope" },
+  );
+
+export const UpdateDashboardInput = z.object({
+  id: Uuid,
+  name: z.string().trim().min(1).max(120).optional(),
+});
+
+export const DeleteDashboardInput = z.object({ id: Uuid });
+
+export const GadgetType = z.enum([
+  "count",
+  "recent_activity",
+  "assigned_to_me",
+  "due_this_week",
+  "velocity",
+  "burndown",
+  "cards_by_type",
+  "markdown_note",
+]);
+
+export const GadgetSize = z.enum(["1x1", "2x1", "2x2", "3x1", "3x2"]);
+
+export const CreateGadgetInput = z.object({
+  dashboardId: Uuid,
+  type: GadgetType,
+  config: z.record(z.string(), z.unknown()).default({}),
+  size: GadgetSize.default("1x1"),
+});
+
+export const UpdateGadgetInput = z.object({
+  id: Uuid,
+  config: z.record(z.string(), z.unknown()).optional(),
+  size: GadgetSize.optional(),
+});
+
+export const MoveGadgetInput = z.object({
+  id: Uuid,
+  direction: z.enum(["up", "down"]),
+});
+
+export const DeleteGadgetInput = z.object({ id: Uuid });
