@@ -34,6 +34,7 @@ import { useWorkspaceStore } from "@/stores/workspace-store";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { RoadmapBar } from "./roadmap-bar";
 import { DependencyArrows, type BarBox } from "./dependency-arrows";
+import { SprintOverlay } from "./sprint-overlay";
 
 const ZOOMS: Zoom[] = ["week", "month", "quarter"];
 const ROW_HEIGHT = 36; // 28px bar + 8px gap
@@ -593,6 +594,13 @@ export function RoadmapView({
                   aria-hidden
                 />
               ))}
+              {/* Sprint overlay (under the bar layer) */}
+              <SprintOverlay
+                zoom={zoom}
+                gridStart={gridStart}
+                gridEnd={gridEnd}
+                height={totalHeight}
+              />
               {/* Bars per lane */}
               {laneLayout.map((ll) => {
                 const barRowsTop = ll.top + LANE_HEADER_HEIGHT;
