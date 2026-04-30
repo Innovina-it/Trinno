@@ -38,11 +38,24 @@ async function signupAndConfirm(page: Page, email: string) {
 }
 
 async function addList(page: Page, title: string) {
+  // Form-mount transition between trigger click and placeholder paint can
+  // miss a single click. Wait up to 8s with one retry.
   const trigger = page.getByRole("button", { name: "+ Add a list" });
+  const placeholder = page.getByPlaceholder("List title");
   if (await trigger.isVisible().catch(() => false)) {
     await trigger.click();
   }
-  await page.getByPlaceholder("List title").fill(title);
+  try {
+    await placeholder.waitFor({ state: "visible", timeout: 8000 });
+  } catch {
+    // Retry: re-click the trigger if it's still visible — sometimes the
+    // first click is swallowed during enter-animation.
+    if (await trigger.isVisible().catch(() => false)) {
+      await trigger.click();
+    }
+    await placeholder.waitFor({ state: "visible", timeout: 8000 });
+  }
+  await placeholder.fill(title);
   await page.getByRole("button", { name: /^add list$/i }).click();
   await expect(
     page.locator(`[data-list-id]`).filter({ hasText: title }),
