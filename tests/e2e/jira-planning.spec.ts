@@ -84,7 +84,11 @@ async function openCardModal(page: Page, cardTitle: string) {
     .locator("[data-card-id]")
     .filter({ hasText: cardTitle })
     .first();
-  await tile.click();
+  // Tiles can carry interactive chips (schedule / sprint) that intercept
+  // a center-of-bbox click. Click the title text directly so we always
+  // hit the Link.
+  const title = tile.getByText(cardTitle, { exact: true }).first();
+  await title.click();
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
 }
 
