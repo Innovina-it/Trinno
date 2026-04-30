@@ -29,6 +29,8 @@ import { TimeSection } from "./card/time-section";
 import { ComponentCardSection } from "@/components/components/component-card-section";
 import { VersionCardSection } from "@/components/versions/version-card-section";
 import { cardCode } from "@/lib/format";
+import Link from "next/link";
+import { CalendarRange } from "lucide-react";
 
 export type CardModalCard = {
   id: string;
@@ -42,6 +44,8 @@ export type CardModalCard = {
   storyPoints?: number | null;
   estimateMin?: number | null;
   spentMin?: number | null;
+  startDate?: Date | string | null;
+  targetDate?: Date | string | null;
 };
 
 export function CardModal({
@@ -107,6 +111,9 @@ export function CardModal({
     }, 600);
   }
 
+  const hasRoadmapDates = Boolean(card.startDate || card.targetDate);
+  const showRoadmapLink = Boolean(workspaceId && hasRoadmapDates);
+
   const body = (
     <div className="space-y-7">
       {/* Type + Parent + Sprint row — at the very top */}
@@ -130,6 +137,16 @@ export function CardModal({
             sprints={sprints}
           />
           <WatchToggle cardId={card.id} />
+          {showRoadmapLink && (
+            <Link
+              href={`/w/${workspaceId}/roadmap?focus=${card.id}`}
+              data-testid="card-modal-roadmap-link"
+              className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
+            >
+              <CalendarRange className="size-3" />
+              VIEW ON ROADMAP →
+            </Link>
+          )}
         </div>
       )}
 

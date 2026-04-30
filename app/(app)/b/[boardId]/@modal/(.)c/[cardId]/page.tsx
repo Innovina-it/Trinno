@@ -43,6 +43,8 @@ export default async function InterceptedCardPage({
         storyPoints: c.storyPoints,
         estimateMin: c.estimateMin,
         spentMin: c.spentMin,
+        startDate: c.startDate,
+        targetDate: c.targetDate,
       }}
       sprints={sprints.map((s) => ({ id: s.id, name: s.name, state: s.state }))}
       workspaceId={board?.workspaceId}
