@@ -37,6 +37,7 @@ export async function updateCardImpl(token: string, input: {
   type?: "epic" | "story" | "task" | "subtask" | "bug";
   parentCardId?: string | null;
   storyPoints?: number | null;
+  estimateMin?: number | null;
 }) {
   const parsed = UpdateCardInput.parse(input);
   const patch: Record<string, unknown> = {};
@@ -54,6 +55,7 @@ export async function updateCardImpl(token: string, input: {
   if (parsed.type !== undefined) patch.type = parsed.type;
   if (parsed.parentCardId !== undefined) patch.parentCardId = parsed.parentCardId;
   if (parsed.storyPoints !== undefined) patch.storyPoints = parsed.storyPoints;
+  if (parsed.estimateMin !== undefined) patch.estimateMin = parsed.estimateMin;
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(cards).set(patch)
       .where(eq(cards.id, parsed.id)).returning();

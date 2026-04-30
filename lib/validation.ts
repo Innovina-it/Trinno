@@ -54,6 +54,7 @@ export const UpdateCardInput = z.object({
   type: CardType.optional(),
   parentCardId: Uuid.nullable().optional(),
   storyPoints: z.number().int().min(0).max(999).nullable().optional(),
+  estimateMin: z.number().int().nonnegative().nullable().optional(),
 });
 export const MoveCardInput = z.object({
   id: Uuid, listId: Uuid, position: z.string().min(1).max(64),
@@ -138,3 +139,30 @@ export const MarkNotificationReadInput = z.object({
 export const MarkAllReadInput = z.object({});
 export const WatchCardInput = z.object({ cardId: Uuid });
 export const UnwatchCardInput = z.object({ cardId: Uuid });
+
+export const SetEstimateInput = z.object({
+  id: Uuid,
+  estimateMin: z.number().int().nonnegative().nullable(),
+});
+export const LogWorkInput = z.object({
+  cardId: Uuid,
+  minutes: z.number().int().positive().max(100000),
+  startedAt: z.union([z.string(), z.date()]).optional().nullable(),
+  comment: z.string().trim().max(500).nullable().optional(),
+});
+export const DeleteWorklogInput = z.object({ id: Uuid });
+export const CreateSlaPolicyInput = z.object({
+  boardId: Uuid,
+  name: Title,
+  targetMin: z.number().int().positive(),
+  appliesWhen: z.record(z.string(), z.unknown()).default({}),
+});
+export const UpdateSlaPolicyInput = z.object({
+  id: Uuid,
+  name: Title.optional(),
+  targetMin: z.number().int().positive().optional(),
+  appliesWhen: z.record(z.string(), z.unknown()).optional(),
+  enabled: z.boolean().optional(),
+});
+export const DeleteSlaPolicyInput = z.object({ id: Uuid });
+export const ScanBoardSlaInput = z.object({ boardId: Uuid });
