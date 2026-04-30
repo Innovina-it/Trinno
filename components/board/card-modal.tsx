@@ -21,6 +21,7 @@ import { TypePicker } from "./card/type-picker";
 import { ParentPicker } from "./card/parent-picker";
 import { SubtasksSection } from "./card/subtasks-section";
 import { CardLinksSection } from "./card/card-links-section";
+import { SprintPicker, type SprintLite } from "@/components/sprint/sprint-picker";
 import { cardCode } from "@/lib/format";
 
 export type CardModalCard = {
@@ -31,14 +32,17 @@ export type CardModalCard = {
   parentCardId?: string | null;
   listId?: string;
   boardId?: string;
+  sprintId?: string | null;
 };
 
 export function CardModal({
   card,
+  sprints = [],
   asDialog = false,
   children,
 }: {
   card: CardModalCard;
+  sprints?: SprintLite[];
   asDialog?: boolean;
   children?: React.ReactNode;
 }) {
@@ -94,7 +98,7 @@ export function CardModal({
 
   const body = (
     <div className="space-y-7">
-      {/* Type + Parent row — at the very top */}
+      {/* Type + Parent + Sprint row — at the very top */}
       {(card.type !== undefined || card.boardId) && (
         <div className="flex flex-wrap items-center gap-2">
           <TypePicker
@@ -109,6 +113,11 @@ export function CardModal({
               boardId={card.boardId}
             />
           )}
+          <SprintPicker
+            cardId={card.id}
+            sprintId={card.sprintId ?? null}
+            sprints={sprints}
+          />
         </div>
       )}
 

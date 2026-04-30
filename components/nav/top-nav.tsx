@@ -32,6 +32,17 @@ export function TopNav({
           </Link>
           <span className="text-fg-faint select-none" aria-hidden>/</span>
           <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspaceId} />
+          {activeWorkspaceId && (
+            <>
+              <span className="text-fg-faint select-none" aria-hidden>/</span>
+              <Link
+                href={`/w/${activeWorkspaceId}/backlog`}
+                className="mono-meta-sm tracking-[0.18em] text-fg-muted hover:text-fg transition-colors"
+              >
+                BACKLOG
+              </Link>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <SearchBox />

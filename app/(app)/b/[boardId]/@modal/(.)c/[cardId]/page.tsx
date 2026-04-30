@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { cards } from "@/lib/db/schema";
+import { cards, boards } from "@/lib/db/schema";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { CardModal } from "@/components/board/card-modal";
 import { CardActivity } from "@/components/board/card/card-activity";
+import { listSprintsForWorkspace } from "@/lib/queries/sprints";
 
 export default async function InterceptedCardPage({
   params,
@@ -19,6 +20,14 @@ export default async function InterceptedCardPage({
   );
   if (rows.length === 0) notFound();
   const c = rows[0];
+
+  const [board] = await dbAsUser(token, async (tx) =>
+    tx.select({ workspaceId: boards.workspaceId }).from(boards).where(eq(boards.id, c.boardId)),
+  );
+  const sprints = board
+    ? await listSprintsForWorkspace(token, board.workspaceId)
+    : [];
+
   return (
     <CardModal
       asDialog
@@ -30,7 +39,9 @@ export default async function InterceptedCardPage({
         parentCardId: c.parentCardId,
         listId: c.listId,
         boardId: c.boardId,
+        sprintId: c.sprintId,
       }}
+      sprints={sprints.map((s) => ({ id: s.id, name: s.name, state: s.state }))}
     >
       <CardActivity cardId={c.id} />
     </CardModal>
