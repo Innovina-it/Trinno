@@ -10,18 +10,18 @@ const buttonVariants = cva(
     "group/button inline-flex shrink-0 items-center justify-center text-sm font-medium whitespace-nowrap select-none",
     "outline-none",
     "transition-[background-color,background-position,box-shadow,color,transform,opacity,border-color] duration-200 ease-out",
-    "focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:ring-[color:var(--accent-cyan)]/60",
+    "focus-visible:ring-1 focus-visible:ring-offset-0 focus-visible:ring-fg/40",
     "active:not-aria-[haspopup]:translate-y-px",
     "disabled:pointer-events-none disabled:opacity-50",
-    "aria-invalid:ring-2 aria-invalid:ring-[color:var(--accent-magenta)]/50",
+    "aria-invalid:ring-1 aria-invalid:ring-fg/50",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   ].join(" "),
   {
     variants: {
       variant: {
-        // Primary: saturated magenta→violet gradient pill with shimmer + glow
+        // Primary: solid white-on-black inverting pill (shimmer-cta sets colors)
         default:
-          "shimmer-cta rounded-full text-white",
+          "shimmer-cta rounded-full",
         // Outline: glass with hairline, brightens on hover
         outline:
           "glass rounded-full text-fg hover:bg-[color:var(--surface-strong)] hover:border-[color:var(--hairline-hi)] aria-expanded:bg-[color:var(--surface-strong)]",
@@ -31,12 +31,12 @@ const buttonVariants = cva(
         // Ghost: minimal, gradient-text on hover
         ghost:
           "rounded-full text-fg-muted hover:text-fg hover:bg-[color:var(--surface)] aria-expanded:bg-[color:var(--surface)] aria-expanded:text-fg",
-        // Destructive: magenta-tinted glass
+        // Destructive: hairline glass tinted darker, no chroma
         destructive:
-          "rounded-full bg-[color:rgb(255_43_214/0.10)] text-[color:var(--accent-magenta)] border border-[color:rgb(255_43_214/0.35)] hover:bg-[color:rgb(255_43_214/0.18)] hover:border-[color:rgb(255_43_214/0.55)]",
-        // Link: underlined, gradient on hover
+          "rounded-full bg-[color:rgb(255_255_255/0.06)] text-fg border border-hairline-hi hover:bg-[color:rgb(255_255_255/0.10)] hover:border-fg/50",
+        // Link: underlined, white on hover
         link:
-          "text-fg underline underline-offset-4 decoration-[color:var(--hairline-hi)] hover:decoration-[color:var(--accent-magenta)] hover:text-[color:var(--accent-magenta)]",
+          "text-fg underline underline-offset-4 decoration-hairline-hi hover:decoration-fg hover:text-fg",
       },
       size: {
         default:
