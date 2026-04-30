@@ -419,3 +419,35 @@ export const cardVersions = pgTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.cardId, t.versionId, t.kind] }) }),
 );
+
+// Plan #16 — Dashboards + Gadgets.
+export const dashboardScope = pgEnum("dashboard_scope", [
+  "personal",
+  "workspace",
+]);
+
+export const dashboards = pgTable("dashboards", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerId: uuid("owner_id").notNull(),
+  scope: dashboardScope("scope").notNull(),
+  workspaceId: uuid("workspace_id"),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const gadgets = pgTable("gadgets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  dashboardId: uuid("dashboard_id").notNull(),
+  type: text("type").notNull(),
+  config: jsonb("config").notNull().default(sql`'{}'::jsonb`),
+  position: integer("position").notNull().default(0),
+  size: text("size").notNull().default("1x1"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
