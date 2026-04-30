@@ -109,6 +109,8 @@ export const cards = pgTable("cards", {
   dueDate: timestamp("due_date", { withTimezone: true }),
   dueComplete: boolean("due_complete").notNull().default(false),
   coverColor: text("cover_color"),
+  type: text("type").notNull().default("task"),
+  parentCardId: uuid("parent_card_id"),
 });
 
 export const labels = pgTable("labels", {
