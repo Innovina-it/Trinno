@@ -23,13 +23,11 @@ export function CardTile({
     });
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),
-    transition: transition ?? "transform 180ms cubic-bezier(0.2, 0, 0, 1)",
-    opacity: isDragging ? 0.5 : 1,
+    transition: transition ?? "transform 200ms cubic-bezier(0.2, 0, 0, 1)",
+    opacity: isDragging ? 0.55 : 1,
     boxShadow: isDragging
-      ? "0 14px 28px rgb(12 12 10 / 0.18)"
+      ? "0 0 0 1px rgb(255 43 214 / 0.6), 0 24px 50px -12px rgb(255 43 214 / 0.55), 0 0 0 4px rgb(255 43 214 / 0.18)"
       : undefined,
-    outline: isDragging ? "1px solid var(--signal)" : undefined,
-    outlineOffset: isDragging ? "2px" : undefined,
   };
   return (
     <Link
@@ -41,15 +39,13 @@ export function CardTile({
       {...listeners}
       data-card-id={card.id}
       data-dragging={isDragging ? "true" : undefined}
-      className="group/card relative block rounded-none border border-ink bg-paper text-ink shadow-sm cursor-grab transition-transform duration-150 ease-out hover:-translate-y-0.5 active:cursor-grabbing data-[dragging=true]:rotate-[1.5deg] data-[dragging=true]:cursor-grabbing"
+      className="group/card relative block rounded-xl bg-[color:var(--surface-strong)] backdrop-blur-md border border-[color:var(--hairline)] text-fg cursor-grab transition-all duration-200 ease-out shadow-[0_1px_0_0_rgb(255_255_255/0.06)_inset,0_8px_20px_-12px_rgb(0_0_0_/_0.5)] hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[color:var(--surface-hi)] hover:shadow-[0_1px_0_0_rgb(255_255_255/0.10)_inset,0_18px_36px_-12px_rgb(0_229_255/0.25),0_0_0_1px_rgb(0_229_255/0.18)] active:cursor-grabbing data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02] data-[dragging=true]:cursor-grabbing"
     >
-      {/* Label stripes — horizontal bars at top, no rounded corners */}
+      {/* Label stripes — top */}
       <LabelStripes cardId={card.id} />
 
-      {/* Top metadata row: card ID rendered as a CSS pseudo-element so it's
-          visible but excluded from textContent (drag tests assert tile text
-          == card title only). */}
-      <div className="flex justify-end px-2.5 pt-1.5">
+      {/* Top metadata row: card ID via pseudo-element to keep textContent clean */}
+      <div className="flex justify-end px-3 pt-2">
         <span
           aria-hidden
           className="card-code-stamp leading-none"
@@ -57,20 +53,22 @@ export function CardTile({
         />
       </div>
 
-      {/* Title — Geist sans, with hairline signal-orange underline on hover */}
-      <div className="px-2.5 pb-2 pt-1">
+      {/* Title — Geist sans, gradient underline grows on hover */}
+      <div className="px-3 pb-2.5 pt-1">
         <span className="block text-sm leading-snug">
-          <span className="hover-underline-signal group-hover/card:hover-underline-signal-active inline">{card.title}</span>
+          <span className="hover-underline-signal group-hover/card:hover-underline-signal-active inline">
+            {card.title}
+          </span>
         </span>
       </div>
 
       {card.dueDate && (
-        <div className="px-2.5 pb-2">
+        <div className="px-3 pb-2.5">
           <DuePill card={card} />
         </div>
       )}
 
-      <div className="px-2.5 pb-2">
+      <div className="px-3 pb-2.5">
         <TileIndicators cardId={card.id} />
       </div>
     </Link>

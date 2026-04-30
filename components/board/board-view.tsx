@@ -41,6 +41,13 @@ function decodeId(
   return null;
 }
 
+function hexToRgb(hex: string): [number, number, number] {
+  const m = hex.replace("#", "");
+  const v = m.length === 3 ? m.split("").map((c) => c + c).join("") : m;
+  const num = parseInt(v, 16);
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
 export function BoardView({
   board,
   currentUser,
@@ -165,32 +172,49 @@ export function BoardView({
   }
 
   const baseColor =
-    board.backgroundKind === "color" ? board.backgroundValue : "#0079bf";
-  // Editorial layering: cream paper underneath, 12% tint in the user's chosen
-  // hue, and the blueprint dot grid on top so the colour is felt rather than seen.
-  const bg = `radial-gradient(circle at 1px 1px, rgb(12 12 10 / 0.08) 1px, transparent 0) 0 0 / 24px 24px, linear-gradient(${baseColor}1f, ${baseColor}1f), var(--paper)`;
+    board.backgroundKind === "color" ? board.backgroundValue : "#8b5cf6";
+  const [r, g, b] = hexToRgb(baseColor);
+  // Layered: deep mesh + colored wash from board.backgroundValue at ~18% opacity
+  const bg = `radial-gradient(60rem 40rem at 8% 12%,  rgb(139 92 246 / 0.45), transparent 60%),
+              radial-gradient(50rem 36rem at 92% 88%, rgb(255 43 214 / 0.30), transparent 60%),
+              radial-gradient(40rem 30rem at 50% 50%, rgb(0 229 255 / 0.16), transparent 60%),
+              radial-gradient(50rem 35rem at 50% 0%, rgb(${r} ${g} ${b} / 0.18), transparent 60%),
+              var(--bg-deep)`;
 
   return (
     <div
-      className="-m-6 min-h-[calc(100vh-3rem)] flex flex-col"
+      className="-m-6 min-h-[calc(100vh-3rem)] flex flex-col relative"
       style={{ background: bg }}
     >
-      {/* Marginalia / editorial masthead */}
-      <div className="border-b border-rule px-6 py-4 bg-paper/60">
+      {/* Soft noise overlay layered over the colored mesh */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.04] mix-blend-overlay"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/></svg>\")",
+          backgroundSize: "200px 200px",
+        }}
+      />
+
+      {/* Board masthead — glass strip with gradient title accent */}
+      <div className="relative border-b border-hairline px-6 py-5 backdrop-blur-xl bg-[color:rgb(15_8_42/0.40)]">
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="space-y-1.5 min-w-0">
-            <div className="mono-meta-sm flex items-center gap-2 text-ink/45">
-              <span>BOARD</span>
-              <span className="text-ink/30">/</span>
-              <span className="text-ink/70">#{boardCode(board.id)}</span>
+          <div className="space-y-2.5 min-w-0">
+            <div className="mono-meta-sm flex items-center gap-2 text-fg-faint">
+              <span className="chip">BOARD</span>
+              <span className="text-fg/60">#{boardCode(board.id)}</span>
               <span
                 aria-hidden
-                className="block h-1 w-5"
-                style={{ backgroundColor: baseColor }}
+                className="block h-2 w-8 rounded-full"
+                style={{
+                  backgroundColor: baseColor,
+                  boxShadow: `0 0 12px ${baseColor}`,
+                }}
               />
             </div>
-            <h1 className="serif-display text-[clamp(2rem,5vw,3.5rem)] text-ink leading-none">
-              {board.title}
+            <h1 className="serif-display text-[clamp(2rem,5vw,3.5rem)] leading-[0.95]">
+              <span className="gradient-text">{board.title}</span>
             </h1>
           </div>
           <div className="flex items-center gap-3">
@@ -207,14 +231,14 @@ export function BoardView({
         </div>
       </div>
 
-      <div className="flex flex-1 items-start gap-4 p-4">
+      <div className="relative flex flex-1 items-start gap-4 p-4">
         <div className="flex-1 min-w-0">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCorners}
             onDragEnd={onDragEnd}
           >
-            <div className="flex items-start gap-3 overflow-x-auto px-2 pb-4 [&>*]:animate-in [&>*]:fade-in [&>*]:slide-in-from-bottom-2 [&>*]:duration-300">
+            <div className="flex items-start gap-4 overflow-x-auto px-2 pb-4 [&>*]:animate-in [&>*]:fade-in [&>*]:slide-in-from-bottom-3 [&>*]:duration-400">
               <SortableContext
                 items={listSortableIds}
                 strategy={horizontalListSortingStrategy}

@@ -33,10 +33,14 @@ export function AddListForm({ boardId }: { boardId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="group/add w-72 shrink-0 border border-dashed border-ink/40 bg-paper/50 px-3 py-3 text-left mono-meta text-ink/55 transition-colors duration-150 ease-out hover:border-ink hover:bg-paper hover:text-ink"
+        className="group/add w-80 shrink-0 rounded-2xl border border-dashed border-[color:var(--hairline-hi)] bg-[color:var(--surface)]/60 backdrop-blur-md px-4 py-4 text-left mono-meta text-fg-muted transition-all duration-200 ease-out hover:border-[color:var(--accent-cyan)]/50 hover:bg-[color:var(--surface-strong)] hover:text-fg"
       >
-        <Plus className="mr-1.5 inline-block size-3 align-text-bottom text-ink/40 transition-colors group-hover/add:text-signal" />
-        + Add a list
+        <span className="inline-flex items-center gap-2">
+          <span aria-hidden className="flex size-5 items-center justify-center rounded-full bg-gradient-to-br from-accent-cyan to-accent-magenta text-[color:var(--bg-deep)] transition-transform duration-200 group-hover/add:scale-110">
+            <Plus className="size-3" strokeWidth={3} />
+          </span>
+          + Add a list
+        </span>
       </button>
     );
   }
@@ -44,9 +48,9 @@ export function AddListForm({ boardId }: { boardId: string }) {
   return (
     <form
       onSubmit={submit}
-      className="w-72 shrink-0 space-y-2 border border-ink bg-paper p-3 animate-in fade-in slide-in-from-bottom-1 duration-150"
+      className="w-80 shrink-0 space-y-2.5 rounded-2xl glass-strong p-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200"
     >
-      <div className="mono-meta-sm text-ink/45 mb-1">NEW LIST</div>
+      <div className="mono-meta-sm text-fg-muted">NEW LIST</div>
       <Input
         autoFocus
         value={title}
@@ -56,14 +60,14 @@ export function AddListForm({ boardId }: { boardId: string }) {
         minLength={1}
         maxLength={120}
       />
-      <div className="flex gap-1.5">
+      <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={pending || !title.trim()}>
           Add list
         </Button>
         <Button
           type="button"
           variant="ghost"
-          size="sm"
+          size="icon-sm"
           onClick={() => {
             setOpen(false);
             setTitle("");

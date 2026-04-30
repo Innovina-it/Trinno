@@ -28,12 +28,18 @@ export function SignupForm() {
 
   if (sent) {
     return (
-      <div className="flex flex-col items-center gap-3 border border-rule bg-paper-shadow p-6 text-center animate-in fade-in slide-in-from-bottom-1 duration-200">
-        <div className="flex size-10 items-center justify-center border border-ink text-ink">
-          <MailCheck className="size-5" />
+      <div className="glass rounded-2xl flex flex-col items-center gap-4 p-7 text-center animate-in fade-in slide-in-from-bottom-1 duration-200">
+        <div className="relative flex size-12 items-center justify-center rounded-full bg-gradient-to-br from-accent-cyan via-accent-magenta to-accent-violet text-white shadow-[0_8px_24px_-8px_rgb(139_92_246/0.6)]">
+          <span className="absolute inset-[2px] rounded-full bg-[color:var(--bg-1)] flex items-center justify-center">
+            <MailCheck className="size-5 text-fg" />
+          </span>
         </div>
-        <p className="mono-meta text-ink/70">
-          Check your email for a confirmation link.
+        <h3 className="serif-display gradient-text-static text-3xl">
+          Check your email.
+        </h3>
+        <p className="mono-meta-sm text-fg-muted max-w-xs leading-relaxed">
+          We sent a confirmation link to your inbox. Click it to activate your
+          studio account.
         </p>
       </div>
     );

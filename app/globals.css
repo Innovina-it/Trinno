@@ -5,25 +5,47 @@
 @custom-variant dark (&:is(.dark *));
 
 /* -------------------------------------------------------------------------
-   Editorial-industrial design tokens
+   Studio-Plastic design tokens
    --------------------------------------------------------------------------
-   Newspaper ink on warm paper, blueprint grid, single signal-orange accent.
-   - Hairline rules over rounded shadows.
-   - Tight serif-italic display; mono for technical metadata.
-   - Sparing use of --signal: active states, due-date warnings, hover marks.
+   Modern abstract product UI — vibrant, glassy, atmospheric.
+   - Dark moody studio backdrop with violet undercurrent.
+   - Animated gradient mesh body.
+   - Glass surfaces with inner highlight + ambient colored shadows.
+   - Saturated jewel-tone accents (cyan / magenta / violet / lime / amber).
+   - The legacy editorial token names (--paper, --ink, --rule, --signal,
+     --moss, --paper-shadow) are retained but remapped onto the new palette
+     so existing consumers continue to work.
    ------------------------------------------------------------------------ */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
-  /* Editorial palette mapped into Tailwind colour utilities */
+  /* Legacy editorial tokens — remapped to studio palette */
   --color-paper: var(--paper);
   --color-paper-shadow: var(--paper-shadow);
   --color-ink: var(--ink);
   --color-rule: var(--rule);
   --color-signal: var(--signal);
   --color-moss: var(--moss);
+
+  /* Studio-Plastic accents (exposed as Tailwind utilities) */
+  --color-bg-deep: var(--bg-deep);
+  --color-accent-cyan: var(--accent-cyan);
+  --color-accent-magenta: var(--accent-magenta);
+  --color-accent-violet: var(--accent-violet);
+  --color-accent-lime: var(--accent-lime);
+  --color-accent-amber: var(--accent-amber);
+  --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
+  --color-surface-hi: var(--surface-hi);
+  --color-hairline: var(--hairline);
+  --color-hairline-hi: var(--hairline-hi);
+
+  /* Foreground text tokens — bind text-fg, text-fg-muted, text-fg-faint */
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
 
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-jb-mono), var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -59,208 +81,402 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: 0.125rem;
-  --radius-md: 0.1875rem;
-  --radius-lg: 0.25rem;
-  --radius-xl: 0.25rem;
-  --radius-2xl: 0.25rem;
-  --radius-3xl: 0.25rem;
-  --radius-4xl: 0.25rem;
+
+  /* Generous radii for the studio-plastic shape language */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.5rem;
+  --radius-4xl: 2rem;
 }
 
 :root {
-  /* Editorial palette */
-  --paper: #f1ebde;
-  --paper-shadow: #e2dac8;
-  --ink: #0c0c0a;
-  --rule: rgb(12 12 10 / 0.12);
-  --signal: #ff4d12;
-  --moss: #1f3933;
+  /* Studio-plastic palette — dark by default */
+  --bg-deep:        #0a0712;
+  --bg-1:           #15102a;
+  --bg-2:           #1d1340;
+  --bg-3:           #28114a;
 
-  /* Map the editorial tokens onto the existing shadcn channel */
-  --background: var(--paper);
-  --foreground: var(--ink);
-  --card: var(--paper);
-  --card-foreground: var(--ink);
-  --popover: var(--paper);
-  --popover-foreground: var(--ink);
-  --primary: var(--ink);
-  --primary-foreground: var(--paper);
-  --secondary: var(--paper-shadow);
-  --secondary-foreground: var(--ink);
-  --muted: var(--paper-shadow);
-  --muted-foreground: rgb(12 12 10 / 0.6);
-  --accent: var(--paper-shadow);
-  --accent-foreground: var(--ink);
-  --destructive: var(--signal);
-  --border: var(--rule);
-  --input: rgb(12 12 10 / 0.5);
-  --ring: var(--ink);
+  --surface:        rgb(255 255 255 / 0.04);
+  --surface-strong: rgb(255 255 255 / 0.08);
+  --surface-hi:     rgb(255 255 255 / 0.12);
+  --hairline:       rgb(255 255 255 / 0.10);
+  --hairline-hi:    rgb(255 255 255 / 0.20);
 
-  --chart-1: var(--ink);
-  --chart-2: var(--moss);
-  --chart-3: var(--signal);
-  --chart-4: rgb(12 12 10 / 0.6);
-  --chart-5: rgb(12 12 10 / 0.35);
-  --radius: 0.1875rem;
+  --fg:             #f5f3fb;
+  --fg-muted:       rgb(245 243 251 / 0.65);
+  --fg-faint:       rgb(245 243 251 / 0.4);
 
-  --sidebar: var(--paper);
-  --sidebar-foreground: var(--ink);
-  --sidebar-primary: var(--ink);
-  --sidebar-primary-foreground: var(--paper);
-  --sidebar-accent: var(--paper-shadow);
-  --sidebar-accent-foreground: var(--ink);
-  --sidebar-border: var(--rule);
-  --sidebar-ring: var(--ink);
+  --accent-cyan:    #00e5ff;
+  --accent-magenta: #ff2bd6;
+  --accent-violet:  #8b5cf6;
+  --accent-lime:    #c3f73a;
+  --accent-amber:   #ffb020;
+
+  /* Legacy editorial tokens — remapped onto studio palette */
+  --paper:          var(--bg-deep);
+  --paper-shadow:   var(--surface-strong);
+  --ink:            var(--fg);
+  --rule:           var(--hairline);
+  --signal:         var(--accent-magenta);
+  --moss:           var(--accent-lime);
+
+  /* Map to shadcn channels */
+  --background: var(--bg-deep);
+  --foreground: var(--fg);
+  --card: var(--surface);
+  --card-foreground: var(--fg);
+  --popover: var(--bg-1);
+  --popover-foreground: var(--fg);
+  --primary: var(--fg);
+  --primary-foreground: var(--bg-deep);
+  --secondary: var(--surface-strong);
+  --secondary-foreground: var(--fg);
+  --muted: var(--surface);
+  --muted-foreground: var(--fg-muted);
+  --accent: var(--surface-strong);
+  --accent-foreground: var(--fg);
+  --destructive: var(--accent-magenta);
+  --border: var(--hairline);
+  --input: var(--hairline-hi);
+  --ring: var(--accent-cyan);
+
+  --chart-1: var(--accent-cyan);
+  --chart-2: var(--accent-violet);
+  --chart-3: var(--accent-magenta);
+  --chart-4: var(--accent-lime);
+  --chart-5: var(--accent-amber);
+  --radius: 0.875rem;
+
+  --sidebar: var(--bg-1);
+  --sidebar-foreground: var(--fg);
+  --sidebar-primary: var(--accent-violet);
+  --sidebar-primary-foreground: var(--fg);
+  --sidebar-accent: var(--surface-strong);
+  --sidebar-accent-foreground: var(--fg);
+  --sidebar-border: var(--hairline);
+  --sidebar-ring: var(--accent-cyan);
 }
 
+/* Light mode is a creamy inversion of the same accent system. Less common —
+   dark is the default — but kept tasteful for users with a light preference. */
+.light {
+  --bg-deep:        #fbf8ff;
+  --bg-1:           #efe9ff;
+  --bg-2:           #e2d4ff;
+  --bg-3:           #d6bcff;
+
+  --surface:        rgb(20 10 40 / 0.04);
+  --surface-strong: rgb(20 10 40 / 0.08);
+  --surface-hi:     rgb(20 10 40 / 0.14);
+  --hairline:       rgb(20 10 40 / 0.10);
+  --hairline-hi:    rgb(20 10 40 / 0.22);
+
+  --fg:             #15102a;
+  --fg-muted:       rgb(21 16 42 / 0.65);
+  --fg-faint:       rgb(21 16 42 / 0.4);
+
+  --paper:          var(--bg-deep);
+  --paper-shadow:   var(--surface-strong);
+  --ink:            var(--fg);
+  --rule:           var(--hairline);
+  --signal:         var(--accent-magenta);
+  --moss:           #4a9d2c;
+
+  --background: var(--bg-deep);
+  --foreground: var(--fg);
+  --card: var(--surface);
+  --card-foreground: var(--fg);
+  --popover: var(--bg-1);
+  --popover-foreground: var(--fg);
+  --primary: var(--accent-violet);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-strong);
+  --secondary-foreground: var(--fg);
+  --muted: var(--surface);
+  --muted-foreground: var(--fg-muted);
+  --accent: var(--surface-strong);
+  --accent-foreground: var(--fg);
+  --destructive: var(--accent-magenta);
+  --border: var(--hairline);
+  --input: var(--hairline-hi);
+  --ring: var(--accent-violet);
+}
+
+/* Preserve .dark utility for compatibility — same as :root since dark is default. */
 .dark {
-  --paper: #0c0c0a;
-  --paper-shadow: #1a1a16;
-  --ink: #f1ebde;
-  --rule: rgb(241 235 222 / 0.18);
-  --signal: #ff5a23;
-  --moss: #c8d6cd;
-
-  --background: var(--paper);
-  --foreground: var(--ink);
-  --card: var(--paper);
-  --card-foreground: var(--ink);
-  --popover: var(--paper);
-  --popover-foreground: var(--ink);
-  --primary: var(--ink);
-  --primary-foreground: var(--paper);
-  --secondary: var(--paper-shadow);
-  --secondary-foreground: var(--ink);
-  --muted: var(--paper-shadow);
-  --muted-foreground: rgb(241 235 222 / 0.65);
-  --accent: var(--paper-shadow);
-  --accent-foreground: var(--ink);
-  --destructive: var(--signal);
-  --border: var(--rule);
-  --input: rgb(241 235 222 / 0.45);
-  --ring: var(--ink);
-  --chart-1: var(--ink);
-  --chart-2: var(--moss);
-  --chart-3: var(--signal);
-  --chart-4: rgb(241 235 222 / 0.6);
-  --chart-5: rgb(241 235 222 / 0.4);
-
-  --sidebar: var(--paper);
-  --sidebar-foreground: var(--ink);
-  --sidebar-primary: var(--ink);
-  --sidebar-primary-foreground: var(--paper);
-  --sidebar-accent: var(--paper-shadow);
-  --sidebar-accent-foreground: var(--ink);
-  --sidebar-border: var(--rule);
-  --sidebar-ring: var(--ink);
+  --paper: var(--bg-deep);
+  --paper-shadow: var(--surface-strong);
+  --ink: var(--fg);
+  --rule: var(--hairline);
+  --signal: var(--accent-magenta);
+  --moss: var(--accent-lime);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
   html {
     @apply font-sans antialiased;
+    color-scheme: dark;
   }
   body {
-    @apply text-foreground;
-    background-color: var(--paper);
-    /* Blueprint dotted grid: 1px ink dots @ 24px intervals, 8% opacity */
-    background-image: radial-gradient(
-      circle at 1px 1px,
-      rgb(12 12 10 / 0.08) 1px,
-      transparent 0
-    );
-    background-size: 24px 24px;
+    color: var(--fg);
+    background-color: var(--bg-deep);
+    /* Layered animated gradient mesh — three large soft blobs over deep base. */
+    background-image:
+      radial-gradient(60rem 40rem at 8% 12%,  rgb(139 92 246 / 0.55), transparent 60%),
+      radial-gradient(50rem 36rem at 92% 88%, rgb(255 43 214 / 0.35), transparent 60%),
+      radial-gradient(40rem 30rem at 50% 50%, rgb(0 229 255 / 0.18), transparent 60%);
     background-attachment: fixed;
-  }
-  .dark body {
-    background-image: radial-gradient(
-      circle at 1px 1px,
-      rgb(241 235 222 / 0.1) 1px,
-      transparent 0
-    );
+    background-repeat: no-repeat;
+    min-height: 100vh;
+    position: relative;
   }
 
-  /* Smoother focus ring transition */
+  /* Drift the mesh slowly — calm + ambient, never jittery. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: -10%;
+    pointer-events: none;
+    z-index: -1;
+    background-image:
+      radial-gradient(40rem 30rem at 75% 25%, rgb(195 247 58 / 0.10), transparent 60%),
+      radial-gradient(35rem 28rem at 25% 75%, rgb(255 176 32 / 0.10), transparent 60%);
+    animation: mesh-drift 18s ease-in-out infinite alternate;
+  }
+
+  /* Subtle grain overlay breaks gradient banding. SVG turbulence as a data-uri. */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.6'/></svg>");
+    background-size: 220px 220px;
+  }
+
+  @keyframes mesh-drift {
+    0%   { transform: translate3d(0, 0, 0) scale(1); }
+    50%  { transform: translate3d(2%, -1.5%, 0) scale(1.03); }
+    100% { transform: translate3d(-1.5%, 1.5%, 0) scale(1.02); }
+  }
+
+  @keyframes gradient-pan {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  @keyframes shimmer-sweep {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Smooth focus transitions */
   :focus-visible {
     transition:
-      box-shadow 150ms ease-out,
-      border-color 150ms ease-out;
+      box-shadow 180ms ease-out,
+      border-color 180ms ease-out,
+      outline-color 180ms ease-out;
   }
 
-  /* Editorial scrollbars: hairline ink, no rounding */
+  /* Studio-plastic scrollbars: thin, faint white, glowy on hover */
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgb(12 12 10 / 0.35) transparent;
+    scrollbar-color: rgb(255 255 255 / 0.18) transparent;
   }
   *::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
   }
   *::-webkit-scrollbar-track {
     background: transparent;
   }
   *::-webkit-scrollbar-thumb {
-    background-color: rgb(12 12 10 / 0.35);
-    border-radius: 0;
-    transition: background-color 150ms ease-out;
+    background-color: rgb(255 255 255 / 0.12);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 180ms ease-out;
   }
   *::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(12 12 10 / 0.6);
-  }
-  .dark *::-webkit-scrollbar-thumb {
-    background-color: rgb(241 235 222 / 0.22);
-  }
-  .dark *::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(241 235 222 / 0.4);
+    background-color: rgb(139 92 246 / 0.45);
   }
 
-  /* Native form controls inherit ink colour for date/checkbox glyphs. */
+  /* Native form controls inherit accent colour */
   input[type="date"],
   input[type="checkbox"] {
-    accent-color: var(--ink);
-  }
-  .dark input[type="date"] {
+    accent-color: var(--accent-violet);
     color-scheme: dark;
+  }
+
+  /* Typography defaults */
+  ::selection {
+    background-color: rgb(255 43 214 / 0.4);
+    color: var(--fg);
   }
 }
 
 /* -------------------------------------------------------------------------
-   Editorial utilities
+   Studio-plastic utilities
    ------------------------------------------------------------------------ */
 
-/* Dotted blueprint grid used as page/section background. */
-@utility paper-grid {
-  background-color: var(--paper);
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    rgb(12 12 10 / 0.08) 1px,
-    transparent 0
+/* Frosted glass panel — the workhorse surface. */
+@utility glass {
+  background: var(--surface);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--hairline);
+  box-shadow:
+    0 1px 0 0 rgb(255 255 255 / 0.08) inset,
+    0 32px 80px -32px rgb(0 0 0 / 0.5);
+}
+
+/* More opaque variant for dialogs / modals / dropdowns. */
+@utility glass-strong {
+  background: var(--surface-strong);
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  border: 1px solid var(--hairline-hi);
+  box-shadow:
+    0 1px 0 0 rgb(255 255 255 / 0.10) inset,
+    0 40px 100px -32px rgb(0 0 0 / 0.6);
+}
+
+/* Even more opaque — tooltips/popovers on top of glass. */
+@utility glass-hi {
+  background: rgb(20 12 40 / 0.78);
+  backdrop-filter: blur(32px) saturate(160%);
+  -webkit-backdrop-filter: blur(32px) saturate(160%);
+  border: 1px solid var(--hairline-hi);
+  box-shadow:
+    0 1px 0 0 rgb(255 255 255 / 0.12) inset,
+    0 24px 60px -16px rgb(0 0 0 / 0.55);
+}
+
+/* Tri-stop accent gradient text — used on hero headlines + dialog titles. */
+@utility gradient-text {
+  background-image: linear-gradient(
+    135deg,
+    var(--accent-cyan) 0%,
+    var(--accent-magenta) 50%,
+    var(--accent-violet) 100%
   );
-  background-size: 24px 24px;
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: gradient-pan 8s ease-in-out infinite;
 }
-.dark .paper-grid {
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    rgb(241 235 222 / 0.1) 1px,
-    transparent 0
+
+/* Static gradient text (no animation) — for body / list titles. */
+@utility gradient-text-static {
+  background-image: linear-gradient(
+    135deg,
+    var(--accent-cyan) 0%,
+    var(--accent-magenta) 60%,
+    var(--accent-violet) 100%
   );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
-/* 1px hairline border at 100% ink — used to outline cards, inputs, modals */
-@utility hairline {
-  border: 1px solid var(--ink);
+/* Gradient pill button — saturated magenta→violet with shimmer sweep on hover. */
+@utility shimmer-cta {
+  position: relative;
+  background-image: linear-gradient(
+    135deg,
+    var(--accent-magenta) 0%,
+    var(--accent-violet) 100%
+  );
+  color: #ffffff;
+  background-size: 200% 200%;
+  background-position: 0% 50%;
+  box-shadow:
+    0 1px 0 0 rgb(255 255 255 / 0.25) inset,
+    0 12px 30px -8px rgb(255 43 214 / 0.45),
+    0 0 0 1px rgb(255 255 255 / 0.08);
+  transition:
+    background-position 400ms ease-out,
+    box-shadow 200ms ease-out,
+    transform 120ms ease-out;
+}
+.shimmer-cta:hover {
+  background-position: 100% 50%;
+  box-shadow:
+    0 1px 0 0 rgb(255 255 255 / 0.30) inset,
+    0 18px 40px -8px rgb(255 43 214 / 0.55),
+    0 0 0 1px rgb(255 255 255 / 0.12);
+}
+.shimmer-cta:active { transform: translateY(1px); }
+
+/* Mesh background utility — apply to a section to inherit the body mesh feel. */
+@utility mesh-bg {
+  background-color: var(--bg-deep);
+  background-image:
+    radial-gradient(60rem 40rem at 8% 12%,  rgb(139 92 246 / 0.55), transparent 60%),
+    radial-gradient(50rem 36rem at 92% 88%, rgb(255 43 214 / 0.35), transparent 60%),
+    radial-gradient(40rem 30rem at 50% 50%, rgb(0 229 255 / 0.18), transparent 60%);
 }
 
-/* 12% rule, used to separate sections without shouting */
-@utility rule {
-  border-top: 1px solid var(--rule);
+/* Subtle SVG noise overlay — break banding on large flat color washes. */
+@utility noise-overlay {
+  position: relative;
+}
+.noise-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.6'/></svg>");
+  background-size: 200px 200px;
 }
 
-@utility rule-b {
-  border-bottom: 1px solid var(--rule);
+/* Colored ambient shadows — used on floating tiles. */
+@utility glow-cyan {
+  box-shadow: 0 18px 50px -16px rgb(0 229 255 / 0.45), 0 0 0 1px rgb(0 229 255 / 0.18);
+}
+@utility glow-magenta {
+  box-shadow: 0 18px 50px -16px rgb(255 43 214 / 0.50), 0 0 0 1px rgb(255 43 214 / 0.20);
+}
+@utility glow-violet {
+  box-shadow: 0 18px 50px -16px rgb(139 92 246 / 0.50), 0 0 0 1px rgb(139 92 246 / 0.20);
+}
+@utility glow-lime {
+  box-shadow: 0 18px 50px -16px rgb(195 247 58 / 0.40), 0 0 0 1px rgb(195 247 58 / 0.18);
+}
+
+/* Vertical 2px gradient bar — for section headers / list column accent strips. */
+@utility accent-bar-cyan {
+  background-image: linear-gradient(180deg, var(--accent-cyan), transparent);
+}
+@utility accent-bar-magenta {
+  background-image: linear-gradient(180deg, var(--accent-magenta), transparent);
+}
+@utility accent-bar-violet {
+  background-image: linear-gradient(180deg, var(--accent-violet), transparent);
+}
+
+/* True gradient border via padding-box trick — used on focus modals. */
+@utility gradient-border {
+  position: relative;
+  background:
+    linear-gradient(var(--bg-1), var(--bg-1)) padding-box,
+    linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta), var(--accent-violet)) border-box;
+  border: 1px solid transparent;
 }
 
 /* Mono uppercase metadata stamp — IDs, dates, route crumbs, section heads */
@@ -294,66 +510,82 @@
   font-weight: 400;
   letter-spacing: -0.02em;
   line-height: 1;
-  color: var(--ink);
+  color: var(--fg);
 }
 
-/* Drag preview emphasis: card rotates + signal-orange hairline ring */
+/* Drag preview emphasis: card glows magenta, slight rotate + scale. */
 @utility drag-active {
   cursor: grabbing !important;
-  outline: 1px solid var(--signal);
-  outline-offset: 2px;
-  transform: rotate(1.5deg);
-  box-shadow: 0 14px 28px rgb(12 12 10 / 0.18);
+  transform: rotate(2deg) scale(1.02);
+  box-shadow:
+    0 0 0 1px rgb(255 43 214 / 0.6),
+    0 24px 50px -12px rgb(255 43 214 / 0.55),
+    0 0 0 4px rgb(255 43 214 / 0.18);
 }
 
-/* Soft elevation utility (kept for skeletons / cards that still want lift) */
+/* Soft elevation utility — kept for legacy callers. */
 @utility shadow-elevated {
   box-shadow:
-    0 1px 0 0 var(--rule),
-    0 0 0 1px var(--rule);
+    0 1px 0 0 rgb(255 255 255 / 0.06) inset,
+    0 12px 30px -16px rgb(0 0 0 / 0.5);
 }
 
-/* Auth backdrop: cream paper + blueprint dot grid */
+/* Hairline rules — separate sections without shouting */
+@utility hairline {
+  border: 1px solid var(--hairline);
+}
+@utility rule {
+  border-top: 1px solid var(--hairline);
+}
+@utility rule-b {
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* Auth backdrop: legacy alias, now resolves to mesh. */
 @utility bg-auth-paper {
-  background-color: var(--paper);
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    rgb(12 12 10 / 0.08) 1px,
-    transparent 0
-  );
-  background-size: 24px 24px;
+  background-color: var(--bg-deep);
+  background-image:
+    radial-gradient(60rem 40rem at 8% 12%,  rgb(139 92 246 / 0.55), transparent 60%),
+    radial-gradient(50rem 36rem at 92% 88%, rgb(255 43 214 / 0.35), transparent 60%),
+    radial-gradient(40rem 30rem at 50% 50%, rgb(0 229 255 / 0.18), transparent 60%);
 }
 
-/* Card hover: 1px signal-orange underline appears under card title */
+/* Legacy paper-grid utility — quietly resolves to a soft glass section. */
+@utility paper-grid {
+  background-color: var(--surface);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+}
+
+/* Card hover: gradient underline appears under card title (replaces signal underline) */
 @utility hover-underline-signal {
-  background-image: linear-gradient(to right, var(--signal), var(--signal));
+  background-image: linear-gradient(
+    to right,
+    var(--accent-cyan),
+    var(--accent-magenta),
+    var(--accent-violet)
+  );
   background-position: 0 100%;
   background-repeat: no-repeat;
-  background-size: 0% 1px;
-  transition: background-size 200ms ease-out;
+  background-size: 0% 1.5px;
+  transition: background-size 220ms ease-out;
 }
 @utility hover-underline-signal-active {
-  background-size: 100% 1px;
+  background-size: 100% 1.5px;
 }
 
-/* Card code stamp: renders the card's TR/BD code via a CSS pseudo-element so
-   it appears visually but is excluded from DOM textContent. This keeps the
-   editorial-industrial part-number marginalia without polluting the Link's
-   text content (which would break drag-test card-title assertions). */
+/* Card code stamp + list ordinal stamp — same pattern, refreshed colors. */
 @utility card-code-stamp {
   font-family: var(--font-mono);
   font-size: 0.625rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgb(12 12 10 / 0.45);
+  color: rgb(245 243 251 / 0.4);
   pointer-events: none;
   user-select: none;
 }
 .card-code-stamp::after {
   content: "#" attr(data-card-code);
-}
-.dark .card-code-stamp {
-  color: rgb(241 235 222 / 0.5);
 }
 
 @utility list-ordinal-stamp {
@@ -361,13 +593,46 @@
   font-size: 0.625rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgb(12 12 10 / 0.4);
+  color: rgb(245 243 251 / 0.45);
   pointer-events: none;
   user-select: none;
 }
 .list-ordinal-stamp::after {
   content: attr(data-list-ordinal);
 }
-.dark .list-ordinal-stamp {
-  color: rgb(241 235 222 / 0.45);
+
+/* Tiny pill — used for mono badges in nav, list ordinals etc. */
+@utility chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  border: 1px solid var(--hairline);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+/* Rotating soft halo — applied to floating decorative shapes on auth + hero */
+@keyframes float-soft {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50%  { transform: translate3d(0, -8px, 0) rotate(2deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+}
+@utility float-soft {
+  animation: float-soft 9s ease-in-out infinite;
+}
+
+/* Pulse glow ring — for active focus states / live indicators */
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgb(0 229 255 / 0.45); }
+  70%  { box-shadow: 0 0 0 12px rgb(0 229 255 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(0 229 255 / 0); }
+}
+@utility pulse-ring {
+  animation: pulse-ring 2.4s ease-out infinite;
 }

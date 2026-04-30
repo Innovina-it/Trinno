@@ -20,25 +20,27 @@ export default async function WorkspacePage({
   const today = shortDate(new Date());
 
   return (
-    <main className="space-y-8 py-2">
-      {/* Hero header — oversized italic serif workspace name + mono metadata */}
-      <header className="space-y-3">
+    <main className="space-y-10 py-4">
+      {/* Hero header — oversized italic serif workspace name with gradient noun */}
+      <header className="space-y-4">
         <div className="flex items-baseline gap-3">
-          <span className="mono-meta-sm text-ink/40">No. 01</span>
-          <span className="mono-meta-sm text-ink/30">—</span>
-          <span className="mono-meta-sm text-ink/50">{today}</span>
+          <span className="chip">No. 01</span>
+          <span className="mono-meta-sm text-fg-faint">{today}</span>
         </div>
-        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-rule pb-6">
-          <div className="space-y-2 min-w-0">
-            <h1 className="serif-display text-[clamp(3rem,8vw,5.5rem)] text-ink truncate">
+        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-hairline pb-8">
+          <div className="space-y-3 min-w-0">
+            <h1 className="serif-display gradient-text text-[clamp(3rem,8vw,5.5rem)] leading-[0.95] truncate">
               {ws.name}
-              <span aria-hidden className="text-signal">.</span>
+              <span aria-hidden className="text-fg/80">.</span>
             </h1>
-            <p className="mono-meta text-ink/60">
-              {visibleCount === 0
-                ? "AWAITING FIRST BOARD"
-                : `${visibleCount} BOARD${visibleCount === 1 ? "" : "S"} ON FILE`}
-            </p>
+            <div className="flex items-center gap-3">
+              <span className="block h-px w-10 bg-gradient-to-r from-accent-cyan to-accent-magenta" />
+              <p className="mono-meta text-fg-muted">
+                {visibleCount === 0
+                  ? "AWAITING FIRST BOARD"
+                  : `${visibleCount} BOARD${visibleCount === 1 ? "" : "S"} ON FILE`}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Button render={<Link href={`/w/${workspaceId}/settings`} />} nativeButton={false} variant="ghost" size="sm">

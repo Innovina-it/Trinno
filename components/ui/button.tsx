@@ -4,38 +4,52 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  // Editorial-industrial: square-cornered, mono-leaning weight, ink-on-paper.
-  // Hover and active states use signal orange marks rather than fills.
-  "group/button inline-flex shrink-0 items-center justify-center rounded-none border border-transparent text-sm font-medium whitespace-nowrap transition-colors outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-signal aria-invalid:text-signal [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  // Studio-plastic: pill / rounded shapes, glass surfaces, gradient primary,
+  // colored focus glow ring (no harsh outline).
+  [
+    "group/button inline-flex shrink-0 items-center justify-center text-sm font-medium whitespace-nowrap select-none",
+    "outline-none",
+    "transition-[background-color,background-position,box-shadow,color,transform,opacity,border-color] duration-200 ease-out",
+    "focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:ring-[color:var(--accent-cyan)]/60",
+    "active:not-aria-[haspopup]:translate-y-px",
+    "disabled:pointer-events-none disabled:opacity-50",
+    "aria-invalid:ring-2 aria-invalid:ring-[color:var(--accent-magenta)]/50",
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  ].join(" "),
   {
     variants: {
       variant: {
-        // Primary: ink block, paper text, signal-orange chevron implied by adjacent svg
+        // Primary: saturated magenta→violet gradient pill with shimmer + glow
         default:
-          "bg-ink text-paper hover:bg-ink/85 [&_svg]:text-signal",
+          "shimmer-cta rounded-full text-white",
+        // Outline: glass with hairline, brightens on hover
         outline:
-          "border-ink/80 bg-paper text-ink hover:border-ink hover:bg-paper-shadow aria-expanded:bg-paper-shadow",
+          "glass rounded-full text-fg hover:bg-[color:var(--surface-strong)] hover:border-[color:var(--hairline-hi)] aria-expanded:bg-[color:var(--surface-strong)]",
+        // Secondary: opaque glass, subtle accent on hover
         secondary:
-          "bg-paper-shadow text-ink hover:bg-paper border border-ink/30 hover:border-ink/60 aria-expanded:bg-paper",
+          "rounded-full bg-[color:var(--surface-strong)] text-fg border border-[color:var(--hairline)] hover:bg-[color:var(--surface-hi)] hover:border-[color:var(--hairline-hi)] aria-expanded:bg-[color:var(--surface-hi)]",
+        // Ghost: minimal, gradient-text on hover
         ghost:
-          "text-ink hover:text-signal aria-expanded:text-signal",
+          "rounded-full text-fg-muted hover:text-fg hover:bg-[color:var(--surface)] aria-expanded:bg-[color:var(--surface)] aria-expanded:text-fg",
+        // Destructive: magenta-tinted glass
         destructive:
-          "bg-paper text-signal border border-signal hover:bg-signal hover:text-paper",
+          "rounded-full bg-[color:rgb(255_43_214/0.10)] text-[color:var(--accent-magenta)] border border-[color:rgb(255_43_214/0.35)] hover:bg-[color:rgb(255_43_214/0.18)] hover:border-[color:rgb(255_43_214/0.55)]",
+        // Link: underlined, gradient on hover
         link:
-          "text-ink underline underline-offset-4 hover:text-signal hover:decoration-signal",
+          "text-fg underline underline-offset-4 decoration-[color:var(--hairline-hi)] hover:decoration-[color:var(--accent-magenta)] hover:text-[color:var(--accent-magenta)]",
       },
       size: {
         default:
-          "h-8 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
-        xs: "h-6 gap-1 px-2 text-[0.68rem] tracking-wider uppercase has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 px-2.5 text-[0.72rem] tracking-wider uppercase has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-10 gap-1.5 px-3.5 text-[0.85rem] tracking-wider uppercase has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        icon: "size-8",
+          "h-9 gap-1.5 px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        xs: "h-7 gap-1 px-2.5 text-[0.68rem] tracking-wider uppercase has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-8 gap-1 px-3 text-[0.72rem] tracking-wider uppercase has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-11 gap-2 px-5 text-[0.85rem] tracking-wider uppercase has-data-[icon=inline-end]:pr-3.5 has-data-[icon=inline-start]:pl-3.5",
+        icon: "size-9 rounded-full",
         "icon-xs":
-          "size-6 [&_svg:not([class*='size-'])]:size-3",
+          "size-7 rounded-full [&_svg:not([class*='size-'])]:size-3",
         "icon-sm":
-          "size-7",
-        "icon-lg": "size-9",
+          "size-8 rounded-full",
+        "icon-lg": "size-10 rounded-full",
       },
     },
     defaultVariants: {

@@ -33,9 +33,9 @@ export function AddCardForm({ listId }: { listId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="group/addcard w-full border border-dashed border-ink/30 bg-transparent px-2 py-1.5 text-left mono-meta-sm text-ink/55 transition-colors duration-150 ease-out hover:border-ink hover:bg-paper-shadow hover:text-ink"
+        className="group/addcard w-full rounded-xl border border-dashed border-[color:var(--hairline-hi)] bg-[color:var(--surface)]/50 backdrop-blur-md px-2.5 py-2 text-left mono-meta-sm text-fg-muted transition-all duration-200 ease-out hover:border-[color:var(--accent-cyan)]/60 hover:bg-[color:var(--surface-strong)] hover:text-fg"
       >
-        <Plus className="mr-1 inline-block size-3 align-text-bottom text-ink/40 transition-colors group-hover/addcard:text-signal" />
+        <Plus className="mr-1 inline-block size-3 align-text-bottom text-fg-faint transition-colors group-hover/addcard:text-[color:var(--accent-cyan)]" />
         + Add a card
       </button>
     );
@@ -44,7 +44,7 @@ export function AddCardForm({ listId }: { listId: string }) {
   return (
     <form
       onSubmit={submit}
-      className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-150"
+      className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-150"
     >
       <Input
         autoFocus
@@ -54,7 +54,6 @@ export function AddCardForm({ listId }: { listId: string }) {
         required
         minLength={1}
         maxLength={120}
-        className="bg-paper"
       />
       <div className="flex gap-1.5">
         <Button type="submit" size="sm" disabled={pending || !title.trim()}>

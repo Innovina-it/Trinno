@@ -33,11 +33,11 @@ export function CreateWorkspaceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="paper-grid">
+      <DialogContent>
         <DialogHeader>
           <div className="flex items-baseline justify-between gap-2">
             <DialogTitle>New workspace.</DialogTitle>
-            <span className="mono-meta-sm text-ink/40">FORM-NW</span>
+            <span className="chip">FORM-NW</span>
           </div>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-5">

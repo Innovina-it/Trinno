@@ -31,8 +31,8 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        // Editorial: cream paper overlay (no blur), so the page recedes without blurring
-        "fixed inset-0 isolate z-50 bg-[color:var(--paper)]/75 duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        // Studio-plastic: violet-tinted blur backdrop (no plain black).
+        "fixed inset-0 isolate z-50 bg-[color:rgb(15_8_42/0.60)] backdrop-blur-md duration-200 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}
       {...props}
@@ -54,11 +54,14 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          // Editorial-industrial modal: paper background, hairline ink border,
-          // no glow ring. Slide-up + fade entrance.
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-none bg-paper p-5 text-sm text-ink duration-200 ease-out outline-none border border-ink sm:max-w-md",
-          "data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom-2",
-          "data-closed:animate-out data-closed:fade-out-0",
+          // Studio-plastic modal: frosted glass + true gradient hairline border,
+          // generous rounded-2xl, violet ambient shadow. Scale-up + fade entrance.
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-5 p-6 text-sm text-fg outline-none sm:max-w-md",
+          "rounded-2xl gradient-border",
+          "shadow-[0_40px_100px_-32px_rgb(139_92_246/0.45),0_1px_0_0_rgb(255_255_255/0.10)_inset]",
+          "duration-250 ease-out",
+          "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-open:slide-in-from-bottom-2",
+          "data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
@@ -70,7 +73,7 @@ function DialogContent({
             render={
               <Button
                 variant="ghost"
-                className="absolute top-2 right-2"
+                className="absolute top-3 right-3"
                 size="icon-sm"
               />
             }
@@ -88,7 +91,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-1 pb-3 border-b border-rule", className)}
+      className={cn("flex flex-col gap-1 pb-3 border-b border-hairline", className)}
       {...props}
     />
   )
@@ -106,7 +109,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-5 -mb-5 flex flex-col-reverse gap-2 border-t border-rule bg-paper-shadow px-5 py-3 sm:flex-row sm:justify-end",
+        "-mx-6 -mb-6 mt-2 flex flex-col-reverse gap-2 border-t border-hairline bg-[color:var(--surface)] px-6 py-4 rounded-b-2xl sm:flex-row sm:justify-end",
         className
       )}
       {...props}
@@ -126,8 +129,8 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
     <DialogPrimitive.Title
       data-slot="dialog-title"
       className={cn(
-        // Serif italic display title — large editorial header
-        "serif-display text-3xl text-ink leading-none",
+        // Serif italic display title with gradient text — large editorial header
+        "serif-display text-3xl gradient-text leading-none",
         className
       )}
       {...props}
@@ -143,7 +146,7 @@ function DialogDescription({
     <DialogPrimitive.Description
       data-slot="dialog-description"
       className={cn(
-        "mono-meta text-foreground/60 *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-signal",
+        "mono-meta text-fg-muted *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-[color:var(--accent-magenta)]",
         className
       )}
       {...props}

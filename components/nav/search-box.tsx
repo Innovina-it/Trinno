@@ -28,7 +28,7 @@ export function SearchBox() {
     <div className="relative">
       <Search
         aria-hidden
-        className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink/40"
+        className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-fg-faint"
       />
       <Input
         value={q}
@@ -36,44 +36,54 @@ export function SearchBox() {
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder="Search cards…"
-        className="h-7 w-56 pl-8 text-xs"
+        className="h-8 w-56 pl-9 pr-3 rounded-full text-xs"
         data-testid="search-box"
       />
       {showResults && (
         <div
-          className="absolute right-0 top-9 w-80 max-h-80 overflow-y-auto border border-ink bg-paper text-ink z-50 animate-in fade-in slide-in-from-top-1 duration-150"
+          className="absolute right-0 top-11 w-80 max-h-80 overflow-y-auto glass-strong rounded-2xl text-fg z-50 animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200"
           data-testid="search-results"
         >
-          <div className="border-b border-rule bg-paper-shadow px-3 py-1.5">
-            <span className="mono-meta-sm text-ink/60">
+          <div className="border-b border-hairline px-4 py-2.5 flex items-baseline justify-between">
+            <span className="mono-meta-sm text-fg-muted">
               {results.length} match{results.length === 1 ? "" : "es"}
             </span>
+            {results.length > 0 && (
+              <span className="block h-px w-12 bg-gradient-to-r from-accent-cyan to-accent-magenta" />
+            )}
           </div>
           {results.length === 0 ? (
-            <div className="px-3 py-6 text-center">
-              <p className="serif-display text-lg text-ink/60 italic">
+            <div className="px-3 py-8 text-center">
+              <p className="serif-display text-xl text-fg-muted italic">
                 Nothing on file.
               </p>
-              <p className="mono-meta-sm mt-1 text-ink/40">
+              <p className="mono-meta-sm mt-2 text-fg-faint">
                 No matches for &ldquo;{q}&rdquo;
               </p>
             </div>
           ) : (
-            results.map((r) => (
-              <button
-                key={r.id}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  router.push(`/b/${r.boardId}/c/${r.id}`);
-                  setOpen(false); setQ("");
-                }}
-                className="block w-full text-left px-3 py-2.5 transition-colors duration-100 hover:bg-paper-shadow hover:text-signal border-b border-rule last:border-b-0"
-                data-testid={`search-result-${r.id}`}
-              >
-                <div className="text-sm font-medium leading-tight">{r.title}</div>
-                <div className="mono-meta-sm mt-0.5 text-ink/50">{r.boardTitle}</div>
-              </button>
-            ))
+            <ul className="p-1">
+              {results.map((r) => (
+                <li key={r.id}>
+                  <button
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      router.push(`/b/${r.boardId}/c/${r.id}`);
+                      setOpen(false); setQ("");
+                    }}
+                    className="block w-full text-left px-3 py-2.5 rounded-xl transition-all duration-150 hover:bg-[color:var(--surface-hi)] hover:translate-x-0.5 group/result"
+                    data-testid={`search-result-${r.id}`}
+                  >
+                    <div className="text-sm font-medium leading-tight text-fg group-hover/result:gradient-text-static">
+                      {r.title}
+                    </div>
+                    <div className="mono-meta-sm mt-1 text-fg-faint">
+                      {r.boardTitle}
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}

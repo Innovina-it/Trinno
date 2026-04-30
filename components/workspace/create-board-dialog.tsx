@@ -11,7 +11,14 @@ import { toast } from "sonner";
 import { createBoard } from "@/actions/boards";
 import { Plus, Check } from "lucide-react";
 
-const PALETTE = ["#0079bf", "#d29034", "#519839", "#b04632", "#89609e", "#cd5a91"];
+// Studio-plastic palette: jewel tones + signature accents
+const PALETTE = ["#00e5ff", "#8b5cf6", "#ff2bd6", "#c3f73a", "#ffb020", "#ff6b6b"];
+
+function hexToRgb(hex: string): [number, number, number] {
+  const m = hex.replace("#", "");
+  const num = parseInt(m, 16);
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
 
 export function CreateBoardButton({ workspaceId }: { workspaceId: string }) {
   const [open, setOpen] = useState(false);
@@ -36,40 +43,41 @@ export function CreateBoardButton({ workspaceId }: { workspaceId: string }) {
     });
   }
 
+  const [r, g, b] = hexToRgb(color);
+  const previewBg = `linear-gradient(135deg, rgb(${r} ${g} ${b} / 0.45) 0%, rgb(${r} ${g} ${b} / 0.12) 70%, rgb(255 255 255 / 0.04) 100%)`;
+  const previewGlow = `0 1px 0 0 rgb(255 255 255 / 0.12) inset, 0 24px 50px -12px rgb(${r} ${g} ${b} / 0.45)`;
+
   return (
     <>
       <Button
         size="sm"
         onClick={() => setOpen(true)}
       >
-        <Plus className="size-3.5 text-signal mr-0.5" /> New board
+        <Plus className="size-3.5 mr-0.5" /> New board
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg paper-grid">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <div className="flex items-baseline justify-between gap-2">
-              <DialogTitle>Create board.</DialogTitle>
-              <span className="mono-meta-sm text-ink/40">FORM-NB</span>
+              <DialogTitle>New board.</DialogTitle>
+              <span className="chip">FORM-NB</span>
             </div>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-5">
-            {/* Editorial preview — paper card with tint, hairline border */}
+            {/* Live preview tile — mirrors the actual board grid card aesthetic */}
             <div
-              className="relative flex h-32 items-end border border-ink p-3"
-              style={{
-                background: `linear-gradient(${color}1f, ${color}1f), var(--paper)`,
-              }}
+              className="relative flex h-36 items-end overflow-hidden rounded-2xl border border-[color:var(--hairline)] p-4 backdrop-blur-xl"
+              style={{ background: previewBg, boxShadow: previewGlow }}
               aria-hidden
             >
-              <div className="absolute inset-x-3 top-2 flex items-baseline justify-between">
-                <span className="mono-meta-sm text-ink/45">PREVIEW</span>
+              <div className="absolute inset-x-4 top-3 flex items-baseline justify-between">
+                <span className="mono-meta-sm text-fg-faint">PREVIEW</span>
                 <span
-                  aria-hidden
-                  className="block h-1 w-8"
-                  style={{ backgroundColor: color }}
+                  className="block size-3 rounded-full"
+                  style={{ backgroundColor: color, boxShadow: `0 0 12px ${color}` }}
                 />
               </div>
-              <span className="serif-display text-2xl text-ink leading-none">
+              <span className="serif-display text-2xl text-fg leading-none">
                 {title.trim() || "Board preview"}
               </span>
             </div>
@@ -87,30 +95,36 @@ export function CreateBoardButton({ workspaceId }: { workspaceId: string }) {
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               <Label>Background</Label>
-              <div className="grid grid-cols-6 gap-px border border-ink/30 bg-ink/30">
+              <div className="grid grid-cols-6 gap-2">
                 {PALETTE.map((c, i) => {
                   const selected = color === c;
+                  const [pr, pg, pb] = hexToRgb(c);
                   return (
                     <button
                       key={c}
                       type="button"
                       onClick={() => setColor(c)}
-                      className={`relative flex aspect-square items-center justify-center bg-paper transition-colors duration-100 ${selected ? "ring-2 ring-inset ring-ink" : "hover:bg-paper-shadow"}`}
+                      className={`group/swatch relative flex aspect-square items-center justify-center rounded-2xl border transition-all duration-200 ${
+                        selected
+                          ? "border-[color:var(--hairline-hi)] scale-105"
+                          : "border-[color:var(--hairline)] hover:scale-105 hover:border-[color:var(--hairline-hi)]"
+                      }`}
+                      style={{
+                        background: `radial-gradient(circle at 30% 30%, rgb(${pr} ${pg} ${pb} / 0.7), rgb(${pr} ${pg} ${pb} / 0.18))`,
+                        boxShadow: selected
+                          ? `0 0 0 2px rgb(${pr} ${pg} ${pb} / 0.6), 0 12px 24px -8px rgb(${pr} ${pg} ${pb} / 0.5)`
+                          : undefined,
+                      }}
                       aria-label={`Pick ${c}`}
                       aria-pressed={selected}
                     >
-                      <span
-                        aria-hidden
-                        className="block h-5 w-5"
-                        style={{ backgroundColor: c }}
-                      />
-                      <span className="absolute top-0.5 left-1 mono-meta-sm text-ink/40">
+                      <span className="absolute top-1 left-1.5 mono-meta-sm text-white/60">
                         {String(i + 1).padStart(2, "0")}
                       </span>
                       {selected && (
-                        <Check className="absolute bottom-1 right-1 size-3 text-signal" strokeWidth={3} />
+                        <Check className="absolute bottom-1.5 right-1.5 size-3.5 text-white drop-shadow" strokeWidth={3} />
                       )}
                     </button>
                   );

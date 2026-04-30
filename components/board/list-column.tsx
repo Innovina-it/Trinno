@@ -13,6 +13,24 @@ import { CardTile } from "./card-tile";
 import { AddCardForm } from "./add-card-form";
 import { roman } from "@/lib/format";
 
+// Per-list accent — deterministic from list id so each column has its own
+// jewel-tone. Five-stop palette spreads across the studio-plastic accents.
+const ACCENT_PALETTE = [
+  "#00e5ff", // cyan
+  "#8b5cf6", // violet
+  "#ff2bd6", // magenta
+  "#c3f73a", // lime
+  "#ffb020", // amber
+];
+
+function hashId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) {
+    h = (h * 31 + id.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
 export function ListColumn({
   list,
   boardId,
@@ -40,9 +58,11 @@ export function ListColumn({
     data: { type: "list-drop", listId: list.id },
   });
 
+  const accent = ACCENT_PALETTE[hashId(list.id) % ACCENT_PALETTE.length];
+
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),
-    transition: transition ?? "transform 200ms cubic-bezier(0.2, 0, 0, 1)",
+    transition: transition ?? "transform 220ms cubic-bezier(0.2, 0, 0, 1)",
     opacity: isDragging ? 0.6 : 1,
   };
 
@@ -53,10 +73,6 @@ export function ListColumn({
 
   const numeral = ordinal ? roman(ordinal) : "—";
   const cardLabel = `${listCards.length} CARD${listCards.length === 1 ? "" : "S"}`;
-  // Compose the editorial column meta line into a single attribute so it can
-  // render via a CSS pseudo-element. This keeps marginalia visible without
-  // polluting the list column's textContent (drag tests rely on filtering
-  // `[data-list-id]` by hasText: <title>).
   const listMeta = `${numeral} · ${cardLabel}`;
 
   return (
@@ -65,20 +81,35 @@ export function ListColumn({
       style={style}
       data-list-id={list.id}
       data-dragging={isDragging ? "true" : undefined}
-      className="group/list flex w-72 shrink-0 flex-col border border-ink bg-paper transition-shadow duration-200 ease-out data-[dragging=true]:rotate-[1deg] data-[dragging=true]:shadow-lg"
+      className="group/list relative flex w-80 shrink-0 flex-col rounded-2xl glass overflow-hidden transition-all duration-300 ease-out data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02]"
     >
-      {/* Column heading: ordinal+count meta in mono, serif italic title beneath */}
+      {/* Per-list accent strip — vertical bar on the left edge, fades top-to-bottom */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 bottom-0 w-[3px]"
+        style={{
+          background: `linear-gradient(180deg, ${accent} 0%, ${accent}55 50%, transparent 100%)`,
+          boxShadow: `0 0 18px ${accent}66`,
+        }}
+      />
+
+      {/* Column heading: ordinal+count meta in chip, serif italic title */}
       <div
         {...attributes}
         {...listeners}
-        className="cursor-grab select-none border-b border-rule px-3 py-2.5 active:cursor-grabbing"
+        className="cursor-grab select-none border-b border-hairline px-4 py-3 active:cursor-grabbing"
       >
-        <span
-          aria-hidden
-          className="list-ordinal-stamp block leading-none"
-          data-list-ordinal={listMeta}
-        />
-        <h3 className="serif-display text-xl text-ink mt-1 leading-tight">
+        <div className="flex items-baseline gap-2">
+          <span
+            aria-hidden
+            className="list-ordinal-stamp block leading-none"
+            data-list-ordinal={listMeta}
+          />
+        </div>
+        <h3
+          className="serif-display text-2xl text-fg mt-1.5 leading-tight transition-all duration-200 group-hover/list:gradient-text-static"
+          style={{ ['--accent' as string]: accent } as React.CSSProperties}
+        >
           {list.title}
         </h3>
       </div>
@@ -86,7 +117,7 @@ export function ListColumn({
       <div
         ref={setDropRef}
         data-over={isOver ? "true" : undefined}
-        className="flex max-h-[calc(100vh-18rem)] flex-col gap-2 overflow-y-auto p-2 transition-colors duration-150 data-[over=true]:bg-paper-shadow"
+        className="flex max-h-[calc(100vh-22rem)] flex-col gap-2.5 overflow-y-auto p-2.5 transition-colors duration-200 data-[over=true]:bg-[color:var(--surface-strong)]"
       >
         <SortableContext
           items={cardSortableIds}
@@ -97,7 +128,7 @@ export function ListColumn({
           ))}
         </SortableContext>
       </div>
-      <div className="border-t border-rule px-2 py-1.5">
+      <div className="border-t border-hairline px-2.5 py-2">
         <AddCardForm listId={list.id} />
       </div>
     </div>
