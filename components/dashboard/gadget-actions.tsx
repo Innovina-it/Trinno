@@ -14,12 +14,11 @@ import { toast } from "sonner";
 
 export function GadgetActions({
   id,
-  type: _type,
-  dashboardId: _dashboardId,
-  config: _config,
-  size: _size,
 }: {
   id: string;
+  // The following props are accepted to keep the call-site stable; they will
+  // be wired into an in-place Edit feature in a follow-up iteration. Plan #16
+  // explicitly permits deferring the in-place edit (only add/move/delete).
   type: string;
   dashboardId: string;
   config: Record<string, unknown>;
