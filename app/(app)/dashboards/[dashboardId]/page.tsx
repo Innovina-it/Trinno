@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { getDashboard } from "@/lib/queries/dashboards";
 import { listWorkspaces } from "@/lib/queries/workspaces";
+import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
+import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
 import { DashboardGrid } from "@/components/dashboard/dashboard-grid";
 import { AddGadgetButton } from "@/components/dashboard/add-gadget-dialog";
 
@@ -18,8 +20,12 @@ export default async function DashboardPage({
   if (!dash) notFound();
   const isOwner = dash.ownerId === user.id;
   const workspaces = await listWorkspaces(token);
+  // Plan #16b-β — only personal-scope dashboards skip the workspace store.
+  const snapshot = dash.workspaceId
+    ? await getWorkspaceSnapshot(token, dash.workspaceId)
+    : null;
 
-  return (
+  const body = (
     <div
       className="mx-auto max-w-7xl px-6 py-8 space-y-6"
       data-testid="dashboard-detail"
@@ -53,5 +59,11 @@ export default async function DashboardPage({
         workspaceId={dash.workspaceId}
       />
     </div>
+  );
+
+  return snapshot ? (
+    <WorkspaceStoreProvider initial={snapshot}>{body}</WorkspaceStoreProvider>
+  ) : (
+    body
   );
 }

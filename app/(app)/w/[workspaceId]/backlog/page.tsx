@@ -6,6 +6,8 @@ import {
   listSprintsForWorkspace,
   listBacklogCards,
 } from "@/lib/queries/sprints";
+import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
+import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
 import { CreateSprintDialog } from "@/components/sprint/create-sprint-dialog";
 import { SprintCard } from "@/components/sprint/sprint-card";
 import { BacklogList } from "@/components/sprint/backlog-list";
@@ -22,6 +24,7 @@ export default async function BacklogPage({
   if (!ws) notFound();
   const allSprints = await listSprintsForWorkspace(token, workspaceId);
   const cards = await listBacklogCards(token, workspaceId);
+  const snapshot = await getWorkspaceSnapshot(token, workspaceId);
 
   const active = allSprints.find((s) => s.state === "active");
   const planned = allSprints.filter((s) => s.state === "planned");
@@ -39,8 +42,9 @@ export default async function BacklogPage({
   );
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10 space-y-10">
-      <header className="space-y-3 border-b border-hairline pb-6">
+    <WorkspaceStoreProvider initial={snapshot}>
+      <div className="mx-auto max-w-6xl px-6 py-10 space-y-10">
+        <header className="space-y-3 border-b border-hairline pb-6">
         <span className="chip">{ws.name.toUpperCase()} / BACKLOG</span>
         <h1 className="serif-display text-5xl">Sprints &amp; backlog</h1>
         <div className="flex justify-between items-center gap-3">
@@ -96,25 +100,29 @@ export default async function BacklogPage({
         <BacklogList cards={backlogCards} sprints={allSprints} />
       </section>
 
-      {completed.length > 0 && (
-        <section className="space-y-3 opacity-70">
-          <h2 className="mono-meta text-fg-muted">
-            COMPLETED ({completed.length})
-          </h2>
-          <ul className="space-y-1 text-sm">
-            {completed.map((s) => (
-              <li key={s.id} className="border border-hairline rounded-lg p-3">
-                <span className="font-medium">{s.name}</span>
-                {s.completedAt && (
-                  <span className="ml-2 mono-meta-sm text-fg-faint">
-                    {new Date(s.completedAt).toLocaleDateString()}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </div>
+        {completed.length > 0 && (
+          <section className="space-y-3 opacity-70">
+            <h2 className="mono-meta text-fg-muted">
+              COMPLETED ({completed.length})
+            </h2>
+            <ul className="space-y-1 text-sm">
+              {completed.map((s) => (
+                <li
+                  key={s.id}
+                  className="border border-hairline rounded-lg p-3"
+                >
+                  <span className="font-medium">{s.name}</span>
+                  {s.completedAt && (
+                    <span className="ml-2 mono-meta-sm text-fg-faint">
+                      {new Date(s.completedAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    </WorkspaceStoreProvider>
   );
 }
