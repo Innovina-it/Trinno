@@ -30,11 +30,13 @@ import {
 } from "@/lib/roadmap/dates";
 import { groupByEpic, stackInLane } from "@/lib/roadmap/layout";
 import { getCardStatusKind, type StatusKind } from "@/lib/roadmap/status";
+import { criticalPath, type Link as CritLink } from "@/lib/roadmap/critical-path";
 import { updateCard } from "@/actions/cards";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { RoadmapBar } from "./roadmap-bar";
 import { DependencyArrows, type BarBox } from "./dependency-arrows";
+import { CriticalPathOverlay } from "./critical-path-overlay";
 import { SprintOverlay } from "./sprint-overlay";
 
 const ZOOMS: Zoom[] = ["week", "month", "quarter"];
@@ -139,6 +141,11 @@ export function RoadmapView({
   // or the param changes again.
   const [flashFocus, setFlashFocus] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+
+  // Plan #16b-γ-A (#3) — critical-path overlay toggle. Local state only;
+  // intentionally not URL-synced because the overlay is a per-session
+  // analysis tool, not a shareable view state.
+  const [showCriticalPath, setShowCriticalPath] = useState(false);
 
   const { subscribed } = useWorkspaceRealtime(workspaceId);
 
@@ -670,6 +677,24 @@ export function RoadmapView({
     [links, barCoords],
   );
 
+  // Plan #16b-γ-A (#3) — compute longest-path set client-side. Cards
+  // already carry start/target dates; links from the workspace store are
+  // filtered to only `is_blocked_by` rows by `criticalPath` itself.
+  const criticalSet = useMemo(() => {
+    if (!showCriticalPath) return new Set<string>();
+    const cardSlim = cards.map((c) => ({
+      id: c.id,
+      startDate: c.startDate,
+      targetDate: c.targetDate,
+    }));
+    const allLinks: CritLink[] = storeLinks.map((l) => ({
+      from: l.fromCardId,
+      to: l.toCardId,
+      kind: l.kind,
+    }));
+    return criticalPath(cardSlim, allLinks).critical;
+  }, [showCriticalPath, cards, storeLinks]);
+
   return (
     <div
       data-testid="roadmap-view"
@@ -715,6 +740,18 @@ export function RoadmapView({
             />
             {subscribed ? "LIVE" : "OFFLINE"}
           </span>
+          <button
+            type="button"
+            onClick={() => setShowCriticalPath((p) => !p)}
+            data-testid="roadmap-critical-toggle"
+            data-active={showCriticalPath ? "true" : "false"}
+            aria-pressed={showCriticalPath}
+            className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
+              showCriticalPath ? "ring-1 ring-fg/40" : ""
+            }`}
+          >
+            CRITICAL PATH: {showCriticalPath ? "ON" : "OFF"}
+          </button>
         </div>
         <span className="mono-meta-sm text-fg-faint">
           {gridStart.toISOString().slice(0, 10)} →{" "}
@@ -1032,6 +1069,15 @@ export function RoadmapView({
                   <div key={`bars-${ll.lane.id}`}>{renderedBars}</div>
                 );
               })}
+              {/* Critical-path overlay sits between bars and arrows. */}
+              {showCriticalPath && (
+                <CriticalPathOverlay
+                  critical={criticalSet}
+                  barCoords={barCoords}
+                  width={width}
+                  height={totalHeight}
+                />
+              )}
               {/* Dependency arrows on top */}
               <DependencyArrows
                 links={visibleLinks}
