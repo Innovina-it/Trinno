@@ -30,6 +30,8 @@ import {
 } from "@/lib/roadmap/dates";
 import { groupByEpic, stackInLane } from "@/lib/roadmap/layout";
 import { updateCard } from "@/actions/cards";
+import { useWorkspaceStore } from "@/stores/workspace-store";
+import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { RoadmapBar } from "./roadmap-bar";
 import { DependencyArrows, type BarBox } from "./dependency-arrows";
 
@@ -109,8 +111,12 @@ function buildHeaderTicks(
 }
 
 export function RoadmapView({
-  initialCards,
-  initialLinks,
+  // `initialCards` / `initialLinks` are kept as a fallback for SSR-seeded
+  // renders that don't (yet) wrap the workspace store provider — the page
+  // wraps it now, so these are effectively unused in production. We still
+  // accept them so existing tests / call sites don't break.
+  initialCards: _initialCards,
+  initialLinks: _initialLinks,
   workspaceId,
 }: {
   initialCards: RoadmapCard[];
@@ -125,14 +131,50 @@ export function RoadmapView({
     ? (zoomParam as Zoom)
     : "month";
 
-  const [cards, setCards] = useState<RoadmapCard[]>(initialCards);
+  const { subscribed } = useWorkspaceRealtime(workspaceId);
+
+  // Read cards directly from the workspace store, projecting to the
+  // RoadmapCard shape the layout helpers expect.
+  const storeCards = useWorkspaceStore((s) => s.cards);
+  const storeBoards = useWorkspaceStore((s) => s.boards);
+  const storeLinks = useWorkspaceStore((s) => s.cardLinks);
+  const patchCardInStore = useWorkspaceStore((s) => s.patchCard);
+
+  const cards = useMemo<RoadmapCard[]>(() => {
+    const boardTitleById = new Map(storeBoards.map((b) => [b.id, b.title]));
+    return storeCards
+      .filter(
+        (c) =>
+          !c.archived &&
+          c.startDate !== null &&
+          c.targetDate !== null &&
+          // Subtasks are nested under their parent — Task 6 renders them
+          // separately. Only top-level types appear in the lane bars.
+          c.type !== "subtask",
+      )
+      .map((c) => ({
+        id: c.id,
+        title: c.title,
+        type: c.type,
+        parentCardId: c.parentCardId,
+        startDate: c.startDate as Date,
+        targetDate: c.targetDate as Date,
+        boardId: c.boardId,
+        boardTitle: boardTitleById.get(c.boardId) ?? "",
+        archived: c.archived,
+      }));
+  }, [storeCards, storeBoards]);
+
+  const links = useMemo<RoadmapLink[]>(
+    () =>
+      storeLinks
+        .filter((l) => l.kind === "is_blocked_by")
+        .map((l) => ({ fromId: l.fromCardId, toId: l.toCardId })),
+    [storeLinks],
+  );
+
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
-
-  // Refresh when server data shifts (e.g. after navigation back).
-  useEffect(() => {
-    setCards(initialCards);
-  }, [initialCards]);
 
   const ppd = pixelsPerDay(zoom);
   const now = useMemo(() => new Date(), []);
@@ -237,19 +279,16 @@ export function RoadmapView({
           startDate: next.start.toISOString(),
           targetDate: next.target.toISOString(),
         });
+        // Don't manually re-set the store: the realtime CDC echo will
+        // reconcile via `useWorkspaceRealtime`. Server-side
+        // `revalidatePath` also refreshes the SSR snapshot on next nav.
       } catch (err) {
-        // Revert on error.
-        setCards((prev) =>
-          prev.map((c) =>
-            c.id === cardId
-              ? { ...c, startDate: orig.start, targetDate: orig.target }
-              : c,
-          ),
-        );
+        // Revert the optimistic patch on failure.
+        patchCardInStore(cardId, { startDate: orig.start, targetDate: orig.target });
         toast.error((err as Error).message);
       }
     },
-    [],
+    [patchCardInStore],
   );
 
   const onPointerMove = useCallback(
@@ -274,15 +313,13 @@ export function RoadmapView({
           nextTarget = nextStart;
         }
       }
-      setCards((prev) =>
-        prev.map((c) =>
-          c.id === d.cardId
-            ? { ...c, startDate: nextStart, targetDate: nextTarget }
-            : c,
-        ),
-      );
+      // Patch the store directly so the bar tracks the cursor immediately.
+      patchCardInStore(d.cardId, {
+        startDate: nextStart,
+        targetDate: nextTarget,
+      });
     },
-    [ppd],
+    [ppd, patchCardInStore],
   );
 
   const onPointerUp = useCallback(() => {
@@ -348,13 +385,21 @@ export function RoadmapView({
     [router],
   );
 
+  // Cleanup any dangling listeners if the component unmounts mid-drag.
+  useEffect(() => {
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [onPointerMove, onPointerUp]);
+
   // Keep the dependency-arrows links list filtered to visible bars only.
   const visibleLinks = useMemo(
     () =>
-      initialLinks.filter(
+      links.filter(
         (l) => barCoords.has(l.fromId) && barCoords.has(l.toId),
       ),
-    [initialLinks, barCoords],
+    [links, barCoords],
   );
 
   return (
@@ -364,27 +409,45 @@ export function RoadmapView({
       className="space-y-4"
     >
       <div className="flex items-center justify-between gap-3">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            data-testid="roadmap-zoom"
-            className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
-          >
-            ZOOM: {zoom.toUpperCase()}
-            <ChevronDown className="size-3" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuRadioGroup
-              value={zoom}
-              onValueChange={(v) => setZoom(v as Zoom)}
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              data-testid="roadmap-zoom"
+              className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
             >
-              {ZOOMS.map((z) => (
-                <DropdownMenuRadioItem key={z} value={z}>
-                  {z[0].toUpperCase() + z.slice(1)}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              ZOOM: {zoom.toUpperCase()}
+              <ChevronDown className="size-3" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuRadioGroup
+                value={zoom}
+                onValueChange={(v) => setZoom(v as Zoom)}
+              >
+                {ZOOMS.map((z) => (
+                  <DropdownMenuRadioItem key={z} value={z}>
+                    {z[0].toUpperCase() + z.slice(1)}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <span
+            className="inline-flex items-center gap-1.5 mono-meta-sm text-fg-faint"
+            data-testid="roadmap-live"
+            data-live={subscribed ? "true" : "false"}
+            title={subscribed ? "Realtime sync active" : "Realtime sync offline"}
+          >
+            <span
+              aria-hidden
+              className={`inline-block size-1.5 rounded-full ${
+                subscribed
+                  ? "bg-emerald-400 animate-pulse"
+                  : "bg-fg/20"
+              }`}
+            />
+            {subscribed ? "LIVE" : "OFFLINE"}
+          </span>
+        </div>
         <span className="mono-meta-sm text-fg-faint">
           {gridStart.toISOString().slice(0, 10)} →{" "}
           {gridEnd.toISOString().slice(0, 10)}
