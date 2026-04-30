@@ -869,10 +869,21 @@ export function RoadmapView({
       </div>
 
       {cards.length === 0 ? (
-        <p className="font-serif italic text-fg-faint">
-          No roadmap cards yet — set both a start and target date on an epic
-          or story to plot it here.
-        </p>
+        // Plan #16b-γ-C (#7) — explicit empty-state with editorial
+        // CTA copy. We layer it inside the same data-testid="roadmap-view"
+        // wrapper so existing E2E selectors still match.
+        <div
+          className="relative min-h-[40vh] grid place-items-center text-center"
+          data-testid="roadmap-empty"
+        >
+          <div className="space-y-3 max-w-md">
+            <p className="serif-display text-4xl">No scheduled work yet.</p>
+            <p className="text-sm text-fg-muted">
+              Open any epic or story and set a start + target date in the
+              Roadmap section of its card modal. Your bars will appear here.
+            </p>
+          </div>
+        </div>
       ) : (
         <div
           className="flex border border-hairline rounded-xl overflow-hidden"
