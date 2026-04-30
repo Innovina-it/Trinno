@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -12,6 +12,12 @@ import { useBoardStore } from "@/stores/board-store";
 import { CardTile } from "./card-tile";
 import { AddCardForm } from "./add-card-form";
 import { roman } from "@/lib/format";
+
+// Plan #16b-γ-C (#3) — opt-in virtualization. We render at most this
+// many tiles up front; cards beyond fold behind a "Show all (+N)" chip
+// the user toggles to expand. Full windowed virtualization is deferred
+// to a later pass.
+const VIRTUALIZE_THRESHOLD = 100;
 
 // Per-list accent — deterministic from list id, monochrome shades.
 const ACCENT_PALETTE = [
@@ -53,6 +59,14 @@ export function ListColumn({
     [listCards, cardIdFilter],
   );
 
+  // Cap rendered tiles at VIRTUALIZE_THRESHOLD until the user opts in.
+  const [showAll, setShowAll] = useState(false);
+  const overflowing = filtered.length > VIRTUALIZE_THRESHOLD && !showAll;
+  const visibleCards = overflowing
+    ? filtered.slice(0, VIRTUALIZE_THRESHOLD)
+    : filtered;
+  const hiddenCount = filtered.length - visibleCards.length;
+
   const sortableId = `list:${list.id}`;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
@@ -74,8 +88,8 @@ export function ListColumn({
   };
 
   const cardSortableIds = useMemo(
-    () => filtered.map((c) => `card:${c.id}`),
-    [filtered],
+    () => visibleCards.map((c) => `card:${c.id}`),
+    [visibleCards],
   );
 
   const numeral = ordinal ? roman(ordinal) : "—";
@@ -136,7 +150,7 @@ export function ListColumn({
           items={cardSortableIds}
           strategy={verticalListSortingStrategy}
         >
-          {filtered.map((card) => (
+          {visibleCards.map((card) => (
             <CardTile
               key={card.id}
               card={card}
@@ -145,6 +159,16 @@ export function ListColumn({
             />
           ))}
         </SortableContext>
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            data-testid="list-show-all"
+            className="chip mono-meta-sm self-center inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
+          >
+            SHOW ALL · +{hiddenCount} MORE
+          </button>
+        )}
       </div>
       <div className="border-t border-hairline px-2.5 py-2">
         <AddCardForm listId={list.id} />
