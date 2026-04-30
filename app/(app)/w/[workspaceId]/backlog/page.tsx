@@ -34,7 +34,9 @@ export default async function BacklogPage({
     arr.push(c);
     cardsBySprint.set(k, arr);
   }
-  const backlogCards = cardsBySprint.get(null) ?? [];
+  const backlogCards = (cardsBySprint.get(null) ?? []).filter(
+    (c) => !c.archived,
+  );
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10 space-y-10">

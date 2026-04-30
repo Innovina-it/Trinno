@@ -1,4 +1,4 @@
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { sprints, cards, boards } from "@/lib/db/schema";
 
@@ -27,11 +27,10 @@ export async function listBacklogCards(token: string, workspaceId: string) {
         sprintId: cards.sprintId,
         type: cards.type,
         archived: cards.archived,
+        storyPoints: cards.storyPoints,
       })
       .from(cards)
       .innerJoin(boards, eq(boards.id, cards.boardId))
-      .where(
-        and(eq(boards.workspaceId, workspaceId), eq(cards.archived, false)),
-      ),
+      .where(eq(boards.workspaceId, workspaceId)),
   );
 }

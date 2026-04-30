@@ -6,6 +6,8 @@ import { BoardGrid } from "@/components/workspace/board-grid";
 import { CreateBoardButton } from "@/components/workspace/create-board-dialog";
 import { Button } from "@/components/ui/button";
 import { shortDate } from "@/lib/format";
+import { computeVelocity } from "@/lib/queries/sprints-stats";
+import { VelocityStrip } from "@/components/sprint/velocity-strip";
 
 export default async function WorkspacePage({
   params,
@@ -18,6 +20,7 @@ export default async function WorkspacePage({
   const boards = await listBoardsInWorkspace(token, workspaceId);
   const visibleCount = boards.filter((b) => !b.archived).length;
   const today = shortDate(new Date());
+  const velocity = await computeVelocity(token, workspaceId, 6);
 
   return (
     <div className="mx-auto max-w-7xl space-y-10 px-6 py-10">
@@ -50,6 +53,8 @@ export default async function WorkspacePage({
           </div>
         </div>
       </header>
+
+      <VelocityStrip data={velocity} />
 
       <BoardGrid boards={boards} />
     </div>

@@ -23,6 +23,8 @@ export type SprintCardProps = {
     boardId: string;
     boardTitle: string;
     sprintId: string | null;
+    storyPoints?: number | null;
+    archived?: boolean;
   }>;
   allSprints: SprintLite[];
   workspaceId: string;
@@ -33,6 +35,7 @@ export function SprintCard({
   sprint,
   cards,
   allSprints,
+  workspaceId,
   activeExists,
 }: SprintCardProps) {
   const [pending, start] = useTransition();
@@ -60,6 +63,13 @@ export function SprintCard({
   }
 
   const isActive = sprint.state === "active";
+  const totalPoints = cards.reduce((s, c) => s + (c.storyPoints ?? 0), 0);
+  const completedPoints = cards
+    .filter((c) => c.archived)
+    .reduce((s, c) => s + (c.storyPoints ?? 0), 0);
+  const progressPct =
+    totalPoints > 0 ? Math.min(100, (completedPoints / totalPoints) * 100) : 0;
+  const visibleCards = cards.filter((c) => !c.archived);
 
   return (
     <div
@@ -69,7 +79,12 @@ export function SprintCard({
       <header className="flex items-start justify-between gap-3 p-4 border-b border-hairline">
         <div className="space-y-1 min-w-0">
           <div className="flex items-baseline gap-2">
-            <h3 className="serif-display text-2xl text-fg">{sprint.name}</h3>
+            <Link
+              href={`/w/${workspaceId}/sprints/${sprint.id}`}
+              className="serif-display text-2xl text-fg hover:underline"
+            >
+              {sprint.name}
+            </Link>
             <span className="chip">{sprint.state.toUpperCase()}</span>
           </div>
           {sprint.goal && (
@@ -87,6 +102,22 @@ export function SprintCard({
                 ? new Date(sprint.endDate).toLocaleDateString()
                 : "?"}
             </p>
+          )}
+          {totalPoints > 0 && (
+            <div
+              className="space-y-1 pt-1"
+              data-testid={`sprint-progress-${sprint.id}`}
+            >
+              <div className="mono-meta-sm text-fg-faint tabular-nums">
+                {completedPoints} / {totalPoints} PT
+              </div>
+              <div className="h-1.5 w-40 rounded-full bg-[rgb(255_255_255/0.06)] overflow-hidden">
+                <div
+                  className="h-full bg-fg/80"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -121,13 +152,13 @@ export function SprintCard({
         </div>
       </header>
       <ul className="divide-y divide-hairline">
-        {cards.length === 0 && (
+        {visibleCards.length === 0 && (
           <li className="px-4 py-6 text-sm text-fg-faint italic text-center">
             No cards yet. Move cards in from the backlog using the sprint
             dropdown.
           </li>
         )}
-        {cards.map((c) => (
+        {visibleCards.map((c) => (
           <li
             key={c.id}
             className="flex items-center gap-3 px-4 py-2"
