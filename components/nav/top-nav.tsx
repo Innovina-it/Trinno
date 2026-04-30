@@ -5,15 +5,17 @@ import { WorkspaceSwitcher, type WorkspaceLite } from "@/components/workspace/wo
 import { SearchBox } from "@/components/nav/search-box";
 import { NotificationBell } from "@/components/nav/notification-bell";
 import { FavoritesDropdown, type FavoriteEntry } from "@/components/nav/favorites-dropdown";
+import { RecentDropdown, type RecentEntry } from "@/components/nav/recent-dropdown";
 
 export function TopNav({
-  email, userId, workspaces, activeWorkspaceId, favorites,
+  email, userId, workspaces, activeWorkspaceId, favorites, recents,
 }: {
   email: string;
   userId: string;
   workspaces: WorkspaceLite[];
   activeWorkspaceId?: string;
   favorites: FavoriteEntry[];
+  recents: RecentEntry[];
 }) {
   const wsForLinks = activeWorkspaceId ?? workspaces[0]?.id;
   return (
@@ -80,6 +82,8 @@ export function TopNav({
           </Link>
           <span className="text-fg-faint select-none" aria-hidden>/</span>
           <FavoritesDropdown favorites={favorites} />
+          <span className="text-fg-faint select-none" aria-hidden>/</span>
+          <RecentDropdown recents={recents} />
         </div>
         <div className="flex items-center gap-3">
           <SearchBox />

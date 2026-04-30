@@ -404,3 +404,9 @@ export const MarkOnboardingCompletedInput = z.object({});
 // that the caller is a board member before the INSERT lands.
 export const ToggleFavoriteBoardInput = z.object({ boardId: Uuid });
 
+// Plan #16b-γ-C (#5) — record a board view. Upserts (user, board) and
+// updates viewed_at so the user's "recent" list naturally pushes the
+// freshest board to the top. Fired best-effort on every board page
+// render — failures are swallowed.
+export const RecordBoardViewInput = z.object({ boardId: Uuid });
+

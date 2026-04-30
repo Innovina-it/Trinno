@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import {
   boardFavorites,
+  recentViews,
   boards,
   workspaces,
 } from "@/lib/db/schema";
@@ -49,5 +50,39 @@ export async function listFavoriteBoardIds(
       .select({ boardId: boardFavorites.boardId })
       .from(boardFavorites);
     return rows.map((r) => r.boardId);
+  });
+}
+
+export type RecentBoardRow = {
+  boardId: string;
+  boardTitle: string;
+  workspaceId: string;
+  workspaceName: string;
+};
+
+/**
+ * Plan #16b-γ-C (#5) — return the caller's last `limit` board views.
+ * Sorted by viewed_at desc; archived/inaccessible boards drop out
+ * automatically through the inner-join + RLS pair.
+ */
+export async function listRecentBoardViews(
+  token: string,
+  limit = 5,
+): Promise<RecentBoardRow[]> {
+  return dbAsUser(token, async (tx) => {
+    const rows = await tx
+      .select({
+        boardId: recentViews.boardId,
+        boardTitle: boards.title,
+        workspaceId: boards.workspaceId,
+        workspaceName: workspaces.name,
+        viewedAt: recentViews.viewedAt,
+      })
+      .from(recentViews)
+      .innerJoin(boards, eq(boards.id, recentViews.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .orderBy(desc(recentViews.viewedAt))
+      .limit(limit);
+    return rows;
   });
 }

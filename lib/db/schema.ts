@@ -460,6 +460,21 @@ export const boardFavorites = pgTable(
   (t) => ({ pk: primaryKey({ columns: [t.userId, t.boardId] }) }),
 );
 
+// Plan #16b-γ-C (#5) — recently-viewed boards. Same composite-PK shape
+// as favorites but `viewed_at` bumps on every visit via UPSERT so the
+// nav dropdown can show the user's last 5 boards across workspaces.
+export const recentViews = pgTable(
+  "recent_views",
+  {
+    userId: uuid("user_id").notNull(),
+    boardId: uuid("board_id").notNull(),
+    viewedAt: timestamp("viewed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.userId, t.boardId] }) }),
+);
+
 // Plan #16 — Dashboards + Gadgets.
 export const dashboardScope = pgEnum("dashboard_scope", [
   "personal",

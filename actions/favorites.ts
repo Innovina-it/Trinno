@@ -1,9 +1,12 @@
 "use server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { boardFavorites } from "@/lib/db/schema";
+import { boardFavorites, recentViews } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
-import { ToggleFavoriteBoardInput } from "@/lib/validation";
+import {
+  ToggleFavoriteBoardInput,
+  RecordBoardViewInput,
+} from "@/lib/validation";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -57,4 +60,33 @@ export async function toggleFavoriteBoard(input: { boardId: string }) {
   await requireUser();
   const t = (await getSessionToken())!;
   return toggleFavoriteBoardImpl(t, input);
+}
+
+/**
+ * Plan #16b-γ-C (#5) — record a board view. UPSERT keyed on
+ * (user_id, board_id) so the row count stays bounded; `viewed_at` is
+ * bumped to `now()` on every visit. Best-effort — callers should never
+ * await this on a critical render path; any error is swallowed.
+ */
+export async function recordBoardViewImpl(
+  token: string,
+  input: { boardId: string },
+): Promise<void> {
+  const parsed = RecordBoardViewInput.parse(input);
+  const userId = decodeSub(token);
+  await dbAsUser(token, async (tx) => {
+    await tx
+      .insert(recentViews)
+      .values({ userId, boardId: parsed.boardId })
+      .onConflictDoUpdate({
+        target: [recentViews.userId, recentViews.boardId],
+        set: { viewedAt: sql`now()` },
+      });
+  });
+}
+
+export async function recordBoardView(input: { boardId: string }) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  return recordBoardViewImpl(t, input);
 }

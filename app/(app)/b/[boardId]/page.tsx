@@ -9,6 +9,7 @@ import { BoardView } from "@/components/board/board-view";
 import { ActivityFeed } from "@/components/board/activity-feed";
 import { ActivityShell } from "@/components/board/activity-shell";
 import { Skeleton } from "@/components/ui/skeleton";
+import { recordBoardViewImpl } from "@/actions/favorites";
 
 export default async function BoardPage({
   params,
@@ -20,6 +21,11 @@ export default async function BoardPage({
   const token = (await getSessionToken())!;
   const snap = await getBoardSnapshot(token, boardId);
   if (!snap) notFound();
+
+  // Plan #16b-γ-C (#5) — best-effort record this board view. We don't
+  // await the result block-then-render because the user shouldn't pay
+  // for a write to see the board; failures are swallowed silently.
+  void recordBoardViewImpl(token, { boardId }).catch(() => {});
 
   const [me] = await dbAsUser(token, async (tx) =>
     tx
