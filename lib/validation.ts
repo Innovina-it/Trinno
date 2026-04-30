@@ -130,3 +130,11 @@ export const AssignCardToSprintInput = z.object({
   cardId: Uuid,
   sprintId: Uuid.nullable(),
 });
+
+export const MarkNotificationReadInput = z.object({
+  id: Uuid,
+  read: z.boolean(),
+});
+export const MarkAllReadInput = z.object({});
+export const WatchCardInput = z.object({ cardId: Uuid });
+export const UnwatchCardInput = z.object({ cardId: Uuid });
