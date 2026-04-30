@@ -326,3 +326,34 @@ export const cardSla = pgTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.cardId, t.slaId] }) }),
 );
+
+export const rules = pgTable("rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  boardId: uuid("board_id").notNull(),
+  name: text("name").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  trigger: jsonb("trigger").notNull(),
+  conditions: jsonb("conditions").notNull().default(sql`'{}'::jsonb`),
+  actions: jsonb("actions").notNull().default(sql`'[]'::jsonb`),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const ruleRuns = pgTable("rule_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ruleId: uuid("rule_id").notNull(),
+  boardId: uuid("board_id").notNull(),
+  status: text("status").notNull(),
+  triggeredAt: timestamp("triggered_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  durationMs: integer("duration_ms").notNull().default(0),
+  event: jsonb("event").notNull(),
+  error: text("error"),
+  actionResults: jsonb("action_results").notNull().default(sql`'[]'::jsonb`),
+});
