@@ -19,6 +19,7 @@ import { AttachmentsSection } from "./card/attachments-section";
 import { CommentsSection } from "./card/comments-section";
 import { TypePicker } from "./card/type-picker";
 import { ParentPicker } from "./card/parent-picker";
+import { WatchToggle } from "./card/watch-toggle";
 import { SubtasksSection } from "./card/subtasks-section";
 import { CardLinksSection } from "./card/card-links-section";
 import { SprintPicker, type SprintLite } from "@/components/sprint/sprint-picker";
@@ -120,6 +121,7 @@ export function CardModal({
             sprintId={card.sprintId ?? null}
             sprints={sprints}
           />
+          <WatchToggle cardId={card.id} />
         </div>
       )}
 
