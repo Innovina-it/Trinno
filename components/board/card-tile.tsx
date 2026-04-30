@@ -9,6 +9,7 @@ import { DuePill } from "./card/due-pill";
 import { TileIndicators } from "./card/tile-indicators";
 import { TypeIcon } from "./card/type-picker";
 import { BlockedBadge } from "./card/blocked-badge";
+import { StoryPointsChip } from "./card/story-points-chip";
 import { cardCode } from "@/lib/format";
 
 export function CardTile({
@@ -65,6 +66,7 @@ export function CardTile({
         <div className="flex items-center gap-1.5">
           <TypeIcon type={card.type ?? "task"} className="size-3 text-fg-faint" />
           <BlockedBadge cardId={card.id} />
+          <StoryPointsChip cardId={card.id} />
         </div>
         <span
           aria-hidden

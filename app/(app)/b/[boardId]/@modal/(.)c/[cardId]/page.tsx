@@ -40,6 +40,7 @@ export default async function InterceptedCardPage({
         listId: c.listId,
         boardId: c.boardId,
         sprintId: c.sprintId,
+        storyPoints: c.storyPoints,
       }}
       sprints={sprints.map((s) => ({ id: s.id, name: s.name, state: s.state }))}
     >

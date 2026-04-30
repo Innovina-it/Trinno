@@ -22,6 +22,7 @@ import { ParentPicker } from "./card/parent-picker";
 import { SubtasksSection } from "./card/subtasks-section";
 import { CardLinksSection } from "./card/card-links-section";
 import { SprintPicker, type SprintLite } from "@/components/sprint/sprint-picker";
+import { StoryPointsPicker } from "./card/story-points-picker";
 import { cardCode } from "@/lib/format";
 
 export type CardModalCard = {
@@ -33,6 +34,7 @@ export type CardModalCard = {
   listId?: string;
   boardId?: string;
   sprintId?: string | null;
+  storyPoints?: number | null;
 };
 
 export function CardModal({
@@ -157,6 +159,7 @@ export function CardModal({
 
       <LabelsSection cardId={card.id} />
       <DueSection cardId={card.id} />
+      <StoryPointsPicker cardId={card.id} storyPoints={card.storyPoints ?? null} />
       <MembersSection cardId={card.id} />
       <ChecklistsSection cardId={card.id} />
       {card.listId && card.boardId && (
