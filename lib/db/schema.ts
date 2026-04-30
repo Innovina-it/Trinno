@@ -30,6 +30,9 @@ export const profiles = pgTable("profiles", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  onboardingCompletedAt: timestamp("onboarding_completed_at", {
+    withTimezone: true,
+  }),
 });
 
 export const workspaces = pgTable("workspaces", {

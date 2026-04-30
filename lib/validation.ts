@@ -387,3 +387,7 @@ export const MoveGadgetInput = z.object({
 });
 
 export const DeleteGadgetInput = z.object({ id: Uuid });
+
+// Plan #16b-γ-B (#7) — no input fields; the action stamps `now()` on the
+// caller's own profile row and RLS prevents writing anyone else's row.
+export const MarkOnboardingCompletedInput = z.object({});
