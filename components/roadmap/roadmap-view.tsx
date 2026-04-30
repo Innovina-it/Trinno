@@ -459,6 +459,85 @@ export function RoadmapView({
     };
   }, [onPointerMove, onPointerUp]);
 
+  // Plan #16b-α (#17) — persist zoom + scroll-x per workspace in
+  // localStorage. On mount we read the saved viewport: the zoom is
+  // applied via URL replace (so it stays bookmarkable) UNLESS the URL
+  // already has an explicit `?zoom=` (URL wins), and the scrollX is
+  // applied to the scroller after first paint. Subsequent zoom changes
+  // and scroll events write back debounced.
+  const VIEWPORT_KEY = `roadmap:${workspaceId}:viewport`;
+  const hydratedRef = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+    if (typeof window === "undefined") return;
+    let saved: { zoom?: Zoom; scrollX?: number } | null = null;
+    try {
+      const raw = window.localStorage.getItem(VIEWPORT_KEY);
+      if (raw) saved = JSON.parse(raw);
+    } catch {
+      saved = null;
+    }
+    if (!saved) return;
+    // Apply saved zoom only if URL is silent on the matter.
+    if (saved.zoom && !zoomParam && (ZOOMS as string[]).includes(saved.zoom)) {
+      const params = new URLSearchParams(sp.toString());
+      params.set("zoom", saved.zoom);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    }
+    // Apply scrollX after first paint.
+    if (typeof saved.scrollX === "number") {
+      requestAnimationFrame(() => {
+        if (scrollerRef.current) {
+          scrollerRef.current.scrollLeft = saved!.scrollX!;
+        }
+      });
+    }
+    // Note: we intentionally don't include sp / pathname / router in deps —
+    // hydration runs exactly once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [VIEWPORT_KEY]);
+
+  // Persist zoom whenever it changes (URL-driven).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!hydratedRef.current) return;
+    try {
+      const raw = window.localStorage.getItem(VIEWPORT_KEY);
+      const cur = raw ? JSON.parse(raw) : {};
+      cur.zoom = zoom;
+      window.localStorage.setItem(VIEWPORT_KEY, JSON.stringify(cur));
+    } catch {
+      /* ignore */
+    }
+  }, [zoom, VIEWPORT_KEY]);
+
+  // Debounced scroll persistence.
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    function onScroll() {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        try {
+          const raw = window.localStorage.getItem(VIEWPORT_KEY);
+          const cur = raw ? JSON.parse(raw) : {};
+          cur.scrollX = scroller!.scrollLeft;
+          window.localStorage.setItem(VIEWPORT_KEY, JSON.stringify(cur));
+        } catch {
+          /* ignore */
+        }
+      }, 200);
+    }
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [VIEWPORT_KEY]);
+
   // Plan #16b-α (#4) — when the URL carries `?focus=<cardId>`, scroll the
   // matching bar into view and flash a 1.5s outline ring. We re-run when the
   // param changes OR when the bar list lands (cards in store) so deep-links
