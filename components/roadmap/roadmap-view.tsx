@@ -147,10 +147,7 @@ export function RoadmapView({
         (c) =>
           !c.archived &&
           c.startDate !== null &&
-          c.targetDate !== null &&
-          // Subtasks are nested under their parent — Task 6 renders them
-          // separately. Only top-level types appear in the lane bars.
-          c.type !== "subtask",
+          c.targetDate !== null,
       )
       .map((c) => ({
         id: c.id,
@@ -164,6 +161,20 @@ export function RoadmapView({
         archived: c.archived,
       }));
   }, [storeCards, storeBoards]);
+
+  // Plan #16b-β — count of subtasks per parent that have NO dates set,
+  // so we can render an "+N undated subtasks" chip next to the parent bar.
+  const undatedSubtaskCountByParent = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const c of storeCards) {
+      if (c.archived) continue;
+      if (c.type !== "subtask") continue;
+      if (!c.parentCardId) continue;
+      if (c.startDate !== null && c.targetDate !== null) continue;
+      out.set(c.parentCardId, (out.get(c.parentCardId) ?? 0) + 1);
+    }
+    return out;
+  }, [storeCards]);
 
   const links = useMemo<RoadmapLink[]>(
     () =>
@@ -191,9 +202,25 @@ export function RoadmapView({
   const totalDays = Math.max(1, dayDiff(gridStart, gridEnd));
   const width = totalDays * ppd;
 
+  // Plan #16b-β — expanded parent state lifted into RoadmapView.
+  const [expandedParents, setExpandedParents] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const toggleParentExpanded = useCallback((parentId: string) => {
+    setExpandedParents((prev) => {
+      const next = new Set(prev);
+      if (next.has(parentId)) next.delete(parentId);
+      else next.add(parentId);
+      return next;
+    });
+  }, []);
+
   const lanes = useMemo(() => groupByEpic(cards), [cards]);
 
-  // Per-lane stacking + total height.
+  // Per-lane stacking + total height. Each entry tracks where in the
+  // canvas its body bars start, and pre-computes per-row offsets for any
+  // expanded subtask groups so the bar renderer can place children
+  // beneath the parent without re-doing layout work.
   const laneLayout = useMemo(() => {
     let yCursor = HEADER_STRIP_HEIGHT;
     return lanes.map((lane) => {
@@ -202,15 +229,46 @@ export function RoadmapView({
         placed.length === 0 ? 0 : Math.max(...placed.map((p) => p.row + 1));
       const headerRows = lane.headerCard ? 1 : 0;
       const bodyRows = Math.max(rowsCount, headerRows);
+      // Compute extra rows added by expanded subtask groups. Header card
+      // gets its own row, body cards group by stack row — within a row we
+      // take the max children-count so overlapping expansions don't break
+      // layout.
+      let extraRows = 0;
+      const expandedExtraByParent = new Map<string, number>();
+      const headerExpansion =
+        lane.headerCard && expandedParents.has(lane.headerCard.id)
+          ? lane.subtaskRowsByParent[lane.headerCard.id]?.length ?? 0
+          : 0;
+      if (headerExpansion > 0 && lane.headerCard)
+        expandedExtraByParent.set(lane.headerCard.id, headerExpansion);
+      extraRows += headerExpansion;
+      const maxByStackRow = new Map<number, number>();
+      for (const p of placed) {
+        if (!expandedParents.has(p.card.id)) continue;
+        const rows = lane.subtaskRowsByParent[p.card.id];
+        if (!rows || rows.length === 0) continue;
+        expandedExtraByParent.set(p.card.id, rows.length);
+        const cur = maxByStackRow.get(p.row) ?? 0;
+        if (rows.length > cur) maxByStackRow.set(p.row, rows.length);
+      }
+      for (const v of maxByStackRow.values()) extraRows += v;
       const height =
         LANE_HEADER_HEIGHT +
-        Math.max(1, bodyRows) * ROW_HEIGHT +
+        (Math.max(1, bodyRows) + extraRows) * ROW_HEIGHT +
         LANE_GAP;
       const top = yCursor;
       yCursor += height;
-      return { lane, placed, top, height, headerRows, bodyRows };
+      return {
+        lane,
+        placed,
+        top,
+        height,
+        headerRows,
+        bodyRows,
+        expandedExtraByParent,
+      };
     });
-  }, [lanes]);
+  }, [lanes, expandedParents]);
 
   const totalHeight =
     laneLayout.length === 0
@@ -539,96 +597,216 @@ export function RoadmapView({
               {laneLayout.map((ll) => {
                 const barRowsTop = ll.top + LANE_HEADER_HEIGHT;
                 const headerCard = ll.lane.headerCard;
-                return (
-                  <div key={`bars-${ll.lane.id}`}>
-                    {headerCard ? (
-                      (() => {
-                        const c = headerCard;
-                        const x = xForDate(
-                          startOfDay(c.startDate),
-                          gridStart,
-                          ppd,
-                        );
-                        const w =
-                          xForDate(
-                            startOfDay(c.targetDate),
+                // We walk the lane's stack rows in order. Within each
+                // stack row we render every bar at the same y, then if
+                // ANY of those bars is expanded we render their subtask
+                // rows beneath, before advancing to the next stack row.
+                // This preserves the original parallel stacking when no
+                // bars are expanded and gracefully extends it when they
+                // are.
+                const renderedBars: React.ReactNode[] = [];
+                let rowCursor = 0;
+
+                const renderSubtaskRows = (parentCard: RoadmapCard) => {
+                  const subRows =
+                    ll.lane.subtaskRowsByParent[parentCard.id] ?? [];
+                  if (!expandedParents.has(parentCard.id)) return 0;
+                  if (subRows.length === 0) return 0;
+                  subRows.forEach((rowCards, rowIdx) => {
+                    renderedBars.push(
+                      <div
+                        key={`subrow-${parentCard.id}-${rowIdx}`}
+                        className="absolute"
+                        style={{
+                          left: 0,
+                          right: 0,
+                          top: barRowsTop + (rowCursor + rowIdx) * ROW_HEIGHT,
+                          height: ROW_HEIGHT,
+                        }}
+                      >
+                        {rowCards.map((p) => {
+                          const sc = p.card;
+                          const sx = xForDate(
+                            startOfDay(sc.startDate),
                             gridStart,
                             ppd,
-                          ) -
-                          x +
-                          ppd;
-                        return (
-                          <div
-                            className="absolute"
-                            style={{
-                              left: 0,
-                              right: 0,
-                              top: barRowsTop,
-                              height: ROW_HEIGHT,
-                            }}
-                          >
-                            <RoadmapBar
-                              card={c}
-                              x={x}
-                              width={w}
-                              row={0}
-                              isHeader
-                              onMoveStart={handleMoveStart}
-                              onResizeLeftStart={handleResizeLeftStart}
-                              onResizeRightStart={handleResizeRightStart}
-                              onOpen={handleOpenCard}
-                            />
-                          </div>
-                        );
-                      })()
-                    ) : null}
-                    {(() => {
-                      const bodyTop =
-                        barRowsTop + (headerCard ? ROW_HEIGHT : 0);
-                      const bodyRows = Math.max(1, ll.bodyRows);
-                      return (
-                        <div
-                          className="absolute"
-                          style={{
-                            left: 0,
-                            right: 0,
-                            top: bodyTop,
-                            height: bodyRows * ROW_HEIGHT,
-                          }}
-                        >
-                          {ll.placed.map((p) => {
-                            const c = p.card;
-                            const x = xForDate(
-                              startOfDay(c.startDate),
+                          );
+                          const sw =
+                            xForDate(
+                              startOfDay(sc.targetDate),
                               gridStart,
                               ppd,
-                            );
-                            const w =
-                              xForDate(
-                                startOfDay(c.targetDate),
-                                gridStart,
-                                ppd,
-                              ) -
-                              x +
-                              ppd;
-                            return (
-                              <RoadmapBar
-                                key={c.id}
-                                card={c}
-                                x={x}
-                                width={w}
-                                row={p.row}
-                                onMoveStart={handleMoveStart}
-                                onResizeLeftStart={handleResizeLeftStart}
-                                onResizeRightStart={handleResizeRightStart}
-                                onOpen={handleOpenCard}
-                              />
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
+                            ) -
+                            sx +
+                            ppd;
+                          return (
+                            <div
+                              key={sc.id}
+                              className="absolute h-3 rounded-sm border border-fg/25 bg-fg/8 hover:border-fg/50 transition-colors flex items-center px-1.5 cursor-pointer select-none"
+                              style={{
+                                left: sx + 16,
+                                width: Math.max(sw - 16, 8),
+                                top: 12,
+                              }}
+                              data-card-id={sc.id}
+                              data-testid="roadmap-subtask-bar"
+                              onDoubleClick={() =>
+                                handleOpenCard(sc.id, sc.boardId)
+                              }
+                              title={`${sc.title} — ${sc.startDate
+                                .toISOString()
+                                .slice(0, 10)} → ${sc.targetDate
+                                .toISOString()
+                                .slice(0, 10)}`}
+                            >
+                              <span className="text-[10px] text-fg-muted truncate">
+                                {sc.title}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>,
+                    );
+                  });
+                  return subRows.length;
+                };
+
+                const renderParentBar = (
+                  parentCard: RoadmapCard,
+                  isHeader: boolean,
+                ) => {
+                  const c = parentCard;
+                  const x = xForDate(startOfDay(c.startDate), gridStart, ppd);
+                  const w =
+                    xForDate(startOfDay(c.targetDate), gridStart, ppd) -
+                    x +
+                    ppd;
+                  const expanded = expandedParents.has(c.id);
+                  const subRows =
+                    ll.lane.subtaskRowsByParent[c.id] ?? [];
+                  const hasChildren = subRows.length > 0;
+                  const undated = undatedSubtaskCountByParent.get(c.id) ?? 0;
+                  return (
+                    <div
+                      key={`bar-${c.id}`}
+                      className="absolute"
+                      style={{
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        height: ROW_HEIGHT,
+                      }}
+                    >
+                      {hasChildren && (
+                        <button
+                          type="button"
+                          onClick={() => toggleParentExpanded(c.id)}
+                          aria-label={
+                            expanded
+                              ? `Collapse subtasks of ${c.title}`
+                              : `Expand subtasks of ${c.title}`
+                          }
+                          aria-expanded={expanded}
+                          data-testid="roadmap-parent-toggle"
+                          data-card-id={c.id}
+                          className="absolute top-1.5 size-5 rounded-md border border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg flex items-center justify-center"
+                          style={{ left: Math.max(0, x - 22) }}
+                        >
+                          <ChevronDown
+                            className={`size-3 transition-transform ${
+                              expanded ? "" : "-rotate-90"
+                            }`}
+                          />
+                        </button>
+                      )}
+                      <RoadmapBar
+                        card={c}
+                        x={x}
+                        width={w}
+                        row={0}
+                        isHeader={isHeader}
+                        onMoveStart={handleMoveStart}
+                        onResizeLeftStart={handleResizeLeftStart}
+                        onResizeRightStart={handleResizeRightStart}
+                        onOpen={handleOpenCard}
+                      />
+                      {undated > 0 && (
+                        <span
+                          className="absolute top-2 chip mono-meta-sm"
+                          style={{ left: x + w + 6 }}
+                          data-testid="roadmap-undated-subtasks"
+                          data-card-id={c.id}
+                        >
+                          +{undated} UNDATED
+                        </span>
+                      )}
+                    </div>
+                  );
+                };
+
+                // Render header card first (always row 0 of the lane).
+                if (headerCard) {
+                  renderedBars.push(
+                    <div
+                      key={`header-row-${ll.lane.id}`}
+                      className="absolute"
+                      style={{
+                        left: 0,
+                        right: 0,
+                        top: barRowsTop + rowCursor * ROW_HEIGHT,
+                        height: ROW_HEIGHT,
+                      }}
+                    >
+                      {renderParentBar(headerCard, true)}
+                    </div>,
+                  );
+                  rowCursor += 1;
+                  rowCursor += renderSubtaskRows(headerCard);
+                }
+
+                // Render body rows, grouping placed cards by their .row.
+                const cardsByRow = new Map<number, RoadmapCard[]>();
+                let maxRow = -1;
+                for (const p of ll.placed) {
+                  const arr = cardsByRow.get(p.row) ?? [];
+                  arr.push(p.card);
+                  cardsByRow.set(p.row, arr);
+                  if (p.row > maxRow) maxRow = p.row;
+                }
+                for (let r = 0; r <= maxRow; r++) {
+                  const rowCards = cardsByRow.get(r) ?? [];
+                  if (rowCards.length === 0) {
+                    rowCursor += 1;
+                    continue;
+                  }
+                  const stackRowTop =
+                    barRowsTop + rowCursor * ROW_HEIGHT;
+                  renderedBars.push(
+                    <div
+                      key={`stackrow-${ll.lane.id}-${r}`}
+                      className="absolute"
+                      style={{
+                        left: 0,
+                        right: 0,
+                        top: stackRowTop,
+                        height: ROW_HEIGHT,
+                      }}
+                    >
+                      {rowCards.map((c) => renderParentBar(c, false))}
+                    </div>,
+                  );
+                  rowCursor += 1;
+                  // Stack subtask rows for any expanded parents in this row.
+                  let extraInRow = 0;
+                  for (const c of rowCards) {
+                    const added = renderSubtaskRows(c);
+                    if (added > extraInRow) extraInRow = added;
+                  }
+                  rowCursor += extraInRow;
+                }
+
+                return (
+                  <div key={`bars-${ll.lane.id}`}>{renderedBars}</div>
                 );
               })}
               {/* Dependency arrows on top */}

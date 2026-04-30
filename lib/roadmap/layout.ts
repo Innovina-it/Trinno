@@ -25,6 +25,13 @@ export type Lane<C extends RoadmapCard = RoadmapCard> = {
   headerCard: C | null;
   /** Children of this epic (or orphan stories for Uncategorized). */
   cards: C[];
+  /**
+   * Plan #16b-β — subtasks (`type === "subtask"`) grouped by `parentCardId`,
+   * pre-stacked into rows. Empty record if no subtasks have dates set in
+   * this lane. The RoadmapView reads this map when rendering expanded
+   * parent rows.
+   */
+  subtaskRowsByParent: Record<string, Array<PlacedCard<C>[]>>;
 };
 
 export const UNCATEGORIZED_LANE_ID = "uncategorized";
@@ -33,6 +40,12 @@ export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
   const epics = new Map<string, C>();
   const childrenByEpic = new Map<string, C[]>();
   const orphans: C[] = [];
+  // Plan #16b-β — collect subtasks separately so they don't appear as their
+  // own rows alongside parent stories. They're rendered as nested children
+  // when the user expands the parent.
+  const subtasksByParent = new Map<string, C[]>();
+  // Build a quick id -> card lookup for resolving subtask parents.
+  const cardById = new Map(cards.map((c) => [c.id, c]));
 
   for (const c of cards) {
     if (c.type === "epic") {
@@ -42,6 +55,14 @@ export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
   }
   for (const c of cards) {
     if (c.type === "epic") continue;
+    if (c.type === "subtask") {
+      if (c.parentCardId) {
+        const arr = subtasksByParent.get(c.parentCardId) ?? [];
+        arr.push(c);
+        subtasksByParent.set(c.parentCardId, arr);
+      }
+      continue;
+    }
     if (c.parentCardId && epics.has(c.parentCardId)) {
       childrenByEpic.get(c.parentCardId)!.push(c);
     } else {
@@ -49,15 +70,42 @@ export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
     }
   }
 
+  // For each lane, pre-stack subtask groups whose parent lives in that lane.
+  function subtaskRowsFor(laneCardIds: Iterable<string>): Record<string, Array<PlacedCard<C>[]>> {
+    const out: Record<string, Array<PlacedCard<C>[]>> = {};
+    for (const parentId of laneCardIds) {
+      const subs = subtasksByParent.get(parentId);
+      if (!subs || subs.length === 0) continue;
+      // Group subtasks for this parent into rows (greedy stacking).
+      const placed = stackInLane(subs);
+      const rows: Array<PlacedCard<C>[]> = [];
+      for (const p of placed) {
+        if (!rows[p.row]) rows[p.row] = [];
+        rows[p.row].push(p);
+      }
+      out[parentId] = rows;
+    }
+    return out;
+  }
+
   const epicLanes: Lane<C>[] = [...epics.values()]
     .sort((a, b) => a.title.localeCompare(b.title))
-    .map<Lane<C>>((e) => ({
-      id: e.id,
-      title: e.title,
-      kind: "epic",
-      headerCard: e,
-      cards: childrenByEpic.get(e.id) ?? [],
-    }));
+    .map<Lane<C>>((e) => {
+      const laneChildren = childrenByEpic.get(e.id) ?? [];
+      const ids: string[] = [e.id, ...laneChildren.map((c) => c.id)];
+      return {
+        id: e.id,
+        title: e.title,
+        kind: "epic",
+        headerCard: e,
+        cards: laneChildren,
+        subtaskRowsByParent: subtaskRowsFor(ids),
+      };
+    });
+
+  // Suppress unused-variable lint hint (cardById may be useful for callers
+  // that want to resolve parent metadata; left exported via no public api).
+  void cardById;
 
   if (orphans.length === 0) return epicLanes;
 
@@ -69,6 +117,7 @@ export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
       kind: "uncategorized",
       headerCard: null,
       cards: orphans,
+      subtaskRowsByParent: subtaskRowsFor(orphans.map((c) => c.id)),
     },
   ];
 }
