@@ -85,7 +85,10 @@ export function CardTile({
           </span>
         </span>
         {card.parentCardId && (
-          <span className="mt-1 inline-flex items-center gap-1 mono-meta-sm text-fg-faint">
+          <span
+            className="mt-1 inline-flex items-center gap-1 mono-meta-sm text-fg-faint"
+            data-testid="tile-parent-breadcrumb"
+          >
             <CornerLeftUp className="size-3" />
             #{cardCode(card.parentCardId)}
           </span>
