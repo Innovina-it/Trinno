@@ -111,6 +111,7 @@ export const cards = pgTable("cards", {
   coverColor: text("cover_color"),
   type: text("type").notNull().default("task"),
   parentCardId: uuid("parent_card_id"),
+  sprintId: uuid("sprint_id"),
 });
 
 export const labels = pgTable("labels", {
@@ -219,4 +220,24 @@ export const cardLinks = pgTable("card_links", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+});
+
+export const sprintState = pgEnum("sprint_state", [
+  "planned",
+  "active",
+  "completed",
+]);
+
+export const sprints = pgTable("sprints", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull(),
+  name: text("name").notNull(),
+  goal: text("goal"),
+  startDate: timestamp("start_date", { withTimezone: true }),
+  endDate: timestamp("end_date", { withTimezone: true }),
+  state: sprintState("state").notNull().default("planned"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
 });
