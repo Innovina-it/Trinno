@@ -67,6 +67,14 @@ export function TopNav({
           >
             DASHBOARDS
           </Link>
+          <span className="text-fg-faint select-none" aria-hidden>/</span>
+          <Link
+            href="/inbox"
+            className="mono-meta-sm tracking-[0.18em] text-fg-muted hover:text-fg transition-colors"
+            data-testid="nav-inbox"
+          >
+            INBOX
+          </Link>
         </div>
         <div className="flex items-center gap-3">
           <SearchBox />
