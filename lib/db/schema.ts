@@ -357,3 +357,63 @@ export const ruleRuns = pgTable("rule_runs", {
   error: text("error"),
   actionResults: jsonb("action_results").notNull().default(sql`'[]'::jsonb`),
 });
+
+// Plan #10 — Components + Versions + Releases.
+
+export const versionState = pgEnum("version_state", [
+  "unreleased",
+  "released",
+  "archived",
+]);
+
+export const cardVersionKind = pgEnum("card_version_kind", [
+  "affects",
+  "fixes",
+]);
+
+export const components = pgTable("components", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  boardId: uuid("board_id").notNull(),
+  name: text("name").notNull(),
+  leadUserId: uuid("lead_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const cardComponents = pgTable(
+  "card_components",
+  {
+    cardId: uuid("card_id").notNull(),
+    componentId: uuid("component_id").notNull(),
+    boardId: uuid("board_id").notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.cardId, t.componentId] }) }),
+);
+
+export const versions = pgTable("versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull(),
+  name: text("name").notNull(),
+  semver: text("semver"),
+  state: versionState("state").notNull().default("unreleased"),
+  releaseDate: timestamp("release_date", { withTimezone: true }),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const cardVersions = pgTable(
+  "card_versions",
+  {
+    cardId: uuid("card_id").notNull(),
+    versionId: uuid("version_id").notNull(),
+    kind: cardVersionKind("kind").notNull(),
+    workspaceId: uuid("workspace_id").notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.cardId, t.versionId, t.kind] }) }),
+);
