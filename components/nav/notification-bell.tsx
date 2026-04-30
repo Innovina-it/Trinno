@@ -33,6 +33,7 @@ const KIND_LABEL: Record<string, string> = {
   "card.unarchived": "restored",
   "card.moved": "moved",
   "card.due": "set due date on",
+  "card.dates": "updated roadmap dates on",
   "card.label.added": "added a label to",
   "board.member.added": "added you to a board",
 };
