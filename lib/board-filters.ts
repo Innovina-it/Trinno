@@ -5,6 +5,7 @@ export type Filters = {
   labelIds: string[];
   due: "overdue" | "this-week" | null;
   assignedToMe: boolean;
+  scheduled: boolean;
 };
 
 type FilterCard = {
@@ -14,6 +15,8 @@ type FilterCard = {
   dueDate?: Date | string | null;
   dueComplete?: boolean | null;
   sprintId?: string | null;
+  startDate?: Date | string | null;
+  targetDate?: Date | string | null;
 };
 
 export function parseFilters(sp: URLSearchParams): Filters {
@@ -23,11 +26,13 @@ export function parseFilters(sp: URLSearchParams): Filters {
   // Canonical query key is `assignee=me` (matches Jira convention).
   // `me=1` is NOT supported.
   const assignedToMe = sp.get("assignee") === "me";
+  const scheduled = sp.get("scheduled") === "1";
   return {
     types,
     labelIds,
     due: due === "overdue" || due === "this-week" ? due : null,
     assignedToMe,
+    scheduled,
   };
 }
 
@@ -37,11 +42,16 @@ export function serializeFilters(f: Filters): URLSearchParams {
   if (f.labelIds.length) sp.set("label", f.labelIds.join(","));
   if (f.due) sp.set("due", f.due);
   if (f.assignedToMe) sp.set("assignee", "me");
+  if (f.scheduled) sp.set("scheduled", "1");
   return sp;
 }
 
 export function isFilterActive(f: Filters): boolean {
-  return f.types.length > 0 || f.labelIds.length > 0 || f.due !== null || f.assignedToMe;
+  return f.types.length > 0
+    || f.labelIds.length > 0
+    || f.due !== null
+    || f.assignedToMe
+    || f.scheduled;
 }
 
 export function applyFilters<T extends FilterCard>(
@@ -89,6 +99,9 @@ export function applyFilters<T extends FilterCard>(
       if (!ctx.currentUserId) return false;
       const mems = memberByCard.get(c.id);
       if (!mems || !mems.has(ctx.currentUserId)) return false;
+    }
+    if (f.scheduled) {
+      if (!c.startDate && !c.targetDate) return false;
     }
     return true;
   });

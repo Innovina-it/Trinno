@@ -11,7 +11,7 @@ import {
   DropdownMenuRadioGroup, DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import {
-  CalendarClock, User, Tag, X, Layers, ChevronDown,
+  CalendarClock, CalendarRange, User, Tag, X, Layers, ChevronDown,
 } from "lucide-react";
 
 const LANE_OPTIONS: { id: LaneMode; label: string }[] = [
@@ -55,7 +55,15 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
   function toggleMe() {
     update({ ...filters, assignedToMe: !filters.assignedToMe });
   }
-  function clear() { update({ types: [], labelIds: [], due: null, assignedToMe: false }, "none"); }
+  function clear() {
+    update(
+      { types: [], labelIds: [], due: null, assignedToMe: false, scheduled: false },
+      "none",
+    );
+  }
+  function toggleScheduled() {
+    update({ ...filters, scheduled: !filters.scheduled });
+  }
 
   const active = isFilterActive(filters) || lanes !== "none";
   void currentUserId; void pending;
@@ -109,6 +117,18 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
         }`}
       >
         <CalendarClock className="size-3" /> THIS WEEK
+      </button>
+
+      {/* Scheduled — cards with start or target date set */}
+      <button
+        type="button"
+        onClick={toggleScheduled}
+        data-testid="filter-scheduled"
+        className={`chip inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] ${
+          filters.scheduled ? "bg-fg/10 text-fg ring-1 ring-fg/40" : ""
+        }`}
+      >
+        <CalendarRange className="size-3" /> SCHEDULED
       </button>
 
       <span className="mx-1 h-4 w-px bg-hairline" />

@@ -283,7 +283,8 @@ export function BoardView({
                         filters.types.length ||
                         filters.labelIds.length ||
                         filters.due ||
-                        filters.assignedToMe
+                        filters.assignedToMe ||
+                        filters.scheduled
                           ? new Set(visibleCards.map((c) => c.id))
                           : undefined
                       }
