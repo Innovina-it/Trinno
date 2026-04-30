@@ -39,6 +39,7 @@ export function WatchToggle({ cardId }: { cardId: string }) {
       onClick={toggle}
       disabled={pending || watching === null}
       title={watching ? "Watching" : "Watch"}
+      aria-label={watching ? "Stop watching this card" : "Watch this card"}
       data-testid="watch-toggle"
     >
       {watching ? (
