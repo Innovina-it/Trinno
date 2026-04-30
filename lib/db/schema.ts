@@ -200,3 +200,23 @@ export const activity = pgTable("activity", {
     .notNull()
     .defaultNow(),
 });
+
+export const linkKind = pgEnum("link_kind", [
+  "blocks",
+  "is_blocked_by",
+  "relates_to",
+  "duplicates",
+  "is_duplicated_by",
+]);
+
+export const cardLinks = pgTable("card_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  fromCardId: uuid("from_card_id").notNull(),
+  toCardId: uuid("to_card_id").notNull(),
+  kind: linkKind("kind").notNull(),
+  boardId: uuid("board_id").notNull(),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
