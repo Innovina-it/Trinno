@@ -49,6 +49,8 @@ function rowToCard(r: Record<string, unknown>): CardRow {
     storyPoints: (r.story_points ?? null) as number | null,
     estimateMin: (r.estimate_min ?? null) as number | null,
     spentMin: (r.spent_min ?? 0) as number,
+    startDate: r.start_date ? new Date(r.start_date as string) : null,
+    targetDate: r.target_date ? new Date(r.target_date as string) : null,
   };
 }
 

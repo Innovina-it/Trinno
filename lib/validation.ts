@@ -55,6 +55,8 @@ export const UpdateCardInput = z.object({
   parentCardId: Uuid.nullable().optional(),
   storyPoints: z.number().int().min(0).max(999).nullable().optional(),
   estimateMin: z.number().int().nonnegative().nullable().optional(),
+  startDate: z.union([z.string(), z.date()]).nullable().optional(),
+  targetDate: z.union([z.string(), z.date()]).nullable().optional(),
 });
 export const MoveCardInput = z.object({
   id: Uuid, listId: Uuid, position: z.string().min(1).max(64),

@@ -116,6 +116,8 @@ export const cards = pgTable("cards", {
   storyPoints: integer("story_points"),
   estimateMin: integer("estimate_min"),
   spentMin: integer("spent_min").notNull().default(0),
+  startDate: timestamp("start_date", { withTimezone: true }),
+  targetDate: timestamp("target_date", { withTimezone: true }),
 });
 
 export const labels = pgTable("labels", {

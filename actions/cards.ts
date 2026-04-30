@@ -38,6 +38,8 @@ export async function updateCardImpl(token: string, input: {
   parentCardId?: string | null;
   storyPoints?: number | null;
   estimateMin?: number | null;
+  startDate?: Date | string | null;
+  targetDate?: Date | string | null;
 }) {
   const parsed = UpdateCardInput.parse(input);
   const patch: Record<string, unknown> = {};
@@ -56,6 +58,22 @@ export async function updateCardImpl(token: string, input: {
   if (parsed.parentCardId !== undefined) patch.parentCardId = parsed.parentCardId;
   if (parsed.storyPoints !== undefined) patch.storyPoints = parsed.storyPoints;
   if (parsed.estimateMin !== undefined) patch.estimateMin = parsed.estimateMin;
+  if (parsed.startDate !== undefined) {
+    patch.startDate =
+      parsed.startDate === null
+        ? null
+        : parsed.startDate instanceof Date
+          ? parsed.startDate
+          : new Date(parsed.startDate);
+  }
+  if (parsed.targetDate !== undefined) {
+    patch.targetDate =
+      parsed.targetDate === null
+        ? null
+        : parsed.targetDate instanceof Date
+          ? parsed.targetDate
+          : new Date(parsed.targetDate);
+  }
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(cards).set(patch)
       .where(eq(cards.id, parsed.id)).returning();
