@@ -25,6 +25,8 @@ import { CardLinksSection } from "./card/card-links-section";
 import { SprintPicker, type SprintLite } from "@/components/sprint/sprint-picker";
 import { StoryPointsPicker } from "./card/story-points-picker";
 import { TimeSection } from "./card/time-section";
+import { ComponentCardSection } from "@/components/components/component-card-section";
+import { VersionCardSection } from "@/components/versions/version-card-section";
 import { cardCode } from "@/lib/format";
 
 export type CardModalCard = {
@@ -44,11 +46,13 @@ export type CardModalCard = {
 export function CardModal({
   card,
   sprints = [],
+  workspaceId,
   asDialog = false,
   children,
 }: {
   card: CardModalCard;
   sprints?: SprintLite[];
+  workspaceId?: string;
   asDialog?: boolean;
   children?: React.ReactNode;
 }) {
@@ -163,6 +167,10 @@ export function CardModal({
       </section>
 
       <LabelsSection cardId={card.id} />
+      <ComponentCardSection cardId={card.id} />
+      {workspaceId && (
+        <VersionCardSection cardId={card.id} workspaceId={workspaceId} />
+      )}
       <DueSection cardId={card.id} />
       <StoryPointsPicker cardId={card.id} storyPoints={card.storyPoints ?? null} />
       <TimeSection

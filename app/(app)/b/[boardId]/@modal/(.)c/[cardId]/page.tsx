@@ -45,6 +45,7 @@ export default async function InterceptedCardPage({
         spentMin: c.spentMin,
       }}
       sprints={sprints.map((s) => ({ id: s.id, name: s.name, state: s.state }))}
+      workspaceId={board?.workspaceId}
     >
       <CardActivity cardId={c.id} />
     </CardModal>
