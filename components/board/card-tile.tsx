@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CornerLeftUp, CalendarRange } from "lucide-react";
+import { CornerLeftUp, CalendarRange, Layers3 } from "lucide-react";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
 import { LabelStripes } from "./card/label-stripes";
@@ -140,6 +140,20 @@ export function CardTile({
             {" → "}
             {card.targetDate ? fmtShortDate(card.targetDate) : "?"}
           </button>
+        </div>
+      )}
+
+      {card.sprintId && (
+        <div className="px-3 pb-2.5">
+          <span
+            data-testid="tile-sprint"
+            data-sprint-id={card.sprintId}
+            title={`Sprint ${card.sprintId}`}
+            className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted"
+          >
+            <Layers3 className="size-3" />
+            IN SPRINT
+          </span>
         </div>
       )}
 
