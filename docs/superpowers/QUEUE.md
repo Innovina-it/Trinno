@@ -6,19 +6,11 @@ Plans listed here are committed + ready for execution. Other Claude sessions can
 
 ## Up next (in order)
 
-- [ ] **#16b-γ-Gantt-CRUD** — `docs/superpowers/plans/2026-04-30-plan-16b-gamma-gantt-crud.md` — Gantt usability + CRUD + filter parity (~6 hrs subagent). Plan committed `1b6d229`. Depends on γ-B + γ-D merged. **9 tasks**: click-to-modal, hover overflow menu, search input, quick-add dialog, bar tooltip, filter parity, keyboard shortcuts, epic-row link, verify.
+- [ ] **#16b-γ-Gantt-Master** — `docs/superpowers/plans/2026-04-30-plan-16b-gamma-gantt-master.md` — All remaining Gantt + integration improvements (28 changes, ~19 hrs subagent). Groups: A (CRUD parity, 9), B (workspace context on board pages + wrap-up, 5), C (Gantt UX polish, 10), D (cross-view bidirectional, 4). Subagent should commit per group.
 
 - [ ] **#16b-γ-E forms** — NEEDS SCOPE. User said items "49-53" but master list not in repo. Write plan after user pastes item titles.
 
 - [ ] **#16b-γ-F a11y + testing** — NEEDS SCOPE. User said items "16, 17, 58-60". Write plan after user pastes item titles. Likely covers ARIA roles, keyboard traps, contrast audit, axe-core, snapshot tests.
-
-- [ ] **#16b-γ-Wrap-up** — `docs/superpowers/plans/` (not yet written) — leftover items from my earlier γ table:
-  - γ-1: mount `WorkspaceStoreProvider` on board pages
-  - γ-2: resolve sprint NAME on Kanban tile (replace "IN SPRINT")
-  - γ-5: status badge on Kanban tile
-  - γ-8: `card_links` workspace realtime extension
-  - γ-10: concerns doc in `docs/superpowers/concerns.md`
-  ~3 hrs subagent. Plan to write before dispatch.
 
 ## Done
 
