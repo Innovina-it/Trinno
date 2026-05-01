@@ -6,7 +6,7 @@ Plans listed here are committed + ready for execution. Other Claude sessions can
 
 ## Up next (in order)
 
-- [ ] **#16b-γ-Gantt-Master** — `docs/superpowers/plans/2026-04-30-plan-16b-gamma-gantt-master.md` — All remaining Gantt + integration improvements (28 changes, ~19 hrs subagent). Groups: A (CRUD parity, 9), B (workspace context on board pages + wrap-up, 5), C (Gantt UX polish, 10), D (cross-view bidirectional, 4). Subagent should commit per group.
+- [~] **#16b-γ-Gantt-Master** — `docs/superpowers/plans/2026-04-30-plan-16b-gamma-gantt-master.md` — All remaining Gantt + integration improvements (28 changes, ~19 hrs subagent). Groups: A (CRUD parity, 9), B (workspace context on board pages + wrap-up, 5), C (Gantt UX polish, 10), D (cross-view bidirectional, 4). Subagent should commit per group.
 
 - [ ] **#16b-γ-E forms** — NEEDS SCOPE. User said items "49-53" but master list not in repo. Write plan after user pastes item titles.
 
