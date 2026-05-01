@@ -43,6 +43,7 @@ import {
   type CascadeAffectedCard,
 } from "./cascade-confirm-dialog";
 import { SprintOverlay } from "./sprint-overlay";
+import { RoadmapNewCardDialog } from "./new-card-dialog";
 
 const ZOOMS: Zoom[] = ["week", "month", "quarter"];
 const ROW_HEIGHT = 36; // 28px bar + 8px gap
@@ -908,6 +909,7 @@ export function RoadmapView({
           </button>
         </div>
         <div className="flex items-center gap-3">
+          <RoadmapNewCardDialog />
           <input
             type="search"
             value={queryDraft}
