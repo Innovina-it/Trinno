@@ -153,7 +153,6 @@ export function RoadmapBar({
           e.preventDefault();
           onMoveStart(e, card.id);
         }}
-        onDoubleClick={() => onOpen?.(card.id, card.boardId)}
         onContextMenu={handleContextMenu}
         data-card-id={card.id}
         data-roadmap-focus={card.id}

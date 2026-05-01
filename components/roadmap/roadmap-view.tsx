@@ -7,6 +7,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -548,11 +549,17 @@ export function RoadmapView({
     window.removeEventListener("pointerup", onPointerUp);
     const current = cardsRef.current.find((c) => c.id === d.cardId);
     if (!current) return;
-    if (
+    const noOp =
       current.startDate.getTime() === d.origStart.getTime() &&
-      current.targetDate.getTime() === d.origTarget.getTime()
-    ) {
-      return; // no-op
+      current.targetDate.getTime() === d.origTarget.getTime();
+    if (noOp) {
+      // A1 — a move-mode pointerdown/up with no movement is a click;
+      // open the card modal. Resize handles enter resize-* mode and
+      // are intentionally excluded.
+      if (d.mode === "move") {
+        router.push(`/b/${current.boardId}/c/${d.cardId}`);
+      }
+      return;
     }
 
     // Apply snap depending on drag mode. In move-mode we snap the
@@ -603,7 +610,7 @@ export function RoadmapView({
         { start: snappedStart, target: snappedTarget },
       );
     });
-  }, [onPointerMove, persistDates, snapDate, patchCardInStore]);
+  }, [onPointerMove, persistDates, snapDate, patchCardInStore, router]);
 
   const beginDrag = useCallback(
     (mode: DragMode, e: React.PointerEvent, cardId: string) => {
@@ -900,22 +907,36 @@ export function RoadmapView({
             >
               LANE
             </div>
-            {laneLayout.map((ll) => (
-              <div
-                key={ll.lane.id}
-                className="border-b border-hairline px-3 flex flex-col justify-center"
-                style={{ height: ll.height }}
-              >
-                <span className="mono-meta text-fg truncate">
-                  {ll.lane.title}
-                </span>
-                <span className="mono-meta-sm text-fg-faint truncate">
-                  {ll.lane.kind === "uncategorized"
-                    ? `${ll.placed.length} ORPHANS`
-                    : `${ll.placed.length} STORIES`}
-                </span>
-              </div>
-            ))}
+            {laneLayout.map((ll) => {
+              const epicHeader = ll.lane.headerCard;
+              return (
+                <div
+                  key={ll.lane.id}
+                  className="border-b border-hairline px-3 flex flex-col justify-center"
+                  style={{ height: ll.height }}
+                >
+                  {epicHeader ? (
+                    <Link
+                      href={`/b/${epicHeader.boardId}/c/${epicHeader.id}`}
+                      className="mono-meta text-fg truncate hover:underline focus:outline-none focus:underline"
+                      data-testid="roadmap-lane-title-link"
+                      data-card-id={epicHeader.id}
+                    >
+                      {ll.lane.title}
+                    </Link>
+                  ) : (
+                    <span className="mono-meta text-fg truncate">
+                      {ll.lane.title}
+                    </span>
+                  )}
+                  <span className="mono-meta-sm text-fg-faint truncate">
+                    {ll.lane.kind === "uncategorized"
+                      ? `${ll.placed.length} ORPHANS`
+                      : `${ll.placed.length} STORIES`}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
           {/* Scrollable canvas */}
@@ -1028,7 +1049,7 @@ export function RoadmapView({
                               }}
                               data-card-id={sc.id}
                               data-testid="roadmap-subtask-bar"
-                              onDoubleClick={() =>
+                              onClick={() =>
                                 handleOpenCard(sc.id, sc.boardId)
                               }
                               title={`${sc.title} — ${sc.startDate
