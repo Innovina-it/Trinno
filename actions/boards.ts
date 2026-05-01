@@ -5,6 +5,10 @@ import { dbAsUser } from "@/lib/db/client";
 import { boards, boardMembers } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
+  listBoardsWithLists,
+  type BoardWithLists,
+} from "@/lib/queries/boards-with-lists";
+import {
   CreateBoardInput,
   CreateBoardFromTemplateInput,
   DeleteBoardInput,
@@ -210,4 +214,14 @@ export async function deleteBoard(
   await requireUser();
   const token = (await getSessionToken())!;
   await deleteBoardImpl(token, input);
+}
+
+// Plan #16b-γ-D (#6, #37, #38) — server action wrapper around
+// `listBoardsWithLists` so client components (quick-add card dialog,
+// move-to-board dialog, cross-board link picker) can fetch the
+// destination tree on-open.
+export async function getBoardsWithLists(): Promise<BoardWithLists[]> {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  return listBoardsWithLists(token);
 }

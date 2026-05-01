@@ -5,6 +5,7 @@ import { TopNav } from "@/components/nav/top-nav";
 import { TourOverlay } from "@/components/onboarding/tour-overlay";
 import { ErrorPane } from "@/components/error-pane";
 import { UndoBanner } from "@/components/undo-banner";
+import { QuickAddCardMount } from "@/components/quick-add-card-dialog";
 import { listWorkspaces } from "@/lib/queries/workspaces";
 import { listFavoriteBoards, listRecentBoardViews } from "@/lib/queries/favorites";
 import { dbAsUser } from "@/lib/db/client";
@@ -72,6 +73,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {showTour && <TourOverlay />}
       <ErrorPane />
       <UndoBanner />
+      <QuickAddCardMount hasWorkspaces={ws.length > 0} />
     </>
   );
 }

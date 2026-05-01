@@ -23,6 +23,7 @@ import { positionBetween } from "@/lib/ordering";
 import { moveCard as moveCardAction } from "@/actions/cards";
 import { moveList as moveListAction } from "@/actions/lists";
 import { undoBus } from "@/lib/undo-bus";
+import { QuickAddFab } from "@/components/quick-add-card-dialog";
 import { Button } from "@/components/ui/button";
 import { ListColumn } from "./list-column";
 import { AddListForm } from "./add-list-form";
@@ -374,6 +375,7 @@ export function BoardView({
         </div>
         {children}
       </div>
+      <QuickAddFab />
     </div>
   );
 }
