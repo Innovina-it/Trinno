@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { ChevronDown, Plus, Check } from "lucide-react";
+import { ChevronDown, Plus, Check, Search } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
@@ -8,19 +8,39 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { CreateWorkspaceDialog } from "@/components/workspace/create-workspace-dialog";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export type WorkspaceLite = { id: string; name: string };
+
+// Plan #16b-γ-D (#39) — when the user belongs to more than 5 workspaces
+// the flat list becomes hard to scan. A search input pinned to the top
+// of the dropdown filters by `name.toLowerCase().includes(q)` so the
+// active workspace is always one or two keystrokes away. We avoid
+// rendering the input below the threshold so users with 1–5 workspaces
+// see no extra noise.
+const SEARCH_THRESHOLD = 5;
 
 export function WorkspaceSwitcher({
   workspaces, activeId,
 }: { workspaces: WorkspaceLite[]; activeId?: string }) {
   const [openCreate, setOpenCreate] = useState(false);
+  const [q, setQ] = useState("");
   const active = workspaces.find(w => w.id === activeId) ?? workspaces[0];
+
+  const showSearch = workspaces.length > SEARCH_THRESHOLD;
+  const filtered = useMemo(() => {
+    if (!showSearch || !q.trim()) return workspaces;
+    const needle = q.toLowerCase();
+    return workspaces.filter(w => w.name.toLowerCase().includes(needle));
+  }, [workspaces, q, showSearch]);
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu
+        onOpenChange={(o) => {
+          if (!o) setQ("");
+        }}
+      >
         <DropdownMenuTrigger
           render={
             <Button
@@ -40,7 +60,32 @@ export function WorkspaceSwitcher({
             <DropdownMenuLabel>
               <span className="mono-meta text-fg-muted">Workspaces</span>
             </DropdownMenuLabel>
-            {workspaces.map(w => {
+            {showSearch && (
+              <div className="px-2 pb-2">
+                <div className="relative">
+                  <Search className="size-3.5 text-fg-faint absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    onKeyDown={(e) => {
+                      // Don't let parent dropdown intercept space/letters.
+                      e.stopPropagation();
+                    }}
+                    placeholder="Search workspaces…"
+                    data-testid="workspace-switcher-search"
+                    className="h-8 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] pl-7 pr-2 text-sm outline-none focus-visible:border-[color:var(--accent-cyan)]/60"
+                  />
+                </div>
+              </div>
+            )}
+            {filtered.length === 0 && (
+              <div className="px-3 py-3 text-sm text-fg-faint italic">
+                No matches.
+              </div>
+            )}
+            {filtered.map(w => {
               const isActive = w.id === active?.id;
               return (
                 <DropdownMenuItem
