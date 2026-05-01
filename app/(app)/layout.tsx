@@ -6,6 +6,7 @@ import { TourOverlay } from "@/components/onboarding/tour-overlay";
 import { ErrorPane } from "@/components/error-pane";
 import { UndoBanner } from "@/components/undo-banner";
 import { QuickAddCardMount } from "@/components/quick-add-card-dialog";
+import { CommandPalette } from "@/components/command-palette";
 import { listWorkspaces } from "@/lib/queries/workspaces";
 import { listFavoriteBoards, listRecentBoardViews } from "@/lib/queries/favorites";
 import { dbAsUser } from "@/lib/db/client";
@@ -74,6 +75,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <ErrorPane />
       <UndoBanner />
       <QuickAddCardMount hasWorkspaces={ws.length > 0} />
+      <CommandPalette
+        workspaces={ws.map((w) => ({ id: w.id, name: w.name }))}
+        favorites={favorites.map((f) => ({
+          boardId: f.boardId,
+          boardTitle: f.boardTitle,
+          workspaceId: f.workspaceId,
+          workspaceName: f.workspaceName,
+        }))}
+        recents={recents.map((r) => ({
+          boardId: r.boardId,
+          boardTitle: r.boardTitle,
+          workspaceId: r.workspaceId,
+          workspaceName: r.workspaceName,
+        }))}
+      />
     </>
   );
 }
