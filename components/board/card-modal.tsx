@@ -1,8 +1,10 @@
 "use client";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useStore } from "zustand";
 import { toast } from "sonner";
 import { errorBus } from "@/lib/errors/error-bus";
+import { BoardStoreContext } from "@/stores/board-store";
 import {
   Dialog,
   DialogContent,
@@ -80,6 +82,55 @@ export function CardModal({
       if (descTimer.current) clearTimeout(descTimer.current);
     };
   }, []);
+
+  // Plan #16b-γ-D (#7) — `[`/`]` navigate to prev/next sibling card in
+  // the same list, sorted by position. Skip when the user is typing in
+  // an input, textarea, or contentEditable so renaming the title doesn't
+  // teleport them to another card. We read sibling order from the board
+  // store (always available because both card routes nest under
+  // BoardLayout's BoardStoreProvider). Use `router.replace` so [/] doesn't
+  // pile up history entries.
+  const boardStore = useContext(BoardStoreContext);
+  const siblings = useStore(boardStore!, (s) =>
+    card.listId
+      ? s.cards
+          .filter((c) => c.listId === card.listId && !c.archived)
+          .slice()
+          .sort((a, b) => (a.position < b.position ? -1 : 1))
+      : [],
+  );
+  const siblingNav = useMemo(() => {
+    if (!siblings.length || !card.boardId) return { prev: null, next: null };
+    const idx = siblings.findIndex((c) => c.id === card.id);
+    if (idx < 0) return { prev: null, next: null };
+    return {
+      prev: idx > 0 ? siblings[idx - 1].id : null,
+      next: idx < siblings.length - 1 ? siblings[idx + 1].id : null,
+    };
+  }, [siblings, card.id, card.boardId]);
+
+  useEffect(() => {
+    if (!card.boardId) return;
+    function isTyping(target: EventTarget | null): boolean {
+      if (!(target instanceof HTMLElement)) return false;
+      if (target.isContentEditable) return true;
+      const tag = target.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTyping(e.target)) return;
+      if (e.key === "[" && siblingNav.prev) {
+        e.preventDefault();
+        router.replace(`/b/${card.boardId}/c/${siblingNav.prev}`, { scroll: false });
+      } else if (e.key === "]" && siblingNav.next) {
+        e.preventDefault();
+        router.replace(`/b/${card.boardId}/c/${siblingNav.next}`, { scroll: false });
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [router, card.boardId, siblingNav.prev, siblingNav.next]);
 
   function close() {
     router.back();
