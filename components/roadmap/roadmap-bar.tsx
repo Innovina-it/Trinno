@@ -1,10 +1,36 @@
 "use client";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type CSSProperties,
+} from "react";
 import type React from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, MousePointerClick } from "lucide-react";
+import {
+  Archive,
+  CalendarRange,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  LayoutGrid,
+  MoreHorizontal,
+  MousePointerClick,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
 import type { StatusKind } from "@/lib/roadmap/status";
+import { archiveCard, updateCard } from "@/actions/cards";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 const TYPE_DOT: Record<string, string> = {
   epic: "bg-fg",
@@ -14,11 +40,6 @@ const TYPE_DOT: Record<string, string> = {
   bug: "bg-fg/70",
 };
 
-// Plan #16b-γ-A (#2) — status fills are monochrome (white at varying
-// opacity) except the `blocked` ring, which is the only chroma allowed.
-// `bgClass` and `bgStyle` are applied additively, so a hatch/stripe
-// `repeating-linear-gradient` lives in `bgStyle` while plain fills land in
-// `bgClass`. Tooltip text is appended to the existing date range.
 const STATUS_LABEL: Record<StatusKind, string> = {
   todo: "to do",
   in_progress: "in progress",
@@ -72,6 +93,10 @@ function statusFill(status: StatusKind | null, isHeader: boolean): {
 
 type ContextMenu = { x: number; y: number };
 
+function isoForInput(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 export function RoadmapBar({
   card,
   x,
@@ -101,8 +126,11 @@ export function RoadmapBar({
   const dot = TYPE_DOT[card.type] ?? "bg-fg/40";
   const [menu, setMenu] = useState<ContextMenu | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const [datesOpen, setDatesOpen] = useState(false);
+  const [datesStart, setDatesStart] = useState(() => isoForInput(card.startDate));
+  const [datesTarget, setDatesTarget] = useState(() => isoForInput(card.targetDate));
+  const [, startTransition] = useTransition();
 
-  // Close the context menu on any outside mousedown.
   useEffect(() => {
     if (!menu) return;
     function onDown(e: MouseEvent) {
@@ -126,9 +154,71 @@ export function RoadmapBar({
     setMenu({ x: e.clientX, y: e.clientY });
   }
 
+  function openMenuFromTrigger(e: React.MouseEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenu({ x: rect.left, y: rect.bottom + 4 });
+  }
+
   const menuStyle: CSSProperties | undefined = menu
     ? { position: "fixed", top: menu.y, left: menu.x, zIndex: 100 }
     : undefined;
+
+  function handleOpenCard() {
+    setMenu(null);
+    router.push(`/b/${card.boardId}/c/${card.id}`);
+    onOpen?.(card.id, card.boardId);
+  }
+
+  function handleInBoard() {
+    setMenu(null);
+    router.push(`/b/${card.boardId}`);
+  }
+
+  function handleEditDates() {
+    setMenu(null);
+    setDatesStart(isoForInput(card.startDate));
+    setDatesTarget(isoForInput(card.targetDate));
+    setDatesOpen(true);
+  }
+
+  function handleArchive() {
+    setMenu(null);
+    startTransition(async () => {
+      try {
+        await archiveCard({ id: card.id, archived: true });
+        toast.success(`Archived "${card.title}"`);
+      } catch (err) {
+        toast.error((err as Error).message);
+      }
+    });
+  }
+
+  function handleSaveDates() {
+    if (!datesStart || !datesTarget) {
+      toast.error("Both dates required");
+      return;
+    }
+    if (datesStart > datesTarget) {
+      toast.error("Start must be on or before target");
+      return;
+    }
+    const startISO = new Date(`${datesStart}T00:00:00.000Z`).toISOString();
+    const targetISO = new Date(`${datesTarget}T00:00:00.000Z`).toISOString();
+    startTransition(async () => {
+      try {
+        await updateCard({
+          id: card.id,
+          startDate: startISO,
+          targetDate: targetISO,
+        });
+        setDatesOpen(false);
+      } catch (err) {
+        toast.error((err as Error).message);
+      }
+    });
+  }
 
   const fill = statusFill(status, isHeader);
   const statusLabel = status ? STATUS_LABEL[status] : null;
@@ -147,9 +237,7 @@ export function RoadmapBar({
                    ${fill.className}
                    ${focused ? "ring-2 ring-fg/50" : ""}`}
         onPointerDown={(e) => {
-          // Don't begin a drag from a right-button (context-menu) press.
           if (e.button !== 0) return;
-          // Prevent accidental text selection during drag.
           e.preventDefault();
           onMoveStart(e, card.id);
         }}
@@ -193,6 +281,23 @@ export function RoadmapBar({
           className={`mr-1.5 inline-block size-1.5 rounded-full ${dot}`}
         />
         <span className="text-xs text-fg truncate">{card.title}</span>
+        {/* A2 — hover overflow trigger. Sits just left of the right resize
+            handle. Stops drag from starting on press. */}
+        <button
+          type="button"
+          aria-label={`Open actions menu for ${card.title}`}
+          aria-haspopup="menu"
+          aria-expanded={menu !== null}
+          data-testid="roadmap-bar-overflow"
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
+          onClick={openMenuFromTrigger}
+          style={{ right: 14 }}
+          className="absolute top-1/2 -translate-y-1/2 size-4 inline-flex items-center justify-center rounded text-fg/70 hover:text-fg hover:bg-[rgb(255_255_255/0.10)] opacity-0 group-hover/bar:opacity-100 focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-fg/40 cursor-pointer z-10"
+        >
+          <MoreHorizontal className="size-3" />
+        </button>
       </div>
       {menu && (
         <div
@@ -200,8 +305,49 @@ export function RoadmapBar({
           role="menu"
           data-testid="roadmap-bar-menu"
           style={menuStyle}
-          className="min-w-44 rounded-md border border-hairline bg-[color:var(--surface-strong)] shadow-lg backdrop-blur-md py-1 text-sm"
+          className="min-w-48 rounded-md border border-hairline bg-[color:var(--surface-strong)] shadow-lg backdrop-blur-md py-1 text-sm"
         >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleOpenCard}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
+            data-testid="roadmap-bar-menu-open-card"
+          >
+            <MousePointerClick className="size-3" />
+            Open card
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleInBoard}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
+            data-testid="roadmap-bar-menu-in-board"
+          >
+            <LayoutGrid className="size-3" />
+            In board
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleEditDates}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
+            data-testid="roadmap-bar-menu-edit-dates"
+          >
+            <CalendarRange className="size-3" />
+            Edit dates
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleArchive}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
+            data-testid="roadmap-bar-menu-archive"
+          >
+            <Archive className="size-3" />
+            Archive
+          </button>
+          <div className="my-1 border-t border-hairline" />
           <button
             type="button"
             role="menuitem"
@@ -209,27 +355,60 @@ export function RoadmapBar({
               setMenu(null);
               router.push(`/b/${card.boardId}/c/${card.id}`);
             }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg-muted hover:bg-[rgb(255_255_255/0.06)]"
             data-testid="roadmap-bar-menu-open-board"
           >
             <ExternalLink className="size-3" />
-            Open in board
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setMenu(null);
-              onOpen?.(card.id, card.boardId);
-            }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
-            data-testid="roadmap-bar-menu-view-card"
-          >
-            <MousePointerClick className="size-3" />
-            View card
+            Open in new view
           </button>
         </div>
       )}
+      <Dialog open={datesOpen} onOpenChange={setDatesOpen}>
+        <DialogContent data-testid="roadmap-bar-dates-dialog">
+          <DialogHeader>
+            <DialogTitle>Edit dates</DialogTitle>
+            <DialogDescription>{card.title.toUpperCase()}</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="space-y-1 text-xs">
+              <span className="mono-meta-sm text-fg-faint">START</span>
+              <input
+                type="date"
+                value={datesStart}
+                onChange={(e) => setDatesStart(e.target.value)}
+                data-testid="roadmap-bar-dates-start"
+                className="w-full rounded-md border border-hairline bg-transparent px-2 py-1.5 text-fg outline-none focus:border-fg/40"
+              />
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="mono-meta-sm text-fg-faint">TARGET</span>
+              <input
+                type="date"
+                value={datesTarget}
+                onChange={(e) => setDatesTarget(e.target.value)}
+                data-testid="roadmap-bar-dates-target"
+                className="w-full rounded-md border border-hairline bg-transparent px-2 py-1.5 text-fg outline-none focus:border-fg/40"
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDatesOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveDates}
+              data-testid="roadmap-bar-dates-save"
+            >
+              Save dates
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
