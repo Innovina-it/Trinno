@@ -40,6 +40,11 @@ export function CardTile({
   const parentCard = useBoardStore((s) =>
     card.parentCardId ? s.cards.find((c) => c.id === card.parentCardId) : null,
   );
+  // Plan #16b-γ-D (#8) — multi-select state.
+  const isSelected = useBoardStore((s) => s.selectedCardIds.has(card.id));
+  const anySelected = useBoardStore((s) => s.selectedCardIds.size > 0);
+  const toggleSelected = useBoardStore((s) => s.toggleSelected);
+  const selectRangeTo = useBoardStore((s) => s.selectRangeTo);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
       id: sortableId,
@@ -58,10 +63,35 @@ export function CardTile({
 
   // Suppress Link navigation if a drag actually occurred (browser still fires
   // click after a tiny move below the activation threshold otherwise).
+  // Plan #16b-γ-D (#8) — also intercept shift/cmd/ctrl-click for
+  // multi-select. While any card is selected, plain click also goes to
+  // toggle so the user doesn't need to drag the cursor to the modifier
+  // key just to grow the selection. Hitting Esc or clicking the bulk
+  // bar's Cancel button clears the selection.
   const handleClick = (e: React.MouseEvent) => {
     if (isDragging) {
       e.preventDefault();
       e.stopPropagation();
+      return;
+    }
+    if (e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      selectRangeTo(card.id);
+      return;
+    }
+    if (e.metaKey || e.ctrlKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSelected(card.id);
+      return;
+    }
+    if (anySelected) {
+      // Toggle this tile into/out of the selection rather than navigate.
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSelected(card.id);
+      return;
     }
   };
 
@@ -76,7 +106,8 @@ export function CardTile({
       onClick={handleClick}
       data-card-id={card.id}
       data-dragging={isDragging ? "true" : undefined}
-      className="group/card relative block rounded-xl bg-[color:var(--surface-strong)] backdrop-blur-md border border-[color:var(--hairline)] text-fg cursor-grab transition-all duration-200 ease-out shadow-[0_1px_0_0_rgb(255_255_255/0.06)_inset,0_8px_20px_-12px_rgb(0_0_0_/_0.5)] hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[color:var(--surface-hi)] hover:shadow-[0_1px_0_0_rgb(255_255_255/0.10)_inset,0_12px_28px_-12px_rgb(0_0_0/0.6)] active:cursor-grabbing data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02] data-[dragging=true]:cursor-grabbing"
+      data-selected={isSelected ? "true" : undefined}
+      className="group/card relative block rounded-xl bg-[color:var(--surface-strong)] backdrop-blur-md border border-[color:var(--hairline)] text-fg cursor-grab transition-all duration-200 ease-out shadow-[0_1px_0_0_rgb(255_255_255/0.06)_inset,0_8px_20px_-12px_rgb(0_0_0_/_0.5)] hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[color:var(--surface-hi)] hover:shadow-[0_1px_0_0_rgb(255_255_255/0.10)_inset,0_12px_28px_-12px_rgb(0_0_0/0.6)] active:cursor-grabbing data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02] data-[dragging=true]:cursor-grabbing data-[selected=true]:ring-2 data-[selected=true]:ring-[color:var(--accent-cyan)] data-[selected=true]:bg-[color:var(--surface-hi)]"
     >
       {/* Cover (color stripe or image header) — sits above label stripes */}
       <CardCover

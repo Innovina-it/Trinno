@@ -10,6 +10,7 @@ import { ActivityFeed } from "@/components/board/activity-feed";
 import { ActivityShell } from "@/components/board/activity-shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { recordBoardViewImpl } from "@/actions/favorites";
+import { listSprintsForWorkspace } from "@/lib/queries/sprints";
 
 export default async function BoardPage({
   params,
@@ -42,8 +43,17 @@ export default async function BoardPage({
     avatarUrl: me?.avatarUrl ?? null,
   };
 
+  // Plan #16b-γ-D (#8) — sprints feed the bulk action bar's "Set sprint"
+  // dropdown. Cheap query (workspace-scoped) and not needed below the
+  // fold; piped straight to the client component.
+  const sprints = await listSprintsForWorkspace(token, snap.board.workspaceId);
+
   return (
-    <BoardView board={snap.board} currentUser={currentUser}>
+    <BoardView
+      board={snap.board}
+      currentUser={currentUser}
+      sprints={sprints.map((s) => ({ id: s.id, name: s.name, state: s.state }))}
+    >
       <ActivityShell>
         <Suspense
           fallback={

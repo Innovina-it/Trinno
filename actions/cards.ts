@@ -1,14 +1,32 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { eq, desc, and, inArray } from "drizzle-orm";
+import { z } from "zod";
 import { dbAsUser } from "@/lib/db/client";
-import { cards, cardLinks } from "@/lib/db/schema";
+import { cards, cardLinks, cardLabels } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { positionBetween } from "@/lib/ordering";
 import {
   CreateCardInput, UpdateCardInput, MoveCardInput, ArchiveCardInput,
-  CascadeShiftBlockedInput,
+  CascadeShiftBlockedInput, Uuid,
 } from "@/lib/validation";
+
+// Plan #16b-γ-D (#8) — bulk-action validators.
+//
+// All capped at 50 ids/call so a single transaction stays bounded; the
+// UI bulk-action bar enforces the same cap.
+const BulkArchiveInput = z.object({
+  cardIds: z.array(Uuid).min(1).max(50),
+  archived: z.boolean(),
+});
+const BulkSetSprintInput = z.object({
+  cardIds: z.array(Uuid).min(1).max(50),
+  sprintId: Uuid.nullable(),
+});
+const BulkAddLabelInput = z.object({
+  cardIds: z.array(Uuid).min(1).max(50),
+  labelId: Uuid,
+});
 
 export async function createCardImpl(token: string, input: { listId: string; title: string }) {
   const parsed = CreateCardInput.parse(input);
@@ -192,6 +210,89 @@ export async function cascadeShiftBlockedAfterImpl(
     }
     return { shifted: updated };
   });
+}
+
+// Plan #16b-γ-D (#8) — bulk archive. Single UPDATE keeps it cheap; RLS
+// drops any id the user can't write to so partial application is the
+// honest behavior.
+export async function bulkArchiveCardsImpl(
+  token: string,
+  input: { cardIds: string[]; archived: boolean },
+): Promise<{ updated: number }> {
+  const p = BulkArchiveInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const r = await tx
+      .update(cards)
+      .set({ archived: p.archived })
+      .where(inArray(cards.id, p.cardIds))
+      .returning({ id: cards.id });
+    return { updated: r.length };
+  });
+}
+
+// Plan #16b-γ-D (#8) — bulk sprint assignment.
+export async function bulkSetSprintImpl(
+  token: string,
+  input: { cardIds: string[]; sprintId: string | null },
+): Promise<{ updated: number }> {
+  const p = BulkSetSprintInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const r = await tx
+      .update(cards)
+      .set({ sprintId: p.sprintId })
+      .where(inArray(cards.id, p.cardIds))
+      .returning({ id: cards.id });
+    return { updated: r.length };
+  });
+}
+
+// Plan #16b-γ-D (#8) — bulk add label. Idempotent thanks to ON CONFLICT;
+// the cards-must-share-board invariant is enforced by the existing
+// `set_card_label_board_id` trigger which throws when the label's
+// board_id doesn't match the card's. The bulk-bar restricts label
+// choices to the current board so this only fails on race conditions.
+export async function bulkAddLabelImpl(
+  token: string,
+  input: { cardIds: string[]; labelId: string },
+): Promise<{ inserted: number }> {
+  const p = BulkAddLabelInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const rows = p.cardIds.map((id) => ({
+      cardId: id,
+      labelId: p.labelId,
+      boardId: "00000000-0000-0000-0000-000000000000", // overwritten by trigger
+    }));
+    const r = await tx
+      .insert(cardLabels)
+      .values(rows)
+      .onConflictDoNothing()
+      .returning({ cardId: cardLabels.cardId });
+    return { inserted: r.length };
+  });
+}
+
+export async function bulkArchiveCards(
+  input: { cardIds: string[]; archived: boolean },
+) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  return bulkArchiveCardsImpl(t, input);
+}
+
+export async function bulkSetSprint(
+  input: { cardIds: string[]; sprintId: string | null },
+) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  return bulkSetSprintImpl(t, input);
+}
+
+export async function bulkAddLabel(
+  input: { cardIds: string[]; labelId: string },
+) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  return bulkAddLabelImpl(t, input);
 }
 
 export async function createCard(input: { listId: string; title: string }) {

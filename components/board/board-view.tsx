@@ -24,6 +24,8 @@ import { moveCard as moveCardAction } from "@/actions/cards";
 import { moveList as moveListAction } from "@/actions/lists";
 import { undoBus } from "@/lib/undo-bus";
 import { QuickAddFab } from "@/components/quick-add-card-dialog";
+import { BulkActionBar } from "./bulk-action-bar";
+import type { SprintLite } from "@/components/sprint/sprint-picker";
 import { Button } from "@/components/ui/button";
 import { ListColumn } from "./list-column";
 import { AddListForm } from "./add-list-form";
@@ -55,10 +57,12 @@ function decodeId(
 export function BoardView({
   board,
   currentUser,
+  sprints = [],
   children,
 }: {
   board: BoardRow;
   currentUser: Viewer;
+  sprints?: SprintLite[];
   children?: React.ReactNode;
 }) {
   const router = useRouter();
@@ -376,6 +380,7 @@ export function BoardView({
         {children}
       </div>
       <QuickAddFab />
+      <BulkActionBar sprints={sprints} />
     </div>
   );
 }

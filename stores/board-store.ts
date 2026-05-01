@@ -59,6 +59,16 @@ export type BoardState = {
   cardVersions: CardVersionRow[];
   boardProfiles: BoardProfile[];
 
+  // Plan #16b-γ-D (#8) — ephemeral multi-select state. Lives only on the
+  // current board view; cleared on navigation by the consumer remounting
+  // the provider. Last-clicked id supports shift-click range selection.
+  selectedCardIds: Set<string>;
+  lastSelectedCardId: string | null;
+  toggleSelected: (cardId: string) => void;
+  selectRangeTo: (cardId: string) => void;
+  setSelected: (ids: string[]) => void;
+  clearSelection: () => void;
+
   setSnapshot: (s: Omit<BoardSnapshotInit, "boardId">) => void;
 
   addList: (list: ListRow) => void;
@@ -141,6 +151,54 @@ export function createBoardStore(initial: BoardSnapshotInit) {
     cardComponents: initial.cardComponents,
     cardVersions: initial.cardVersions,
     boardProfiles: initial.boardProfiles,
+
+    selectedCardIds: new Set<string>(),
+    lastSelectedCardId: null,
+    toggleSelected: (cardId) =>
+      set((state) => {
+        const next = new Set(state.selectedCardIds);
+        if (next.has(cardId)) next.delete(cardId);
+        else next.add(cardId);
+        return { selectedCardIds: next, lastSelectedCardId: cardId };
+      }),
+    selectRangeTo: (cardId) =>
+      set((state) => {
+        // Range-select between the last-clicked card and `cardId` within
+        // the same list (board-store cards are sorted by position).
+        const target = state.cards.find((c) => c.id === cardId);
+        if (!target) return state;
+        const anchor = state.lastSelectedCardId
+          ? state.cards.find((c) => c.id === state.lastSelectedCardId)
+          : null;
+        if (!anchor || anchor.listId !== target.listId) {
+          // Fall back to a single toggle.
+          const next = new Set(state.selectedCardIds);
+          next.add(cardId);
+          return { selectedCardIds: next, lastSelectedCardId: cardId };
+        }
+        const listCards = state.cards
+          .filter((c) => c.listId === target.listId)
+          .slice()
+          .sort((a, b) => (a.position < b.position ? -1 : 1));
+        const idxA = listCards.findIndex((c) => c.id === anchor.id);
+        const idxB = listCards.findIndex((c) => c.id === target.id);
+        if (idxA < 0 || idxB < 0) return state;
+        const lo = Math.min(idxA, idxB);
+        const hi = Math.max(idxA, idxB);
+        const next = new Set(state.selectedCardIds);
+        for (let i = lo; i <= hi; i++) next.add(listCards[i].id);
+        return { selectedCardIds: next, lastSelectedCardId: cardId };
+      }),
+    setSelected: (ids) =>
+      set(() => ({
+        selectedCardIds: new Set(ids),
+        lastSelectedCardId: ids[ids.length - 1] ?? null,
+      })),
+    clearSelection: () =>
+      set(() => ({
+        selectedCardIds: new Set<string>(),
+        lastSelectedCardId: null,
+      })),
 
     setSnapshot: (s) =>
       set({
