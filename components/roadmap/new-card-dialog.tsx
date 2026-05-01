@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
 import { createCard, updateCard } from "@/actions/cards";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import {
@@ -25,13 +24,16 @@ function plus14ISO(): string {
 }
 
 export function RoadmapNewCardDialog({
+  open,
+  onOpenChange,
   defaultStart,
   defaultTarget,
 }: {
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
   defaultStart?: string;
   defaultTarget?: string;
 }) {
-  const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [boardId, setBoardId] = useState("");
   const [listId, setListId] = useState("");
@@ -93,7 +95,7 @@ export function RoadmapNewCardDialog({
           targetDate: targetISO,
         });
         toast.success(`Created "${t}"`);
-        setOpen(false);
+        onOpenChange(false);
         reset();
       } catch (err) {
         toast.error((err as Error).message);
@@ -102,16 +104,7 @@ export function RoadmapNewCardDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        data-testid="roadmap-new-card-trigger"
-        className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
-      >
-        <Plus className="size-3" />
-        NEW CARD
-      </button>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="roadmap-new-card-dialog">
         <DialogHeader>
           <DialogTitle>New card</DialogTitle>
@@ -196,7 +189,7 @@ export function RoadmapNewCardDialog({
           <Button
             type="button"
             variant="outline"
-            onClick={() => setOpen(false)}
+            onClick={() => onOpenChange(false)}
             disabled={pending}
           >
             Cancel

@@ -17,6 +17,13 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ChevronDown } from "lucide-react";
 import type { RoadmapCard, RoadmapLink } from "@/lib/queries/roadmap";
 import {
@@ -44,6 +51,9 @@ import {
 } from "./cascade-confirm-dialog";
 import { SprintOverlay } from "./sprint-overlay";
 import { RoadmapNewCardDialog } from "./new-card-dialog";
+import { RoadmapFilterBar } from "./roadmap-filter-bar";
+import { parseFilters } from "@/lib/board-filters";
+import { Plus } from "lucide-react";
 
 const ZOOMS: Zoom[] = ["week", "month", "quarter"];
 const ROW_HEIGHT = 36; // 28px bar + 8px gap
@@ -164,6 +174,19 @@ export function RoadmapView({
   }, [queryDraft, queryParam, pathname, router]);
   const queryNorm = queryParam.trim().toLowerCase();
 
+  // A6 — filters parsed from URL (parity with kanban). `sprint` is
+  // a roadmap-only addition.
+  const filters = useMemo(
+    () => parseFilters(new URLSearchParams(sp.toString())),
+    [sp],
+  );
+  const sprintFilter = sp.get("sprint") ?? "";
+
+  // A7 — new-card dialog state lifted up so `n` can open it.
+  const [newCardOpen, setNewCardOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
   // Plan #16b-α (#6 / #4) — flash an outline ring on the focused bar for
   // 1.5s after mount / focus-param change. Cleared when the timeout fires
   // or the param changes again.
@@ -253,14 +276,31 @@ export function RoadmapView({
 
   const cards = useMemo<RoadmapCard[]>(() => {
     const boardTitleById = new Map(storeBoards.map((b) => [b.id, b.title]));
+    const now = new Date();
     return storeCards
-      .filter(
-        (c) =>
-          !c.archived &&
-          c.startDate !== null &&
-          c.targetDate !== null &&
-          (queryNorm === "" || c.title.toLowerCase().includes(queryNorm)),
-      )
+      .filter((c) => {
+        if (c.archived) return false;
+        if (c.startDate === null || c.targetDate === null) return false;
+        if (queryNorm && !c.title.toLowerCase().includes(queryNorm)) {
+          return false;
+        }
+        if (filters.types.length && !filters.types.includes(c.type)) {
+          return false;
+        }
+        if (sprintFilter && c.sprintId !== sprintFilter) return false;
+        if (filters.due === "overdue") {
+          const due = c.dueDate
+            ? c.dueDate instanceof Date
+              ? c.dueDate
+              : new Date(c.dueDate)
+            : null;
+          if (!due || due > now || c.dueComplete) return false;
+        }
+        // Note: filters.labelIds, filters.assignedToMe currently no-op on
+        // the roadmap because the workspace snapshot does not yet carry
+        // labels / cardMembers. Tracked for the B-batch wrap-up.
+        return true;
+      })
       .map((c) => ({
         id: c.id,
         title: c.title,
@@ -272,7 +312,7 @@ export function RoadmapView({
         boardTitle: boardTitleById.get(c.boardId) ?? "",
         archived: c.archived,
       }));
-  }, [storeCards, storeBoards, queryNorm]);
+  }, [storeCards, storeBoards, queryNorm, filters, sprintFilter]);
 
   // Plan #16b-β — count of subtasks per parent that have NO dates set,
   // so we can render an "+N undated subtasks" chip next to the parent bar.
@@ -837,6 +877,87 @@ export function RoadmapView({
     return criticalPath(cardSlim, allLinks).critical;
   }, [showCriticalPath, cards, storeLinks]);
 
+  // A7 — global keyboard shortcuts. Ignored while typing in an input,
+  // textarea, or contenteditable surface (except `Esc`, which is a
+  // universal escape hatch and clears the search input).
+  useEffect(() => {
+    function isTypingTarget(t: EventTarget | null): boolean {
+      if (!(t instanceof HTMLElement)) return false;
+      const tag = t.tagName;
+      return (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        t.isContentEditable
+      );
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const typing = isTypingTarget(e.target);
+      if (e.key === "Escape") {
+        if (queryDraft) {
+          setQueryDraft("");
+          e.preventDefault();
+          return;
+        }
+        if (newCardOpen || shortcutsOpen) {
+          // base-ui Dialog handles Esc itself; let it through.
+          return;
+        }
+        return;
+      }
+      if (typing) return;
+      if (e.key === "/") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+      if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        setNewCardOpen(true);
+        return;
+      }
+      if (e.key === "?") {
+        e.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
+      if (e.key === "+" || e.key === "=") {
+        const idx = ZOOMS.indexOf(zoom);
+        const nextIdx = Math.min(ZOOMS.length - 1, idx + 1);
+        if (nextIdx !== idx) {
+          e.preventDefault();
+          setZoom(ZOOMS[nextIdx]);
+        }
+        return;
+      }
+      if (e.key === "-" || e.key === "_") {
+        const idx = ZOOMS.indexOf(zoom);
+        const nextIdx = Math.max(0, idx - 1);
+        if (nextIdx !== idx) {
+          e.preventDefault();
+          setZoom(ZOOMS[nextIdx]);
+        }
+        return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        const scroller = scrollerRef.current;
+        if (!scroller) return;
+        e.preventDefault();
+        const step = e.shiftKey ? scroller.clientWidth : 80;
+        scroller.scrollBy({
+          left: e.key === "ArrowLeft" ? -step : step,
+          behavior: "smooth",
+        });
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // setZoom is a stable function defined in this scope.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryDraft, newCardOpen, shortcutsOpen, zoom]);
+
   return (
     <div
       data-testid="roadmap-view"
@@ -909,8 +1030,17 @@ export function RoadmapView({
           </button>
         </div>
         <div className="flex items-center gap-3">
-          <RoadmapNewCardDialog />
+          <button
+            type="button"
+            onClick={() => setNewCardOpen(true)}
+            data-testid="roadmap-new-card-trigger"
+            className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
+          >
+            <Plus className="size-3" />
+            NEW CARD
+          </button>
           <input
+            ref={searchInputRef}
             type="search"
             value={queryDraft}
             onChange={(e) => setQueryDraft(e.target.value)}
@@ -919,12 +1049,22 @@ export function RoadmapView({
             data-testid="roadmap-search"
             className="rounded-md border border-hairline bg-transparent px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:border-fg/40 w-44"
           />
+          <button
+            type="button"
+            onClick={() => setShortcutsOpen(true)}
+            data-testid="roadmap-shortcuts-trigger"
+            aria-label="Keyboard shortcuts"
+            className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
+          >
+            ?
+          </button>
           <span className="mono-meta-sm text-fg-faint">
             {gridStart.toISOString().slice(0, 10)} →{" "}
             {gridEnd.toISOString().slice(0, 10)}
           </span>
         </div>
       </div>
+      <RoadmapFilterBar />
 
       {cards.length === 0 ? (
         // Plan #16b-γ-C (#7) — explicit empty-state with editorial
@@ -1297,6 +1437,44 @@ export function RoadmapView({
         deltaDays={cascadeState.deltaDays}
         affectedCards={cascadeState.affected}
       />
+      <RoadmapNewCardDialog open={newCardOpen} onOpenChange={setNewCardOpen} />
+      <RoadmapShortcutsDialog
+        open={shortcutsOpen}
+        onOpenChange={setShortcutsOpen}
+      />
     </div>
+  );
+}
+
+function RoadmapShortcutsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="roadmap-shortcuts-dialog">
+        <DialogHeader>
+          <DialogTitle>Keyboard shortcuts</DialogTitle>
+          <DialogDescription>ROADMAP</DialogDescription>
+        </DialogHeader>
+        <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
+          <dt className="mono-meta text-fg-faint">/</dt>
+          <dd className="text-fg">Focus search</dd>
+          <dt className="mono-meta text-fg-faint">Esc</dt>
+          <dd className="text-fg">Clear search / close menus</dd>
+          <dt className="mono-meta text-fg-faint">+ / −</dt>
+          <dd className="text-fg">Zoom in / out</dd>
+          <dt className="mono-meta text-fg-faint">← / →</dt>
+          <dd className="text-fg">Scroll the timeline</dd>
+          <dt className="mono-meta text-fg-faint">n</dt>
+          <dd className="text-fg">New card</dd>
+          <dt className="mono-meta text-fg-faint">?</dt>
+          <dd className="text-fg">Show this list</dd>
+        </dl>
+      </DialogContent>
+    </Dialog>
   );
 }
