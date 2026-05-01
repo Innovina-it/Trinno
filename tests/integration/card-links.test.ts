@@ -122,4 +122,61 @@ describe("card links", () => {
       }),
     ).rejects.toThrow();
   });
+
+  // Plan #16b-γ-D (#38) — cross-board linking.
+  it("creates cross-board links and mirrors them on the other board", async () => {
+    const u = await makeUser("cl5");
+    // Two boards in same workspace so the user is a member of both.
+    const ws = await createWorkspaceImpl(u.jwt, { name: "WS-X" });
+    const bA = await createBoardImpl(u.jwt, {
+      workspaceId: ws.id,
+      title: "A",
+      backgroundKind: "color",
+      backgroundValue: "#fafafa",
+    });
+    const bB = await createBoardImpl(u.jwt, {
+      workspaceId: ws.id,
+      title: "B",
+      backgroundKind: "color",
+      backgroundValue: "#fafafa",
+    });
+    const lA = await createListImpl(u.jwt, { boardId: bA.id, title: "L" });
+    const lB = await createListImpl(u.jwt, { boardId: bB.id, title: "L" });
+    const cardA = await createCardImpl(u.jwt, {
+      listId: lA.id,
+      title: "Frontend bug",
+    });
+    const cardB = await createCardImpl(u.jwt, {
+      listId: lB.id,
+      title: "Backend story",
+    });
+
+    await createCardLinkImpl(u.jwt, {
+      fromCardId: cardA.id,
+      toCardId: cardB.id,
+      kind: "is_blocked_by",
+    });
+
+    const rows = await dbAsUser(u.jwt, async (tx) =>
+      tx.select().from(cardLinks),
+    );
+    // Forward link lives on board A (from-card's board)
+    const fwd = rows.find(
+      (r) =>
+        r.fromCardId === cardA.id &&
+        r.toCardId === cardB.id &&
+        r.kind === "is_blocked_by",
+    );
+    expect(fwd).toBeDefined();
+    expect(fwd?.boardId).toBe(bA.id);
+    // Inverse mirror lives on board B
+    const inv = rows.find(
+      (r) =>
+        r.fromCardId === cardB.id &&
+        r.toCardId === cardA.id &&
+        r.kind === "blocks",
+    );
+    expect(inv).toBeDefined();
+    expect(inv?.boardId).toBe(bB.id);
+  });
 });
