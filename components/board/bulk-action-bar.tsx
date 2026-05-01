@@ -53,7 +53,14 @@ export function BulkActionBar({
   sprints: SprintLite[];
 }) {
   const router = useRouter();
-  const selectedIds = useBoardStore((s) => Array.from(s.selectedCardIds));
+  // Select the Set reference (stable per mutation) and derive the array
+  // in useMemo so we don't trigger React 19's "selector returned a new
+  // value each render" guard.
+  const selectedIdSet = useBoardStore((s) => s.selectedCardIds);
+  const selectedIds = useMemo(
+    () => Array.from(selectedIdSet),
+    [selectedIdSet],
+  );
   const lists = useBoardStore((s) => s.lists);
   const labels = useBoardStore((s) => s.labels);
   const components = useBoardStore((s) => s.components);

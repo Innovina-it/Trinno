@@ -173,15 +173,22 @@ test("sprints, backlog, story points, WIP, filters, swimlanes, roadmap", async (
     .filter({ hasNotText: "←" })
     .last();
   await backlogPicker.click();
-  await page.getByRole("menuitemradio", { name: /Sprint 1/ }).click();
+  // Use anchored regex so the "Demo Sprint 1" seed row doesn't match.
+  await page.getByRole("menuitemradio", { name: /^Sprint 1\b/ }).click();
   // Card should now be inside Sprint 1's card list.
   void backlogSection;
   await expect(
     page.locator(`[data-testid^="sprint-card-"]`).filter({ hasText: "Refactor" }),
   ).toBeVisible({ timeout: 5000 });
 
-  // 6. Start sprint.
-  await page.getByRole("button", { name: /^START/i }).click();
+  // 6. Start sprint. Scope to the user-created "Sprint 1" card (Demo
+  // Sprint 1 from the seed also has a START button). The sprint name
+  // is rendered inside a Link, so anchor on the visible link text.
+  const sprintCard = page
+    .locator('[data-testid^="sprint-card-"]')
+    .filter({ has: page.getByRole("link", { name: /^Sprint 1$/ }) })
+    .first();
+  await sprintCard.getByRole("button", { name: /^START/i }).click();
   // Sprint state becomes ACTIVE.
   await expect(page.getByText("ACTIVE", { exact: true }).first()).toBeVisible({
     timeout: 5000,

@@ -56,9 +56,10 @@ function BoardModeDialog({
   boardStore: BoardStore;
 }) {
   const router = useRouter();
-  const boardLists = useStore(boardStore, (s) =>
-    s.lists.slice().sort((a, b) => (a.position < b.position ? -1 : 1)),
-  );
+  // The store already keeps lists sorted by position; selecting the
+  // array reference directly avoids the "infinite loop" warning React
+  // 19 throws when a selector returns a fresh array each render.
+  const boardLists = useStore(boardStore, (s) => s.lists);
   const [listId, setListId] = useState<string>("");
   const [title, setTitle] = useState("");
   const [pending, start] = useTransition();

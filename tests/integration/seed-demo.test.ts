@@ -74,7 +74,7 @@ describe("seedDemoWorkspace", () => {
       tx.select().from(sprints).where(eq(sprints.workspaceId, workspaceId)),
     );
     expect(sprintRows).toHaveLength(1);
-    expect(sprintRows[0].name).toBe("Sprint 1");
+    expect(sprintRows[0].name).toBe("Demo Sprint 1");
 
     // 4 cards assigned to the sprint (story, subtask, bug, task — epic stays out).
     const assigned = cardRows.filter(

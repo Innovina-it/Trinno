@@ -92,25 +92,25 @@ export function CardModal({
   // teleport them to another card. We read sibling order from the board
   // store (always available because both card routes nest under
   // BoardLayout's BoardStoreProvider). Use `router.replace` so [/] doesn't
-  // pile up history entries.
+  // pile up history entries. Select the raw cards array so the zustand
+  // selector returns a stable reference; derive the filtered+sorted
+  // sibling list inside useMemo to keep React 19 happy.
   const boardStore = useContext(BoardStoreContext);
-  const siblings = useStore(boardStore!, (s) =>
-    card.listId
-      ? s.cards
-          .filter((c) => c.listId === card.listId && !c.archived)
-          .slice()
-          .sort((a, b) => (a.position < b.position ? -1 : 1))
-      : [],
-  );
+  const allCards = useStore(boardStore!, (s) => s.cards);
   const siblingNav = useMemo(() => {
-    if (!siblings.length || !card.boardId) return { prev: null, next: null };
+    if (!card.listId || !card.boardId) return { prev: null, next: null };
+    const siblings = allCards
+      .filter((c) => c.listId === card.listId && !c.archived)
+      .slice()
+      .sort((a, b) => (a.position < b.position ? -1 : 1));
+    if (!siblings.length) return { prev: null, next: null };
     const idx = siblings.findIndex((c) => c.id === card.id);
     if (idx < 0) return { prev: null, next: null };
     return {
       prev: idx > 0 ? siblings[idx - 1].id : null,
       next: idx < siblings.length - 1 ? siblings[idx + 1].id : null,
     };
-  }, [siblings, card.id, card.boardId]);
+  }, [allCards, card.id, card.listId, card.boardId]);
 
   useEffect(() => {
     if (!card.boardId) return;
