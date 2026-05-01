@@ -140,6 +140,28 @@ export function RoadmapView({
     ? (zoomParam as Zoom)
     : "month";
   const focusParam = sp.get("focus");
+  const queryParam = sp.get("q") ?? "";
+
+  // A3 — debounced search. URL param `q` is the source of truth, the
+  // input is a local mirror that flushes to the URL after 250ms.
+  const [queryDraft, setQueryDraft] = useState(queryParam);
+  useEffect(() => {
+    setQueryDraft(queryParam);
+  }, [queryParam]);
+  useEffect(() => {
+    if (queryDraft === queryParam) return;
+    const t = setTimeout(() => {
+      const params = new URLSearchParams(sp.toString());
+      if (queryDraft) params.set("q", queryDraft);
+      else params.delete("q");
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    }, 250);
+    return () => clearTimeout(t);
+    // sp is intentionally read once per debounce flush; including it would
+    // re-arm the timer on every URL change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryDraft, queryParam, pathname, router]);
+  const queryNorm = queryParam.trim().toLowerCase();
 
   // Plan #16b-α (#6 / #4) — flash an outline ring on the focused bar for
   // 1.5s after mount / focus-param change. Cleared when the timeout fires
@@ -213,6 +235,21 @@ export function RoadmapView({
     return out;
   }, [storeCards, storeLists]);
 
+  // A5 — supporting data for the rich bar tooltip.
+  const cardSpById = useMemo(() => {
+    const out = new Map<string, number | null>();
+    for (const c of storeCards) out.set(c.id, c.storyPoints);
+    return out;
+  }, [storeCards]);
+  const cardSprintNameById = useMemo(() => {
+    const sprintsById = new Map(storeSprints.map((s) => [s.id, s.name]));
+    const out = new Map<string, string | null>();
+    for (const c of storeCards) {
+      out.set(c.id, c.sprintId ? sprintsById.get(c.sprintId) ?? null : null);
+    }
+    return out;
+  }, [storeCards, storeSprints]);
+
   const cards = useMemo<RoadmapCard[]>(() => {
     const boardTitleById = new Map(storeBoards.map((b) => [b.id, b.title]));
     return storeCards
@@ -220,7 +257,8 @@ export function RoadmapView({
         (c) =>
           !c.archived &&
           c.startDate !== null &&
-          c.targetDate !== null,
+          c.targetDate !== null &&
+          (queryNorm === "" || c.title.toLowerCase().includes(queryNorm)),
       )
       .map((c) => ({
         id: c.id,
@@ -233,7 +271,7 @@ export function RoadmapView({
         boardTitle: boardTitleById.get(c.boardId) ?? "",
         archived: c.archived,
       }));
-  }, [storeCards, storeBoards]);
+  }, [storeCards, storeBoards, queryNorm]);
 
   // Plan #16b-β — count of subtasks per parent that have NO dates set,
   // so we can render an "+N undated subtasks" chip next to the parent bar.
@@ -869,10 +907,21 @@ export function RoadmapView({
             AUTO-RESCHEDULE: {autoCascade ? "ON" : "OFF"}
           </button>
         </div>
-        <span className="mono-meta-sm text-fg-faint">
-          {gridStart.toISOString().slice(0, 10)} →{" "}
-          {gridEnd.toISOString().slice(0, 10)}
-        </span>
+        <div className="flex items-center gap-3">
+          <input
+            type="search"
+            value={queryDraft}
+            onChange={(e) => setQueryDraft(e.target.value)}
+            placeholder="Search bars…"
+            aria-label="Search roadmap"
+            data-testid="roadmap-search"
+            className="rounded-md border border-hairline bg-transparent px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:border-fg/40 w-44"
+          />
+          <span className="mono-meta-sm text-fg-faint">
+            {gridStart.toISOString().slice(0, 10)} →{" "}
+            {gridEnd.toISOString().slice(0, 10)}
+          </span>
+        </div>
       </div>
 
       {cards.length === 0 ? (
@@ -884,6 +933,11 @@ export function RoadmapView({
           data-testid="roadmap-empty"
         >
           <div className="space-y-3 max-w-md">
+            {queryNorm && (
+              <p className="mono-meta-sm text-fg-faint">
+                NO MATCHES FOR &quot;{queryParam}&quot;
+              </p>
+            )}
             <p className="serif-display text-4xl">No scheduled work yet.</p>
             <p className="text-sm text-fg-muted">
               Open any epic or story and set a start + target date in the
@@ -1126,6 +1180,8 @@ export function RoadmapView({
                         isHeader={isHeader}
                         focused={flashFocus === c.id}
                         status={cardStatusById.get(c.id) ?? null}
+                        storyPoints={cardSpById.get(c.id) ?? null}
+                        sprintName={cardSprintNameById.get(c.id) ?? null}
                         onMoveStart={handleMoveStart}
                         onResizeLeftStart={handleResizeLeftStart}
                         onResizeRightStart={handleResizeRightStart}

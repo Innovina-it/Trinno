@@ -105,6 +105,8 @@ export function RoadmapBar({
   isHeader = false,
   focused = false,
   status = null,
+  storyPoints = null,
+  sprintName = null,
   onMoveStart,
   onResizeLeftStart,
   onResizeRightStart,
@@ -117,6 +119,8 @@ export function RoadmapBar({
   isHeader?: boolean;
   focused?: boolean;
   status?: StatusKind | null;
+  storyPoints?: number | null;
+  sprintName?: string | null;
   onMoveStart: (e: React.PointerEvent, cardId: string) => void;
   onResizeLeftStart: (e: React.PointerEvent, cardId: string) => void;
   onResizeRightStart: (e: React.PointerEvent, cardId: string) => void;
@@ -129,7 +133,24 @@ export function RoadmapBar({
   const [datesOpen, setDatesOpen] = useState(false);
   const [datesStart, setDatesStart] = useState(() => isoForInput(card.startDate));
   const [datesTarget, setDatesTarget] = useState(() => isoForInput(card.targetDate));
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [, startTransition] = useTransition();
+
+  function scheduleTooltip() {
+    if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
+    tooltipTimer.current = setTimeout(() => setTooltipOpen(true), 350);
+  }
+  function cancelTooltip() {
+    if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
+    tooltipTimer.current = null;
+    setTooltipOpen(false);
+  }
+  useEffect(() => {
+    return () => {
+      if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!menu) return;
@@ -238,16 +259,18 @@ export function RoadmapBar({
                    ${focused ? "ring-2 ring-fg/50" : ""}`}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
+          cancelTooltip();
           e.preventDefault();
           onMoveStart(e, card.id);
         }}
+        onMouseEnter={scheduleTooltip}
+        onMouseLeave={cancelTooltip}
         onContextMenu={handleContextMenu}
         data-card-id={card.id}
         data-roadmap-focus={card.id}
         data-testid="roadmap-bar"
         data-status={status ?? "unmapped"}
         aria-label={`Roadmap bar for ${card.title}`}
-        title={`${card.title} — ${card.startDate.toISOString().slice(0, 10)} → ${card.targetDate.toISOString().slice(0, 10)}${statusLabel ? ` — ${statusLabel}` : ""}`}
       >
         {/* Wider hit-zone (12px) for the left edge resize handle, with a hover-only chevron. */}
         <span
@@ -298,6 +321,41 @@ export function RoadmapBar({
         >
           <MoreHorizontal className="size-3" />
         </button>
+        {tooltipOpen && !menu && (
+          <div
+            role="tooltip"
+            data-testid="roadmap-bar-tooltip"
+            className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-20 w-64 rounded-md border border-hairline bg-[color:var(--surface-strong)] shadow-lg backdrop-blur-md p-3 text-xs text-fg pointer-events-none"
+          >
+            <div className="serif-display text-base leading-tight">
+              {card.title}
+            </div>
+            <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 mono-meta-sm">
+              <dt className="text-fg-faint">TYPE</dt>
+              <dd className="text-fg">{card.type.toUpperCase()}</dd>
+              <dt className="text-fg-faint">STATUS</dt>
+              <dd className="text-fg">
+                {statusLabel ? statusLabel.toUpperCase() : "—"}
+              </dd>
+              <dt className="text-fg-faint">SPRINT</dt>
+              <dd className="text-fg truncate">
+                {sprintName ?? "—"}
+              </dd>
+              <dt className="text-fg-faint">SP</dt>
+              <dd className="text-fg">
+                {storyPoints !== null ? storyPoints : "—"}
+              </dd>
+              <dt className="text-fg-faint">START</dt>
+              <dd className="text-fg">
+                {card.startDate.toISOString().slice(0, 10)}
+              </dd>
+              <dt className="text-fg-faint">TARGET</dt>
+              <dd className="text-fg">
+                {card.targetDate.toISOString().slice(0, 10)}
+              </dd>
+            </dl>
+          </div>
+        )}
       </div>
       {menu && (
         <div
