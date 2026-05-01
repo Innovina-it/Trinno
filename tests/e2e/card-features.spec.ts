@@ -56,8 +56,9 @@ test("card features: labels + due date + comment", async ({ page }) => {
   // 1. Sign up and land on default workspace.
   await signupAndLandOnDefaultWorkspace(page);
 
-  // 2. Create a board.
+  // 2. Create a board. Two-step dialog post Plan #16b-γ-B.
   await page.getByRole("button", { name: /new board/i }).click();
+  await page.getByRole("button", { name: /^continue$/i }).click();
   await page.getByLabel("Title").fill("Card Features");
   await page.getByRole("button", { name: /create board/i }).click();
   await expect(page).toHaveURL(/\/b\/[0-9a-f-]{36}/);

@@ -22,6 +22,7 @@ import type { BoardRow } from "@/lib/queries/board-snapshot";
 import { positionBetween } from "@/lib/ordering";
 import { moveCard as moveCardAction } from "@/actions/cards";
 import { moveList as moveListAction } from "@/actions/lists";
+import { undoBus } from "@/lib/undo-bus";
 import { Button } from "@/components/ui/button";
 import { ListColumn } from "./list-column";
 import { AddListForm } from "./add-list-form";
@@ -196,6 +197,10 @@ export function BoardView({
       if (!toListId) return;
       const newPos = positionBetween(prevPos, nextPos);
       const targetListId = toListId;
+      // Snapshot original list+position so the undo banner can put the
+      // card back if the user changes their mind within 8s.
+      const originalListId = sourceCard.listId;
+      const originalPosition = sourceCard.position;
       moveCardLocal(activeKey.id, targetListId, newPos);
       const retryMoveCard = async () => {
         await moveCardAction({
@@ -211,6 +216,29 @@ export function BoardView({
             listId: targetListId,
             position: newPos,
           });
+          if (originalListId !== targetListId) {
+            // Plan #16b-γ-D (#10) — only push undo on cross-list moves.
+            // Same-list reorders are too noisy and the user almost never
+            // wants to undo them.
+            undoBus.push({
+              message: "Moved card to another list",
+              undo: async () => {
+                moveCardLocal(activeKey.id, originalListId, originalPosition);
+                try {
+                  await moveCardAction({
+                    id: activeKey.id,
+                    listId: originalListId,
+                    position: originalPosition,
+                  });
+                } catch (err) {
+                  const m = "Failed to undo move: " + (err as Error).message;
+                  toast.error(m);
+                  errorBus.push({ message: m });
+                  router.refresh();
+                }
+              },
+            });
+          }
         } catch (err) {
           const msg = "Failed to move card: " + (err as Error).message;
           toast.error(msg);

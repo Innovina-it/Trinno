@@ -124,8 +124,10 @@ test("list + card + drag lifecycle", async ({ page }) => {
   // 1. Sign up → default workspace.
   await signupAndLandOnDefaultWorkspace(page);
 
-  // 2. Create board "Roadmap".
+  // 2. Create board "Roadmap". Step 1 picks the template (Blank by default
+  // post Plan #16b-γ-B); step 2 fills Title + tone.
   await page.getByRole("button", { name: /new board/i }).click();
+  await page.getByRole("button", { name: /^continue$/i }).click();
   await page.getByLabel("Title").fill("Roadmap");
   await page.getByRole("button", { name: /create board/i }).click();
   await expect(page).toHaveURL(/\/b\/[0-9a-f-]{36}/);

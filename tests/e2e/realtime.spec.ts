@@ -54,6 +54,7 @@ test("user A creates a list → user B sees it within 3 s", async ({ browser }) 
 
   // A creates board in their default workspace
   await a.getByRole("button", { name: /new board/i }).click();
+  await a.getByRole("button", { name: /^continue$/i }).click();
   await a.getByLabel("Title").fill("Realtime");
   await a.getByRole("button", { name: /create board/i }).click();
   await expect(a).toHaveURL(/\/b\/[0-9a-f-]{36}/);

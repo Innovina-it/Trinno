@@ -144,6 +144,7 @@ test("jira-gantt integration: drag, critical path, cascade, cross-context realti
   // 3. A creates a board.
   await a.goto(wsUrlA);
   await a.getByRole("button", { name: /new board/i }).click();
+  await a.getByRole("button", { name: /^continue$/i }).click();
   await a.getByLabel("Title").fill("Gantt");
   await a.getByRole("button", { name: /create board/i }).click();
   await expect(a).toHaveURL(/\/b\/[0-9a-f-]{36}/);

@@ -122,6 +122,7 @@ test("watchers, mentions, inbox, time tracking, dashboards", async ({
   const wsIdA = wsUrlA.match(/\/w\/([0-9a-f-]{36})/)![1];
 
   await a.getByRole("button", { name: /new board/i }).click();
+  await a.getByRole("button", { name: /^continue$/i }).click();
   await a.getByLabel("Title").fill("Collab");
   await a.getByRole("button", { name: /create board/i }).click();
   await expect(a).toHaveURL(/\/b\/[0-9a-f-]{36}/);

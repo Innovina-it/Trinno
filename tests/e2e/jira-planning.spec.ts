@@ -113,6 +113,7 @@ test("sprints, backlog, story points, WIP, filters, swimlanes, roadmap", async (
   const wsId = wsUrl.match(/\/w\/([0-9a-f-]{36})/)![1];
 
   await page.getByRole("button", { name: /new board/i }).click();
+  await page.getByRole("button", { name: /^continue$/i }).click();
   await page.getByLabel("Title").fill("Planning");
   await page.getByRole("button", { name: /create board/i }).click();
   await expect(page).toHaveURL(/\/b\/[0-9a-f-]{36}/);

@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -7,8 +7,13 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { Archive } from "lucide-react";
+import { toast } from "sonner";
 import type { ListRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
+import { archiveList } from "@/actions/lists";
+import { undoBus } from "@/lib/undo-bus";
+import { errorBus } from "@/lib/errors/error-bus";
 import { CardTile } from "./card-tile";
 import { AddCardForm } from "./add-card-form";
 import { roman } from "@/lib/format";
@@ -97,6 +102,42 @@ export function ListColumn({
   const listMeta = `${numeral} · ${cardLabel}`;
   const overLimit = list.wipLimit != null && filtered.length > list.wipLimit;
 
+  // Plan #16b-γ-D (#10) — archive list with undo. The store removes the
+  // list (and its cards) optimistically via the realtime subscription.
+  // The undo callback restores via archiveList(id, archived=false).
+  const updateListLocal = useBoardStore((s) => s.updateList);
+  const [, startArchive] = useTransition();
+  function onArchive() {
+    if (
+      !window.confirm(
+        `Archive list "${list.title}"? Cards stay attached and you can restore from settings.`,
+      )
+    )
+      return;
+    startArchive(async () => {
+      try {
+        await archiveList({ id: list.id, archived: true });
+        undoBus.push({
+          message: `Archived list "${list.title}"`,
+          undo: async () => {
+            try {
+              await archiveList({ id: list.id, archived: false });
+              updateListLocal(list.id, { archived: false });
+            } catch (err) {
+              const m = "Failed to undo: " + (err as Error).message;
+              toast.error(m);
+              errorBus.push({ message: m });
+            }
+          },
+        });
+      } catch (err) {
+        const m = (err as Error).message;
+        toast.error(m);
+        errorBus.push({ message: `Archive list failed: ${m}` });
+      }
+    });
+  }
+
   return (
     <div
       ref={setNodeRef}
@@ -115,30 +156,45 @@ export function ListColumn({
       />
 
       {/* Column heading: ordinal+count meta in chip, serif italic title */}
-      <div
-        {...attributes}
-        {...listeners}
-        className="cursor-grab select-none border-b border-hairline px-4 py-3 active:cursor-grabbing"
-      >
-        <div className="flex items-baseline gap-2">
-          <span
-            aria-hidden
-            className="list-ordinal-stamp block leading-none"
-            data-list-ordinal={listMeta}
-          />
-          <span
-            data-testid="list-wip-chip"
-            className={`chip tabular-nums ${overLimit ? "bg-red-900/40 text-red-200 ring-1 ring-red-500/30" : ""}`}
-          >
-            {filtered.length}{list.wipLimit != null ? `/${list.wipLimit}` : ""}
-          </span>
-        </div>
-        <h3
-          className="serif-display text-2xl text-fg mt-1.5 leading-tight transition-all duration-200 group-hover/list:gradient-text-static"
-          style={{ ['--accent' as string]: accent } as React.CSSProperties}
+      <div className="relative border-b border-hairline px-4 py-3">
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab select-none active:cursor-grabbing"
         >
-          {list.title}
-        </h3>
+          <div className="flex items-baseline gap-2">
+            <span
+              aria-hidden
+              className="list-ordinal-stamp block leading-none"
+              data-list-ordinal={listMeta}
+            />
+            <span
+              data-testid="list-wip-chip"
+              className={`chip tabular-nums ${overLimit ? "bg-red-900/40 text-red-200 ring-1 ring-red-500/30" : ""}`}
+            >
+              {filtered.length}{list.wipLimit != null ? `/${list.wipLimit}` : ""}
+            </span>
+          </div>
+          <h3
+            className="serif-display text-2xl text-fg mt-1.5 leading-tight transition-all duration-200 group-hover/list:gradient-text-static"
+            style={{ ['--accent' as string]: accent } as React.CSSProperties}
+          >
+            {list.title}
+          </h3>
+        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onArchive();
+          }}
+          aria-label="Archive list"
+          data-testid="list-archive"
+          className="absolute right-2 top-2 rounded p-1.5 text-fg-faint opacity-0 transition-opacity duration-150 hover:bg-[rgb(255_255_255/0.06)] hover:text-fg group-hover/list:opacity-100"
+          title="Archive list"
+        >
+          <Archive className="size-3.5" />
+        </button>
       </div>
 
       <div

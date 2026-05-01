@@ -97,6 +97,7 @@ test("card type, parent breadcrumb, sub-tasks, links, components, versions all p
   const wsUrl = page.url();
 
   await page.getByRole("button", { name: /new board/i }).click();
+  await page.getByRole("button", { name: /^continue$/i }).click();
   await page.getByLabel("Title").fill("Jira Structure");
   await page.getByRole("button", { name: /create board/i }).click();
   await expect(page).toHaveURL(/\/b\/[0-9a-f-]{36}/);

@@ -119,8 +119,7 @@ export function TourOverlay() {
   return (
     <div
       data-testid="tour-overlay"
-      role="dialog"
-      aria-modal="true"
+      role="region"
       aria-label="First-run tour"
       className="pointer-events-none fixed inset-0 z-30"
     >

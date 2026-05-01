@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { updateCard } from "@/actions/cards";
+import { updateCard, archiveCard } from "@/actions/cards";
+import { undoBus } from "@/lib/undo-bus";
 import { LabelsSection } from "./card/labels-section";
 import { DueSection } from "./card/due-section";
 import { RoadmapDatesSection } from "./card/roadmap-dates-section";
@@ -35,7 +36,7 @@ import { ComponentCardSection } from "@/components/components/component-card-sec
 import { VersionCardSection } from "@/components/versions/version-card-section";
 import { cardCode } from "@/lib/format";
 import Link from "next/link";
-import { CalendarRange } from "lucide-react";
+import { Archive, CalendarRange } from "lucide-react";
 
 export type CardModalCard = {
   id: string;
@@ -134,6 +135,34 @@ export function CardModal({
 
   function close() {
     router.back();
+  }
+
+  // Plan #16b-γ-D (#10) — archive with undo. Closes the modal first
+  // (the card vanishes from the board snapshot via realtime/refresh).
+  function onArchive() {
+    start(async () => {
+      try {
+        await archiveCard({ id: card.id, archived: true });
+        // Push the undo banner; close the modal so the user sees it.
+        undoBus.push({
+          message: "Card archived",
+          undo: async () => {
+            try {
+              await archiveCard({ id: card.id, archived: false });
+            } catch (err) {
+              const m = "Failed to undo archive: " + (err as Error).message;
+              toast.error(m);
+              errorBus.push({ message: m });
+            }
+          },
+        });
+        router.back();
+      } catch (err) {
+        const m = (err as Error).message;
+        toast.error(m);
+        errorBus.push({ message: `Archive failed: ${m}` });
+      }
+    });
   }
 
   function persistTitle() {
@@ -294,7 +323,18 @@ export function CardModal({
 
       {children && <div className="border-t border-hairline pt-4">{children}</div>}
 
-      <div className="flex justify-end border-t border-hairline pt-4">
+      <div className="flex justify-between gap-2 border-t border-hairline pt-4">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onArchive}
+          disabled={pending}
+          data-testid="card-modal-archive"
+        >
+          <Archive className="size-3.5 mr-1.5" />
+          Archive
+        </Button>
         <Button type="button" variant="outline" onClick={close} disabled={pending}>
           Close
         </Button>

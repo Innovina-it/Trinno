@@ -54,8 +54,10 @@ test("workspace+board lifecycle", async ({ page }) => {
   await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}/);
   await expect(page.getByRole("heading", { name: "Side Project" })).toBeVisible();
 
-  // Create board
+  // Create board (step 1: pick template — "Blank" is selected by default,
+  // step 2: fill title + tone). Plan #16b-γ-B added the template picker.
   await page.getByRole("button", { name: /new board/i }).click();
+  await page.getByRole("button", { name: /^continue$/i }).click();
   await page.getByLabel("Title").fill("Roadmap");
   await page.getByRole("button", { name: /create board/i }).click();
   // Lands on /b/{uuid}
