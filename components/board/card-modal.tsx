@@ -36,7 +36,8 @@ import { ComponentCardSection } from "@/components/components/component-card-sec
 import { VersionCardSection } from "@/components/versions/version-card-section";
 import { cardCode } from "@/lib/format";
 import Link from "next/link";
-import { Archive, CalendarRange } from "lucide-react";
+import { Archive, CalendarRange, Move } from "lucide-react";
+import { MoveToBoardDialog } from "./card/move-to-board-dialog";
 
 export type CardModalCard = {
   id: string;
@@ -74,6 +75,7 @@ export function CardModal({
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description ?? "");
   const [pending, start] = useTransition();
+  const [moveOpen, setMoveOpen] = useState(false);
   const descTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedDesc = useRef(card.description ?? "");
   const lastSavedTitle = useRef(card.title);
@@ -324,21 +326,46 @@ export function CardModal({
       {children && <div className="border-t border-hairline pt-4">{children}</div>}
 
       <div className="flex justify-between gap-2 border-t border-hairline pt-4">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onArchive}
-          disabled={pending}
-          data-testid="card-modal-archive"
-        >
-          <Archive className="size-3.5 mr-1.5" />
-          Archive
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onArchive}
+            disabled={pending}
+            data-testid="card-modal-archive"
+          >
+            <Archive className="size-3.5 mr-1.5" />
+            Archive
+          </Button>
+          {card.boardId && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setMoveOpen(true)}
+              disabled={pending}
+              data-testid="card-modal-move-to-board"
+            >
+              <Move className="size-3.5 mr-1.5" />
+              Move to…
+            </Button>
+          )}
+        </div>
         <Button type="button" variant="outline" onClick={close} disabled={pending}>
           Close
         </Button>
       </div>
+      {card.boardId && (
+        <MoveToBoardDialog
+          open={moveOpen}
+          onOpenChange={setMoveOpen}
+          cardId={card.id}
+          currentBoardId={card.boardId}
+          currentWorkspaceId={workspaceId}
+          cardTitle={card.title}
+        />
+      )}
     </div>
   );
 

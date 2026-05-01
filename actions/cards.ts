@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { dbAsUser } from "@/lib/db/client";
-import { cards, cardLinks, cardLabels } from "@/lib/db/schema";
+import { cards, cardLinks, cardLabels, lists } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { positionBetween } from "@/lib/ordering";
 import {
@@ -26,6 +26,12 @@ const BulkSetSprintInput = z.object({
 const BulkAddLabelInput = z.object({
   cardIds: z.array(Uuid).min(1).max(50),
   labelId: Uuid,
+});
+
+// Plan #16b-γ-D (#37) — cross-board move.
+const MoveCardCrossBoardInput = z.object({
+  cardId: Uuid,
+  toListId: Uuid,
 });
 
 export async function createCardImpl(token: string, input: { listId: string; title: string }) {
@@ -269,6 +275,69 @@ export async function bulkAddLabelImpl(
       .returning({ cardId: cardLabels.cardId });
     return { inserted: r.length };
   });
+}
+
+// Plan #16b-γ-D (#37) — move a card to a list on another board. RLS
+// gates the SELECT of the target list (must be readable) and the
+// UPDATE of the card row (the user has write on the destination
+// because the destination list's board has them as a member). The
+// existing `set_card_board_id` denorm trigger fires on `list_id`
+// change so child rows (subtasks, comments, attachments, links) sync
+// their `board_id` automatically.
+export async function moveCardCrossBoardImpl(
+  token: string,
+  input: { cardId: string; toListId: string },
+): Promise<{ id: string; boardId: string; listId: string; position: string }> {
+  const p = MoveCardCrossBoardInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    // Resolve destination board via the target list. If the user can't
+    // read the list (RLS), this returns 0 rows and we 403.
+    const [tlist] = await tx
+      .select({ id: lists.id, boardId: lists.boardId })
+      .from(lists)
+      .where(eq(lists.id, p.toListId));
+    if (!tlist) throw new Error("Forbidden");
+
+    // Pick a position at the tail of the destination list.
+    const [last] = await tx
+      .select({ position: cards.position })
+      .from(cards)
+      .where(eq(cards.listId, p.toListId))
+      .orderBy(desc(cards.position))
+      .limit(1);
+    const pos = positionBetween(last?.position ?? null, null);
+
+    // The trigger `set_card_board_id` rewrites `board_id` from the new
+    // `list_id`; we still pass the destination's board_id explicitly so
+    // a future trigger change doesn't silently let stale denorms creep.
+    const [row] = await tx
+      .update(cards)
+      .set({
+        listId: p.toListId,
+        boardId: tlist.boardId,
+        position: pos,
+      })
+      .where(eq(cards.id, p.cardId))
+      .returning();
+    if (!row) throw new Error("Forbidden");
+    return {
+      id: row.id,
+      boardId: row.boardId,
+      listId: row.listId,
+      position: row.position,
+    };
+  });
+}
+
+export async function moveCardCrossBoard(input: {
+  cardId: string;
+  toListId: string;
+}) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const r = await moveCardCrossBoardImpl(t, input);
+  revalidatePath(`/b/${r.boardId}`);
+  return r;
 }
 
 export async function bulkArchiveCards(
