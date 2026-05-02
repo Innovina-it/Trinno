@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -16,11 +16,16 @@ import {
   horizontalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
+import { Layers3 } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
+import { useWorkspaceStore } from "@/stores/workspace-store";
 import { errorBus } from "@/lib/errors/error-bus";
 import type { BoardRow } from "@/lib/queries/board-snapshot";
 import { positionBetween } from "@/lib/ordering";
-import { moveCard as moveCardAction } from "@/actions/cards";
+import {
+  moveCard as moveCardAction,
+  bulkSetSprint as bulkSetSprintAction,
+} from "@/actions/cards";
 import { moveList as moveListAction } from "@/actions/lists";
 import { undoBus } from "@/lib/undo-bus";
 import { QuickAddFab } from "@/components/quick-add-card-dialog";
@@ -31,6 +36,7 @@ import { ListColumn } from "./list-column";
 import { AddListForm } from "./add-list-form";
 import { BoardFilterBar } from "./board-filter-bar";
 import { SwimlaneRow } from "./swimlane-row";
+import { SprintDropStrip } from "./sprint-drop-strip";
 import { useBoardRealtime } from "@/hooks/use-board-realtime";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { useBoardPresence, type Viewer } from "@/hooks/use-board-presence";
@@ -42,6 +48,11 @@ import {
   partitionLanes,
   type LaneMode,
 } from "@/lib/board-filters";
+
+// Plan #16b-γ-Master-D D1 — localStorage key for the sprint drop strip
+// toggle. Lives on the board view; Roadmap has its own UI for sprint
+// assignment.
+const SPRINT_STRIP_KEY = "board.sprintStrip";
 
 function decodeId(
   sortableId: string,
@@ -76,7 +87,37 @@ export function BoardView({
   const boardProfiles = useBoardStore((s) => s.boardProfiles);
   const moveListLocal = useBoardStore((s) => s.moveList);
   const moveCardLocal = useBoardStore((s) => s.moveCard);
+  // Plan #16b-γ-Master-D D1 — optimistic patches for sprint assignment go
+  // through the per-board store (drives card-tile.sprintId visibility) and
+  // the workspace store (drives the human-readable chip name). The CDC
+  // echo from `cards` will reconcile both when the server confirms.
+  const updateCardLocal = useBoardStore((s) => s.updateCard);
+  const patchWorkspaceCard = useWorkspaceStore((s) => s.patchCard);
   const [, start] = useTransition();
+
+  // Plan #16b-γ-Master-D D1 — toggle for the sprint drop strip. Persisted
+  // to localStorage so the user's preference survives navigation. Initial
+  // read happens lazily so SSR doesn't crash.
+  const [showSprintStrip, setShowSprintStrip] = useState(() => {
+    try {
+      return typeof window !== "undefined"
+        ? window.localStorage.getItem(SPRINT_STRIP_KEY) === "1"
+        : false;
+    } catch {
+      return false;
+    }
+  });
+  const toggleSprintStrip = useCallback(() => {
+    setShowSprintStrip((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(SPRINT_STRIP_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
 
   useBoardRealtime(board.id, board.workspaceId);
   useWorkspaceRealtime(board.workspaceId);
@@ -161,11 +202,46 @@ export function BoardView({
     if (activeKey.type === "card") {
       const overKey = decodeId(String(over.id));
       const overData = over.data.current as
-        | { type?: string; listId?: string }
+        | { type?: string; listId?: string; sprintId?: string }
         | undefined;
 
       const sourceCard = cards.find((c) => c.id === activeKey.id);
       if (!sourceCard) return;
+
+      // Plan #16b-γ-Master-D D1 — drop onto a sprint band → assign sprint.
+      // Checked before the list/card move branches because sprint bands are
+      // their own droppable type with no list semantics.
+      if (overData?.type === "sprint-band" && overData.sprintId) {
+        const newSprintId = overData.sprintId;
+        if (sourceCard.sprintId === newSprintId) return; // no-op
+        const origSprintId = sourceCard.sprintId;
+        // Optimistic — patch both stores so card-tile chip + tile.sprintId
+        // update without a roundtrip.
+        updateCardLocal(activeKey.id, { sprintId: newSprintId });
+        patchWorkspaceCard(activeKey.id, { sprintId: newSprintId });
+        const retrySprintAssign = async () => {
+          await bulkSetSprintAction({
+            cardIds: [activeKey.id],
+            sprintId: newSprintId,
+          });
+        };
+        start(async () => {
+          try {
+            await bulkSetSprintAction({
+              cardIds: [activeKey.id],
+              sprintId: newSprintId,
+            });
+          } catch (err) {
+            // Revert both stores on failure.
+            updateCardLocal(activeKey.id, { sprintId: origSprintId });
+            patchWorkspaceCard(activeKey.id, { sprintId: origSprintId });
+            const msg = "Failed to assign sprint: " + (err as Error).message;
+            toast.error(msg);
+            errorBus.push({ message: msg, retry: retrySprintAssign });
+          }
+        });
+        return;
+      }
 
       let toListId: string | null = null;
       let prevPos: string | null = null;
@@ -295,6 +371,25 @@ export function BoardView({
           </div>
           <div className="flex items-center gap-3">
             <PresenceAvatars viewers={viewers} />
+            <button
+              type="button"
+              onClick={toggleSprintStrip}
+              data-testid="board-sprint-strip-toggle"
+              aria-pressed={showSprintStrip}
+              title={
+                showSprintStrip
+                  ? "Hide sprint drop strip"
+                  : "Show sprint drop strip — drag a card onto a band to assign it"
+              }
+              className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
+                showSprintStrip
+                  ? "bg-fg/10 text-fg ring-1 ring-fg/40"
+                  : ""
+              }`}
+            >
+              <Layers3 className="size-3" />
+              SPRINTS
+            </button>
             <Button
               render={<Link href={`/b/${board.id}/settings`} />}
               nativeButton={false}
@@ -316,6 +411,10 @@ export function BoardView({
             collisionDetection={closestCorners}
             onDragEnd={onDragEnd}
           >
+            {/* Plan #16b-γ-Master-D D1 — droppable strip lives inside the
+                DndContext so the bands' useDroppable() registrations are
+                visible to onDragEnd. Hidden when the toggle is off. */}
+            {showSprintStrip && <SprintDropStrip />}
             {laneMode === "none" ? (
               <div className="flex items-start gap-4 overflow-x-auto px-2 pb-4 [&>*]:animate-in [&>*]:fade-in [&>*]:slide-in-from-bottom-3 [&>*]:duration-400">
                 <SortableContext
