@@ -42,6 +42,8 @@ import { errorBus } from "@/lib/errors/error-bus";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { RoadmapBar } from "./roadmap-bar";
+import { PriorityGutter, PRIORITIES } from "./priority-gutter";
+import type { CardPriority } from "@/components/board/card/priority-picker";
 import { DependencyArrows, type BarBox } from "./dependency-arrows";
 import { CriticalPathOverlay } from "./critical-path-overlay";
 import {
@@ -80,6 +82,13 @@ type DragState = {
   // movement does not change the bar's parent so we leave them null.
   sourceLaneId: string | null;
   currentLaneId: string | null;
+  // Plan #16b-γ-G G4 — priority-gutter mode. When the cursor enters the
+  // gutter region during a `move` drag (and `gutterOn === true`), this
+  // captures the band the cursor is currently over. While set, the
+  // pointermove handler does NOT translate dates — pointerup writes
+  // `priority = gutterBand` instead of persisting the snapped dates.
+  gutterBand: CardPriority | null;
+  origPriority: CardPriority | null;
 };
 
 function fmtHeader(d: Date, zoom: Zoom): string {
@@ -166,6 +175,9 @@ export function RoadmapView({
     : "epic";
   const focusParam = sp.get("focus");
   const queryParam = sp.get("q") ?? "";
+  // Plan #16b-γ-G G4 — priority-gutter URL toggle. Default off (param
+  // absent); `?gutter=1` turns it on.
+  const gutterOn = sp.get("gutter") === "1";
 
   // A3 — debounced search. URL param `q` is the source of truth, the
   // input is a local mirror that flushes to the URL after 250ms.
@@ -347,6 +359,7 @@ export function RoadmapView({
         boardTitle: boardTitleById.get(c.boardId) ?? "",
         archived: c.archived,
         roadmapOrder: c.roadmapOrder ?? null,
+        priority: c.priority ?? null,
       }));
   }, [storeCards, storeBoards, queryNorm, filters, sprintFilter]);
 
@@ -538,6 +551,14 @@ export function RoadmapView({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
+  // Plan #16b-γ-G G4 — priority-gutter toggle (URL-synced; default off).
+  function toggleGutter() {
+    const params = new URLSearchParams(sp.toString());
+    if (gutterOn) params.delete("gutter");
+    else params.set("gutter", "1");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
   // ---- Drag state (refs to avoid re-renders during pointermove) ----
   const dragRef = useRef<DragState | null>(null);
   const [, startTransition] = useTransition();
@@ -565,6 +586,19 @@ export function RoadmapView({
   // (not ref) so the lane overlay re-renders on crossing.
   const [dragHoverLaneId, setDragHoverLaneId] = useState<string | null>(null);
   const dragSourceLaneIdRef = useRef<string | null>(null);
+
+  // Plan #16b-γ-G G4 — gutter band the cursor is currently hovering
+  // during a bar drag. State (not ref) so the gutter band re-renders
+  // with the highlighted ring as the cursor moves vertically. Mirrored
+  // into dragRef.gutterBand so pointerup reads the latest value.
+  const [hoveredGutterBand, setHoveredGutterBand] =
+    useState<CardPriority | null>(null);
+  // Ref to the gutter element for clientX hit-testing during drags.
+  const gutterRef = useRef<HTMLDivElement | null>(null);
+  // We read `gutterOn` inside callbacks bound at mount; mirror it via
+  // a ref so the latest value is read without re-binding listeners.
+  const gutterOnRef = useRef(gutterOn);
+  gutterOnRef.current = gutterOn;
 
   // Ref to the lane label panel for row-drag hit-testing (G1). Declared
   // up here so the row-drag callbacks can reference it cleanly.
@@ -699,6 +733,62 @@ export function RoadmapView({
       const d = dragRef.current;
       if (!d) return;
       lastClientXRef.current = e.clientX;
+
+      // Plan #16b-γ-G G4 — gutter detection. Only meaningful in `move`
+      // mode and when the gutter is on. We hit-test the cursor against
+      // the gutter element's bounding rect; entering it suspends date
+      // translation and selects a band by Y. Leaving it (cursor.x past
+      // gutter.right) exits gutter mode and resumes normal drag.
+      if (d.mode === "move" && gutterOnRef.current) {
+        const gutter = gutterRef.current;
+        if (gutter) {
+          const gRect = gutter.getBoundingClientRect();
+          const inGutter =
+            e.clientX >= gRect.left &&
+            e.clientX < gRect.right &&
+            e.clientY >= gRect.top &&
+            e.clientY < gRect.bottom;
+          if (inGutter) {
+            // Five equal vertical bands — index by Y offset.
+            const localY = e.clientY - gRect.top;
+            const bandHeight = gRect.height / PRIORITIES.length;
+            const idx = Math.min(
+              PRIORITIES.length - 1,
+              Math.max(0, Math.floor(localY / bandHeight)),
+            );
+            const band = PRIORITIES[idx];
+            if (d.gutterBand !== band) {
+              d.gutterBand = band;
+              setHoveredGutterBand(band);
+            }
+            // Clear any lane-crossing highlight from prior non-gutter
+            // frames so the cross-lane indicator doesn't linger.
+            if (d.currentLaneId !== d.sourceLaneId) {
+              d.currentLaneId = d.sourceLaneId;
+              setDragHoverLaneId(null);
+            }
+            // While in gutter mode: keep the bar visually pinned at its
+            // original dates, NOT the cursor-projected ones.
+            patchCardInStore(d.cardId, {
+              startDate: d.origStart,
+              targetDate: d.origTarget,
+            });
+            // Auto-scroll loop is still useful for horizontal escape
+            // out of the gutter, but not strictly required while parked.
+            if (autoScrollRafRef.current === null) {
+              autoScrollRafRef.current =
+                requestAnimationFrame(tickAutoScroll);
+            }
+            return;
+          }
+          // Not in gutter — clear band if previously set.
+          if (d.gutterBand !== null) {
+            d.gutterBand = null;
+            setHoveredGutterBand(null);
+          }
+        }
+      }
+
       const deltaPx = e.clientX - d.startClientX;
       const deltaDays = Math.round(deltaPx / ppd);
       let nextStart = d.origStart;
@@ -805,11 +895,37 @@ export function RoadmapView({
     dragRef.current = null;
     dragSourceLaneIdRef.current = null;
     setDragHoverLaneId(null);
+    setHoveredGutterBand(null);
     stopAutoScroll();
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onPointerUp);
     const current = cardsRef.current.find((c) => c.id === d.cardId);
     if (!current) return;
+
+    // Plan #16b-γ-G G4 — pointerup INSIDE the gutter writes priority
+    // (and skips date snap / lane reparent entirely). The user's intent
+    // is unambiguous: they parked the bar in a band. We optimistically
+    // patch the store, then persist via updateCard. The bar visually
+    // stays at its original dates because the move-mode pointermove
+    // pinned them while in gutter mode.
+    if (d.mode === "move" && d.gutterBand !== null) {
+      const cardId = d.cardId;
+      const nextPriority = d.gutterBand;
+      const origPriority = d.origPriority;
+      if (nextPriority === origPriority) return;
+      patchCardInStore(cardId, { priority: nextPriority });
+      startTransition(() => {
+        void (async () => {
+          try {
+            await updateCard({ id: cardId, priority: nextPriority });
+          } catch (err) {
+            patchCardInStore(cardId, { priority: origPriority });
+            toast.error((err as Error).message);
+          }
+        })();
+      });
+      return;
+    }
     // Plan #16b-γ-G G2 — detect cross-lane reparent. Only valid in epic
     // mode (sourceLaneId is null elsewhere) AND in move mode (resize
     // never reparents). Triggers regardless of horizontal movement —
@@ -987,6 +1103,8 @@ export function RoadmapView({
         origTarget: c.targetDate,
         sourceLaneId,
         currentLaneId: sourceLaneId,
+        gutterBand: null,
+        origPriority: c.priority ?? null,
       };
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
@@ -1655,6 +1773,8 @@ export function RoadmapView({
         onToggleCriticalPath={() => setShowCriticalPath((p) => !p)}
         autoCascade={autoCascade}
         onToggleAutoCascade={toggleAutoCascade}
+        gutter={gutterOn}
+        onToggleGutter={toggleGutter}
         onJumpToDate={jumpToDate}
         onOpenNewCard={() => setNewCardOpen(true)}
         queryDraft={queryDraft}
@@ -1708,6 +1828,19 @@ export function RoadmapView({
             className="shrink-0 border-r border-hairline bg-[color:var(--surface)] relative"
             style={{ width: LANE_LABEL_WIDTH }}
           >
+            {/* Plan #16b-γ-G G4 — priority gutter. Sticky-positioned
+                inside the lane-label panel (which itself doesn't scroll
+                horizontally with canvas content). 64px overlay over the
+                leftmost slice of the panel. Visible only when toggled
+                on; bars are tinted by priority regardless. The ref lets
+                pointermove hit-test against gutter bounds. */}
+            {gutterOn && (
+              <PriorityGutter
+                ref={gutterRef}
+                height={HEADER_STRIP_HEIGHT + totalHeight}
+                hoveredBand={hoveredGutterBand}
+              />
+            )}
             <div
               className="border-b border-hairline mono-meta-sm text-fg-faint flex items-end px-3 pb-1"
               style={{ height: HEADER_STRIP_HEIGHT }}

@@ -34,6 +34,8 @@ function rowToCard(r: Record<string, unknown>, boardId: string): CardSnap {
     archived: Boolean(r.archived),
     createdAt: r.created_at ? new Date(r.created_at as string) : new Date(),
     roadmapOrder: (r.roadmap_order as number | null) ?? null,
+    priority:
+      (r.priority as "p0" | "p1" | "p2" | "p3" | "p4" | null) ?? null,
   };
 }
 

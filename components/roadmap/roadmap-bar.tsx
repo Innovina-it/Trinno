@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Flag,
   LayoutGrid,
   MoreHorizontal,
   MousePointerClick,
@@ -22,6 +23,10 @@ import { toast } from "sonner";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
 import { STATUS_LABEL, type StatusKind } from "@/lib/status";
 import { archiveCard, updateCard } from "@/actions/cards";
+import {
+  PRIORITY_TINT,
+  type CardPriority,
+} from "@/components/board/card/priority-picker";
 import {
   Dialog,
   DialogContent,
@@ -208,6 +213,20 @@ export function RoadmapBar({
     });
   }
 
+  // Plan #16b-γ-G G4 — keyboard parity for the gutter drag. Same items
+  // are flat (no submenu) since the existing menu is a stack of plain
+  // buttons. Includes a "Clear priority" entry when one is set.
+  function handleSetPriority(next: CardPriority | null) {
+    setMenu(null);
+    startTransition(async () => {
+      try {
+        await updateCard({ id: card.id, priority: next });
+      } catch (err) {
+        toast.error((err as Error).message);
+      }
+    });
+  }
+
   function handleSaveDates() {
     if (!datesStart || !datesTarget) {
       toast.error("Both dates required");
@@ -235,6 +254,12 @@ export function RoadmapBar({
 
   const fill = statusFill(status, isHeader);
   const statusLabel = status ? STATUS_LABEL[status] : null;
+  // Plan #16b-γ-G G4 — bars are always tinted by priority (regardless of
+  // whether the gutter is visible). 3px stripe at the bar's left edge.
+  // Skipped when priority is null — preserves original visuals for
+  // unset cards.
+  const priority = card.priority ?? null;
+  const priorityDot = priority ? PRIORITY_TINT[priority as CardPriority].dot : null;
   return (
     <>
       <div
@@ -262,8 +287,21 @@ export function RoadmapBar({
         data-roadmap-focus={card.id}
         data-testid="roadmap-bar"
         data-status={status ?? "unmapped"}
+        data-priority={priority ?? "none"}
         aria-label={`Roadmap bar for ${card.title}`}
       >
+        {/* Plan #16b-γ-G G4 — left-edge priority stripe (3px). Always
+            rendered when priority is set, independent of gutter
+            visibility. `pointer-events-none` so it doesn't swallow the
+            resize handle's hit area. */}
+        {priorityDot && (
+          <span
+            data-testid="roadmap-bar-priority-stripe"
+            data-priority={priority}
+            aria-hidden
+            className={`absolute left-0 top-0 bottom-0 w-[3px] rounded-l-md pointer-events-none ${priorityDot}`}
+          />
+        )}
         {/* Wider hit-zone (12px) for the left edge resize handle, with a hover-only chevron. */}
         <span
           className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize opacity-0 group-hover/bar:opacity-100 rounded-l-md flex items-center justify-center"
@@ -387,6 +425,38 @@ export function RoadmapBar({
             <CalendarRange className="size-3" />
             Edit dates
           </button>
+          <div className="my-1 border-t border-hairline" />
+          {(["p0", "p1", "p2", "p3", "p4"] as CardPriority[]).map((p) => (
+            <button
+              key={p}
+              type="button"
+              role="menuitem"
+              onClick={() => handleSetPriority(p)}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
+              data-testid="roadmap-bar-menu-set-priority"
+              data-priority={p}
+            >
+              <span
+                aria-hidden
+                className={`size-2 rounded-full ${PRIORITY_TINT[p].dot}`}
+              />
+              <Flag className="size-3" />
+              Set {p.toUpperCase()}
+            </button>
+          ))}
+          {priority !== null && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => handleSetPriority(null)}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-fg-muted hover:bg-[rgb(255_255_255/0.06)]"
+              data-testid="roadmap-bar-menu-clear-priority"
+            >
+              <Flag className="size-3" />
+              Clear priority
+            </button>
+          )}
+          <div className="my-1 border-t border-hairline" />
           <button
             type="button"
             role="menuitem"

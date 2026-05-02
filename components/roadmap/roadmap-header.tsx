@@ -29,6 +29,8 @@ export function RoadmapHeader({
   onToggleCriticalPath,
   autoCascade,
   onToggleAutoCascade,
+  gutter,
+  onToggleGutter,
   onJumpToDate,
   onOpenNewCard,
   queryDraft,
@@ -47,6 +49,8 @@ export function RoadmapHeader({
   onToggleCriticalPath: () => void;
   autoCascade: boolean;
   onToggleAutoCascade: () => void;
+  gutter: boolean;
+  onToggleGutter: () => void;
   onJumpToDate: (d: Date) => void;
   onOpenNewCard: () => void;
   queryDraft: string;
@@ -142,6 +146,19 @@ export function RoadmapHeader({
           }`}
         >
           AUTO-RESCHEDULE: {autoCascade ? "ON" : "OFF"}
+        </button>
+        <button
+          type="button"
+          onClick={onToggleGutter}
+          data-testid="roadmap-priority-gutter-toggle"
+          data-active={gutter ? "true" : "false"}
+          aria-pressed={gutter}
+          title="Drag a bar leftward into the gutter to set its priority (P0-P4)"
+          className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
+            gutter ? "ring-1 ring-fg/40" : ""
+          }`}
+        >
+          PRIORITY GUTTER: {gutter ? "ON" : "OFF"}
         </button>
         <button
           type="button"
