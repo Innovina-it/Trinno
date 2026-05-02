@@ -25,20 +25,27 @@ Living doc of intentional gaps, deferred items, and workarounds in the trello-fo
 |---|---|---|
 | Bulk-select / lasso | Not implemented on Gantt. Per-card multi-select only via Kanban. | 🟡 |
 | Inline date input | Rejected. Drag is the primary date-edit affordance. Edit-dates accessible via overflow menu (A2). | ✅ |
-| Mini-map / overview scrollbar | Deferred (γ-Master C6, ~2 hr — largest single item). | 🟡 |
-| Print stylesheet | Deferred (γ-Master C8). Browser `Cmd+P` works but chrome leaks into output. | 🟡 |
-| PDF export | None. Use browser print → "Save as PDF". | ✅ |
-| Per-assignee swimlane | Deferred (γ-Master C9). Data already in workspace store via β. | 🟡 |
-| Per-component swimlane | Deferred (γ-Master C10). | 🟡 |
-| Drag Kanban tile → sprint band | Deferred (γ-Master D1). Requires dnd-kit context plumbed across Kanban + Gantt — non-trivial. May be cut from γ entirely. | 🟡 |
+| Mini-map / overview scrollbar | Shipped (γ-Master C6 — `components/roadmap/mini-map.tsx`). Click + drag, viewport rect, slider role. | ✅ |
+| Print stylesheet | Shipped (γ-Master C8). Landscape `@page`, hide chrome, color preserved via `print-color-adjust`. | ✅ |
+| PDF export | None. Use browser print → "Save as PDF" (now with C8 stylesheet). | ✅ |
+| Per-assignee swimlane | Shipped (γ-Master C9). `card_members` snapshot + realtime extension. URL-state `?lanes=assignee`. | ✅ |
+| Per-component swimlane | Shipped (γ-Master C10). URL-state `?lanes=component`. | ✅ |
+| Drag bar auto-scroll near edges | Shipped (γ-Master C3 / γ-G G5 alias). RAF tick at canvas edge during any active bar/paint/chip/row drag. | ✅ |
+| Snap to dependency ends | Shipped (γ-Master C4 + γ-G G6 polish). 4-day window, blocker target_dates injected into snap candidates, Alt-bypass, visual snap guide. | ✅ |
+| Drag-paint empty area → new card | Shipped (γ-G G3). Pointerdown on empty row → drag rect → A4 dialog with start/target/parent/board prefilled. Supersedes the earlier D2 click variant (kept as a < 4 px click case). | ✅ |
+| Header chip drag → new card | Shipped (γ-G G7). Floating ghost chip, drop on row → A4 dialog with `defaultStart=dropDay, defaultTarget=+7d`. | ✅ |
+| Manual row reorder | Shipped (γ-G G1). Sparse-int `cards.roadmap_order`, `≡` drag handle on epic-mode lanes, full-board renumber on rank collision under `pg_advisory_xact_lock`. Activity log entry skipped (UI affordance, not audit-relevant). | ✅ |
+| Cross-epic-lane reparent via drag | Shipped (γ-G G2). Vertical lane crossing during bar drag writes `parent_card_id`. Cycle errors route to error pane. Dep-break confirm dialog deferred (silent commit per plan). | ✅ |
+| Priority gutter (drag bar to set enum) | Shipped (γ-G G4). Sticky 64px left strip, P0–P4 bands, URL toggle `?gutter=1`. Bars tinted by priority always. Overflow-menu flat priority entries for keyboard parity. | ✅ |
+| Drag Kanban tile → sprint band | Deferred (γ-Master D1). Requires dnd-kit context plumbed across Kanban + Gantt — non-trivial. Cut from γ pending a separate plan. | 🟡 |
 
 ## Cross-view consistency
 
 | Area | Limit | Status |
 |---|---|---|
 | `card_links` workspace realtime | Live on board pages (γ-Master B4 — `useWorkspaceRealtime` mounted in `BoardView`). Per-board + per-workspace channels both subscribe to current board's tables; accepted dual-write into separate stores. | ✅ |
-| Inbox `card.dates` deep-link | Routes to card modal, not Gantt focus. Fix queued (γ-Master D3). | 🟡 |
-| Activity "set roadmap dates" link | Opens card modal instead of roadmap view. Fix queued (γ-Master D4). | 🟡 |
+| Inbox `card.dates` deep-link | Shipped (γ-Master D3). Routes to `/w/<workspaceId>/roadmap?focus=<cardId>` for both inbox list and notification bell. Other notification kinds keep the card modal link. | ✅ |
+| Activity "set roadmap dates" link | Shipped (γ-Master D4). Board ActivityFeed and CardActivity panel both wrap `card.dates` rows in a roadmap-focus link. | ✅ |
 
 ## Bulk operations
 
