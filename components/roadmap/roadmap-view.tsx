@@ -593,6 +593,32 @@ export function RoadmapView({
   // into dragRef.gutterBand so pointerup reads the latest value.
   const [hoveredGutterBand, setHoveredGutterBand] =
     useState<CardPriority | null>(null);
+
+  // Plan #16b-γ-G G6 polish — Alt-key bypass + visual snap guide.
+  // `lastAltKeyRef` is updated on every pointermove so onPointerUp
+  // (which doesn't take an event) can read the latest Alt state. When
+  // true at release, the snap step is skipped and the rounded-to-day
+  // position is persisted as-is.
+  const lastAltKeyRef = useRef(false);
+  // Per-drag snap candidate caches, populated once at beginDrag so the
+  // pointermove preview computation is cheap (no per-move sprint/blocker
+  // rebuilds; see G6 perf note in the plan).
+  const dragBlockerTargetsRef = useRef<
+    Array<{ date: Date; cardTitle: string }>
+  >([]);
+  const dragSprintEndsRef = useRef<Array<{ date: Date; name: string }>>([]);
+  // Snap preview shown during drag (cleared on pointerup or when out of
+  // window). State (not ref) so the guide/label re-render as the cursor
+  // moves through the 4-day snap window. Mirrored into a ref so the
+  // pointermove handler can read the latest value without putting it
+  // in its deps (which would re-bind the listener mid-drag).
+  const [snapPreview, setSnapPreview] = useState<{
+    date: Date;
+    label: string;
+    kind: "monday" | "sprint" | "blocker";
+  } | null>(null);
+  const snapPreviewRef = useRef(snapPreview);
+  snapPreviewRef.current = snapPreview;
   // Ref to the gutter element for clientX hit-testing during drags.
   const gutterRef = useRef<HTMLDivElement | null>(null);
   // We read `gutterOn` inside callbacks bound at mount; mirror it via
@@ -728,11 +754,76 @@ export function RoadmapView({
     autoScrollRafRef.current = requestAnimationFrame(tickAutoScroll);
   }, []);
 
+  // Plan #16b-γ-G G6 polish — companion to `snapDate` that also returns
+  // which kind of candidate matched and a human label to display next
+  // to the snap-guide line. Used only by the in-drag preview; the
+  // pointerup path keeps using `snapDate` for backwards compat. Sprint
+  // ends and blocker target_dates are read from per-drag refs filled in
+  // by `beginDrag` so we don't rebuild them on every pointer event.
+  const snapDateWithSource = useCallback(
+    (
+      d: Date,
+      includeBlockers: boolean,
+    ): {
+      date: Date;
+      label: string;
+      kind: "monday" | "sprint" | "blocker";
+    } | null => {
+      type Cand = {
+        date: Date;
+        kind: "monday" | "sprint" | "blocker";
+        label: string;
+      };
+      const candidates: Cand[] = [];
+      // Mondays.
+      const day = d.getUTCDay();
+      const sinceMonday = (day + 6) % 7;
+      const prevMonday = addDays(startOfDay(d), -sinceMonday);
+      const nextMonday = addDays(prevMonday, 7);
+      candidates.push(
+        { date: prevMonday, kind: "monday", label: "Mon" },
+        { date: nextMonday, kind: "monday", label: "Mon" },
+      );
+      // Sprint ends — read from per-drag cache.
+      for (const s of dragSprintEndsRef.current) {
+        candidates.push({
+          date: s.date,
+          kind: "sprint",
+          label: `${s.name} end`,
+        });
+      }
+      // Blocker target_dates — only on the start edge (move + resize-left).
+      if (includeBlockers) {
+        for (const b of dragBlockerTargetsRef.current) {
+          candidates.push({
+            date: b.date,
+            kind: "blocker",
+            label: b.cardTitle,
+          });
+        }
+      }
+      let best: Cand | null = null;
+      let bestDiff = Number.POSITIVE_INFINITY;
+      for (const c of candidates) {
+        const diff = Math.abs(dayDiff(d, c.date));
+        if (diff <= 4 && diff < bestDiff) {
+          best = c;
+          bestDiff = diff;
+        }
+      }
+      return best;
+    },
+    [],
+  );
+
   const onPointerMove = useCallback(
     (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
       lastClientXRef.current = e.clientX;
+      // Plan #16b-γ-G G6 polish — track Alt-key state for pointerup to
+      // read. Holding Alt at release skips the snap step entirely.
+      lastAltKeyRef.current = e.altKey;
 
       // Plan #16b-γ-G G4 — gutter detection. Only meaningful in `move`
       // mode and when the gutter is on. We hit-test the cursor against
@@ -841,12 +932,54 @@ export function RoadmapView({
           }
         }
       }
+      // Plan #16b-γ-G G6 polish — visual snap guide. Compute the snap
+      // candidate the START / TARGET edge would land on if released
+      // here. Mirrors the per-edge snap rules in `onPointerUp`:
+      // resize-left / move's start side may snap to blockers, sprint
+      // ends, or Mondays; resize-right / move's target side may NOT
+      // snap to blockers. In move mode we pick whichever edge has the
+      // closer candidate (preserving duration is irrelevant for the
+      // *preview* — we just show what would happen). Alt held suppresses
+      // the preview because the release will skip snap.
+      const currentPreview = snapPreviewRef.current;
+      if (d.gutterBand !== null || e.altKey) {
+        if (currentPreview !== null) setSnapPreview(null);
+      } else {
+        let preview: typeof currentPreview = null;
+        if (d.mode === "resize-left") {
+          preview = snapDateWithSource(startOfDay(nextStart), true);
+        } else if (d.mode === "resize-right") {
+          preview = snapDateWithSource(startOfDay(nextTarget), false);
+        } else {
+          // move mode — try both edges, pick the closer one.
+          const startCand = snapDateWithSource(startOfDay(nextStart), true);
+          const targetCand = snapDateWithSource(startOfDay(nextTarget), false);
+          const startDelta = startCand
+            ? Math.abs(dayDiff(startOfDay(nextStart), startCand.date))
+            : Number.POSITIVE_INFINITY;
+          const targetDelta = targetCand
+            ? Math.abs(dayDiff(startOfDay(nextTarget), targetCand.date))
+            : Number.POSITIVE_INFINITY;
+          preview =
+            startDelta <= targetDelta ? startCand : targetCand;
+        }
+        // Avoid setState churn on identity-stable previews. Compare by
+        // (date, kind, label) rather than by reference.
+        const same =
+          (preview === null && currentPreview === null) ||
+          (preview !== null &&
+            currentPreview !== null &&
+            preview.date.getTime() === currentPreview.date.getTime() &&
+            preview.kind === currentPreview.kind &&
+            preview.label === currentPreview.label);
+        if (!same) setSnapPreview(preview);
+      }
       // Lazily start the auto-scroll RAF on the first move of a drag.
       if (autoScrollRafRef.current === null) {
         autoScrollRafRef.current = requestAnimationFrame(tickAutoScroll);
       }
     },
-    [ppd, patchCardInStore, tickAutoScroll],
+    [ppd, patchCardInStore, tickAutoScroll, snapDateWithSource],
   );
 
   // Plan #16b-α (#10) — snap-to-week-Monday + snap-to-sprint-end on
@@ -892,10 +1025,17 @@ export function RoadmapView({
   const onPointerUp = useCallback(() => {
     const d = dragRef.current;
     if (!d) return;
+    // Plan #16b-γ-G G6 polish — capture Alt state then reset all the
+    // per-drag refs/state. Alt was last written by `onPointerMove`.
+    const altBypass = lastAltKeyRef.current;
+    lastAltKeyRef.current = false;
     dragRef.current = null;
     dragSourceLaneIdRef.current = null;
     setDragHoverLaneId(null);
     setHoveredGutterBand(null);
+    setSnapPreview(null);
+    dragBlockerTargetsRef.current = [];
+    dragSprintEndsRef.current = [];
     stopAutoScroll();
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onPointerUp);
@@ -1024,27 +1164,32 @@ export function RoadmapView({
     // resize modes we snap only the dragged edge. Blocker target_dates
     // are passed only to the START-edge snap calls (resize-left and
     // move's start side); the END edge does not snap to dependency ends.
+    // Plan #16b-γ-G G6 polish — `altBypass` skips the snap step
+    // entirely so the user can park a bar at an arbitrary day. The
+    // rounded-to-day position from `onPointerMove` is preserved as-is.
     let snappedStart = startOfDay(current.startDate);
     let snappedTarget = startOfDay(current.targetDate);
-    if (d.mode === "resize-left") {
-      snappedStart = snapDate(snappedStart, blockerTargets);
-    } else if (d.mode === "resize-right") {
-      snappedTarget = snapDate(snappedTarget);
-    } else {
-      const startSnap = snapDate(snappedStart, blockerTargets);
-      const targetSnap = snapDate(snappedTarget);
-      const startDelta = Math.abs(dayDiff(snappedStart, startSnap));
-      const targetDelta = Math.abs(dayDiff(snappedTarget, targetSnap));
-      // Prefer the edge that snapped (smaller delta), then translate
-      // both ends to preserve duration.
-      if (startDelta <= targetDelta && startDelta <= 4) {
-        const shift = dayDiff(snappedStart, startSnap);
-        snappedStart = startSnap;
-        snappedTarget = addDays(snappedTarget, shift);
-      } else if (targetDelta <= 4) {
-        const shift = dayDiff(snappedTarget, targetSnap);
-        snappedTarget = targetSnap;
-        snappedStart = addDays(snappedStart, shift);
+    if (!altBypass) {
+      if (d.mode === "resize-left") {
+        snappedStart = snapDate(snappedStart, blockerTargets);
+      } else if (d.mode === "resize-right") {
+        snappedTarget = snapDate(snappedTarget);
+      } else {
+        const startSnap = snapDate(snappedStart, blockerTargets);
+        const targetSnap = snapDate(snappedTarget);
+        const startDelta = Math.abs(dayDiff(snappedStart, startSnap));
+        const targetDelta = Math.abs(dayDiff(snappedTarget, targetSnap));
+        // Prefer the edge that snapped (smaller delta), then translate
+        // both ends to preserve duration.
+        if (startDelta <= targetDelta && startDelta <= 4) {
+          const shift = dayDiff(snappedStart, startSnap);
+          snappedStart = startSnap;
+          snappedTarget = addDays(snappedTarget, shift);
+        } else if (targetDelta <= 4) {
+          const shift = dayDiff(snappedTarget, targetSnap);
+          snappedTarget = targetSnap;
+          snappedStart = addDays(snappedStart, shift);
+        }
       }
     }
     if (snappedStart.getTime() > snappedTarget.getTime()) {
@@ -1106,10 +1251,51 @@ export function RoadmapView({
         gutterBand: null,
         origPriority: c.priority ?? null,
       };
+      // Plan #16b-γ-G G6 polish — pre-compute per-drag snap candidates
+      // (sprint ends with names; blocker target_dates with card titles)
+      // so `onPointerMove` doesn't rebuild them at pointer-event rate.
+      const sprintEnds: Array<{ date: Date; name: string }> = [];
+      for (const s of storeSprints) {
+        if (s.endDate) {
+          sprintEnds.push({
+            date: startOfDay(
+              s.endDate instanceof Date ? s.endDate : new Date(s.endDate),
+            ),
+            name: s.name,
+          });
+        }
+      }
+      dragSprintEndsRef.current = sprintEnds;
+      const blockerCardIds = storeLinksRef.current
+        .filter(
+          (l) => l.fromCardId === cardId && l.kind === "is_blocked_by",
+        )
+        .map((l) => l.toCardId);
+      const blockerTargets: Array<{ date: Date; cardTitle: string }> = [];
+      if (blockerCardIds.length > 0) {
+        const cardById = new Map(
+          storeCardsRef.current.map((sc) => [sc.id, sc]),
+        );
+        for (const id of blockerCardIds) {
+          const bc = cardById.get(id);
+          if (bc && bc.targetDate) {
+            blockerTargets.push({
+              date: startOfDay(
+                bc.targetDate instanceof Date
+                  ? bc.targetDate
+                  : new Date(bc.targetDate),
+              ),
+              cardTitle: bc.title,
+            });
+          }
+        }
+      }
+      dragBlockerTargetsRef.current = blockerTargets;
+      lastAltKeyRef.current = e.altKey;
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
     },
-    [laneMode, onPointerMove, onPointerUp],
+    [laneMode, onPointerMove, onPointerUp, storeSprints],
   );
 
   const handleMoveStart = useCallback(
@@ -2031,6 +2217,44 @@ export function RoadmapView({
                   />
                 );
               })()}
+              {/* Plan #16b-γ-G G6 polish — visual snap guide. Drawn
+                  while a drag is in progress and a snap candidate is
+                  within the 4-day window. Suppressed when Alt is held
+                  (the release will skip snap). Sits between today-line
+                  and the bar layer so labels read above weekend
+                  stripes but below dragged bars. */}
+              {snapPreview &&
+                (() => {
+                  const x = xForDate(snapPreview.date, gridStart, ppd);
+                  return (
+                    <>
+                      <div
+                        data-testid="roadmap-snap-guide"
+                        data-snap-kind={snapPreview.kind}
+                        aria-hidden
+                        className="absolute pointer-events-none border-l border-fg/70"
+                        style={{
+                          left: x,
+                          top: HEADER_STRIP_HEIGHT,
+                          bottom: 0,
+                          width: 1,
+                        }}
+                      />
+                      <div
+                        data-testid="roadmap-snap-label"
+                        data-snap-kind={snapPreview.kind}
+                        aria-hidden
+                        className="absolute pointer-events-none mono-meta-sm text-fg-muted bg-[color:var(--surface-strong)] px-1.5 py-0.5 rounded chip"
+                        style={{
+                          left: x + 4,
+                          top: HEADER_STRIP_HEIGHT + 4,
+                        }}
+                      >
+                        → {snapPreview.label}
+                      </div>
+                    </>
+                  );
+                })()}
               {/* Sprint overlay (under the bar layer) */}
               <SprintOverlay
                 zoom={zoom}
