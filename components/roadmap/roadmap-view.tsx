@@ -580,6 +580,36 @@ export function RoadmapView({
     height: number;
   } | null>(null);
 
+  // Plan #16b-γ-G G7 — header NEW CARD chip is also a drag source. On
+  // pointerdown we record the origin; pointermove follows the cursor as
+  // a translucent floating chip and hit-tests against the canvas to
+  // resolve a target row + day. On pointerup we either treat the
+  // gesture as a click (delta < 4px → empty dialog, D2 parity) or a
+  // drag (over canvas → dialog with start/target/parent/board prefill;
+  // released outside → cancel).
+  const chipDragRef = useRef<{
+    startClientX: number;
+    startClientY: number;
+    over: {
+      row: {
+        top: number;
+        height: number;
+        laneId: string;
+        epicId: string | null;
+        boardId: string | null;
+      };
+      canvasX: number;
+    } | null;
+  } | null>(null);
+  const [chipGhost, setChipGhost] = useState<{
+    clientX: number;
+    clientY: number;
+  } | null>(null);
+  // Mirrors `dragHoverLaneId` semantics for the chip drag — highlights the
+  // lane the cursor is over so the user gets the same visual affordance as
+  // bar-drag reparent. Reuses the `roadmap-lane-target` overlay below.
+  const [chipHoverLaneId, setChipHoverLaneId] = useState<string | null>(null);
+
   // Plan #16b-γ-G G2 — visual highlight on the lane the cursor is over
   // while dragging a bar across lanes. Only set when hoverLaneId differs
   // from sourceLaneId so the source lane never highlights itself. State
@@ -1679,6 +1709,156 @@ export function RoadmapView({
     [laneLayout, onPaintPointerMove, onPaintPointerUp, ppd],
   );
 
+  // Plan #16b-γ-G G7 — draggable NEW CARD chip in the header. Same dialog
+  // prefill model as G3 drag-paint, just sourced from the chip rather
+  // than the canvas. Click (delta < 4px) → empty dialog (existing chip
+  // behavior). Drag onto canvas → dialog with start/target/parent/board
+  // prefilled. Drag off-canvas → cancel.
+  const CHIP_DRAG_THRESHOLD_PX = 4;
+  const onChipPointerMoveRef = useRef<((e: PointerEvent) => void) | null>(null);
+  const onChipPointerUpRef = useRef<((e: PointerEvent) => void) | null>(null);
+
+  const finishChipDrag = useCallback(
+    (mode: "drop" | "cancel") => {
+      const moveHandler = onChipPointerMoveRef.current;
+      const upHandler = onChipPointerUpRef.current;
+      if (moveHandler) window.removeEventListener("pointermove", moveHandler);
+      if (upHandler) window.removeEventListener("pointerup", upHandler);
+      const c = chipDragRef.current;
+      chipDragRef.current = null;
+      setChipGhost(null);
+      setChipHoverLaneId(null);
+      if (!c) return;
+      if (mode === "cancel") return;
+      // mode === "drop": decide click vs canvas drop
+      if (c.over !== null) {
+        const startDays = Math.max(0, Math.round(c.over.canvasX / ppd));
+        const startISO = addDays(gridStart, startDays).toISOString().slice(0, 10);
+        const targetISO = addDays(gridStart, startDays + 7)
+          .toISOString()
+          .slice(0, 10);
+        setNewCardDefaults({
+          start: startISO,
+          target: targetISO,
+          board: c.over.row.boardId ?? undefined,
+          parent: c.over.row.epicId,
+        });
+        setNewCardOpen(true);
+      }
+      // If `c.over === null`, the gesture was either an in-place click
+      // (no drag) or a release outside the canvas. Click is handled by
+      // the chip's pointerdown helper below (it checks delta and opens
+      // an empty dialog); off-canvas release is a no-op.
+    },
+    [gridStart, ppd],
+  );
+
+  const onChipPointerMove = useCallback(
+    (e: PointerEvent) => {
+      const c = chipDragRef.current;
+      if (!c) return;
+      setChipGhost({ clientX: e.clientX, clientY: e.clientY });
+      // Hit-test against the canvas. We use the scroller rect for the
+      // visible viewport and the canvas rect for canvas-local
+      // coordinates (the canvas is wider than the scroller because of
+      // horizontal scroll).
+      const scroller = scrollerRef.current;
+      const canvas = canvasRef.current;
+      if (!scroller || !canvas) {
+        c.over = null;
+        setChipHoverLaneId(null);
+        return;
+      }
+      const sRect = scroller.getBoundingClientRect();
+      if (
+        e.clientX < sRect.left ||
+        e.clientX > sRect.right ||
+        e.clientY < sRect.top ||
+        e.clientY > sRect.bottom
+      ) {
+        c.over = null;
+        setChipHoverLaneId(null);
+        return;
+      }
+      const cRect = canvas.getBoundingClientRect();
+      const x = e.clientX - cRect.left;
+      const y = e.clientY - cRect.top;
+      const ll = laneLayoutRef.current.find(
+        (entry) => y >= entry.top && y < entry.top + entry.height,
+      );
+      if (!ll) {
+        c.over = null;
+        setChipHoverLaneId(null);
+        return;
+      }
+      // Match the G3 paint convention: skip the lane's header strip so
+      // a release "above" the bars still creates inside the lane body.
+      const bodyTop = ll.top + LANE_HEADER_HEIGHT;
+      const yInBody = Math.max(0, y - bodyTop);
+      const rowIdx = Math.floor(yInBody / ROW_HEIGHT);
+      const rowTop = bodyTop + rowIdx * ROW_HEIGHT;
+      const epic = ll.lane.headerCard;
+      const epicBoardId = epic
+        ? storeCardsRef.current.find((cc) => cc.id === epic.id)?.boardId ?? null
+        : null;
+      c.over = {
+        row: {
+          top: rowTop,
+          height: ROW_HEIGHT,
+          laneId: ll.lane.id,
+          epicId: epic?.id ?? null,
+          boardId: epicBoardId,
+        },
+        canvasX: x,
+      };
+      setChipHoverLaneId(ll.lane.id);
+    },
+    [],
+  );
+  onChipPointerMoveRef.current = onChipPointerMove;
+
+  const onChipPointerUp = useCallback(
+    (e: PointerEvent) => {
+      const c = chipDragRef.current;
+      if (!c) {
+        finishChipDrag("cancel");
+        return;
+      }
+      const dx = e.clientX - c.startClientX;
+      const dy = e.clientY - c.startClientY;
+      const moved = Math.hypot(dx, dy) >= CHIP_DRAG_THRESHOLD_PX;
+      if (!moved) {
+        // Treated as a click: empty dialog (D2/existing chip behavior).
+        finishChipDrag("cancel");
+        setNewCardDefaults(null);
+        setNewCardOpen(true);
+        return;
+      }
+      if (c.over === null) {
+        // Released outside canvas after dragging — silent cancel.
+        finishChipDrag("cancel");
+        return;
+      }
+      finishChipDrag("drop");
+    },
+    [finishChipDrag],
+  );
+  onChipPointerUpRef.current = onChipPointerUp;
+
+  const onChipDragStart = useCallback(
+    (clientX: number, clientY: number) => {
+      chipDragRef.current = {
+        startClientX: clientX,
+        startClientY: clientY,
+        over: null,
+      };
+      setChipGhost({ clientX, clientY });
+      window.addEventListener("pointermove", onChipPointerMove);
+      window.addEventListener("pointerup", onChipPointerUp);
+    },
+    [onChipPointerMove, onChipPointerUp],
+  );
+
   // Plan #16b-γ-Gantt-Master Group C (C5) — jump-to-date control.
   // Centers the given date in the scroller viewport, clamped to the
   // scrollable range. Smooth scroll for nicer UX.
@@ -1705,6 +1885,13 @@ export function RoadmapView({
       window.removeEventListener("pointermove", onPaintPointerMove);
       const upHandler = onPaintPointerUpRef.current;
       if (upHandler) window.removeEventListener("pointerup", upHandler);
+      // Plan #16b-γ-G G7 — chip drag listeners.
+      const chipMoveHandler = onChipPointerMoveRef.current;
+      const chipUpHandler = onChipPointerUpRef.current;
+      if (chipMoveHandler)
+        window.removeEventListener("pointermove", chipMoveHandler);
+      if (chipUpHandler)
+        window.removeEventListener("pointerup", chipUpHandler);
       stopAutoScroll();
     };
   }, [
@@ -1872,6 +2059,13 @@ export function RoadmapView({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const typing = isTypingTarget(e.target);
       if (e.key === "Escape") {
+        // Plan #16b-γ-G G7 — cancel an in-progress chip drag. Same
+        // priority handling as G3 paint: chip-cancel beats search-clear.
+        if (chipDragRef.current) {
+          finishChipDrag("cancel");
+          e.preventDefault();
+          return;
+        }
         // Plan #16b-γ-G G3 — cancel an in-progress drag-paint. Takes
         // priority over the search-clear so a paint that overlaps a
         // populated search box still cancels cleanly.
@@ -1941,7 +2135,7 @@ export function RoadmapView({
     return () => window.removeEventListener("keydown", onKey);
     // setZoom is a stable function defined in this scope.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryDraft, newCardOpen, shortcutsOpen, zoom, finishPaint]);
+  }, [queryDraft, newCardOpen, shortcutsOpen, zoom, finishPaint, finishChipDrag]);
 
   return (
     <div
@@ -1963,6 +2157,7 @@ export function RoadmapView({
         onToggleGutter={toggleGutter}
         onJumpToDate={jumpToDate}
         onOpenNewCard={() => setNewCardOpen(true)}
+        onChipDragStart={onChipDragStart}
         queryDraft={queryDraft}
         onQueryDraftChange={setQueryDraft}
         searchInputRef={searchInputRef}
@@ -2161,6 +2356,23 @@ export function RoadmapView({
                   .map((ll) => (
                     <div
                       key={`lt-${ll.lane.id}`}
+                      data-testid="roadmap-lane-target"
+                      data-lane-id={ll.lane.id}
+                      aria-hidden
+                      className="absolute left-0 right-0 ring-1 ring-fg/40 bg-fg/[0.04] pointer-events-none"
+                      style={{ top: ll.top, height: ll.height }}
+                    />
+                  ))}
+              {/* Plan #16b-γ-G G7 — destination-lane highlight while the
+                  user drags the header NEW CARD chip over the canvas.
+                  Reuses the same `roadmap-lane-target` testid + ring
+                  styling as G2 reparent for a consistent affordance. */}
+              {chipHoverLaneId !== null &&
+                laneLayout
+                  .filter((ll) => ll.lane.id === chipHoverLaneId)
+                  .map((ll) => (
+                    <div
+                      key={`ct-${ll.lane.id}`}
                       data-testid="roadmap-lane-target"
                       data-lane-id={ll.lane.id}
                       aria-hidden
@@ -2539,6 +2751,24 @@ export function RoadmapView({
         defaultBoard={newCardDefaults?.board}
         defaultParent={newCardDefaults?.parent ?? null}
       />
+      {/* Plan #16b-γ-G G7 — translucent floating chip that follows the
+          cursor while the user drags the header NEW CARD chip. Uses
+          fixed positioning + raw clientX/clientY so it tracks the
+          cursor regardless of viewport scroll. pointer-events-none so
+          it never swallows the move events that drive its own update. */}
+      {chipGhost && (
+        <div
+          data-testid="roadmap-chip-ghost"
+          aria-hidden
+          className="fixed pointer-events-none chip mono-meta-sm bg-fg/10 ring-1 ring-fg/40 z-50"
+          style={{
+            left: chipGhost.clientX + 12,
+            top: chipGhost.clientY + 12,
+          }}
+        >
+          + NEW CARD
+        </div>
+      )}
       <RoadmapShortcutsDialog
         open={shortcutsOpen}
         onOpenChange={setShortcutsOpen}

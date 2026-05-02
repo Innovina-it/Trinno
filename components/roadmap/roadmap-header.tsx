@@ -7,7 +7,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, GripVertical, Plus } from "lucide-react";
 import type { Zoom } from "@/lib/roadmap/dates";
 
 export const ZOOMS: Zoom[] = ["week", "month", "quarter"];
@@ -33,6 +33,7 @@ export function RoadmapHeader({
   onToggleGutter,
   onJumpToDate,
   onOpenNewCard,
+  onChipDragStart,
   queryDraft,
   onQueryDraftChange,
   searchInputRef,
@@ -53,6 +54,11 @@ export function RoadmapHeader({
   onToggleGutter: () => void;
   onJumpToDate: (d: Date) => void;
   onOpenNewCard: () => void;
+  // Plan #16b-γ-G G7 — pointerdown on the NEW CARD chip starts a potential
+  // drag. The view decides whether the gesture was a click (delta < 4px)
+  // or a drag (open dialog with prefilled start/target/parent/board) on
+  // pointerup. When omitted, the chip behaves as a plain button.
+  onChipDragStart?: (clientX: number, clientY: number) => void;
   queryDraft: string;
   onQueryDraftChange: (s: string) => void;
   searchInputRef: RefObject<HTMLInputElement | null>;
@@ -182,10 +188,28 @@ export function RoadmapHeader({
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={onOpenNewCard}
+          // Plan #16b-γ-G G7 — chip is now a drag source. On pointerdown
+          // we hand off to the view, which sets up window listeners and
+          // decides at pointerup whether to treat the gesture as a click
+          // (delta < 4px → empty dialog, existing behavior) or a drag
+          // (drop on canvas → dialog with prefilled start/target/parent).
+          // When `onChipDragStart` is omitted we fall back to the
+          // pre-G7 onClick → onOpenNewCard behavior so consumers that
+          // don't pass the drag handler still work.
+          onPointerDown={
+            onChipDragStart
+              ? (e) => {
+                  if (e.button !== 0) return;
+                  onChipDragStart(e.clientX, e.clientY);
+                }
+              : undefined
+          }
+          onClick={onChipDragStart ? undefined : onOpenNewCard}
           data-testid="roadmap-new-card-trigger"
-          className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
+          title="Click or drag onto roadmap to create"
+          className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] cursor-grab active:cursor-grabbing select-none"
         >
+          <GripVertical className="size-3 text-fg-faint" aria-hidden />
           <Plus className="size-3" />
           NEW CARD
         </button>
