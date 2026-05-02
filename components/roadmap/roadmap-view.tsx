@@ -191,6 +191,14 @@ export function RoadmapView({
 
   // A7 — new-card dialog state lifted up so `n` can open it.
   const [newCardOpen, setNewCardOpen] = useState(false);
+  // D2 — when the user clicks an empty area of the canvas, prefill the
+  // dialog's start_date with the date corresponding to the click X. Cleared
+  // when the dialog closes so subsequent opens (e.g. via the chip or `n`)
+  // don't leak stale defaults.
+  const [newCardDefaults, setNewCardDefaults] = useState<{
+    start?: string;
+    target?: string;
+  } | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -855,6 +863,24 @@ export function RoadmapView({
     [router],
   );
 
+  // D2 — empty-area canvas click opens the new-card dialog with start_date
+  // prefilled to the date under the cursor. The `target === currentTarget`
+  // guard keeps clicks on bars / overlays / lane labels / today line from
+  // bubbling up here; only true empty space on the canvas div fires.
+  const onCanvasEmptyClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (e.target !== e.currentTarget) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const days = Math.max(0, Math.round(x / ppd));
+      const startDate = addDays(gridStart, days);
+      const startISO = startDate.toISOString().slice(0, 10);
+      setNewCardDefaults({ start: startISO });
+      setNewCardOpen(true);
+    },
+    [gridStart, ppd],
+  );
+
   // Plan #16b-γ-Gantt-Master Group C (C5) — jump-to-date control.
   // Centers the given date in the scroller viewport, clamped to the
   // scrollable range. Smooth scroll for nicer UX.
@@ -1219,6 +1245,7 @@ export function RoadmapView({
               className="relative"
               style={{ width, height: totalHeight }}
               data-testid="roadmap-canvas"
+              onClick={onCanvasEmptyClick}
             >
               {/* Vertical grid lines + header strip labels */}
               <div
@@ -1560,7 +1587,15 @@ export function RoadmapView({
         deltaDays={cascadeState.deltaDays}
         affectedCards={cascadeState.affected}
       />
-      <RoadmapNewCardDialog open={newCardOpen} onOpenChange={setNewCardOpen} />
+      <RoadmapNewCardDialog
+        open={newCardOpen}
+        onOpenChange={(next) => {
+          setNewCardOpen(next);
+          if (!next) setNewCardDefaults(null);
+        }}
+        defaultStart={newCardDefaults?.start}
+        defaultTarget={newCardDefaults?.target}
+      />
       <RoadmapShortcutsDialog
         open={shortcutsOpen}
         onOpenChange={setShortcutsOpen}
