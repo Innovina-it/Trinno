@@ -32,6 +32,7 @@ import { AddListForm } from "./add-list-form";
 import { BoardFilterBar } from "./board-filter-bar";
 import { SwimlaneRow } from "./swimlane-row";
 import { useBoardRealtime } from "@/hooks/use-board-realtime";
+import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { useBoardPresence, type Viewer } from "@/hooks/use-board-presence";
 import { PresenceAvatars } from "./presence-avatars";
 import { boardCode } from "@/lib/format";
@@ -78,6 +79,7 @@ export function BoardView({
   const [, start] = useTransition();
 
   useBoardRealtime(board.id, board.workspaceId);
+  useWorkspaceRealtime(board.workspaceId);
   const viewers = useBoardPresence(board.id, currentUser);
 
   const filters = useMemo(
