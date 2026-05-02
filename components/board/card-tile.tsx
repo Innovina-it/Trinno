@@ -7,7 +7,7 @@ import { CornerLeftUp, CalendarRange, CircleDot, Layers3 } from "lucide-react";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
-import { getCardStatusKind, STATUS_LABEL } from "@/lib/roadmap/status";
+import { getCardStatusKind, STATUS_LABEL } from "@/lib/status";
 import { LabelStripes } from "./card/label-stripes";
 import { DuePill } from "./card/due-pill";
 import { TileIndicators } from "./card/tile-indicators";

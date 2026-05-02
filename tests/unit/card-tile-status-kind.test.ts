@@ -4,7 +4,7 @@ import {
   type WorkspaceState,
 } from "@/stores/workspace-store";
 import type { WorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
-import { getCardStatusKind } from "@/lib/roadmap/status";
+import { getCardStatusKind } from "@/lib/status";
 
 // Plan #16b-γ-Gantt-B (B3) — locks in the status-kind lookup the Kanban tile
 // performs against the workspace store. The CardTile selector is inline:

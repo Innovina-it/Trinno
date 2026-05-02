@@ -20,7 +20,7 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
-import { STATUS_LABEL, type StatusKind } from "@/lib/roadmap/status";
+import { STATUS_LABEL, type StatusKind } from "@/lib/status";
 import { archiveCard, updateCard } from "@/actions/cards";
 import {
   Dialog,

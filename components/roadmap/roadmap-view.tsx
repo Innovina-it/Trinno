@@ -37,7 +37,7 @@ import {
   type Zoom,
 } from "@/lib/roadmap/dates";
 import { groupByEpic, stackInLane } from "@/lib/roadmap/layout";
-import { getCardStatusKind, type StatusKind } from "@/lib/roadmap/status";
+import { getCardStatusKind, type StatusKind } from "@/lib/status";
 import { criticalPath, type Link as CritLink } from "@/lib/roadmap/critical-path";
 import { updateCard } from "@/actions/cards";
 import { useWorkspaceStore } from "@/stores/workspace-store";
