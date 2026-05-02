@@ -6,6 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { CornerLeftUp, CalendarRange, Layers3 } from "lucide-react";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
+import { useWorkspaceStore } from "@/stores/workspace-store";
 import { LabelStripes } from "./card/label-stripes";
 import { DuePill } from "./card/due-pill";
 import { TileIndicators } from "./card/tile-indicators";
@@ -39,6 +40,15 @@ export function CardTile({
   const sortableId = `card:${card.id}`;
   const parentCard = useBoardStore((s) =>
     card.parentCardId ? s.cards.find((c) => c.id === card.parentCardId) : null,
+  );
+  // Plan #16b-γ-Gantt-B (B2) — pull sprint name from workspace store so the
+  // tile shows the human-readable sprint name instead of a literal "IN SPRINT"
+  // tag. Selector returns a primitive (string | null) to keep zustand
+  // referential stability and avoid re-render thrash.
+  const sprintName = useWorkspaceStore((s) =>
+    card.sprintId
+      ? (s.sprints.find((sp) => sp.id === card.sprintId)?.name ?? null)
+      : null,
   );
   // Plan #16b-γ-D (#8) — multi-select state.
   const isSelected = useBoardStore((s) => s.selectedCardIds.has(card.id));
@@ -190,11 +200,11 @@ export function CardTile({
           <span
             data-testid="tile-sprint"
             data-sprint-id={card.sprintId}
-            title={`Sprint ${card.sprintId}`}
+            title={sprintName ? `Sprint: ${sprintName}` : `Sprint ${card.sprintId}`}
             className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted"
           >
             <Layers3 className="size-3" />
-            IN SPRINT
+            {sprintName ?? "IN SPRINT"}
           </span>
         </div>
       )}
