@@ -20,7 +20,7 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
-import type { StatusKind } from "@/lib/roadmap/status";
+import { STATUS_LABEL, type StatusKind } from "@/lib/roadmap/status";
 import { archiveCard, updateCard } from "@/actions/cards";
 import {
   Dialog,
@@ -38,14 +38,6 @@ const TYPE_DOT: Record<string, string> = {
   task: "bg-fg/40",
   subtask: "bg-fg/40",
   bug: "bg-fg/70",
-};
-
-const STATUS_LABEL: Record<StatusKind, string> = {
-  todo: "to do",
-  in_progress: "in progress",
-  review: "review",
-  done: "done",
-  blocked: "blocked",
 };
 
 function statusFill(status: StatusKind | null, isHeader: boolean): {

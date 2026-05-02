@@ -9,6 +9,18 @@ export type StatusKind =
   | "done"
   | "blocked";
 
+// Plan #16b-γ-Gantt-B (B3) — shared human-readable labels for the five
+// statusKind values. Used by the Roadmap bar's tooltip and by the Kanban
+// tile's status badge. Keep here so both consumers stay in sync without a
+// UI→roadmap dep.
+export const STATUS_LABEL: Record<StatusKind, string> = {
+  todo: "to do",
+  in_progress: "in progress",
+  review: "review",
+  done: "done",
+  blocked: "blocked",
+};
+
 type CardLike = { listId: string };
 type ListLike = { id: string; statusKind: StatusKind | null };
 

@@ -3,10 +3,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CornerLeftUp, CalendarRange, Layers3 } from "lucide-react";
+import { CornerLeftUp, CalendarRange, CircleDot, Layers3 } from "lucide-react";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
+import { getCardStatusKind, STATUS_LABEL } from "@/lib/roadmap/status";
 import { LabelStripes } from "./card/label-stripes";
 import { DuePill } from "./card/due-pill";
 import { TileIndicators } from "./card/tile-indicators";
@@ -49,6 +50,13 @@ export function CardTile({
     card.sprintId
       ? (s.sprints.find((sp) => sp.id === card.sprintId)?.name ?? null)
       : null,
+  );
+  // Plan #16b-γ-Gantt-B (B3) — derive the card's status from the workspace
+  // store's `lists`. Selector returns a primitive (StatusKind | null) so
+  // zustand referential stability holds. When null (list unmapped or absent
+  // during a CDC race) the badge isn't rendered.
+  const statusKind = useWorkspaceStore((s) =>
+    getCardStatusKind({ listId: card.listId }, s.lists),
   );
   // Plan #16b-γ-D (#8) — multi-select state.
   const isSelected = useBoardStore((s) => s.selectedCardIds.has(card.id));
@@ -195,17 +203,32 @@ export function CardTile({
         </div>
       )}
 
-      {card.sprintId && (
+      {(card.sprintId || statusKind) && (
         <div className="px-3 pb-2.5">
-          <span
-            data-testid="tile-sprint"
-            data-sprint-id={card.sprintId}
-            title={sprintName ? `Sprint: ${sprintName}` : `Sprint ${card.sprintId}`}
-            className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted"
-          >
-            <Layers3 className="size-3" />
-            {sprintName ?? "IN SPRINT"}
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {card.sprintId && (
+              <span
+                data-testid="tile-sprint"
+                data-sprint-id={card.sprintId}
+                title={sprintName ? `Sprint: ${sprintName}` : `Sprint ${card.sprintId}`}
+                className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted"
+              >
+                <Layers3 className="size-3" />
+                {sprintName ?? "IN SPRINT"}
+              </span>
+            )}
+            {statusKind && (
+              <span
+                data-testid="tile-status"
+                data-status-kind={statusKind}
+                title={`Status: ${STATUS_LABEL[statusKind]}`}
+                className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted"
+              >
+                <CircleDot className="size-3" />
+                {STATUS_LABEL[statusKind].toUpperCase()}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
