@@ -434,6 +434,13 @@ export async function reorderRoadmapRowImpl(
 ): Promise<{ id: string; roadmapOrder: number }> {
   const p = ReorderRoadmapRowInput.parse(input);
   return dbAsUser(token, async (tx) => {
+    // Serialize concurrent reorders on the same board so the renumber
+    // path can't race against a second writer's neighbour-rank reads.
+    // Auto-released at txn end.
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${"reorder:" + p.boardId}))`,
+    );
+
     async function readRank(id: string | null): Promise<number | null> {
       if (id === null) return null;
       const [row] = await tx

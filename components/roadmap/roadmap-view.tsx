@@ -2074,6 +2074,15 @@ export function RoadmapView({
           e.preventDefault();
           return;
         }
+        // Plan #16b-γ-G G1 — cancel an in-progress row drag.
+        if (rowDragRef.current) {
+          rowDragRef.current = null;
+          setRowDragGhost(null);
+          window.removeEventListener("pointermove", onRowPointerMove);
+          window.removeEventListener("pointerup", onRowPointerUp);
+          e.preventDefault();
+          return;
+        }
         if (queryDraft) {
           setQueryDraft("");
           e.preventDefault();
@@ -2135,7 +2144,7 @@ export function RoadmapView({
     return () => window.removeEventListener("keydown", onKey);
     // setZoom is a stable function defined in this scope.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryDraft, newCardOpen, shortcutsOpen, zoom, finishPaint, finishChipDrag]);
+  }, [queryDraft, newCardOpen, shortcutsOpen, zoom, finishPaint, finishChipDrag, onRowPointerMove, onRowPointerUp]);
 
   return (
     <div
