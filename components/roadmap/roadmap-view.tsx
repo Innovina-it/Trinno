@@ -5,11 +5,9 @@ import {
   useMemo,
   useRef,
   useState,
-  useTransition,
 } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -37,13 +35,10 @@ import {
 } from "@/lib/roadmap/layout";
 import { getCardStatusKind, type StatusKind } from "@/lib/status";
 import { criticalPath, type Link as CritLink } from "@/lib/roadmap/critical-path";
-import { updateCard, reorderRoadmapRow } from "@/actions/cards";
-import { errorBus } from "@/lib/errors/error-bus";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { RoadmapBar } from "./roadmap-bar";
-import { PriorityGutter, PRIORITIES } from "./priority-gutter";
-import type { CardPriority } from "@/components/board/card/priority-picker";
+import { PriorityGutter } from "./priority-gutter";
 import { DependencyArrows, type BarBox } from "./dependency-arrows";
 import { CriticalPathOverlay } from "./critical-path-overlay";
 import {
@@ -62,34 +57,13 @@ import {
   type LaneMode,
 } from "./roadmap-header";
 import { parseFilters } from "@/lib/board-filters";
+import { useRoadmapDragHarness } from "./use-roadmap-drag-harness";
 
 const ROW_HEIGHT = 36; // 28px bar + 8px gap
 const LANE_HEADER_HEIGHT = 28;
 const LANE_GAP = 12;
 const HEADER_STRIP_HEIGHT = 36;
 const LANE_LABEL_WIDTH = 200;
-
-type DragMode = "move" | "resize-left" | "resize-right";
-
-type DragState = {
-  cardId: string;
-  mode: DragMode;
-  startClientX: number;
-  origStart: Date;
-  origTarget: Date;
-  // Plan #16b-γ-G G2 — vertical lane-crossing reparent. Both fields are
-  // populated only in epic mode; in assignee/component mode vertical
-  // movement does not change the bar's parent so we leave them null.
-  sourceLaneId: string | null;
-  currentLaneId: string | null;
-  // Plan #16b-γ-G G4 — priority-gutter mode. When the cursor enters the
-  // gutter region during a `move` drag (and `gutterOn === true`), this
-  // captures the band the cursor is currently over. While set, the
-  // pointermove handler does NOT translate dates — pointerup writes
-  // `priority = gutterBand` instead of persisting the snapped dates.
-  gutterBand: CardPriority | null;
-  origPriority: CardPriority | null;
-};
 
 function fmtHeader(d: Date, zoom: Zoom): string {
   const monthShort = d.toLocaleString("en-US", {
@@ -227,6 +201,11 @@ export function RoadmapView({
   // is the canvas top, where the header strip lives), so to hit-test
   // which lane the cursor is over we need this rect.
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  // Ref to the gutter element for clientX hit-testing during drags
+  // (consumed by the drag harness).
+  const gutterRef = useRef<HTMLDivElement | null>(null);
+  // Ref to the lane label panel for row-drag hit-testing (G1).
+  const labelPanelRef = useRef<HTMLDivElement | null>(null);
 
   // Plan #16b-γ-A (#3) — critical-path overlay toggle. Local state only;
   // intentionally not URL-synced because the overlay is a per-session
@@ -377,6 +356,19 @@ export function RoadmapView({
 
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
+
+  // Refs for the drag harness — read latest store data inside async drag
+  // commits without re-binding listeners.
+  const storeCardsRef = useRef(storeCards);
+  storeCardsRef.current = storeCards;
+  const storeLinksRef = useRef(storeLinks);
+  storeLinksRef.current = storeLinks;
+  const storeSprintsRef = useRef(storeSprints);
+  storeSprintsRef.current = storeSprints;
+  // Mirrors the URL `?gutter=1` flag for the drag harness; updated each
+  // render so the harness reads the latest without re-binding listeners.
+  const gutterOnRef = useRef(gutterOn);
+  gutterOnRef.current = gutterOn;
 
   const ppd = pixelsPerDay(zoom);
   const now = useMemo(() => new Date(), []);
@@ -549,1306 +541,91 @@ export function RoadmapView({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
-  // ---- Drag state (refs to avoid re-renders during pointermove) ----
-  const dragRef = useRef<DragState | null>(null);
-  const [, startTransition] = useTransition();
-
-  // Plan #16b-γ-G G3 — drag-paint state. The user pointerdowns on empty
-  // canvas and drags horizontally; on pointerup we open the new-card
-  // dialog with start/target prefilled. The ref carries cursor/anchor
-  // info, the rect state drives the visual ghost.
-  const paintRef = useRef<{
-    startClientX: number;
-    startCanvasX: number;
-    currentCanvasX: number;
-    row: { top: number; height: number; laneId: string; epicId: string | null; boardId: string | null };
-  } | null>(null);
-  const [paintRect, setPaintRect] = useState<{
-    left: number;
-    top: number;
-    width: number;
-    height: number;
-  } | null>(null);
-
-  // Plan #16b-γ-G G7 — header NEW CARD chip is also a drag source. On
-  // pointerdown we record the origin; pointermove follows the cursor as
-  // a translucent floating chip and hit-tests against the canvas to
-  // resolve a target row + day. On pointerup we either treat the
-  // gesture as a click (delta < 4px → empty dialog, D2 parity) or a
-  // drag (over canvas → dialog with start/target/parent/board prefill;
-  // released outside → cancel).
-  const chipDragRef = useRef<{
-    startClientX: number;
-    startClientY: number;
-    over: {
-      row: {
-        top: number;
-        height: number;
-        laneId: string;
-        epicId: string | null;
-        boardId: string | null;
-      };
-      canvasX: number;
-    } | null;
-  } | null>(null);
-  const [chipGhost, setChipGhost] = useState<{
-    clientX: number;
-    clientY: number;
-  } | null>(null);
-  // Mirrors `dragHoverLaneId` semantics for the chip drag — highlights the
-  // lane the cursor is over so the user gets the same visual affordance as
-  // bar-drag reparent. Reuses the `roadmap-lane-target` overlay below.
-  const [chipHoverLaneId, setChipHoverLaneId] = useState<string | null>(null);
-
-  // Plan #16b-γ-G G2 — visual highlight on the lane the cursor is over
-  // while dragging a bar across lanes. Only set when hoverLaneId differs
-  // from sourceLaneId so the source lane never highlights itself. State
-  // (not ref) so the lane overlay re-renders on crossing.
-  const [dragHoverLaneId, setDragHoverLaneId] = useState<string | null>(null);
-  const dragSourceLaneIdRef = useRef<string | null>(null);
-
-  // Plan #16b-γ-G G4 — gutter band the cursor is currently hovering
-  // during a bar drag. State (not ref) so the gutter band re-renders
-  // with the highlighted ring as the cursor moves vertically. Mirrored
-  // into dragRef.gutterBand so pointerup reads the latest value.
-  const [hoveredGutterBand, setHoveredGutterBand] =
-    useState<CardPriority | null>(null);
-
-  // Plan #16b-γ-G G6 polish — Alt-key bypass + visual snap guide.
-  // `lastAltKeyRef` is updated on every pointermove so onPointerUp
-  // (which doesn't take an event) can read the latest Alt state. When
-  // true at release, the snap step is skipped and the rounded-to-day
-  // position is persisted as-is.
-  const lastAltKeyRef = useRef(false);
-  // Per-drag snap candidate caches, populated once at beginDrag so the
-  // pointermove preview computation is cheap (no per-move sprint/blocker
-  // rebuilds; see G6 perf note in the plan).
-  const dragBlockerTargetsRef = useRef<
-    Array<{ date: Date; cardTitle: string }>
-  >([]);
-  const dragSprintEndsRef = useRef<Array<{ date: Date; name: string }>>([]);
-  // Snap preview shown during drag (cleared on pointerup or when out of
-  // window). State (not ref) so the guide/label re-render as the cursor
-  // moves through the 4-day snap window. Mirrored into a ref so the
-  // pointermove handler can read the latest value without putting it
-  // in its deps (which would re-bind the listener mid-drag).
-  const [snapPreview, setSnapPreview] = useState<{
-    date: Date;
-    label: string;
-    kind: "monday" | "sprint" | "blocker";
-  } | null>(null);
-  const snapPreviewRef = useRef(snapPreview);
-  snapPreviewRef.current = snapPreview;
-  // Ref to the gutter element for clientX hit-testing during drags.
-  const gutterRef = useRef<HTMLDivElement | null>(null);
-  // We read `gutterOn` inside callbacks bound at mount; mirror it via
-  // a ref so the latest value is read without re-binding listeners.
-  const gutterOnRef = useRef(gutterOn);
-  gutterOnRef.current = gutterOn;
-
-  // Ref to the lane label panel for row-drag hit-testing (G1). Declared
-  // up here so the row-drag callbacks can reference it cleanly.
-  const labelPanelRef = useRef<HTMLDivElement | null>(null);
-
-  // Refs for cascade detection — read latest store data inside async drag
-  // commit without re-binding the callback.
-  const storeCardsRef = useRef(storeCards);
-  storeCardsRef.current = storeCards;
-  const storeLinksRef = useRef(storeLinks);
-  storeLinksRef.current = storeLinks;
-
-  const collectDependents = useCallback(
-    (rootId: string): CascadeAffectedCard[] => {
-      const cardById = new Map(storeCardsRef.current.map((c) => [c.id, c]));
-      const visited = new Set<string>([rootId]);
-      const out: CascadeAffectedCard[] = [];
-      let frontier: string[] = [rootId];
-      for (let depth = 0; depth < 50; depth++) {
-        if (frontier.length === 0) break;
-        const next: string[] = [];
-        for (const l of storeLinksRef.current) {
-          if (l.kind !== "is_blocked_by") continue;
-          if (!frontier.includes(l.toCardId)) continue;
-          // l: from is blocked by to. We're walking from blocker (to) to
-          // dependent (from).
-          const depId = l.fromCardId;
-          if (visited.has(depId)) continue;
-          visited.add(depId);
-          const c = cardById.get(depId);
-          out.push({ id: depId, title: c?.title ?? depId });
-          next.push(depId);
-        }
-        frontier = next;
-      }
-      return out;
+  // Plan #16b-γ-G aggregate review I2 — drag harness extracted out of
+  // RoadmapView. Owns all five drag systems (bar, paint, chip, row,
+  // auto-scroll), all snap state, and Esc cancellation. RoadmapView is
+  // orchestration + render only; it forwards refs the harness needs to
+  // read (without re-binding listeners) and provides a callback for
+  // the cascade dialog mount and the new-card dialog open.
+  const onCascadeNeeded = useCallback(
+    (info: {
+      rootCardId: string;
+      deltaDays: number;
+      affected: CascadeAffectedCard[];
+    }) => {
+      setCascadeState({
+        open: true,
+        rootCardId: info.rootCardId,
+        deltaDays: info.deltaDays,
+        affected: info.affected,
+      });
     },
     [],
   );
-
-  const persistDates = useCallback(
-    async (
-      cardId: string,
-      orig: { start: Date; target: Date },
-      next: { start: Date; target: Date },
-    ) => {
-      try {
-        await updateCard({
-          id: cardId,
-          startDate: next.start.toISOString(),
-          targetDate: next.target.toISOString(),
-        });
-        // Plan #16b-γ-A (#4) — if auto-cascade is on and the target_date
-        // moved forward, surface a confirmation dialog listing every
-        // transitively blocked dependent the same delta would shift.
-        const targetDeltaMs =
-          next.target.getTime() - orig.target.getTime();
-        const deltaDays = Math.round(targetDeltaMs / 86_400_000);
-        if (autoCascadeRef.current && deltaDays > 0) {
-          const affected = collectDependents(cardId);
-          if (affected.length > 0) {
-            setCascadeState({
-              open: true,
-              rootCardId: cardId,
-              deltaDays,
-              affected,
-            });
-          }
-        }
-        // Don't manually re-set the store: the realtime CDC echo will
-        // reconcile via `useWorkspaceRealtime`. Server-side
-        // `revalidatePath` also refreshes the SSR snapshot on next nav.
-      } catch (err) {
-        // Revert the optimistic patch on failure.
-        patchCardInStore(cardId, { startDate: orig.start, targetDate: orig.target });
-        toast.error((err as Error).message);
-      }
-    },
-    [patchCardInStore, collectDependents],
-  );
-
-  // Plan #16b-γ-C (C3) — auto-scroll the scroller when the cursor enters a
-  // hot zone near its left/right edge during a drag. RAF loop is lazily
-  // started on the first pointermove of a drag and stopped on pointerup /
-  // unmount. We adjust dragRef.startClientX by the actual scroll delta so
-  // the next pointermove sees a consistent deltaPx; bar position only
-  // refreshes on real cursor movement (acceptable tradeoff for the simpler
-  // implementation — a stationary cursor at the edge will see the canvas
-  // slide while the bar visually lags by ≤1 frame until the next move).
-  const lastClientXRef = useRef(0);
-  const autoScrollRafRef = useRef<number | null>(null);
-
-  const stopAutoScroll = useCallback(() => {
-    if (autoScrollRafRef.current !== null) {
-      cancelAnimationFrame(autoScrollRafRef.current);
-      autoScrollRafRef.current = null;
-    }
-  }, []);
-
-  const tickAutoScroll = useCallback(() => {
-    const scroller = scrollerRef.current;
-    const drag = dragRef.current;
-    if (!scroller || !drag) {
-      autoScrollRafRef.current = null;
-      return;
-    }
-    const rect = scroller.getBoundingClientRect();
-    const x = lastClientXRef.current;
-    const HOT = 60; // px from each edge
-    const MAX_PX = 12; // per tick (~720 px/sec at 60 fps)
-    let dx = 0;
-    if (x < rect.left + HOT) {
-      const depth = Math.min(1, (rect.left + HOT - x) / HOT);
-      dx = -Math.ceil(depth * MAX_PX);
-    } else if (x > rect.right - HOT) {
-      const depth = Math.min(1, (x - (rect.right - HOT)) / HOT);
-      dx = Math.ceil(depth * MAX_PX);
-    }
-    if (dx !== 0) {
-      const before = scroller.scrollLeft;
-      scroller.scrollLeft = before + dx;
-      // scrollLeft is clamped by the browser to [0, scrollWidth-clientWidth];
-      // shift startClientX by the ACTUAL delta so deltaPx stays consistent.
-      const actualDx = scroller.scrollLeft - before;
-      drag.startClientX -= actualDx;
-    }
-    autoScrollRafRef.current = requestAnimationFrame(tickAutoScroll);
-  }, []);
-
-  // Plan #16b-γ-G G6 polish — companion to `snapDate` that also returns
-  // which kind of candidate matched and a human label to display next
-  // to the snap-guide line. Used only by the in-drag preview; the
-  // pointerup path keeps using `snapDate` for backwards compat. Sprint
-  // ends and blocker target_dates are read from per-drag refs filled in
-  // by `beginDrag` so we don't rebuild them on every pointer event.
-  const snapDateWithSource = useCallback(
+  const onOpenNewCardDialog = useCallback(
     (
-      d: Date,
-      includeBlockers: boolean,
-    ): {
-      date: Date;
-      label: string;
-      kind: "monday" | "sprint" | "blocker";
-    } | null => {
-      type Cand = {
-        date: Date;
-        kind: "monday" | "sprint" | "blocker";
-        label: string;
-      };
-      const candidates: Cand[] = [];
-      // Mondays.
-      const day = d.getUTCDay();
-      const sinceMonday = (day + 6) % 7;
-      const prevMonday = addDays(startOfDay(d), -sinceMonday);
-      const nextMonday = addDays(prevMonday, 7);
-      candidates.push(
-        { date: prevMonday, kind: "monday", label: "Mon" },
-        { date: nextMonday, kind: "monday", label: "Mon" },
-      );
-      // Sprint ends — read from per-drag cache.
-      for (const s of dragSprintEndsRef.current) {
-        candidates.push({
-          date: s.date,
-          kind: "sprint",
-          label: `${s.name} end`,
-        });
-      }
-      // Blocker target_dates — only on the start edge (move + resize-left).
-      if (includeBlockers) {
-        for (const b of dragBlockerTargetsRef.current) {
-          candidates.push({
-            date: b.date,
-            kind: "blocker",
-            label: b.cardTitle,
-          });
-        }
-      }
-      let best: Cand | null = null;
-      let bestDiff = Number.POSITIVE_INFINITY;
-      for (const c of candidates) {
-        const diff = Math.abs(dayDiff(d, c.date));
-        if (diff <= 4 && diff < bestDiff) {
-          best = c;
-          bestDiff = diff;
-        }
-      }
-      return best;
+      defaults: {
+        start?: string;
+        target?: string;
+        board?: string;
+        parent?: string | null;
+      } | null,
+    ) => {
+      setNewCardDefaults(defaults);
+      setNewCardOpen(true);
     },
     [],
   );
-
-  const onPointerMove = useCallback(
-    (e: PointerEvent) => {
-      const d = dragRef.current;
-      if (!d) return;
-      lastClientXRef.current = e.clientX;
-      // Plan #16b-γ-G G6 polish — track Alt-key state for pointerup to
-      // read. Holding Alt at release skips the snap step entirely.
-      lastAltKeyRef.current = e.altKey;
-
-      // Plan #16b-γ-G G4 — gutter detection. Only meaningful in `move`
-      // mode and when the gutter is on. We hit-test the cursor against
-      // the gutter element's bounding rect; entering it suspends date
-      // translation and selects a band by Y. Leaving it (cursor.x past
-      // gutter.right) exits gutter mode and resumes normal drag.
-      if (d.mode === "move" && gutterOnRef.current) {
-        const gutter = gutterRef.current;
-        if (gutter) {
-          const gRect = gutter.getBoundingClientRect();
-          const inGutter =
-            e.clientX >= gRect.left &&
-            e.clientX < gRect.right &&
-            e.clientY >= gRect.top &&
-            e.clientY < gRect.bottom;
-          if (inGutter) {
-            // Five equal vertical bands — index by Y offset.
-            const localY = e.clientY - gRect.top;
-            const bandHeight = gRect.height / PRIORITIES.length;
-            const idx = Math.min(
-              PRIORITIES.length - 1,
-              Math.max(0, Math.floor(localY / bandHeight)),
-            );
-            const band = PRIORITIES[idx];
-            if (d.gutterBand !== band) {
-              d.gutterBand = band;
-              setHoveredGutterBand(band);
-            }
-            // Clear any lane-crossing highlight from prior non-gutter
-            // frames so the cross-lane indicator doesn't linger.
-            if (d.currentLaneId !== d.sourceLaneId) {
-              d.currentLaneId = d.sourceLaneId;
-              setDragHoverLaneId(null);
-            }
-            // While in gutter mode: keep the bar visually pinned at its
-            // original dates, NOT the cursor-projected ones.
-            patchCardInStore(d.cardId, {
-              startDate: d.origStart,
-              targetDate: d.origTarget,
-            });
-            // Auto-scroll loop is still useful for horizontal escape
-            // out of the gutter, but not strictly required while parked.
-            if (autoScrollRafRef.current === null) {
-              autoScrollRafRef.current =
-                requestAnimationFrame(tickAutoScroll);
-            }
-            return;
-          }
-          // Not in gutter — clear band if previously set.
-          if (d.gutterBand !== null) {
-            d.gutterBand = null;
-            setHoveredGutterBand(null);
-          }
-        }
-      }
-
-      const deltaPx = e.clientX - d.startClientX;
-      const deltaDays = Math.round(deltaPx / ppd);
-      let nextStart = d.origStart;
-      let nextTarget = d.origTarget;
-      if (d.mode === "move") {
-        nextStart = addDays(d.origStart, deltaDays);
-        nextTarget = addDays(d.origTarget, deltaDays);
-      } else if (d.mode === "resize-left") {
-        nextStart = addDays(d.origStart, deltaDays);
-        if (nextStart.getTime() > nextTarget.getTime()) {
-          nextStart = nextTarget;
-        }
-      } else if (d.mode === "resize-right") {
-        nextTarget = addDays(d.origTarget, deltaDays);
-        if (nextTarget.getTime() < nextStart.getTime()) {
-          nextTarget = nextStart;
-        }
-      }
-      // Patch the store directly so the bar tracks the cursor immediately.
-      patchCardInStore(d.cardId, {
-        startDate: nextStart,
-        targetDate: nextTarget,
-      });
-      // Plan #16b-γ-G G2 — vertical hit-test for cross-lane reparent.
-      // Only meaningful in epic mode + during a `move` drag (resizing
-      // never reparents). `sourceLaneId` is null in non-epic modes so we
-      // gate on it to skip the hit-test entirely there.
-      if (d.mode === "move" && d.sourceLaneId !== null) {
-        const canvas = canvasRef.current;
-        if (canvas) {
-          const localY = e.clientY - canvas.getBoundingClientRect().top;
-          const lanes = laneLayoutRef.current;
-          let nextLaneId: string | null = null;
-          for (const ll of lanes) {
-            if (localY >= ll.top && localY < ll.top + ll.height) {
-              nextLaneId = ll.lane.id;
-              break;
-            }
-          }
-          if (nextLaneId !== d.currentLaneId) {
-            d.currentLaneId = nextLaneId;
-            // Highlight the lane only when it's a different lane from
-            // the source. The source lane never highlights itself
-            // (cursor returning to the source clears the indicator).
-            const highlight =
-              nextLaneId !== null && nextLaneId !== d.sourceLaneId
-                ? nextLaneId
-                : null;
-            setDragHoverLaneId(highlight);
-          }
-        }
-      }
-      // Plan #16b-γ-G G6 polish — visual snap guide. Compute the snap
-      // candidate the START / TARGET edge would land on if released
-      // here. Mirrors the per-edge snap rules in `onPointerUp`:
-      // resize-left / move's start side may snap to blockers, sprint
-      // ends, or Mondays; resize-right / move's target side may NOT
-      // snap to blockers. In move mode we pick whichever edge has the
-      // closer candidate (preserving duration is irrelevant for the
-      // *preview* — we just show what would happen). Alt held suppresses
-      // the preview because the release will skip snap.
-      const currentPreview = snapPreviewRef.current;
-      if (d.gutterBand !== null || e.altKey) {
-        if (currentPreview !== null) setSnapPreview(null);
-      } else {
-        let preview: typeof currentPreview = null;
-        if (d.mode === "resize-left") {
-          preview = snapDateWithSource(startOfDay(nextStart), true);
-        } else if (d.mode === "resize-right") {
-          preview = snapDateWithSource(startOfDay(nextTarget), false);
-        } else {
-          // move mode — try both edges, pick the closer one.
-          const startCand = snapDateWithSource(startOfDay(nextStart), true);
-          const targetCand = snapDateWithSource(startOfDay(nextTarget), false);
-          const startDelta = startCand
-            ? Math.abs(dayDiff(startOfDay(nextStart), startCand.date))
-            : Number.POSITIVE_INFINITY;
-          const targetDelta = targetCand
-            ? Math.abs(dayDiff(startOfDay(nextTarget), targetCand.date))
-            : Number.POSITIVE_INFINITY;
-          preview =
-            startDelta <= targetDelta ? startCand : targetCand;
-        }
-        // Avoid setState churn on identity-stable previews. Compare by
-        // (date, kind, label) rather than by reference.
-        const same =
-          (preview === null && currentPreview === null) ||
-          (preview !== null &&
-            currentPreview !== null &&
-            preview.date.getTime() === currentPreview.date.getTime() &&
-            preview.kind === currentPreview.kind &&
-            preview.label === currentPreview.label);
-        if (!same) setSnapPreview(preview);
-      }
-      // Lazily start the auto-scroll RAF on the first move of a drag.
-      if (autoScrollRafRef.current === null) {
-        autoScrollRafRef.current = requestAnimationFrame(tickAutoScroll);
-      }
-    },
-    [ppd, patchCardInStore, tickAutoScroll, snapDateWithSource],
-  );
-
-  // Plan #16b-α (#10) — snap-to-week-Monday + snap-to-sprint-end on
-  // pointer release. Window: within 4 days of a candidate snap target,
-  // we snap to the nearest one; otherwise the rounded-to-day position
-  // (preserved by the drag delta math) is kept as-is. Sprint end_dates
-  // come from the workspace store; weeks are computed deterministically
-  // off the dragged date itself.
-  // Plan #16b-γ-C (C4) — `extraCandidates` lets the caller add more
-  // snap targets for this invocation only. Used to snap a dragged
-  // card's start_date onto its blocker's target_date, so dropping
-  // near a dependency end snaps cleanly to it.
-  const snapDate = useCallback(
-    (d: Date, extraCandidates: Date[] = []): Date => {
-      const candidates: Date[] = [...extraCandidates];
-      // Nearest Monday (UTC).
-      const day = d.getUTCDay();
-      const sinceMonday = (day + 6) % 7; // Mon=0
-      const prevMonday = addDays(startOfDay(d), -sinceMonday);
-      const nextMonday = addDays(prevMonday, 7);
-      candidates.push(prevMonday, nextMonday);
-      // Sprint end_dates.
-      for (const s of storeSprints) {
-        if (s.endDate)
-          candidates.push(
-            startOfDay(s.endDate instanceof Date ? s.endDate : new Date(s.endDate)),
-          );
-      }
-      let best: Date | null = null;
-      let bestDiff = Number.POSITIVE_INFINITY;
-      for (const c of candidates) {
-        const diff = Math.abs(dayDiff(d, c));
-        if (diff <= 4 && diff < bestDiff) {
-          best = c;
-          bestDiff = diff;
-        }
-      }
-      return best ?? startOfDay(d);
-    },
-    [storeSprints],
-  );
-
-  const onPointerUp = useCallback(() => {
-    const d = dragRef.current;
-    if (!d) return;
-    // Plan #16b-γ-G G6 polish — capture Alt state then reset all the
-    // per-drag refs/state. Alt was last written by `onPointerMove`.
-    const altBypass = lastAltKeyRef.current;
-    lastAltKeyRef.current = false;
-    dragRef.current = null;
-    dragSourceLaneIdRef.current = null;
-    setDragHoverLaneId(null);
-    setHoveredGutterBand(null);
-    setSnapPreview(null);
-    dragBlockerTargetsRef.current = [];
-    dragSprintEndsRef.current = [];
-    stopAutoScroll();
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onPointerUp);
-    const current = cardsRef.current.find((c) => c.id === d.cardId);
-    if (!current) return;
-
-    // Plan #16b-γ-G G4 — pointerup INSIDE the gutter writes priority
-    // (and skips date snap / lane reparent entirely). The user's intent
-    // is unambiguous: they parked the bar in a band. We optimistically
-    // patch the store, then persist via updateCard. The bar visually
-    // stays at its original dates because the move-mode pointermove
-    // pinned them while in gutter mode.
-    if (d.mode === "move" && d.gutterBand !== null) {
-      const cardId = d.cardId;
-      const nextPriority = d.gutterBand;
-      const origPriority = d.origPriority;
-      if (nextPriority === origPriority) return;
-      patchCardInStore(cardId, { priority: nextPriority });
-      startTransition(() => {
-        void (async () => {
-          try {
-            await updateCard({ id: cardId, priority: nextPriority });
-          } catch (err) {
-            patchCardInStore(cardId, { priority: origPriority });
-            toast.error((err as Error).message);
-          }
-        })();
-      });
-      return;
-    }
-    // Plan #16b-γ-G G2 — detect cross-lane reparent. Only valid in epic
-    // mode (sourceLaneId is null elsewhere) AND in move mode (resize
-    // never reparents). Triggers regardless of horizontal movement —
-    // a purely vertical drag is a legitimate reparent gesture that
-    // wouldn't be a click.
-    const reparented =
-      d.mode === "move" &&
-      d.sourceLaneId !== null &&
-      d.currentLaneId !== null &&
-      d.currentLaneId !== d.sourceLaneId;
-    const noOp =
-      current.startDate.getTime() === d.origStart.getTime() &&
-      current.targetDate.getTime() === d.origTarget.getTime();
-    if (noOp && !reparented) {
-      // A1 — a move-mode pointerdown/up with no movement is a click;
-      // open the card modal. Resize handles enter resize-* mode and
-      // are intentionally excluded.
-      if (d.mode === "move") {
-        router.push(`/b/${current.boardId}/c/${d.cardId}`);
-      }
-      return;
-    }
-    if (reparented) {
-      // Resolve target epic id: the destination lane's headerCard.id, or
-      // null if the destination is the "uncategorized" lane (no parent).
-      const targetLane = laneLayoutRef.current.find(
-        (ll) => ll.lane.id === d.currentLaneId,
-      );
-      const targetEpicId = targetLane?.lane.headerCard?.id ?? null;
-      const targetTitle =
-        targetLane?.lane.title ??
-        (targetEpicId ? "destination" : "Uncategorized");
-      // Capture the original parent for revert on failure. Read from the
-      // store (not the projected `cards`) so we get the full nullable.
-      const origCard = storeCardsRef.current.find((c) => c.id === d.cardId);
-      const origParentId = origCard?.parentCardId ?? null;
-      // Optimistic patch — the store update flips the lane the bar
-      // belongs to so the next render places it on the destination row.
-      patchCardInStore(d.cardId, { parentCardId: targetEpicId });
-      const cardId = d.cardId;
-      startTransition(() => {
-        void (async () => {
-          try {
-            await updateCard({ id: cardId, parentCardId: targetEpicId });
-          } catch (err) {
-            // Revert + surface to the persistent error pane (plan #16b-γ-C
-            // #6 says action failures belong on the error bus, not toasts).
-            patchCardInStore(cardId, { parentCardId: origParentId });
-            const raw = (err as Error).message ?? "Reparent failed";
-            // Action wraps the cycle-guard error with a stable PARENT_CYCLE
-            // prefix so we don't have to match the trigger's English text.
-            const isCycle = raw.startsWith("PARENT_CYCLE");
-            const message = isCycle
-              ? `Cannot move card under ${targetTitle} — cycle detected.`
-              : `Reparent failed: ${raw}`;
-            errorBus.push({ message });
-          }
-        })();
-      });
-      // Fall through: dates may also have changed in the same drag, so
-      // we still need to run the snap + persist branch below. If
-      // `noOp` is true the date-persist branch skips itself naturally.
-    }
-    if (noOp) return;
-
-    // Plan #16b-γ-C (C4) — additional snap candidates for the START
-    // edge: target_dates of any card that blocks the dragged card
-    // (`is_blocked_by` links from the dragged card). Computed here
-    // while dragRef is still meaningful and storeLinksRef/storeCardsRef
-    // hold the latest data. Filtered to blockers with a non-null
-    // target_date; null targets are skipped.
-    const blockerCardIds = storeLinksRef.current
-      .filter((l) => l.fromCardId === d.cardId && l.kind === "is_blocked_by")
-      .map((l) => l.toCardId);
-    const blockerTargets: Date[] = (() => {
-      if (blockerCardIds.length === 0) return [];
-      const cardById = new Map(
-        storeCardsRef.current.map((c) => [c.id, c]),
-      );
-      const out: Date[] = [];
-      for (const id of blockerCardIds) {
-        const c = cardById.get(id);
-        if (c && c.targetDate) {
-          out.push(
-            startOfDay(
-              c.targetDate instanceof Date
-                ? c.targetDate
-                : new Date(c.targetDate),
-            ),
-          );
-        }
-      }
-      return out;
-    })();
-
-    // Apply snap depending on drag mode. In move-mode we snap the
-    // edge that's closest to a target, preserving the duration; in
-    // resize modes we snap only the dragged edge. Blocker target_dates
-    // are passed only to the START-edge snap calls (resize-left and
-    // move's start side); the END edge does not snap to dependency ends.
-    // Plan #16b-γ-G G6 polish — `altBypass` skips the snap step
-    // entirely so the user can park a bar at an arbitrary day. The
-    // rounded-to-day position from `onPointerMove` is preserved as-is.
-    let snappedStart = startOfDay(current.startDate);
-    let snappedTarget = startOfDay(current.targetDate);
-    if (!altBypass) {
-      if (d.mode === "resize-left") {
-        snappedStart = snapDate(snappedStart, blockerTargets);
-      } else if (d.mode === "resize-right") {
-        snappedTarget = snapDate(snappedTarget);
-      } else {
-        const startSnap = snapDate(snappedStart, blockerTargets);
-        const targetSnap = snapDate(snappedTarget);
-        const startDelta = Math.abs(dayDiff(snappedStart, startSnap));
-        const targetDelta = Math.abs(dayDiff(snappedTarget, targetSnap));
-        // Prefer the edge that snapped (smaller delta), then translate
-        // both ends to preserve duration.
-        if (startDelta <= targetDelta && startDelta <= 4) {
-          const shift = dayDiff(snappedStart, startSnap);
-          snappedStart = startSnap;
-          snappedTarget = addDays(snappedTarget, shift);
-        } else if (targetDelta <= 4) {
-          const shift = dayDiff(snappedTarget, targetSnap);
-          snappedTarget = targetSnap;
-          snappedStart = addDays(snappedStart, shift);
-        }
-      }
-    }
-    if (snappedStart.getTime() > snappedTarget.getTime()) {
-      snappedStart = snappedTarget;
-    }
-
-    // Reflect snap in the store immediately so the bar visually settles.
-    if (
-      snappedStart.getTime() !== current.startDate.getTime() ||
-      snappedTarget.getTime() !== current.targetDate.getTime()
-    ) {
-      patchCardInStore(d.cardId, {
-        startDate: snappedStart,
-        targetDate: snappedTarget,
-      });
-    }
-
-    startTransition(() => {
-      void persistDates(
-        d.cardId,
-        { start: d.origStart, target: d.origTarget },
-        { start: snappedStart, target: snappedTarget },
-      );
-    });
-  }, [onPointerMove, persistDates, snapDate, patchCardInStore, router, stopAutoScroll]);
-
-  const beginDrag = useCallback(
-    (mode: DragMode, e: React.PointerEvent, cardId: string) => {
-      const c = cardsRef.current.find((x) => x.id === cardId);
-      if (!c) return;
-      e.preventDefault();
-      // Plan #16b-γ-G G2 — record which lane currently owns this card so
-      // pointermove can detect crossings. We resolve it by walking the
-      // current laneLayout: a card is the source-lane's headerCard, or
-      // appears in its placed-rows. Only computed in epic mode; in other
-      // modes vertical movement does NOT reparent so we skip entirely.
-      let sourceLaneId: string | null = null;
-      if (laneMode === "epic" && mode === "move") {
-        for (const ll of laneLayoutRef.current) {
-          if (ll.lane.headerCard?.id === cardId) {
-            sourceLaneId = ll.lane.id;
-            break;
-          }
-          if (ll.placed.some((p) => p.card.id === cardId)) {
-            sourceLaneId = ll.lane.id;
-            break;
-          }
-        }
-      }
-      dragSourceLaneIdRef.current = sourceLaneId;
-      dragRef.current = {
-        cardId,
-        mode,
-        startClientX: e.clientX,
-        origStart: c.startDate,
-        origTarget: c.targetDate,
-        sourceLaneId,
-        currentLaneId: sourceLaneId,
-        gutterBand: null,
-        origPriority: c.priority ?? null,
-      };
-      // Plan #16b-γ-G G6 polish — pre-compute per-drag snap candidates
-      // (sprint ends with names; blocker target_dates with card titles)
-      // so `onPointerMove` doesn't rebuild them at pointer-event rate.
-      const sprintEnds: Array<{ date: Date; name: string }> = [];
-      for (const s of storeSprints) {
-        if (s.endDate) {
-          sprintEnds.push({
-            date: startOfDay(
-              s.endDate instanceof Date ? s.endDate : new Date(s.endDate),
-            ),
-            name: s.name,
-          });
-        }
-      }
-      dragSprintEndsRef.current = sprintEnds;
-      const blockerCardIds = storeLinksRef.current
-        .filter(
-          (l) => l.fromCardId === cardId && l.kind === "is_blocked_by",
-        )
-        .map((l) => l.toCardId);
-      const blockerTargets: Array<{ date: Date; cardTitle: string }> = [];
-      if (blockerCardIds.length > 0) {
-        const cardById = new Map(
-          storeCardsRef.current.map((sc) => [sc.id, sc]),
-        );
-        for (const id of blockerCardIds) {
-          const bc = cardById.get(id);
-          if (bc && bc.targetDate) {
-            blockerTargets.push({
-              date: startOfDay(
-                bc.targetDate instanceof Date
-                  ? bc.targetDate
-                  : new Date(bc.targetDate),
-              ),
-              cardTitle: bc.title,
-            });
-          }
-        }
-      }
-      dragBlockerTargetsRef.current = blockerTargets;
-      lastAltKeyRef.current = e.altKey;
-      window.addEventListener("pointermove", onPointerMove);
-      window.addEventListener("pointerup", onPointerUp);
-    },
-    [laneMode, onPointerMove, onPointerUp, storeSprints],
-  );
-
-  const handleMoveStart = useCallback(
-    (e: React.PointerEvent, cardId: string) => beginDrag("move", e, cardId),
-    [beginDrag],
-  );
-  const handleResizeLeftStart = useCallback(
-    (e: React.PointerEvent, cardId: string) =>
-      beginDrag("resize-left", e, cardId),
-    [beginDrag],
-  );
-  const handleResizeRightStart = useCallback(
-    (e: React.PointerEvent, cardId: string) =>
-      beginDrag("resize-right", e, cardId),
-    [beginDrag],
-  );
-
-  const handleOpenCard = useCallback(
+  const onOpenCard = useCallback(
     (cardId: string, boardId: string) => {
       router.push(`/b/${boardId}/c/${cardId}`);
     },
     [router],
   );
 
-  // Plan #16b-γ-G G1 — row-drag state for manual roadmap row reorder.
-  // Lives in a ref + a useState pair: the ref holds the active drag
-  // metadata (no re-render on each pointermove for responsiveness) and
-  // the state mirrors the current Y so the ghost overlay re-renders.
-  // Only active in epic mode — assignee / component lanes have no
-  // stable "card identity" we'd persist a rank against.
-  type RowDragState = {
-    cardId: string;
-    boardId: string;
-    laneIndex: number;
-    startClientY: number;
-  };
-  const rowDragRef = useRef<RowDragState | null>(null);
-  const [rowDragGhost, setRowDragGhost] = useState<{
-    cardId: string;
-    laneIndex: number;
-    currentY: number;
-    insertIndex: number;
-  } | null>(null);
+  const drag = useRoadmapDragHarness({
+    ppd,
+    gridStart,
+    LANE_HEADER_HEIGHT,
+    ROW_HEIGHT,
+    HEADER_STRIP_HEIGHT,
+    laneLayout,
+    laneLayoutRef,
+    cardsRef,
+    storeCardsRef,
+    storeLinksRef,
+    storeSprintsRef,
+    scrollerRef,
+    canvasRef,
+    labelPanelRef,
+    gutterRef,
+    patchCardInStore,
+    laneMode,
+    gutterOnRef,
+    autoCascadeRef,
+    onCascadeNeeded,
+    onOpenNewCardDialog,
+    onOpenCard,
+  });
 
-  // Snapshot lane geometry for hit-testing during the drag. Captured at
-  // pointerdown so a re-flow of the canvas mid-drag (unlikely, but
-  // possible if a CDC echo lands) doesn't tear the math.
-  const rowDragLanesRef = useRef<
-    Array<{
-      laneIndex: number;
-      cardId: string | null;
-      boardId: string | null;
-      top: number;
-      height: number;
-    }>
-  >([]);
-
-  const onRowPointerMove = useCallback((e: PointerEvent) => {
-    const drag = rowDragRef.current;
-    if (!drag) return;
-    const lanes = rowDragLanesRef.current;
-    if (lanes.length === 0) return;
-    const y = e.clientY;
-    // Resolve the insertion index relative to the LANE LABEL panel by
-    // converting the cursor's clientY into the panel's local Y. The
-    // panel's top is captured implicitly via the lanes' canvas-local
-    // tops + the panel's bounding rect.
-    const panel = labelPanelRef.current;
-    if (!panel) return;
-    const rect = panel.getBoundingClientRect();
-    const localY = y - rect.top;
-    let insertIndex = lanes.length;
-    for (let i = 0; i < lanes.length; i++) {
-      const ln = lanes[i];
-      if (localY < ln.top + ln.height / 2) {
-        insertIndex = i;
-        break;
-      }
-    }
-    setRowDragGhost({
-      cardId: drag.cardId,
-      laneIndex: drag.laneIndex,
-      currentY: localY,
-      insertIndex,
-    });
-  }, []);
-
-  const onRowPointerUp = useCallback(() => {
-    const drag = rowDragRef.current;
-    if (!drag) return;
-    rowDragRef.current = null;
-    const ghost = rowDragGhostRef.current;
-    setRowDragGhost(null);
-    window.removeEventListener("pointermove", onRowPointerMove);
-    window.removeEventListener("pointerup", onRowPointerUp);
-    if (!ghost) return;
-    const lanes = rowDragLanesRef.current;
-    if (lanes.length === 0) return;
-
-    // Build the eligible-neighbour list, excluding the dragged lane and
-    // any non-epic lane (no headerCard → no card to rank).
-    const neighbours = lanes.filter(
-      (ln) => ln.laneIndex !== drag.laneIndex && ln.cardId !== null,
-    );
-    const insertIdx = ghost.insertIndex;
-    // Translate insert index in the FULL `lanes` array into the
-    // neighbours-array slot the dragged lane will land between.
-    let neighbourSlot = 0;
-    for (let i = 0; i < insertIdx; i++) {
-      const ln = lanes[i];
-      if (ln.laneIndex === drag.laneIndex) continue;
-      neighbourSlot++;
-    }
-    const beforeId = neighbourSlot > 0 ? neighbours[neighbourSlot - 1].cardId : null;
-    const afterId =
-      neighbourSlot < neighbours.length ? neighbours[neighbourSlot].cardId : null;
-
-    // No-op: dropped exactly where it was.
-    if (beforeId === null && afterId === null) return;
-    const origNeighbours = lanes
-      .filter((ln) => ln.cardId !== null && ln.laneIndex !== drag.laneIndex);
-    const origIdx = lanes.findIndex((ln) => ln.cardId === drag.cardId);
-    const origNeighbourBefore =
-      origIdx > 0
-        ? lanes
-            .slice(0, origIdx)
-            .reverse()
-            .find((ln) => ln.cardId !== null && ln.laneIndex !== drag.laneIndex)
-            ?.cardId ?? null
-        : null;
-    void origNeighbours;
-    if (
-      beforeId === origNeighbourBefore &&
-      afterId !== null &&
-      origIdx < lanes.findIndex((ln) => ln.cardId === afterId)
-    ) {
-      // Same slot — skip server round-trip.
-      return;
-    }
-
-    const cardId = drag.cardId;
-    const boardId = drag.boardId;
-    // Capture original roadmapOrder for revert.
-    const origCard = storeCardsRef.current.find((c) => c.id === cardId);
-    const origRoadmapOrder = origCard?.roadmapOrder ?? null;
-
-    // Optimistic patch: pick a synthetic mid-rank using the neighbours'
-    // current orders. If we can't compute one cleanly we let the server
-    // assign and wait for the realtime echo. Using fallbacks here keeps
-    // the UI from snapping back briefly during the round-trip.
-    const beforeOrd =
-      beforeId
-        ? storeCardsRef.current.find((c) => c.id === beforeId)?.roadmapOrder ??
-          null
-        : null;
-    const afterOrd =
-      afterId
-        ? storeCardsRef.current.find((c) => c.id === afterId)?.roadmapOrder ??
-          null
-        : null;
-    let optimistic: number | null = null;
-    if (beforeOrd !== null && afterOrd !== null) {
-      const m = Math.floor((beforeOrd + afterOrd) / 2);
-      if (m !== beforeOrd && m !== afterOrd) optimistic = m;
-    } else if (beforeOrd !== null) optimistic = beforeOrd + 1024;
-    else if (afterOrd !== null) optimistic = afterOrd - 1024;
-    else optimistic = 1024;
-    if (optimistic !== null) {
-      patchCardInStore(cardId, { roadmapOrder: optimistic });
-    }
-
-    startTransition(() => {
-      void (async () => {
-        try {
-          const r = await reorderRoadmapRow({
-            cardId,
-            beforeId,
-            afterId,
-            boardId,
-          });
-          patchCardInStore(cardId, { roadmapOrder: r.roadmapOrder });
-        } catch (err) {
-          patchCardInStore(cardId, { roadmapOrder: origRoadmapOrder });
-          toast.error((err as Error).message);
-        }
-      })();
-    });
-  }, [onRowPointerMove, patchCardInStore]);
-
-  // Keep the ghost in a ref so onRowPointerUp can read the latest value
-  // without re-binding (which would re-attach window listeners).
-  const rowDragGhostRef = useRef(rowDragGhost);
-  rowDragGhostRef.current = rowDragGhost;
-
-  const beginRowDrag = useCallback(
-    (cardId: string, e: React.PointerEvent) => {
-      // Only valid in epic mode + when the lane has a headerCard. The
-      // handle is gated to epic mode at render-time so we just confirm.
-      if (laneMode !== "epic") return;
-      // Capture lane geometry from the current laneLayout for hit
-      // testing. We compute the panel-local tops by subtracting the
-      // panel header strip (the "LANE" label row uses HEADER_STRIP_HEIGHT
-      // which is *also* the canvas's HEADER_STRIP_HEIGHT — they share
-      // the strip).
-      const panel = labelPanelRef.current;
-      if (!panel) return;
-      let cursor = HEADER_STRIP_HEIGHT;
-      const lanesGeo = laneLayout.map((ll, idx) => {
-        const top = cursor;
-        cursor += ll.height;
-        return {
-          laneIndex: idx,
-          cardId: ll.lane.headerCard?.id ?? null,
-          boardId: ll.lane.headerCard?.boardId ?? null,
-          top,
-          height: ll.height,
-        };
-      });
-      rowDragLanesRef.current = lanesGeo;
-      const me = lanesGeo.find((ln) => ln.cardId === cardId);
-      if (!me) return;
-      const card = storeCardsRef.current.find((c) => c.id === cardId);
-      if (!card) return;
-      rowDragRef.current = {
-        cardId,
-        boardId: card.boardId,
-        laneIndex: me.laneIndex,
-        startClientY: e.clientY,
-      };
-      setRowDragGhost({
-        cardId,
-        laneIndex: me.laneIndex,
-        currentY: e.clientY - panel.getBoundingClientRect().top,
-        insertIndex: me.laneIndex,
-      });
-      window.addEventListener("pointermove", onRowPointerMove);
-      window.addEventListener("pointerup", onRowPointerUp);
-    },
-    [laneLayout, laneMode, onRowPointerMove, onRowPointerUp],
+  // Bar-drag entry-point wrappers — RoadmapBar accepts per-mode handlers
+  // shaped (e, cardId) => void, the harness exposes a single (mode, e,
+  // cardId) entry. Wrapping here keeps the harness API symmetric across
+  // modes without leaking three identical exports.
+  const handleMoveStart = useCallback(
+    (e: React.PointerEvent, cardId: string) =>
+      drag.beginBarDrag("move", e, cardId),
+    [drag],
   );
-
-  // Plan #16b-γ-G G3 — drag-paint on empty canvas → new card. Supersedes
-  // D2's click-to-create: a click without drag (delta < 4px) still opens
-  // the dialog with `defaultStart` only (D2 parity); a drag paints a
-  // visual ghost rect for the date range and opens the dialog with both
-  // `defaultStart` and `defaultTarget` set. Backward paint swaps so
-  // start ≤ target. The lane the paint started on resolves the epic
-  // parent + board so the new card lands in the right slot.
-  //
-  // The `target === currentTarget` guard keeps pointerdowns on bars /
-  // overlays / lane labels / today line from bubbling up here; only
-  // true empty space on the canvas div fires.
-  const PAINT_THRESHOLD_PX = 4;
-  const onPaintPointerMove = useCallback(
-    (e: PointerEvent) => {
-      const p = paintRef.current;
-      if (!p) return;
-      const deltaPx = e.clientX - p.startClientX;
-      const newCanvasX = p.startCanvasX + deltaPx;
-      p.currentCanvasX = newCanvasX;
-      // Snap each end to whole-day grid for a cleaner ghost. We snap by
-      // rounding the canvas-x to the nearest day boundary.
-      const aSnap = Math.round(p.startCanvasX / ppd) * ppd;
-      const bSnap = Math.round(newCanvasX / ppd) * ppd;
-      const left = Math.min(aSnap, bSnap);
-      const right = Math.max(aSnap, bSnap);
-      // Width is at least one day so the ghost is always visible while
-      // painting (matches the "click = single-day" mental model).
-      const width = Math.max(ppd, right - left + ppd);
-      setPaintRect({
-        left,
-        top: p.row.top,
-        width,
-        height: p.row.height,
-      });
-    },
-    [ppd],
+  const handleResizeLeftStart = useCallback(
+    (e: React.PointerEvent, cardId: string) =>
+      drag.beginBarDrag("resize-left", e, cardId),
+    [drag],
   );
-
-  // `finishPaint` references `onPaintPointerUp`, which references
-  // `finishPaint` — break the cycle with a ref so the cleanup inside
-  // `finishPaint` can detach the same listener instance that was
-  // attached on pointerdown.
-  const onPaintPointerUpRef = useRef<((e: PointerEvent) => void) | null>(null);
-
-  const finishPaint = useCallback(
-    (cancelled: boolean) => {
-      window.removeEventListener("pointermove", onPaintPointerMove);
-      const upHandler = onPaintPointerUpRef.current;
-      if (upHandler) window.removeEventListener("pointerup", upHandler);
-      const p = paintRef.current;
-      paintRef.current = null;
-      setPaintRect(null);
-      if (!p || cancelled) return;
-      const deltaPx = Math.abs(p.currentCanvasX - p.startCanvasX);
-      const aDays = Math.max(0, Math.round(p.startCanvasX / ppd));
-      const bDays = Math.max(0, Math.round(p.currentCanvasX / ppd));
-      const startDays = Math.min(aDays, bDays);
-      const endDays = Math.max(aDays, bDays);
-      const startISO = addDays(gridStart, startDays).toISOString().slice(0, 10);
-      const endISO = addDays(gridStart, endDays).toISOString().slice(0, 10);
-      // Resolve the epic's boardId so the dialog defaults to the right
-      // board. Uncategorized lane → no parent → fall back to first
-      // visible board (handled by the dialog).
-      const epicBoardId = p.row.boardId;
-      if (deltaPx < PAINT_THRESHOLD_PX) {
-        // Click-style: D2 parity (start only, no target).
-        setNewCardDefaults({
-          start: startISO,
-          board: epicBoardId ?? undefined,
-          parent: p.row.epicId,
-        });
-      } else {
-        setNewCardDefaults({
-          start: startISO,
-          target: endISO,
-          board: epicBoardId ?? undefined,
-          parent: p.row.epicId,
-        });
-      }
-      setNewCardOpen(true);
-    },
-    [gridStart, onPaintPointerMove, ppd],
-  );
-
-  const onPaintPointerUp = useCallback(() => {
-    finishPaint(false);
-  }, [finishPaint]);
-  onPaintPointerUpRef.current = onPaintPointerUp;
-
-  const onCanvasEmptyPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.target !== e.currentTarget) return;
-      // Only react to primary button (left click / single touch).
-      if (e.button !== 0) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      // Walk laneLayout to find which row the cursor is on. Skip the
-      // lane's header row (top LANE_HEADER_HEIGHT band) so we always
-      // paint inside the body. We resolve the epic via lane.headerCard
-      // — null for "uncategorized".
-      const ll = laneLayout.find(
-        (entry) => y >= entry.top && y < entry.top + entry.height,
-      );
-      if (!ll) return;
-      const bodyTop = ll.top + LANE_HEADER_HEIGHT;
-      // If the cursor is in the lane header strip itself, snap the paint
-      // row to the first body row so painting "above" the bars still
-      // works the way users expect.
-      const yInBody = Math.max(0, y - bodyTop);
-      const rowIdx = Math.floor(yInBody / ROW_HEIGHT);
-      const rowTop = bodyTop + rowIdx * ROW_HEIGHT;
-      const epic = ll.lane.headerCard;
-      const epicBoardId = epic
-        ? storeCardsRef.current.find((c) => c.id === epic.id)?.boardId ?? null
-        : null;
-      paintRef.current = {
-        startClientX: e.clientX,
-        startCanvasX: x,
-        currentCanvasX: x,
-        row: {
-          top: rowTop,
-          height: ROW_HEIGHT,
-          laneId: ll.lane.id,
-          epicId: epic?.id ?? null,
-          boardId: epicBoardId,
-        },
-      };
-      // Initial ghost: zero-width rect at click point (snapped to day).
-      const xSnap = Math.round(x / ppd) * ppd;
-      setPaintRect({
-        left: xSnap,
-        top: rowTop,
-        width: ppd,
-        height: ROW_HEIGHT,
-      });
-      window.addEventListener("pointermove", onPaintPointerMove);
-      window.addEventListener("pointerup", onPaintPointerUp);
-    },
-    [laneLayout, onPaintPointerMove, onPaintPointerUp, ppd],
-  );
-
-  // Plan #16b-γ-G G7 — draggable NEW CARD chip in the header. Same dialog
-  // prefill model as G3 drag-paint, just sourced from the chip rather
-  // than the canvas. Click (delta < 4px) → empty dialog (existing chip
-  // behavior). Drag onto canvas → dialog with start/target/parent/board
-  // prefilled. Drag off-canvas → cancel.
-  const CHIP_DRAG_THRESHOLD_PX = 4;
-  const onChipPointerMoveRef = useRef<((e: PointerEvent) => void) | null>(null);
-  const onChipPointerUpRef = useRef<((e: PointerEvent) => void) | null>(null);
-
-  const finishChipDrag = useCallback(
-    (mode: "drop" | "cancel") => {
-      const moveHandler = onChipPointerMoveRef.current;
-      const upHandler = onChipPointerUpRef.current;
-      if (moveHandler) window.removeEventListener("pointermove", moveHandler);
-      if (upHandler) window.removeEventListener("pointerup", upHandler);
-      const c = chipDragRef.current;
-      chipDragRef.current = null;
-      setChipGhost(null);
-      setChipHoverLaneId(null);
-      if (!c) return;
-      if (mode === "cancel") return;
-      // mode === "drop": decide click vs canvas drop
-      if (c.over !== null) {
-        const startDays = Math.max(0, Math.round(c.over.canvasX / ppd));
-        const startISO = addDays(gridStart, startDays).toISOString().slice(0, 10);
-        const targetISO = addDays(gridStart, startDays + 7)
-          .toISOString()
-          .slice(0, 10);
-        setNewCardDefaults({
-          start: startISO,
-          target: targetISO,
-          board: c.over.row.boardId ?? undefined,
-          parent: c.over.row.epicId,
-        });
-        setNewCardOpen(true);
-      }
-      // If `c.over === null`, the gesture was either an in-place click
-      // (no drag) or a release outside the canvas. Click is handled by
-      // the chip's pointerdown helper below (it checks delta and opens
-      // an empty dialog); off-canvas release is a no-op.
-    },
-    [gridStart, ppd],
-  );
-
-  const onChipPointerMove = useCallback(
-    (e: PointerEvent) => {
-      const c = chipDragRef.current;
-      if (!c) return;
-      setChipGhost({ clientX: e.clientX, clientY: e.clientY });
-      // Hit-test against the canvas. We use the scroller rect for the
-      // visible viewport and the canvas rect for canvas-local
-      // coordinates (the canvas is wider than the scroller because of
-      // horizontal scroll).
-      const scroller = scrollerRef.current;
-      const canvas = canvasRef.current;
-      if (!scroller || !canvas) {
-        c.over = null;
-        setChipHoverLaneId(null);
-        return;
-      }
-      const sRect = scroller.getBoundingClientRect();
-      if (
-        e.clientX < sRect.left ||
-        e.clientX > sRect.right ||
-        e.clientY < sRect.top ||
-        e.clientY > sRect.bottom
-      ) {
-        c.over = null;
-        setChipHoverLaneId(null);
-        return;
-      }
-      const cRect = canvas.getBoundingClientRect();
-      const x = e.clientX - cRect.left;
-      const y = e.clientY - cRect.top;
-      const ll = laneLayoutRef.current.find(
-        (entry) => y >= entry.top && y < entry.top + entry.height,
-      );
-      if (!ll) {
-        c.over = null;
-        setChipHoverLaneId(null);
-        return;
-      }
-      // Match the G3 paint convention: skip the lane's header strip so
-      // a release "above" the bars still creates inside the lane body.
-      const bodyTop = ll.top + LANE_HEADER_HEIGHT;
-      const yInBody = Math.max(0, y - bodyTop);
-      const rowIdx = Math.floor(yInBody / ROW_HEIGHT);
-      const rowTop = bodyTop + rowIdx * ROW_HEIGHT;
-      const epic = ll.lane.headerCard;
-      const epicBoardId = epic
-        ? storeCardsRef.current.find((cc) => cc.id === epic.id)?.boardId ?? null
-        : null;
-      c.over = {
-        row: {
-          top: rowTop,
-          height: ROW_HEIGHT,
-          laneId: ll.lane.id,
-          epicId: epic?.id ?? null,
-          boardId: epicBoardId,
-        },
-        canvasX: x,
-      };
-      setChipHoverLaneId(ll.lane.id);
-    },
-    [],
-  );
-  onChipPointerMoveRef.current = onChipPointerMove;
-
-  const onChipPointerUp = useCallback(
-    (e: PointerEvent) => {
-      const c = chipDragRef.current;
-      if (!c) {
-        finishChipDrag("cancel");
-        return;
-      }
-      const dx = e.clientX - c.startClientX;
-      const dy = e.clientY - c.startClientY;
-      const moved = Math.hypot(dx, dy) >= CHIP_DRAG_THRESHOLD_PX;
-      if (!moved) {
-        // Treated as a click: empty dialog (D2/existing chip behavior).
-        finishChipDrag("cancel");
-        setNewCardDefaults(null);
-        setNewCardOpen(true);
-        return;
-      }
-      if (c.over === null) {
-        // Released outside canvas after dragging — silent cancel.
-        finishChipDrag("cancel");
-        return;
-      }
-      finishChipDrag("drop");
-    },
-    [finishChipDrag],
-  );
-  onChipPointerUpRef.current = onChipPointerUp;
-
-  const onChipDragStart = useCallback(
-    (clientX: number, clientY: number) => {
-      chipDragRef.current = {
-        startClientX: clientX,
-        startClientY: clientY,
-        over: null,
-      };
-      setChipGhost({ clientX, clientY });
-      window.addEventListener("pointermove", onChipPointerMove);
-      window.addEventListener("pointerup", onChipPointerUp);
-    },
-    [onChipPointerMove, onChipPointerUp],
+  const handleResizeRightStart = useCallback(
+    (e: React.PointerEvent, cardId: string) =>
+      drag.beginBarDrag("resize-right", e, cardId),
+    [drag],
   );
 
   // Plan #16b-γ-Gantt-Master Group C (C5) — jump-to-date control.
@@ -1867,33 +644,6 @@ export function RoadmapView({
     [gridStart, ppd],
   );
 
-  // Cleanup any dangling listeners if the component unmounts mid-drag.
-  useEffect(() => {
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointermove", onRowPointerMove);
-      window.removeEventListener("pointerup", onRowPointerUp);
-      window.removeEventListener("pointermove", onPaintPointerMove);
-      const upHandler = onPaintPointerUpRef.current;
-      if (upHandler) window.removeEventListener("pointerup", upHandler);
-      // Plan #16b-γ-G G7 — chip drag listeners.
-      const chipMoveHandler = onChipPointerMoveRef.current;
-      const chipUpHandler = onChipPointerUpRef.current;
-      if (chipMoveHandler)
-        window.removeEventListener("pointermove", chipMoveHandler);
-      if (chipUpHandler)
-        window.removeEventListener("pointerup", chipUpHandler);
-      stopAutoScroll();
-    };
-  }, [
-    onPointerMove,
-    onPointerUp,
-    onRowPointerMove,
-    onRowPointerUp,
-    onPaintPointerMove,
-    stopAutoScroll,
-  ]);
 
   // Plan #16b-α (#17) — persist zoom + scroll-x per workspace in
   // localStorage. On mount we read the saved viewport: the zoom is
@@ -2051,27 +801,11 @@ export function RoadmapView({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const typing = isTypingTarget(e.target);
       if (e.key === "Escape") {
-        // Plan #16b-γ-G G7 — cancel an in-progress chip drag. Same
-        // priority handling as G3 paint: chip-cancel beats search-clear.
-        if (chipDragRef.current) {
-          finishChipDrag("cancel");
-          e.preventDefault();
-          return;
-        }
-        // Plan #16b-γ-G G3 — cancel an in-progress drag-paint. Takes
-        // priority over the search-clear so a paint that overlaps a
-        // populated search box still cancels cleanly.
-        if (paintRef.current) {
-          finishPaint(true);
-          e.preventDefault();
-          return;
-        }
-        // Plan #16b-γ-G G1 — cancel an in-progress row drag.
-        if (rowDragRef.current) {
-          rowDragRef.current = null;
-          setRowDragGhost(null);
-          window.removeEventListener("pointermove", onRowPointerMove);
-          window.removeEventListener("pointerup", onRowPointerUp);
+        // Plan #16b-γ-G I2 — drag harness owns chip/paint/row Esc
+        // cancellation. Order inside the harness mirrors the prior
+        // priority (chip → paint → row), so chip-cancel still beats
+        // search-clear when both apply.
+        if (drag.cancelActiveDrag()) {
           e.preventDefault();
           return;
         }
@@ -2136,7 +870,7 @@ export function RoadmapView({
     return () => window.removeEventListener("keydown", onKey);
     // setZoom is a stable function defined in this scope.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryDraft, newCardOpen, shortcutsOpen, zoom, finishPaint, finishChipDrag, onRowPointerMove, onRowPointerUp]);
+  }, [queryDraft, newCardOpen, shortcutsOpen, zoom, drag]);
 
   return (
     <div
@@ -2158,7 +892,7 @@ export function RoadmapView({
         onToggleGutter={toggleGutter}
         onJumpToDate={jumpToDate}
         onOpenNewCard={() => setNewCardOpen(true)}
-        onChipDragStart={onChipDragStart}
+        onChipDragStart={drag.onChipDragStart}
         queryDraft={queryDraft}
         onQueryDraftChange={setQueryDraft}
         searchInputRef={searchInputRef}
@@ -2220,7 +954,7 @@ export function RoadmapView({
               <PriorityGutter
                 ref={gutterRef}
                 height={HEADER_STRIP_HEIGHT + totalHeight}
-                hoveredBand={hoveredGutterBand}
+                hoveredBand={drag.hoveredGutterBand}
               />
             )}
             <div
@@ -2233,7 +967,8 @@ export function RoadmapView({
               const epicHeader = ll.lane.headerCard;
               const draggable = laneMode === "epic" && epicHeader !== null;
               const isDragging =
-                rowDragGhost !== null && epicHeader?.id === rowDragGhost.cardId;
+                drag.rowDragGhost !== null &&
+                epicHeader?.id === drag.rowDragGhost.cardId;
               return (
                 <div
                   key={ll.lane.id}
@@ -2247,7 +982,7 @@ export function RoadmapView({
                   {draggable && epicHeader && (
                     <RoadmapRowHandle
                       cardId={epicHeader.id}
-                      onDragStart={beginRowDrag}
+                      onDragStart={drag.beginRowDrag}
                     />
                   )}
                   {epicHeader ? (
@@ -2279,10 +1014,10 @@ export function RoadmapView({
             {/* Plan #16b-γ-G G1 — drop indicator overlay during a row
                 drag. Renders a thin line at the resolved insertion
                 point. */}
-            {rowDragGhost !== null && (() => {
-              const lanes = rowDragLanesRef.current;
+            {drag.rowDragGhost !== null && (() => {
+              const lanes = drag.rowDragLanesRef.current;
               if (lanes.length === 0) return null;
-              const idx = rowDragGhost.insertIndex;
+              const idx = drag.rowDragGhost.insertIndex;
               const indicatorY =
                 idx >= lanes.length
                   ? lanes[lanes.length - 1].top + lanes[lanes.length - 1].height
@@ -2309,7 +1044,7 @@ export function RoadmapView({
               className="relative"
               style={{ width, height: totalHeight }}
               data-testid="roadmap-canvas"
-              onPointerDown={onCanvasEmptyPointerDown}
+              onPointerDown={drag.onCanvasEmptyPointerDown}
             >
               {/* Vertical grid lines + header strip labels */}
               <div
@@ -2351,9 +1086,9 @@ export function RoadmapView({
                   the cursor is over a lane different from the source.
                   Sits below the bar layer (rendered next) so the bar
                   remains fully readable while it crosses. */}
-              {dragHoverLaneId !== null &&
+              {drag.dragHoverLaneId !== null &&
                 laneLayout
-                  .filter((ll) => ll.lane.id === dragHoverLaneId)
+                  .filter((ll) => ll.lane.id === drag.dragHoverLaneId)
                   .map((ll) => (
                     <div
                       key={`lt-${ll.lane.id}`}
@@ -2368,9 +1103,9 @@ export function RoadmapView({
                   user drags the header NEW CARD chip over the canvas.
                   Reuses the same `roadmap-lane-target` testid + ring
                   styling as G2 reparent for a consistent affordance. */}
-              {chipHoverLaneId !== null &&
+              {drag.chipHoverLaneId !== null &&
                 laneLayout
-                  .filter((ll) => ll.lane.id === chipHoverLaneId)
+                  .filter((ll) => ll.lane.id === drag.chipHoverLaneId)
                   .map((ll) => (
                     <div
                       key={`ct-${ll.lane.id}`}
@@ -2436,14 +1171,14 @@ export function RoadmapView({
                   (the release will skip snap). Sits between today-line
                   and the bar layer so labels read above weekend
                   stripes but below dragged bars. */}
-              {snapPreview &&
+              {drag.snapPreview &&
                 (() => {
-                  const x = xForDate(snapPreview.date, gridStart, ppd);
+                  const x = xForDate(drag.snapPreview.date, gridStart, ppd);
                   return (
                     <>
                       <div
                         data-testid="roadmap-snap-guide"
-                        data-snap-kind={snapPreview.kind}
+                        data-snap-kind={drag.snapPreview.kind}
                         aria-hidden
                         className="absolute pointer-events-none border-l border-fg/70"
                         style={{
@@ -2455,7 +1190,7 @@ export function RoadmapView({
                       />
                       <div
                         data-testid="roadmap-snap-label"
-                        data-snap-kind={snapPreview.kind}
+                        data-snap-kind={drag.snapPreview.kind}
                         aria-hidden
                         className="absolute pointer-events-none mono-meta-sm text-fg-muted bg-[color:var(--surface-strong)] px-1.5 py-0.5 rounded chip"
                         style={{
@@ -2463,7 +1198,7 @@ export function RoadmapView({
                           top: HEADER_STRIP_HEIGHT + 4,
                         }}
                       >
-                        → {snapPreview.label}
+                        → {drag.snapPreview.label}
                       </div>
                     </>
                   );
@@ -2532,9 +1267,7 @@ export function RoadmapView({
                               }}
                               data-card-id={sc.id}
                               data-testid="roadmap-subtask-bar"
-                              onClick={() =>
-                                handleOpenCard(sc.id, sc.boardId)
-                              }
+                              onClick={() => onOpenCard(sc.id, sc.boardId)}
                               title={`${sc.title} — ${sc.startDate
                                 .toISOString()
                                 .slice(0, 10)} → ${sc.targetDate
@@ -2614,7 +1347,7 @@ export function RoadmapView({
                         onMoveStart={handleMoveStart}
                         onResizeLeftStart={handleResizeLeftStart}
                         onResizeRightStart={handleResizeRightStart}
-                        onOpen={handleOpenCard}
+                        onOpen={onOpenCard}
                       />
                       {undated > 0 && (
                         <span
@@ -2715,16 +1448,16 @@ export function RoadmapView({
                   other canvas child while the user is painting; cleared
                   on pointerup or Esc. `pointer-events-none` so it never
                   swallows the move events that drive its own update. */}
-              {paintRect && (
+              {drag.paintRect && (
                 <div
                   data-testid="roadmap-paint-ghost"
                   aria-hidden
                   className="absolute pointer-events-none border-2 border-dashed border-fg/40 bg-fg/[0.05]"
                   style={{
-                    left: paintRect.left,
-                    top: paintRect.top,
-                    width: paintRect.width,
-                    height: paintRect.height,
+                    left: drag.paintRect.left,
+                    top: drag.paintRect.top,
+                    width: drag.paintRect.width,
+                    height: drag.paintRect.height,
                   }}
                 />
               )}
@@ -2757,14 +1490,14 @@ export function RoadmapView({
           fixed positioning + raw clientX/clientY so it tracks the
           cursor regardless of viewport scroll. pointer-events-none so
           it never swallows the move events that drive its own update. */}
-      {chipGhost && (
+      {drag.chipGhost && (
         <div
           data-testid="roadmap-chip-ghost"
           aria-hidden
           className="fixed pointer-events-none chip mono-meta-sm bg-fg/10 ring-1 ring-fg/40 z-50"
           style={{
-            left: chipGhost.clientX + 12,
-            top: chipGhost.clientY + 12,
+            left: drag.chipGhost.clientX + 12,
+            top: drag.chipGhost.clientY + 12,
           }}
         >
           + NEW CARD
