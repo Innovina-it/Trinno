@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   groupByAssignee,
+  groupByComponent,
   groupByEpic,
   stackInLane,
   type RoadmapCard,
@@ -162,6 +163,92 @@ describe("groupByAssignee", () => {
     ];
     const lanes = groupByAssignee([ca, cb], members, profiles);
     expect(lanes.map((l) => l.title)).toEqual(["Alice", "Bob"]);
+  });
+});
+
+describe("groupByComponent", () => {
+  const components = [
+    { id: "k1", name: "Frontend" },
+    { id: "k2", name: "Backend" },
+  ];
+
+  it("places visible cards in Uncomponented when there are no card_components", () => {
+    const c1 = card({ id: "c1" });
+    const c2 = card({ id: "c2" });
+    const lanes = groupByComponent([c1, c2], [], components);
+    expect(lanes.map((l) => l.id)).toEqual(["component:uncomponented"]);
+    expect(lanes[0].cards.map((c) => c.id).sort()).toEqual(["c1", "c2"]);
+    expect(lanes[0].kind).toBe("component");
+    expect(lanes[0].title).toBe("Uncomponented");
+  });
+
+  it("groups two cards under one component into a single lane", () => {
+    const c1 = card({ id: "c1" });
+    const c2 = card({ id: "c2" });
+    const cardComponents = [
+      { cardId: "c1", componentId: "k1" },
+      { cardId: "c2", componentId: "k1" },
+    ];
+    const lanes = groupByComponent([c1, c2], cardComponents, components);
+    expect(lanes.map((l) => l.id)).toEqual(["component:k1"]);
+    expect(lanes[0].title).toBe("Frontend");
+    expect(lanes[0].cards.map((c) => c.id).sort()).toEqual(["c1", "c2"]);
+  });
+
+  it("duplicates a card into each component lane when it has multiple components", () => {
+    const c1 = card({ id: "c1" });
+    const cardComponents = [
+      { cardId: "c1", componentId: "k1" },
+      { cardId: "c1", componentId: "k2" },
+    ];
+    const lanes = groupByComponent([c1], cardComponents, components);
+    // Sorted alphabetically: Backend (k2) before Frontend (k1).
+    expect(lanes.map((l) => l.id)).toEqual(["component:k2", "component:k1"]);
+    expect(lanes[0].cards.map((c) => c.id)).toEqual(["c1"]);
+    expect(lanes[1].cards.map((c) => c.id)).toEqual(["c1"]);
+  });
+
+  it("falls back to title 'Unknown' when the component is missing for a componentId", () => {
+    const c1 = card({ id: "c1" });
+    const cardComponents = [{ cardId: "c1", componentId: "k-missing" }];
+    const lanes = groupByComponent([c1], cardComponents, components);
+    expect(lanes.map((l) => l.id)).toEqual(["component:k-missing"]);
+    expect(lanes[0].title).toBe("Unknown");
+  });
+
+  it("emits Uncomponented only when at least one visible card has no components", () => {
+    const c1 = card({ id: "c1" });
+    const c2 = card({ id: "c2" });
+    const cardComponents = [{ cardId: "c1", componentId: "k1" }];
+    const lanes = groupByComponent([c1, c2], cardComponents, components);
+    const ids = lanes.map((l) => l.id);
+    expect(ids).toContain("component:k1");
+    expect(ids).toContain("component:uncomponented");
+  });
+
+  it("skips epics and subtasks (component v1 ignores them)", () => {
+    const epic = card({ id: "e1", type: "epic" });
+    const sub = card({ id: "s1", type: "subtask", parentCardId: "x" });
+    const story = card({ id: "c1" });
+    const cardComponents = [
+      { cardId: "e1", componentId: "k1" },
+      { cardId: "s1", componentId: "k1" },
+      { cardId: "c1", componentId: "k1" },
+    ];
+    const lanes = groupByComponent([epic, sub, story], cardComponents, components);
+    expect(lanes.map((l) => l.id)).toEqual(["component:k1"]);
+    expect(lanes[0].cards.map((c) => c.id)).toEqual(["c1"]);
+  });
+
+  it("orders component lanes alphabetically by component name", () => {
+    const ca = card({ id: "ca" });
+    const cb = card({ id: "cb" });
+    const cardComponents = [
+      { cardId: "ca", componentId: "k1" }, // Frontend
+      { cardId: "cb", componentId: "k2" }, // Backend
+    ];
+    const lanes = groupByComponent([ca, cb], cardComponents, components);
+    expect(lanes.map((l) => l.title)).toEqual(["Backend", "Frontend"]);
   });
 });
 

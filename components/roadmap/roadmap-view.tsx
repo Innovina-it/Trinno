@@ -36,7 +36,12 @@ import {
   xForDate,
   type Zoom,
 } from "@/lib/roadmap/dates";
-import { groupByAssignee, groupByEpic, stackInLane } from "@/lib/roadmap/layout";
+import {
+  groupByAssignee,
+  groupByComponent,
+  groupByEpic,
+  stackInLane,
+} from "@/lib/roadmap/layout";
 import { getCardStatusKind, type StatusKind } from "@/lib/status";
 import { criticalPath, type Link as CritLink } from "@/lib/roadmap/critical-path";
 import { updateCard } from "@/actions/cards";
@@ -57,11 +62,12 @@ import { parseFilters } from "@/lib/board-filters";
 import { Plus } from "lucide-react";
 
 const ZOOMS: Zoom[] = ["week", "month", "quarter"];
-type LaneMode = "epic" | "assignee";
-const LANE_MODES: LaneMode[] = ["epic", "assignee"];
+type LaneMode = "epic" | "assignee" | "component";
+const LANE_MODES: LaneMode[] = ["epic", "assignee", "component"];
 const LANE_MODE_LABEL: Record<LaneMode, string> = {
   epic: "By epic",
   assignee: "By assignee",
+  component: "By component",
 };
 const ROW_HEIGHT = 36; // 28px bar + 8px gap
 const LANE_HEADER_HEIGHT = 28;
@@ -260,6 +266,8 @@ export function RoadmapView({
   const storeSprints = useWorkspaceStore((s) => s.sprints);
   const storeCardMembers = useWorkspaceStore((s) => s.cardMembers);
   const storeProfiles = useWorkspaceStore((s) => s.workspaceProfiles);
+  const storeCardComponents = useWorkspaceStore((s) => s.cardComponents);
+  const storeComponents = useWorkspaceStore((s) => s.components);
   const patchCardInStore = useWorkspaceStore((s) => s.patchCard);
 
   // Plan #16b-γ-A (#2) — index card → status kind via list mapping. We
@@ -384,8 +392,18 @@ export function RoadmapView({
     if (laneMode === "assignee") {
       return groupByAssignee(cards, storeCardMembers, storeProfiles);
     }
+    if (laneMode === "component") {
+      return groupByComponent(cards, storeCardComponents, storeComponents);
+    }
     return groupByEpic(cards);
-  }, [laneMode, cards, storeCardMembers, storeProfiles]);
+  }, [
+    laneMode,
+    cards,
+    storeCardMembers,
+    storeProfiles,
+    storeCardComponents,
+    storeComponents,
+  ]);
 
   // Per-lane stacking + total height. Each entry tracks where in the
   // canvas its body bars start, and pre-computes per-row offsets for any
@@ -1313,7 +1331,9 @@ export function RoadmapView({
                       ? `${ll.placed.length} ORPHANS`
                       : ll.lane.kind === "assignee"
                         ? `${ll.placed.length} CARDS`
-                        : `${ll.placed.length} STORIES`}
+                        : ll.lane.kind === "component"
+                          ? `${ll.placed.length} CARDS`
+                          : `${ll.placed.length} STORIES`}
                   </span>
                 </div>
               );

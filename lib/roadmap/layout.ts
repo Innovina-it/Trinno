@@ -20,7 +20,7 @@ export type RoadmapCard = {
 export type Lane<C extends RoadmapCard = RoadmapCard> = {
   id: string;
   title: string;
-  kind: "epic" | "uncategorized" | "assignee";
+  kind: "epic" | "uncategorized" | "assignee" | "component";
   /** The epic card itself (header bar). Null for the Uncategorized lane. */
   headerCard: C | null;
   /** Children of this epic (or orphan stories for Uncategorized). */
@@ -187,6 +187,76 @@ export function groupByAssignee<C extends RoadmapCard>(
       kind: "assignee",
       headerCard: null,
       cards: unassigned,
+      subtaskRowsByParent: {},
+    });
+  }
+
+  return lanes;
+}
+
+/**
+ * Plan #16b-γ-Gantt-Master Group C (C10) — alternate lane mode that groups
+ * roadmap bars by component instead of by epic / assignee. One lane per
+ * component that has any visible card tagged; cards with multiple components
+ * appear in EACH component's lane (intentional — a card legitimately belongs
+ * to all its component lanes). An "Uncomponented" lane is appended only when
+ * at least one visible card has no component. Subtasks and epics are skipped
+ * for the same reasons as `groupByAssignee` — subtasks render under their
+ * parent in epic mode, and epics' component sets are rarely meaningful.
+ */
+export function groupByComponent<C extends RoadmapCard>(
+  cards: C[],
+  cardComponents: Array<{ cardId: string; componentId: string }>,
+  components: Array<{ id: string; name: string }>,
+): Lane<C>[] {
+  const componentById = new Map(components.map((c) => [c.id, c]));
+  const componentsByCard = new Map<string, string[]>();
+  for (const cc of cardComponents) {
+    const arr = componentsByCard.get(cc.cardId) ?? [];
+    arr.push(cc.componentId);
+    componentsByCard.set(cc.cardId, arr);
+  }
+
+  const cardsByComponent = new Map<string, C[]>();
+  const uncomponented: C[] = [];
+  for (const c of cards) {
+    if (c.type === "epic") continue;
+    if (c.type === "subtask") continue;
+    const componentIds = componentsByCard.get(c.id) ?? [];
+    if (componentIds.length === 0) {
+      uncomponented.push(c);
+    } else {
+      for (const cid of componentIds) {
+        const arr = cardsByComponent.get(cid) ?? [];
+        arr.push(c);
+        cardsByComponent.set(cid, arr);
+      }
+    }
+  }
+
+  const lanes: Lane<C>[] = [...cardsByComponent.entries()]
+    .map(([componentId, laneCards]) => ({
+      componentId,
+      title: componentById.get(componentId)?.name ?? "Unknown",
+      cards: laneCards,
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title))
+    .map<Lane<C>>(({ componentId, title, cards: laneCards }) => ({
+      id: `component:${componentId}`,
+      title,
+      kind: "component",
+      headerCard: null,
+      cards: laneCards,
+      subtaskRowsByParent: {},
+    }));
+
+  if (uncomponented.length > 0) {
+    lanes.push({
+      id: "component:uncomponented",
+      title: "Uncomponented",
+      kind: "component",
+      headerCard: null,
+      cards: uncomponented,
       subtaskRowsByParent: {},
     });
   }
