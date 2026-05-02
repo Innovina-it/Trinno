@@ -16,6 +16,7 @@ function humanType(type: string): string {
     "card.unarchive": "restored card",
     "card.due": "set due date",
     "card.dates": "set roadmap dates",
+    "card.roadmap_order": "reordered roadmap row",
     "card.label.add": "added label",
     "card.label.remove": "removed label",
     "card.member.assign": "assigned member",
