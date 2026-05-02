@@ -7,7 +7,8 @@
 **Architecture:**
 - **Route:** `/w/[workspaceId]/all-tasks` — server page wraps `WorkspaceStoreProvider` (already loads cards / lists / sprints / profiles for the whole workspace via β + γ-Master B1).
 - **Layout:** 6 vertical columns keyed by `lists.statusKind` enum + one "No status" bucket: `todo | in_progress | review | done | blocked | (unmapped)`. Same monochrome chip aesthetic as Kanban.
-- **Drop semantics:** drag a card to column X → the card moves to the FIRST list with `status_kind = X` on the card's CURRENT board. Cross-board drag is out of scope for v1 (preserves "one card lives on one board" invariant — a card whose board has no list with the target status_kind cannot be dropped there; UI shows a tooltip explaining why).
+- **Drop semantics:** drag a card to column X → the card moves to the FIRST list (by list `position` ascending) with `status_kind = X` on the card's CURRENT board. Cross-board drag is out of scope for v1 (preserves "one card lives on one board" invariant — a card whose board has no list with the target status_kind cannot be dropped there; UI shows a toast explaining why).
+- **Multi-mapped lists per board:** if a board has *two* lists both mapped to e.g. `in_progress`, the v1 drop always lands in the first one (by `position`). We document this in `findTargetListId` JSDoc so callers can reason about it. A future "pick destination list" flyout could refine this — flagged in self-review notes.
 - **Filter:** default `mine` (cards assigned to viewer). Toggle to `all workspace`. Plus search + label/priority/sprint chips reusing `parseFilters` from γ-Master A6.
 - **Access:** new top-nav entry "MY TASKS" between WORKSPACE switcher and BACKLOG. Cmd+K palette also gets a "Open my tasks" entry.
 
@@ -237,11 +238,15 @@ describe("groupByStatus", () => {
 });
 
 describe("findTargetListId", () => {
+  // `findTargetListId` walks `lists` in array order. Callers must sort by
+  // list `position` ascending before passing in, so the helper picks the
+  // visually-first list on the board with the target status — that's the
+  // semantics the view layer relies on.
   const lists: List[] = [
-    { id: "l1", boardId: "b1", statusKind: "todo" },
-    { id: "l2", boardId: "b1", statusKind: "in_progress" },
-    { id: "l3", boardId: "b1", statusKind: "in_progress" },
-    { id: "l4", boardId: "b2", statusKind: "todo" },
+    { id: "l1", boardId: "b1", position: "a0", statusKind: "todo" },
+    { id: "l2", boardId: "b1", position: "a1", statusKind: "in_progress" },
+    { id: "l3", boardId: "b1", position: "a2", statusKind: "in_progress" },
+    { id: "l4", boardId: "b2", position: "a0", statusKind: "todo" },
   ];
 
   it("returns the first list on the board with the target statusKind", () => {
@@ -261,6 +266,8 @@ describe("findTargetListId", () => {
   });
 });
 ```
+
+> The `position` field is not consumed by `findTargetListId` itself but appears on the input shape because the caller must order the array. Adding it to the test's `List` type keeps test fixtures honest.
 
 - [ ] **Step 2: Run tests to confirm they fail**
 
@@ -306,6 +313,7 @@ type CardLite = {
 type ListLite = {
   id: string;
   boardId: string;
+  position?: string;
   statusKind: StatusKind | null;
 };
 
@@ -337,6 +345,16 @@ export function groupByStatus<C extends CardLite, L extends ListLite>(
   return out;
 }
 
+/**
+ * Returns the first list (in argument order) on `boardId` whose statusKind
+ * matches `target`. Callers MUST sort `lists` by `position` ascending
+ * before calling — the view layer does this, and the result then represents
+ * the visually-first matching list.
+ *
+ * Returns `null` when:
+ *   - target is `"unmapped"` (no semantic destination — drop is rejected)
+ *   - no list on the board carries that statusKind
+ */
 export function findTargetListId<L extends ListLite>(
   lists: L[],
   boardId: string,
@@ -380,7 +398,6 @@ import {
   PriorityChip,
   type CardPriority,
 } from "@/components/board/card/priority-picker";
-import { useWorkspaceStore } from "@/stores/workspace-store";
 
 function fmtShortDate(d: Date | string | null): string | null {
   if (!d) return null;
@@ -392,31 +409,32 @@ function fmtShortDate(d: Date | string | null): string | null {
   });
 }
 
+// Pure display — board title + sprint name come from the parent (precomputed
+// from the workspace store at view level so this component doesn't subscribe
+// to the store per render).
 export function AllTasksCard({
   cardId,
   boardId,
+  boardTitle,
   title,
   listId,
   sprintId,
+  sprintName,
   priority,
   dueDate,
 }: {
   cardId: string;
   boardId: string;
+  boardTitle: string | null;
   title: string;
   listId: string;
   sprintId: string | null;
+  sprintName: string | null;
   priority: CardPriority | null;
   dueDate: Date | string | null;
 }) {
-  // Read board title + sprint name from workspace store. Stable primitives.
-  const boardTitle = useWorkspaceStore(
-    (s) => s.boards.find((b) => b.id === boardId)?.title ?? null,
-  );
-  const sprintName = useWorkspaceStore((s) =>
-    sprintId ? s.sprints.find((sp) => sp.id === sprintId)?.name ?? null : null,
-  );
   const due = fmtShortDate(dueDate);
+  void sprintId; // kept on the prop for symmetry; sprintName is the displayed value
   return (
     <Link
       href={`/b/${boardId}/c/${cardId}`}
@@ -818,6 +836,26 @@ export function AllTasksView({
   const lists = useWorkspaceStore((s) => s.lists);
   const cardMembers = useWorkspaceStore((s) => s.cardMembers);
   const sprints = useWorkspaceStore((s) => s.sprints);
+  const boards = useWorkspaceStore((s) => s.boards);
+
+  // Pre-compute board title + sprint name lookup once at the view level so
+  // each rendered card avoids a per-row store selector. Cheap compared to
+  // ~hundreds of card chips repeatedly walking `boards`/`sprints` arrays.
+  const boardTitleById = useMemo(
+    () => new Map(boards.map((b) => [b.id, b.title])),
+    [boards],
+  );
+  const sprintNameById = useMemo(
+    () => new Map(sprints.map((s) => [s.id, s.name])),
+    [sprints],
+  );
+
+  // Sort lists by `position` ascending — `findTargetListId` relies on
+  // ordered input to pick the visually-first matching list per board.
+  const sortedLists = useMemo(
+    () => [...lists].sort((a, b) => (a.position < b.position ? -1 : 1)),
+    [lists],
+  );
 
   const filtered = useMemo(
     () =>
@@ -841,7 +879,10 @@ export function AllTasksView({
       ),
     [cards, cardMembers, scope, viewerId, queryDraft, sprintFilter],
   );
-  const grouped = useMemo(() => groupByStatus(filtered, lists), [filtered, lists]);
+  const grouped = useMemo(
+    () => groupByStatus(filtered, sortedLists),
+    [filtered, sortedLists],
+  );
 
   return (
     <div className="space-y-4" data-testid="all-tasks-view">
@@ -905,9 +946,11 @@ export function AllTasksView({
                 key={c.id}
                 cardId={c.id}
                 boardId={c.boardId}
+                boardTitle={boardTitleById.get(c.boardId) ?? null}
                 title={c.title}
                 listId={c.listId}
                 sprintId={c.sprintId}
+                sprintName={c.sprintId ? sprintNameById.get(c.sprintId) ?? null : null}
                 priority={c.priority as CardPriority | null}
                 dueDate={c.dueDate}
               />
@@ -960,7 +1003,9 @@ import {
   PriorityChip,
   type CardPriority,
 } from "@/components/board/card/priority-picker";
-import { useWorkspaceStore } from "@/stores/workspace-store";
+
+// No `useWorkspaceStore` import — board title and sprint name are passed
+// in by the view (computed once via Map lookup, not per-card subscription).
 
 function fmtShortDate(d: Date | string | null): string | null {
   if (!d) return null;
@@ -977,27 +1022,26 @@ const DRAG_THRESHOLD = 4; // px — below this counts as a click, not a drag.
 export function AllTasksCard({
   cardId,
   boardId,
+  boardTitle,
   title,
   listId,
   sprintId,
+  sprintName,
   priority,
   dueDate,
 }: {
   cardId: string;
   boardId: string;
+  boardTitle: string | null;
   title: string;
   listId: string;
   sprintId: string | null;
+  sprintName: string | null;
   priority: CardPriority | null;
   dueDate: Date | string | null;
 }) {
   const router = useRouter();
-  const boardTitle = useWorkspaceStore(
-    (s) => s.boards.find((b) => b.id === boardId)?.title ?? null,
-  );
-  const sprintName = useWorkspaceStore((s) =>
-    sprintId ? s.sprints.find((sp) => sp.id === sprintId)?.name ?? null : null,
-  );
+  void sprintId;
   const due = fmtShortDate(dueDate);
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -1076,7 +1120,10 @@ import { toast } from "sonner";
 import { findTargetListId } from "@/lib/aggregate-kanban/group";
 import { moveCard } from "@/actions/cards";
 import { errorBus } from "@/lib/errors/error-bus";
+import { positionBetween } from "@/lib/ordering"; // verified import path
 ```
+
+> **Verified imports** — confirmed against the existing repo before writing this plan: `@/lib/ordering` exports `positionBetween(prev, next)` (`generateKeyBetween` from `fractional-indexing` underneath) and is used today by `components/board/board-view.tsx:24`, `bulk-action-bar.tsx:23`, `actions/lists.ts:7`, `actions/checklists.ts:7`. `moveCard` is the existing server action signature `{ id: string; listId: string; position: string }` from `actions/cards.ts`.
 
 Inside the component (after existing memos), add:
 
@@ -1111,15 +1158,16 @@ function onDragEnd(e: DragEndEvent) {
   if (!card) return;
 
   // No-op if dropped on the same column the card already lives in.
-  const currentList = lists.find((l) => l.id === card.listId);
+  const currentList = sortedLists.find((l) => l.id === card.listId);
   const currentCol = currentList?.statusKind ?? "unmapped";
   if (currentCol === overData.columnId) return;
 
   // Cross-board drag is out of scope for v1: the user dropped onto a
   // status column but cards live on one board. Find the FIRST list with
-  // the target status_kind on the card's CURRENT board.
+  // the target status_kind on the card's CURRENT board (already
+  // position-sorted by the view-level memo).
   const toListId = findTargetListId(
-    lists,
+    sortedLists,
     activeData.boardId,
     overData.columnId,
   );
@@ -1132,15 +1180,27 @@ function onDragEnd(e: DragEndEvent) {
     return;
   }
 
+  // Compute the destination position: append to the END of the target list
+  // (mirrors how Kanban handles a cross-list drop with no target card —
+  // see board-view.tsx onDragEnd "list-drop" branch). Sort by position
+  // ascending and take the last as `prev`, then `positionBetween(prev,
+  // null)` returns a fractional key that places the card after it.
+  const targetListCards = cards
+    .filter((c) => c.listId === toListId && !c.archived && c.id !== card.id)
+    .sort((a, b) => (a.position < b.position ? -1 : 1));
+  const lastPos =
+    targetListCards.length > 0
+      ? targetListCards[targetListCards.length - 1].position
+      : null;
+  const newPos = positionBetween(lastPos, null);
+
   // Optimistic: workspace store reflects the new listId immediately.
   // The board store on the source board will reconcile via realtime CDC.
   const origListId = card.listId;
   patchCard(card.id, { listId: toListId });
   void (async () => {
     try {
-      // moveCard: { id, listId, position } — position '0' lets the server
-      // append. Action computes the tail position itself for cross-list moves.
-      await moveCard({ id: card.id, listId: toListId, position: "0" });
+      await moveCard({ id: card.id, listId: toListId, position: newPos });
     } catch (err) {
       patchCard(card.id, { listId: origListId });
       const msg = "Failed to move card: " + (err as Error).message;
@@ -1151,22 +1211,7 @@ function onDragEnd(e: DragEndEvent) {
 }
 ```
 
-> **Note on `position: "0"`** — `moveCard` accepts a fractional position string and writes it directly. For "drop to end of target list" we'd ideally read the tail position and pick a value after it. Since `moveCard` doesn't compute that itself, follow the existing Kanban pattern: read the destination list's last card position via `useWorkspaceStore` and use `positionBetween(lastPos, null)` from `@/lib/positions`. Pseudocode:
-
-```tsx
-import { positionBetween } from "@/lib/positions";
-
-const targetCards = cards
-  .filter((c) => c.listId === toListId && !c.archived)
-  .sort((a, b) => (a.position < b.position ? -1 : 1));
-const lastPos =
-  targetCards.length > 0 ? targetCards[targetCards.length - 1].position : null;
-const newPos = positionBetween(lastPos, null);
-```
-
-(`positions` and `positionBetween` are already used by Kanban — verify the import path against `components/board/board-view.tsx`.)
-
-Replace `position: "0"` with `position: newPos` in the action call.
+> **Why `cards` (not `sortedLists`) carries `position`** — cards have their own `position` (a fractional key) for ordering within a list. `sortedLists` is sorted by *list* position; `targetListCards` is sorted by *card* position. Different fields, different sort orders. The plan's helper `findTargetListId` operates on `sortedLists` to pick the list; the inline `targetListCards` sort is for placing the card within the chosen list.
 
 Wrap the JSX:
 
@@ -1570,10 +1615,16 @@ git commit -m "docs(concerns): aggregate kanban shipped, cross-board drag deferr
 - **Spec coverage:** route ✓, columns ✓, drag ✓, filter (mine/all/search/sprint/priority — priority filter present in helper but no UI chip; OK for v1) ✓, top-nav ✓, palette ✓, empty states ✓, e2e ✓, concerns.md ✓.
 - **Placeholders:** none. Each step has runnable code or commands.
 - **Type consistency:** `AggregateColumnId` used in helpers, column, and view all reference the same type. `AggregateScope` ditto. `findTargetListId` matches its caller's expectations.
-- **Known fragility:** `position: "0"` placeholder in Task 7 step 2 — replaced by `positionBetween` lookup. The implementing engineer must wire that import (see note in Task 7).
+- **Imports verified before writing this plan:**
+  - `positionBetween` from `@/lib/ordering` — used by `board-view.tsx`, `bulk-action-bar.tsx`, `actions/lists.ts`, `actions/checklists.ts`. Implementation wraps `fractional-indexing/generateKeyBetween`.
+  - `moveCard` from `@/actions/cards` — same signature `{ id, listId, position }` used everywhere.
+  - `errorBus` from `@/lib/errors/error-bus` — used by `board-view.tsx`, `bulk-action-bar.tsx`.
+  - `useWorkspaceStore` from `@/stores/workspace-store` — already exposes `cards`, `lists`, `boards`, `sprints`, `cardMembers`, `patchCard`.
 - **Cross-board drag deferral**: documented in concerns.md and out-of-scope section. v1 makes drop-to-other-board fail gracefully with a toast, never silently.
+- **Multi-mapped lists per board:** `findTargetListId` picks the first list with the target status on the board (sorted by `position` ascending — view memo handles the sort). If a board has two `in_progress` lists, drops always land in the leftmost. JSDoc'd; flagged in self-review as a future "pick destination" UX.
+- **Performance — per-card store reads avoided:** the view precomputes `boardTitleById` + `sprintNameById` Maps once via `useMemo` and passes the lookups to each card as primitive props. Earlier draft had each `AllTasksCard` calling `useWorkspaceStore` selectors per render, which would re-run on every workspace store mutation — the precomputed map approach is O(1) per card and only re-renders when `boards`/`sprints` arrays change.
 - **Realtime**: `useWorkspaceRealtime(workspaceId)` is called in the view. Cards mutated on a board page or by a peer user reconcile here without a manual refetch.
-- **Performance**: workspace snapshot loads all cards in workspace. For very large workspaces (>10k cards) this becomes heavy; the snapshot table-by-table cap is the same upstream concern flagged in the γ-G review (M4). v1 ignores; revisit if it becomes a real complaint.
+- **Snapshot size**: workspace snapshot loads all cards in workspace. For very large workspaces (>10k cards) this becomes heavy; the snapshot table-by-table cap is the same upstream concern flagged in the γ-G review (M4). v1 ignores; revisit if it becomes a real complaint.
 - **A11y**: card is `role="button"` + `tabIndex=0` + click navigates. Keyboard drag (dnd-kit's `KeyboardSensor`) is NOT wired — could be added cheaply by attaching `useSensor(KeyboardSensor, { coordinateGetter })` next to `PointerSensor`. Listed as a γ-F item if a11y plan picks it up.
 
 ---
