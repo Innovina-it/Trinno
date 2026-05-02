@@ -20,7 +20,7 @@ export type RoadmapCard = {
 export type Lane<C extends RoadmapCard = RoadmapCard> = {
   id: string;
   title: string;
-  kind: "epic" | "uncategorized";
+  kind: "epic" | "uncategorized" | "assignee";
   /** The epic card itself (header bar). Null for the Uncategorized lane. */
   headerCard: C | null;
   /** Children of this epic (or orphan stories for Uncategorized). */
@@ -120,6 +120,78 @@ export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
       subtaskRowsByParent: subtaskRowsFor(orphans.map((c) => c.id)),
     },
   ];
+}
+
+/**
+ * Plan #16b-γ-Gantt-Master Group C (C9) — alternate lane mode that groups
+ * roadmap bars by assignee instead of by epic. One lane per user that has
+ * any visible card assigned; cards with multiple assignees appear in EACH
+ * assignee's lane (intentional — useful for capacity reading). An
+ * "Unassigned" lane is appended only when at least one visible card has no
+ * assignees. Subtasks are intentionally excluded in v1: in epic mode they
+ * render under their parent (`subtaskRowsByParent`), but resolving the
+ * "right" parent in assignee mode is out of scope here. Epics are also
+ * skipped — their assignee-set is rarely meaningful and they'd dominate
+ * lanes if included.
+ */
+export function groupByAssignee<C extends RoadmapCard>(
+  cards: C[],
+  cardMembers: Array<{ cardId: string; userId: string }>,
+  profiles: Array<{ id: string; displayName: string }>,
+): Lane<C>[] {
+  const profileById = new Map(profiles.map((p) => [p.id, p]));
+  const assigneesByCard = new Map<string, string[]>();
+  for (const m of cardMembers) {
+    const arr = assigneesByCard.get(m.cardId) ?? [];
+    arr.push(m.userId);
+    assigneesByCard.set(m.cardId, arr);
+  }
+
+  const cardsByUser = new Map<string, C[]>();
+  const unassigned: C[] = [];
+  for (const c of cards) {
+    if (c.type === "epic") continue;
+    if (c.type === "subtask") continue;
+    const userIds = assigneesByCard.get(c.id) ?? [];
+    if (userIds.length === 0) {
+      unassigned.push(c);
+    } else {
+      for (const uid of userIds) {
+        const arr = cardsByUser.get(uid) ?? [];
+        arr.push(c);
+        cardsByUser.set(uid, arr);
+      }
+    }
+  }
+
+  const lanes: Lane<C>[] = [...cardsByUser.entries()]
+    .map(([userId, laneCards]) => ({
+      userId,
+      title: profileById.get(userId)?.displayName ?? "Unknown",
+      cards: laneCards,
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title))
+    .map<Lane<C>>(({ userId, title, cards: laneCards }) => ({
+      id: `assignee:${userId}`,
+      title,
+      kind: "assignee",
+      headerCard: null,
+      cards: laneCards,
+      subtaskRowsByParent: {},
+    }));
+
+  if (unassigned.length > 0) {
+    lanes.push({
+      id: "assignee:unassigned",
+      title: "Unassigned",
+      kind: "assignee",
+      headerCard: null,
+      cards: unassigned,
+      subtaskRowsByParent: {},
+    });
+  }
+
+  return lanes;
 }
 
 export type PlacedCard<C extends RoadmapCard = RoadmapCard> = {

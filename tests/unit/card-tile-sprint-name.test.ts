@@ -29,6 +29,7 @@ function makeSnapshot(sprints: WorkspaceSnapshot["sprints"]): WorkspaceSnapshot 
     versions: [],
     cardVersions: [],
     cardLinks: [],
+    cardMembers: [],
     workspaceProfiles: [],
   };
 }

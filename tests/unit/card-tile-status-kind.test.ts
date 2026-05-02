@@ -28,6 +28,7 @@ function makeSnapshot(lists: WorkspaceSnapshot["lists"]): WorkspaceSnapshot {
     versions: [],
     cardVersions: [],
     cardLinks: [],
+    cardMembers: [],
     workspaceProfiles: [],
   };
 }

@@ -25,6 +25,7 @@ type CardComponent = WorkspaceSnapshot["cardComponents"][number];
 type Version = WorkspaceSnapshot["versions"][number];
 type CardVersion = WorkspaceSnapshot["cardVersions"][number];
 type CardLink = WorkspaceSnapshot["cardLinks"][number];
+type CardMember = WorkspaceSnapshot["cardMembers"][number];
 type Profile = WorkspaceSnapshot["workspaceProfiles"][number];
 type Board = WorkspaceSnapshot["boards"][number];
 
@@ -39,6 +40,7 @@ export type WorkspaceState = {
   versions: Version[];
   cardVersions: CardVersion[];
   cardLinks: CardLink[];
+  cardMembers: CardMember[];
   workspaceProfiles: Profile[];
 
   setSnapshot: (s: Omit<WorkspaceSnapshot, "workspaceId">) => void;
@@ -82,6 +84,7 @@ export function createWorkspaceStore(initial: WorkspaceSnapshot) {
     versions: initial.versions,
     cardVersions: initial.cardVersions,
     cardLinks: initial.cardLinks,
+    cardMembers: initial.cardMembers,
     workspaceProfiles: initial.workspaceProfiles,
 
     setSnapshot: (s) => set({ ...s }),

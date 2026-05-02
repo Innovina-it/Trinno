@@ -11,6 +11,7 @@ import {
   cardComponents,
   cardVersions,
   cardLinks,
+  cardMembers,
   profiles,
   workspaceMembers,
 } from "@/lib/db/schema";
@@ -85,6 +86,7 @@ export type WorkspaceSnapshot = {
     kind: string;
     boardId: string;
   }>;
+  cardMembers: Array<{ cardId: string; userId: string }>;
   workspaceProfiles: Array<{ id: string; displayName: string }>;
 };
 
@@ -156,6 +158,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         versions: versionRows,
         cardVersions: [],
         cardLinks: [],
+        cardMembers: [],
         workspaceProfiles: profileRows,
       };
     }
@@ -171,6 +174,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
       versionRows,
       cardVersionRows,
       cardLinkRows,
+      cardMemberRows,
       memberRows,
     ] = await Promise.all([
       tx
@@ -266,6 +270,11 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         .where(inArray(cardLinks.boardId, boardIds)),
 
       tx
+        .select({ cardId: cardMembers.cardId, userId: cardMembers.userId })
+        .from(cardMembers)
+        .where(inArray(cardMembers.boardId, boardIds)),
+
+      tx
         .select({ userId: workspaceMembers.userId })
         .from(workspaceMembers)
         .where(eq(workspaceMembers.workspaceId, workspaceId)),
@@ -295,6 +304,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
       versions: versionRows,
       cardVersions: cardVersionRows,
       cardLinks: cardLinkRows,
+      cardMembers: cardMemberRows,
       workspaceProfiles: profileRows,
     };
   });

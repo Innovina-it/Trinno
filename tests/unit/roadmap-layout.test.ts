@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  groupByAssignee,
   groupByEpic,
   stackInLane,
   type RoadmapCard,
@@ -77,6 +78,90 @@ describe("groupByEpic", () => {
     expect(lanes.find((l) => l.id === "uncategorized")?.kind).toBe(
       "uncategorized",
     );
+  });
+});
+
+describe("groupByAssignee", () => {
+  const profiles = [
+    { id: "u1", displayName: "Alice" },
+    { id: "u2", displayName: "Bob" },
+  ];
+
+  it("places visible cards in Unassigned when there are no card_members", () => {
+    const c1 = card({ id: "c1" });
+    const c2 = card({ id: "c2" });
+    const lanes = groupByAssignee([c1, c2], [], profiles);
+    expect(lanes.map((l) => l.id)).toEqual(["assignee:unassigned"]);
+    expect(lanes[0].cards.map((c) => c.id).sort()).toEqual(["c1", "c2"]);
+    expect(lanes[0].kind).toBe("assignee");
+  });
+
+  it("groups two cards under one assignee into a single lane", () => {
+    const c1 = card({ id: "c1" });
+    const c2 = card({ id: "c2" });
+    const members = [
+      { cardId: "c1", userId: "u1" },
+      { cardId: "c2", userId: "u1" },
+    ];
+    const lanes = groupByAssignee([c1, c2], members, profiles);
+    expect(lanes.map((l) => l.id)).toEqual(["assignee:u1"]);
+    expect(lanes[0].title).toBe("Alice");
+    expect(lanes[0].cards.map((c) => c.id).sort()).toEqual(["c1", "c2"]);
+  });
+
+  it("duplicates a card into each assignee lane when it has multiple assignees", () => {
+    const c1 = card({ id: "c1" });
+    const members = [
+      { cardId: "c1", userId: "u1" },
+      { cardId: "c1", userId: "u2" },
+    ];
+    const lanes = groupByAssignee([c1], members, profiles);
+    expect(lanes.map((l) => l.id)).toEqual(["assignee:u1", "assignee:u2"]);
+    expect(lanes[0].cards.map((c) => c.id)).toEqual(["c1"]);
+    expect(lanes[1].cards.map((c) => c.id)).toEqual(["c1"]);
+  });
+
+  it("falls back to title 'Unknown' when the profile is missing for a userId", () => {
+    const c1 = card({ id: "c1" });
+    const members = [{ cardId: "c1", userId: "u-missing" }];
+    const lanes = groupByAssignee([c1], members, profiles);
+    expect(lanes.map((l) => l.id)).toEqual(["assignee:u-missing"]);
+    expect(lanes[0].title).toBe("Unknown");
+  });
+
+  it("emits Unassigned only when at least one visible card has no assignees", () => {
+    const c1 = card({ id: "c1" });
+    const c2 = card({ id: "c2" });
+    const members = [{ cardId: "c1", userId: "u1" }];
+    const lanes = groupByAssignee([c1, c2], members, profiles);
+    const ids = lanes.map((l) => l.id);
+    expect(ids).toContain("assignee:u1");
+    expect(ids).toContain("assignee:unassigned");
+  });
+
+  it("skips epics and subtasks (epic mode renders them; assignee v1 ignores)", () => {
+    const epic = card({ id: "e1", type: "epic" });
+    const sub = card({ id: "s1", type: "subtask", parentCardId: "x" });
+    const story = card({ id: "c1" });
+    const members = [
+      { cardId: "e1", userId: "u1" },
+      { cardId: "s1", userId: "u1" },
+      { cardId: "c1", userId: "u1" },
+    ];
+    const lanes = groupByAssignee([epic, sub, story], members, profiles);
+    expect(lanes.map((l) => l.id)).toEqual(["assignee:u1"]);
+    expect(lanes[0].cards.map((c) => c.id)).toEqual(["c1"]);
+  });
+
+  it("orders assignee lanes alphabetically by display name", () => {
+    const ca = card({ id: "ca" });
+    const cb = card({ id: "cb" });
+    const members = [
+      { cardId: "ca", userId: "u2" }, // Bob
+      { cardId: "cb", userId: "u1" }, // Alice
+    ];
+    const lanes = groupByAssignee([ca, cb], members, profiles);
+    expect(lanes.map((l) => l.title)).toEqual(["Alice", "Bob"]);
   });
 });
 

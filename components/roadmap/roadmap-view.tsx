@@ -36,7 +36,7 @@ import {
   xForDate,
   type Zoom,
 } from "@/lib/roadmap/dates";
-import { groupByEpic, stackInLane } from "@/lib/roadmap/layout";
+import { groupByAssignee, groupByEpic, stackInLane } from "@/lib/roadmap/layout";
 import { getCardStatusKind, type StatusKind } from "@/lib/status";
 import { criticalPath, type Link as CritLink } from "@/lib/roadmap/critical-path";
 import { updateCard } from "@/actions/cards";
@@ -57,6 +57,12 @@ import { parseFilters } from "@/lib/board-filters";
 import { Plus } from "lucide-react";
 
 const ZOOMS: Zoom[] = ["week", "month", "quarter"];
+type LaneMode = "epic" | "assignee";
+const LANE_MODES: LaneMode[] = ["epic", "assignee"];
+const LANE_MODE_LABEL: Record<LaneMode, string> = {
+  epic: "By epic",
+  assignee: "By assignee",
+};
 const ROW_HEIGHT = 36; // 28px bar + 8px gap
 const LANE_HEADER_HEIGHT = 28;
 const LANE_GAP = 12;
@@ -151,6 +157,10 @@ export function RoadmapView({
   const zoom: Zoom = (ZOOMS as string[]).includes(zoomParam ?? "")
     ? (zoomParam as Zoom)
     : "month";
+  const lanesParam = sp.get("lanes");
+  const laneMode: LaneMode = (LANE_MODES as string[]).includes(lanesParam ?? "")
+    ? (lanesParam as LaneMode)
+    : "epic";
   const focusParam = sp.get("focus");
   const queryParam = sp.get("q") ?? "";
 
@@ -248,6 +258,8 @@ export function RoadmapView({
   const storeLists = useWorkspaceStore((s) => s.lists);
   const storeLinks = useWorkspaceStore((s) => s.cardLinks);
   const storeSprints = useWorkspaceStore((s) => s.sprints);
+  const storeCardMembers = useWorkspaceStore((s) => s.cardMembers);
+  const storeProfiles = useWorkspaceStore((s) => s.workspaceProfiles);
   const patchCardInStore = useWorkspaceStore((s) => s.patchCard);
 
   // Plan #16b-γ-A (#2) — index card → status kind via list mapping. We
@@ -368,7 +380,12 @@ export function RoadmapView({
     });
   }, []);
 
-  const lanes = useMemo(() => groupByEpic(cards), [cards]);
+  const lanes = useMemo(() => {
+    if (laneMode === "assignee") {
+      return groupByAssignee(cards, storeCardMembers, storeProfiles);
+    }
+    return groupByEpic(cards);
+  }, [laneMode, cards, storeCardMembers, storeProfiles]);
 
   // Per-lane stacking + total height. Each entry tracks where in the
   // canvas its body bars start, and pre-computes per-row offsets for any
@@ -471,6 +488,14 @@ export function RoadmapView({
   function setZoom(next: Zoom) {
     const params = new URLSearchParams(sp.toString());
     params.set("zoom", next);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  // ---- Lane mode toggle (URL-synced; default "epic" stays absent from URL) ----
+  function setLaneMode(next: LaneMode) {
+    const params = new URLSearchParams(sp.toString());
+    if (next === "epic") params.delete("lanes");
+    else params.set("lanes", next);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
@@ -1095,6 +1120,27 @@ export function RoadmapView({
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              data-testid="roadmap-lanes"
+              className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
+            >
+              LANES: {LANE_MODE_LABEL[laneMode].toUpperCase()}
+              <ChevronDown className="size-3" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuRadioGroup
+                value={laneMode}
+                onValueChange={(v) => setLaneMode(v as LaneMode)}
+              >
+                {LANE_MODES.map((m) => (
+                  <DropdownMenuRadioItem key={m} value={m}>
+                    {LANE_MODE_LABEL[m]}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <span
             className="inline-flex items-center gap-1.5 mono-meta-sm text-fg-faint"
             data-testid="roadmap-live"
@@ -1265,7 +1311,9 @@ export function RoadmapView({
                   <span className="mono-meta-sm text-fg-faint truncate">
                     {ll.lane.kind === "uncategorized"
                       ? `${ll.placed.length} ORPHANS`
-                      : `${ll.placed.length} STORIES`}
+                      : ll.lane.kind === "assignee"
+                        ? `${ll.placed.length} CARDS`
+                        : `${ll.placed.length} STORIES`}
                   </span>
                 </div>
               );
