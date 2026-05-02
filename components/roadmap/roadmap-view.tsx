@@ -1009,6 +1009,7 @@ export function RoadmapView({
             data-testid="roadmap-critical-toggle"
             data-active={showCriticalPath ? "true" : "false"}
             aria-pressed={showCriticalPath}
+            title="Highlights the longest chain of blocking dependencies — a delay on any of these pushes the project end date."
             className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
               showCriticalPath ? "ring-1 ring-fg/40" : ""
             }`}
