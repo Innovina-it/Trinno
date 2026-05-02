@@ -64,6 +64,9 @@ export type WorkspaceState = {
   upsertCardLink: (l: CardLink) => void;
   removeCardLink: (id: string) => void;
 
+  upsertCardMember: (m: CardMember) => void;
+  removeCardMember: (cardId: string, userId: string) => void;
+
   upsertCardVersion: (x: CardVersion) => void;
   removeCardVersion: (
     cardId: string,
@@ -152,6 +155,21 @@ export function createWorkspaceStore(initial: WorkspaceSnapshot) {
     removeCardLink: (id) =>
       set((st) => ({
         cardLinks: st.cardLinks.filter((l) => l.id !== id),
+      })),
+
+    upsertCardMember: (m) =>
+      set((st) => ({
+        cardMembers: st.cardMembers.some(
+          (x) => x.cardId === m.cardId && x.userId === m.userId,
+        )
+          ? st.cardMembers
+          : [...st.cardMembers, m],
+      })),
+    removeCardMember: (cardId, userId) =>
+      set((st) => ({
+        cardMembers: st.cardMembers.filter(
+          (m) => !(m.cardId === cardId && m.userId === userId),
+        ),
       })),
 
     upsertCardVersion: (x) =>

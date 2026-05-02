@@ -51,6 +51,8 @@ export function useWorkspaceRealtime(workspaceId: string) {
   const removeVersion = useWorkspaceStore((s) => s.removeVersion);
   const upsertCardLink = useWorkspaceStore((s) => s.upsertCardLink);
   const removeCardLink = useWorkspaceStore((s) => s.removeCardLink);
+  const upsertCardMember = useWorkspaceStore((s) => s.upsertCardMember);
+  const removeCardMember = useWorkspaceStore((s) => s.removeCardMember);
   const upsertCardVersion = useWorkspaceStore((s) => s.upsertCardVersion);
   const removeCardVersion = useWorkspaceStore((s) => s.removeCardVersion);
   const boards = useWorkspaceStore((s) => s.boards);
@@ -168,6 +170,32 @@ export function useWorkspaceRealtime(workspaceId: string) {
               });
             } else if (payload.eventType === "DELETE" && payload.old) {
               removeCardLink((payload.old as { id: string }).id);
+            }
+          },
+        );
+        ch.on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "card_members",
+            filter: `board_id=eq.${b.id}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (payload.eventType === "INSERT" && payload.new) {
+              const r = payload.new as Record<string, unknown>;
+              upsertCardMember({
+                cardId: r.card_id as string,
+                userId: r.user_id as string,
+              });
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              const r = payload.old as Record<string, unknown>;
+              removeCardMember(
+                r.card_id as string,
+                r.user_id as string,
+              );
             }
           },
         );
@@ -310,6 +338,8 @@ export function useWorkspaceRealtime(workspaceId: string) {
     removeVersion,
     upsertCardLink,
     removeCardLink,
+    upsertCardMember,
+    removeCardMember,
     upsertCardVersion,
     removeCardVersion,
   ]);
