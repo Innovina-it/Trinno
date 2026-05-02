@@ -65,7 +65,7 @@ export default async function BoardPage({
             </aside>
           }
         >
-          <ActivityFeed boardId={boardId} />
+          <ActivityFeed boardId={boardId} workspaceId={snap.board.workspaceId} />
         </Suspense>
       </ActivityShell>
     </BoardView>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { listActivityForCard } from "@/lib/queries/activity";
 import { getSessionToken } from "@/lib/auth";
 
@@ -38,7 +39,13 @@ function rel(dateStr: string): string {
   return `${Math.round(sec / 86400)}d ago`;
 }
 
-export async function CardActivity({ cardId }: { cardId: string }) {
+export async function CardActivity({
+  cardId,
+  workspaceId,
+}: {
+  cardId: string;
+  workspaceId?: string;
+}) {
   const token = (await getSessionToken())!;
   const rows = await listActivityForCard(token, cardId, 30);
   return (
@@ -51,17 +58,34 @@ export async function CardActivity({ cardId }: { cardId: string }) {
         <p className="font-serif italic text-sm text-ink/50">No activity yet.</p>
       )}
       <ul className="divide-y divide-[color:var(--rule)]">
-        {rows.map((r) => (
-          <li key={r.id} className="py-1.5">
-            <div className="mono-meta-sm text-ink/55">{humanType(r.type)}</div>
-            <div className="text-xs text-ink leading-snug mt-0.5">
-              <span className="font-medium">{r.actorName ?? "Someone"}</span>
-              <span className="ml-2 mono-meta-sm text-ink/45">
-                {rel(r.createdAt as unknown as string)}
-              </span>
-            </div>
-          </li>
-        ))}
+        {rows.map((r) => {
+          const isRoadmapDates = r.type === "card.dates" && workspaceId;
+          const body = (
+            <>
+              <div className="mono-meta-sm text-ink/55">{humanType(r.type)}</div>
+              <div className="text-xs text-ink leading-snug mt-0.5">
+                <span className="font-medium">{r.actorName ?? "Someone"}</span>
+                <span className="ml-2 mono-meta-sm text-ink/45">
+                  {rel(r.createdAt as unknown as string)}
+                </span>
+              </div>
+            </>
+          );
+          return (
+            <li key={r.id} className="py-1.5">
+              {isRoadmapDates ? (
+                <Link
+                  href={`/w/${workspaceId}/roadmap?focus=${cardId}`}
+                  className="block hover:bg-[rgb(0_0_0/0.03)] -mx-1 px-1 rounded"
+                >
+                  {body}
+                </Link>
+              ) : (
+                body
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

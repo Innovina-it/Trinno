@@ -52,7 +52,7 @@ export default async function InterceptedCardPage({
       sprints={sprints.map((s) => ({ id: s.id, name: s.name, state: s.state }))}
       workspaceId={board?.workspaceId}
     >
-      <CardActivity cardId={c.id} />
+      <CardActivity cardId={c.id} workspaceId={board?.workspaceId} />
     </CardModal>
   );
 }

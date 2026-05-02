@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { listActivityForBoard } from "@/lib/queries/activity";
 import { getSessionToken } from "@/lib/auth";
 
@@ -38,7 +39,13 @@ function rel(dateStr: string): string {
   return `${Math.round(sec / 86400)}d ago`;
 }
 
-export async function ActivityFeed({ boardId }: { boardId: string }) {
+export async function ActivityFeed({
+  boardId,
+  workspaceId,
+}: {
+  boardId: string;
+  workspaceId: string;
+}) {
   const token = (await getSessionToken())!;
   const rows = await listActivityForBoard(token, boardId, 30);
   return (
@@ -68,23 +75,40 @@ export async function ActivityFeed({ boardId }: { boardId: string }) {
       )}
 
       <ul className="overflow-y-auto divide-y divide-hairline">
-        {rows.map((r) => (
-          <li
-            key={r.id}
-            className="px-4 py-2.5 transition-colors duration-150 hover:bg-[rgb(255_255_255/0.04)]"
-            data-testid={`activity-${r.type}`}
-          >
-            <div className="mono-meta-sm text-fg-faint">{humanType(r.type)}</div>
-            <div className="text-sm leading-snug mt-0.5">
-              <span className="font-medium text-fg">
-                {r.actorName ?? "Someone"}
-              </span>
-            </div>
-            <div className="mono-meta-sm text-fg-faint mt-0.5">
-              {rel(r.createdAt as unknown as string)}
-            </div>
-          </li>
-        ))}
+        {rows.map((r) => {
+          const isRoadmapDates = r.type === "card.dates" && r.cardId;
+          const body = (
+            <>
+              <div className="mono-meta-sm text-fg-faint">{humanType(r.type)}</div>
+              <div className="text-sm leading-snug mt-0.5">
+                <span className="font-medium text-fg">
+                  {r.actorName ?? "Someone"}
+                </span>
+              </div>
+              <div className="mono-meta-sm text-fg-faint mt-0.5">
+                {rel(r.createdAt as unknown as string)}
+              </div>
+            </>
+          );
+          return (
+            <li
+              key={r.id}
+              className="px-4 py-2.5 transition-colors duration-150 hover:bg-[rgb(255_255_255/0.04)]"
+              data-testid={`activity-${r.type}`}
+            >
+              {isRoadmapDates ? (
+                <Link
+                  href={`/w/${workspaceId}/roadmap?focus=${r.cardId}`}
+                  className="block"
+                >
+                  {body}
+                </Link>
+              ) : (
+                body
+              )}
+            </li>
+          );
+        })}
       </ul>
     </aside>
   );
