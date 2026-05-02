@@ -198,13 +198,17 @@ export function RoadmapView({
 
   // A7 — new-card dialog state lifted up so `n` can open it.
   const [newCardOpen, setNewCardOpen] = useState(false);
-  // D2 — when the user clicks an empty area of the canvas, prefill the
-  // dialog's start_date with the date corresponding to the click X. Cleared
-  // when the dialog closes so subsequent opens (e.g. via the chip or `n`)
-  // don't leak stale defaults.
+  // D2 / G3 — when the user clicks (or drag-paints) an empty area of the
+  // canvas, prefill the dialog's start_date (and on G3 drag, target_date)
+  // with the date(s) under the cursor. G3 also pre-resolves the lane's
+  // epic + board so the new card lands in the right slot. Cleared when
+  // the dialog closes so subsequent opens (chip / `n`) don't leak stale
+  // defaults.
   const [newCardDefaults, setNewCardDefaults] = useState<{
     start?: string;
     target?: string;
+    board?: string;
+    parent?: string | null;
   } | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -537,6 +541,23 @@ export function RoadmapView({
   // ---- Drag state (refs to avoid re-renders during pointermove) ----
   const dragRef = useRef<DragState | null>(null);
   const [, startTransition] = useTransition();
+
+  // Plan #16b-γ-G G3 — drag-paint state. The user pointerdowns on empty
+  // canvas and drags horizontally; on pointerup we open the new-card
+  // dialog with start/target prefilled. The ref carries cursor/anchor
+  // info, the rect state drives the visual ghost.
+  const paintRef = useRef<{
+    startClientX: number;
+    startCanvasX: number;
+    currentCanvasX: number;
+    row: { top: number; height: number; laneId: string; epicId: string | null; boardId: string | null };
+  } | null>(null);
+  const [paintRect, setPaintRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   // Plan #16b-γ-G G2 — visual highlight on the lane the cursor is over
   // while dragging a bar across lanes. Only set when hoverLaneId differs
@@ -1212,22 +1233,146 @@ export function RoadmapView({
     [laneLayout, laneMode, onRowPointerMove, onRowPointerUp],
   );
 
-  // D2 — empty-area canvas click opens the new-card dialog with start_date
-  // prefilled to the date under the cursor. The `target === currentTarget`
-  // guard keeps clicks on bars / overlays / lane labels / today line from
-  // bubbling up here; only true empty space on the canvas div fires.
-  const onCanvasEmptyClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.target !== e.currentTarget) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const days = Math.max(0, Math.round(x / ppd));
-      const startDate = addDays(gridStart, days);
-      const startISO = startDate.toISOString().slice(0, 10);
-      setNewCardDefaults({ start: startISO });
+  // Plan #16b-γ-G G3 — drag-paint on empty canvas → new card. Supersedes
+  // D2's click-to-create: a click without drag (delta < 4px) still opens
+  // the dialog with `defaultStart` only (D2 parity); a drag paints a
+  // visual ghost rect for the date range and opens the dialog with both
+  // `defaultStart` and `defaultTarget` set. Backward paint swaps so
+  // start ≤ target. The lane the paint started on resolves the epic
+  // parent + board so the new card lands in the right slot.
+  //
+  // The `target === currentTarget` guard keeps pointerdowns on bars /
+  // overlays / lane labels / today line from bubbling up here; only
+  // true empty space on the canvas div fires.
+  const PAINT_THRESHOLD_PX = 4;
+  const onPaintPointerMove = useCallback(
+    (e: PointerEvent) => {
+      const p = paintRef.current;
+      if (!p) return;
+      const deltaPx = e.clientX - p.startClientX;
+      const newCanvasX = p.startCanvasX + deltaPx;
+      p.currentCanvasX = newCanvasX;
+      // Snap each end to whole-day grid for a cleaner ghost. We snap by
+      // rounding the canvas-x to the nearest day boundary.
+      const aSnap = Math.round(p.startCanvasX / ppd) * ppd;
+      const bSnap = Math.round(newCanvasX / ppd) * ppd;
+      const left = Math.min(aSnap, bSnap);
+      const right = Math.max(aSnap, bSnap);
+      // Width is at least one day so the ghost is always visible while
+      // painting (matches the "click = single-day" mental model).
+      const width = Math.max(ppd, right - left + ppd);
+      setPaintRect({
+        left,
+        top: p.row.top,
+        width,
+        height: p.row.height,
+      });
+    },
+    [ppd],
+  );
+
+  // `finishPaint` references `onPaintPointerUp`, which references
+  // `finishPaint` — break the cycle with a ref so the cleanup inside
+  // `finishPaint` can detach the same listener instance that was
+  // attached on pointerdown.
+  const onPaintPointerUpRef = useRef<((e: PointerEvent) => void) | null>(null);
+
+  const finishPaint = useCallback(
+    (cancelled: boolean) => {
+      window.removeEventListener("pointermove", onPaintPointerMove);
+      const upHandler = onPaintPointerUpRef.current;
+      if (upHandler) window.removeEventListener("pointerup", upHandler);
+      const p = paintRef.current;
+      paintRef.current = null;
+      setPaintRect(null);
+      if (!p || cancelled) return;
+      const deltaPx = Math.abs(p.currentCanvasX - p.startCanvasX);
+      const aDays = Math.max(0, Math.round(p.startCanvasX / ppd));
+      const bDays = Math.max(0, Math.round(p.currentCanvasX / ppd));
+      const startDays = Math.min(aDays, bDays);
+      const endDays = Math.max(aDays, bDays);
+      const startISO = addDays(gridStart, startDays).toISOString().slice(0, 10);
+      const endISO = addDays(gridStart, endDays).toISOString().slice(0, 10);
+      // Resolve the epic's boardId so the dialog defaults to the right
+      // board. Uncategorized lane → no parent → fall back to first
+      // visible board (handled by the dialog).
+      const epicBoardId = p.row.boardId;
+      if (deltaPx < PAINT_THRESHOLD_PX) {
+        // Click-style: D2 parity (start only, no target).
+        setNewCardDefaults({
+          start: startISO,
+          board: epicBoardId ?? undefined,
+          parent: p.row.epicId,
+        });
+      } else {
+        setNewCardDefaults({
+          start: startISO,
+          target: endISO,
+          board: epicBoardId ?? undefined,
+          parent: p.row.epicId,
+        });
+      }
       setNewCardOpen(true);
     },
-    [gridStart, ppd],
+    [gridStart, onPaintPointerMove, ppd],
+  );
+
+  const onPaintPointerUp = useCallback(() => {
+    finishPaint(false);
+  }, [finishPaint]);
+  onPaintPointerUpRef.current = onPaintPointerUp;
+
+  const onCanvasEmptyPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.target !== e.currentTarget) return;
+      // Only react to primary button (left click / single touch).
+      if (e.button !== 0) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      // Walk laneLayout to find which row the cursor is on. Skip the
+      // lane's header row (top LANE_HEADER_HEIGHT band) so we always
+      // paint inside the body. We resolve the epic via lane.headerCard
+      // — null for "uncategorized".
+      const ll = laneLayout.find(
+        (entry) => y >= entry.top && y < entry.top + entry.height,
+      );
+      if (!ll) return;
+      const bodyTop = ll.top + LANE_HEADER_HEIGHT;
+      // If the cursor is in the lane header strip itself, snap the paint
+      // row to the first body row so painting "above" the bars still
+      // works the way users expect.
+      const yInBody = Math.max(0, y - bodyTop);
+      const rowIdx = Math.floor(yInBody / ROW_HEIGHT);
+      const rowTop = bodyTop + rowIdx * ROW_HEIGHT;
+      const epic = ll.lane.headerCard;
+      const epicBoardId = epic
+        ? storeCardsRef.current.find((c) => c.id === epic.id)?.boardId ?? null
+        : null;
+      paintRef.current = {
+        startClientX: e.clientX,
+        startCanvasX: x,
+        currentCanvasX: x,
+        row: {
+          top: rowTop,
+          height: ROW_HEIGHT,
+          laneId: ll.lane.id,
+          epicId: epic?.id ?? null,
+          boardId: epicBoardId,
+        },
+      };
+      // Initial ghost: zero-width rect at click point (snapped to day).
+      const xSnap = Math.round(x / ppd) * ppd;
+      setPaintRect({
+        left: xSnap,
+        top: rowTop,
+        width: ppd,
+        height: ROW_HEIGHT,
+      });
+      window.addEventListener("pointermove", onPaintPointerMove);
+      window.addEventListener("pointerup", onPaintPointerUp);
+    },
+    [laneLayout, onPaintPointerMove, onPaintPointerUp, ppd],
   );
 
   // Plan #16b-γ-Gantt-Master Group C (C5) — jump-to-date control.
@@ -1253,9 +1398,19 @@ export function RoadmapView({
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointermove", onRowPointerMove);
       window.removeEventListener("pointerup", onRowPointerUp);
+      window.removeEventListener("pointermove", onPaintPointerMove);
+      const upHandler = onPaintPointerUpRef.current;
+      if (upHandler) window.removeEventListener("pointerup", upHandler);
       stopAutoScroll();
     };
-  }, [onPointerMove, onPointerUp, onRowPointerMove, onRowPointerUp, stopAutoScroll]);
+  }, [
+    onPointerMove,
+    onPointerUp,
+    onRowPointerMove,
+    onRowPointerUp,
+    onPaintPointerMove,
+    stopAutoScroll,
+  ]);
 
   // Plan #16b-α (#17) — persist zoom + scroll-x per workspace in
   // localStorage. On mount we read the saved viewport: the zoom is
@@ -1413,6 +1568,14 @@ export function RoadmapView({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const typing = isTypingTarget(e.target);
       if (e.key === "Escape") {
+        // Plan #16b-γ-G G3 — cancel an in-progress drag-paint. Takes
+        // priority over the search-clear so a paint that overlaps a
+        // populated search box still cancels cleanly.
+        if (paintRef.current) {
+          finishPaint(true);
+          e.preventDefault();
+          return;
+        }
         if (queryDraft) {
           setQueryDraft("");
           e.preventDefault();
@@ -1474,7 +1637,7 @@ export function RoadmapView({
     return () => window.removeEventListener("keydown", onKey);
     // setZoom is a stable function defined in this scope.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryDraft, newCardOpen, shortcutsOpen, zoom]);
+  }, [queryDraft, newCardOpen, shortcutsOpen, zoom, finishPaint]);
 
   return (
     <div
@@ -1631,7 +1794,7 @@ export function RoadmapView({
               className="relative"
               style={{ width, height: totalHeight }}
               data-testid="roadmap-canvas"
-              onClick={onCanvasEmptyClick}
+              onPointerDown={onCanvasEmptyPointerDown}
             >
               {/* Vertical grid lines + header strip labels */}
               <div
@@ -1978,6 +2141,23 @@ export function RoadmapView({
                 width={width}
                 height={totalHeight}
               />
+              {/* Plan #16b-γ-G G3 — drag-paint ghost. Renders ABOVE every
+                  other canvas child while the user is painting; cleared
+                  on pointerup or Esc. `pointer-events-none` so it never
+                  swallows the move events that drive its own update. */}
+              {paintRect && (
+                <div
+                  data-testid="roadmap-paint-ghost"
+                  aria-hidden
+                  className="absolute pointer-events-none border-2 border-dashed border-fg/40 bg-fg/[0.05]"
+                  style={{
+                    left: paintRect.left,
+                    top: paintRect.top,
+                    width: paintRect.width,
+                    height: paintRect.height,
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -1999,6 +2179,8 @@ export function RoadmapView({
         }}
         defaultStart={newCardDefaults?.start}
         defaultTarget={newCardDefaults?.target}
+        defaultBoard={newCardDefaults?.board}
+        defaultParent={newCardDefaults?.parent ?? null}
       />
       <RoadmapShortcutsDialog
         open={shortcutsOpen}

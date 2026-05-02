@@ -28,15 +28,24 @@ export function RoadmapNewCardDialog({
   onOpenChange,
   defaultStart,
   defaultTarget,
+  defaultBoard,
+  defaultList,
+  defaultParent,
 }: {
   open: boolean;
   onOpenChange: (next: boolean) => void;
   defaultStart?: string;
   defaultTarget?: string;
+  // Plan #16b-γ-G G3 — drag-paint can pre-resolve a target board/list and
+  // an epic parent (the lane the user painted on). The dialog still falls
+  // back to the first visible board/list when these are absent.
+  defaultBoard?: string;
+  defaultList?: string;
+  defaultParent?: string | null;
 }) {
   const [title, setTitle] = useState("");
-  const [boardId, setBoardId] = useState("");
-  const [listId, setListId] = useState("");
+  const [boardId, setBoardId] = useState(defaultBoard ?? "");
+  const [listId, setListId] = useState(defaultList ?? "");
   const [start, setStart] = useState(defaultStart ?? todayISO());
   const [target, setTarget] = useState(defaultTarget ?? plus14ISO());
   const [pending, startTransition] = useTransition();
@@ -53,21 +62,40 @@ export function RoadmapNewCardDialog({
     [lists, boardId],
   );
 
-  // Default board to first available; default list to first list of board.
+  // When the dialog opens, seed boardId/listId from the provided defaults
+  // if they're available, otherwise fall back to the first visible board.
+  // The defaults take precedence on every open so a subsequent paint on a
+  // different lane re-resolves to that lane's board.
   useEffect(() => {
     if (!open) return;
+    if (defaultBoard) {
+      if (boardId !== defaultBoard) setBoardId(defaultBoard);
+      return;
+    }
     if (!boardId && visibleBoards[0]) setBoardId(visibleBoards[0].id);
-  }, [open, boardId, visibleBoards]);
+    // boardId is intentionally omitted from deps — we only re-seed on open
+    // or when the defaults change, not on every internal boardId edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultBoard, visibleBoards]);
   useEffect(() => {
+    if (!open) return;
+    if (defaultList) {
+      if (listId !== defaultList) setListId(defaultList);
+      return;
+    }
     if (!boardId) return;
     if (listsForBoard.find((l) => l.id === listId)) return;
     setListId(listsForBoard[0]?.id ?? "");
-  }, [boardId, listsForBoard, listId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultList, boardId, listsForBoard]);
 
   function reset() {
     setTitle("");
     setStart(defaultStart ?? todayISO());
     setTarget(defaultTarget ?? plus14ISO());
+    // Note: we intentionally do NOT carry the prior defaultParent forward —
+    // the parent is a per-open prop. RoadmapView clears its newCardDefaults
+    // state on close so the next open re-derives it cleanly.
   }
 
   function handleSubmit() {
@@ -86,6 +114,7 @@ export function RoadmapNewCardDialog({
     }
     const startISO = new Date(`${start}T00:00:00.000Z`).toISOString();
     const targetISO = new Date(`${target}T00:00:00.000Z`).toISOString();
+    const parentId = defaultParent ?? null;
     startTransition(async () => {
       try {
         const created = await createCard({ listId, title: t });
@@ -93,6 +122,9 @@ export function RoadmapNewCardDialog({
           id: created.id,
           startDate: startISO,
           targetDate: targetISO,
+          // Only thread parentCardId through when the caller asked for it;
+          // omit otherwise so the action treats it as "leave unchanged".
+          ...(parentId ? { parentCardId: parentId } : {}),
         });
         toast.success(`Created "${t}"`);
         onOpenChange(false);
