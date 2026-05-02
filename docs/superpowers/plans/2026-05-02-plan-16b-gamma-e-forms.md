@@ -3,16 +3,16 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: `superpowers:subagent-driven-development`. Mid-size slice (5 items, ~6 hrs subagent). Each item is independent enough to commit per task.
 
 **Scope (5 items from queue):**
-- **#49** Markdown rendering for card descriptions + comments (with sanitization).
-- **#50** `@mention` autocomplete in comments (caret-anchored popover, workspace-profile-backed).
-- **#51** Paste image into a comment / description → upload + auto-insert markdown image.
-- **#52** Drag-and-drop file from OS onto a comment / description → upload + auto-insert markdown link.
+- **#49** WYSIWYG rich-text editor (tiptap-based) for card descriptions + comments, with markdown round-trip storage.
+- **#50** `@mention` autocomplete in the editor (tiptap mention extension, workspace-profile-backed).
+- **#51** Paste image into the editor → upload + auto-insert inline image node.
+- **#52** Drag-and-drop file from OS onto the editor → upload + auto-insert link / image node.
 - **#53** Polished date picker primitive replacing 6 native `<input type="date">` call sites.
 
 **Out of scope:**
-- Full WYSIWYG editor (e.g. tiptap). We stay with `<textarea>` + markdown render; cheaper, less footgun-prone.
+- Real-time collaborative editing (tiptap supports `@tiptap/extension-collaboration` + Y.js, but that needs a sync server and is its own slice).
 - `#-issue` / `[[wiki-link]]` markdown extensions.
-- Slash commands inside the editor.
+- Slash-command palette inside the editor (`@tiptap/extension-mention` covers `@`, but `/cmd` is a separate UX).
 - Replacing roadmap-bar's mid-drag inline date inputs (they're ephemeral and the calendar primitive isn't worth the dnd interplay).
 
 **Depends on:**
@@ -20,32 +20,40 @@
 - existing `actions/attachments.ts` (has `registerAttachment` + the signed-upload flow under `/api/upload`)
 - existing `useBoardStore.boardProfiles` (per-board profile list, used for mention popover)
 - workspace profiles via `useWorkspaceStore.workspaceProfiles` (cross-board comments via aggregate-kanban view)
-- `@base-ui/react` (already a dep — `^1.4.1`) — used for popover primitive
+- `@base-ui/react` (already a dep — `^1.4.1`) — used for popover primitive in the date picker
 - `lucide-react` (already a dep) — icons
 
 **Tech Stack additions:**
-- `react-markdown` + `remark-gfm` + `rehype-sanitize` (SSR/CSR safe markdown render).
-- `react-day-picker` (calendar primitive — small, headless, easy to style with our mono palette).
+- `@tiptap/react` + `@tiptap/starter-kit` — WYSIWYG editor core (ProseMirror under the hood; React glue).
+- `@tiptap/extension-mention` + `@tiptap/suggestion` — caret-anchored mention popover, no manual caret-coords plumbing.
+- `@tiptap/extension-link` — auto-link + paste-link handling.
+- `@tiptap/extension-image` — inline image nodes for paste / drop.
+- `@tiptap/extension-placeholder` — placeholder text in empty editors.
+- `tiptap-markdown` — markdown serializer/parser (preserves the existing `cards.description` + `comments.body` text columns; no schema change).
+- `tippy.js` — required by `@tiptap/extension-mention` for the suggestion popover positioning. (This is the canonical pairing; ~17 KB gzipped.)
+- `react-day-picker` + `date-fns` — calendar primitive (small, headless, easy to style with our mono palette).
 
-These are the only new deps; they're widely-used and stable.
+These are the only new deps; all widely-used and stable. Bundle delta ≈ 130 KB gzipped (tiptap + ProseMirror is the bulk; tree-shakable so unused extensions don't ship).
 
 ---
 
 ## File Structure
 
 **New files:**
-- `lib/markdown/render.ts` — pure helper that compiles a markdown string into safe React nodes via `react-markdown` + `remark-gfm` + `rehype-sanitize`. Exports `<MarkdownView source={…} />` (a thin component wrapping the render call).
-- `lib/markdown/mentions.ts` — pure helpers `extractMentions(body): { displayName, userId }[]` + `replaceMentionTokens(body)` (used by the comment renderer to swap `@[Name](id)` tokens for highlighted spans + the action layer to map mentioned-user-ids to notifications).
+- `components/ui/rich-editor.tsx` — `<RichEditor>` controlled component wrapping tiptap's `useEditor`. Bundles starter-kit + Mention + Link + Image + Placeholder. Exposes `value`, `onChange(markdown)`, `onMentionsChange(userIds)`, `disabled`, `cardId` (passed to upload helper for paste / drop), `placeholder`, `testId`. Markdown round-trip via `tiptap-markdown`.
+- `components/ui/rich-view.tsx` — `<RichView source={markdown} />` — read-only render path. Mounts a tiptap editor in `editable: false` mode so the same Mention / Image / Link nodes render with identical styling. Cheaper than a separate markdown→HTML pipeline because we already pay for tiptap on every page that displays comments.
+- `lib/markdown/mentions.ts` — pure helpers `extractMentions(markdown): { displayName, userId }[]` + `replaceMentionTokens(markdown)`. Markdown round-trip stores tokens as `@[Name](user-id)` (compatible with our existing notification flow), so we still need the parser for server-side notification fan-out — but on the client, tiptap's Mention extension owns insertion / deletion / display.
 - `tests/unit/markdown-mentions.test.ts` — TDD coverage for the parser.
-- `components/ui/mention-popover.tsx` — caret-anchored popover that lists workspace profiles filtered by query. Drives both the `@` typeahead in comments and a future "share with…" picker.
+- `lib/uploads/upload-file.ts` — extracted shared upload helper (currently inlined in `attachments-section.tsx` + `cover-picker.tsx`). Used by tiptap's paste / drop hooks.
 - `components/ui/calendar.tsx` — shadcn-style wrapper around `react-day-picker` styled with our tokens.
 - `components/ui/date-picker.tsx` — popover-anchored trigger + `<Calendar />` body. Drop-in replacement for `<input type="date">` (controlled `value: string | null`, `onChange(next: string | null)` with ISO-yyyy-mm-dd strings).
 - `tests/unit/date-picker.test.ts` — render + interaction smoke (uses the calendar primitive's exported helpers, no jsdom needed; pure helpers only).
-- `tests/e2e/forms.spec.ts` — E2E: markdown render, mention autocomplete + notification, paste image roundtrip, file drop, date picker selection.
+- `tests/e2e/forms.spec.ts` — E2E: rich render, mention autocomplete + notification, paste image roundtrip, file drop, date picker selection.
 
 **Modified files:**
-- `components/board/card/comments-section.tsx` — render comment body via `<MarkdownView />`; wire `<MentionPopover />` to the `<textarea>`; add paste-image + file-drop handlers; thread mentioned-user-ids through `createComment`.
-- `components/board/card/description-section.tsx` (or wherever description editor lives) — same treatment minus mention notifications.
+- `components/board/card/comments-section.tsx` — replace `<textarea>` with `<RichEditor>`; render comment body via `<RichView />`; thread mention-user-ids through `createComment` from the editor's `onMentionsChange`.
+- `components/board/card/description-section.tsx` (or wherever description editor lives) — same treatment minus mention notifications (no need to fan out notifications for description edits in v1).
+- `components/board/card/attachments-section.tsx` + `components/board/card/cover-picker.tsx` — refactor to consume `lib/uploads/upload-file.ts` (extraction is part of #51 / #52 tasks; deduplicates existing inline logic).
 - `actions/comments.ts` — accept `mentionedUserIds: string[]`, deduplicate, write rows into `notifications` (kind `comment.mention`). Likely already exists; verify.
 - `components/board/card/due-section.tsx` — swap `<input type="date">` for `<DatePicker />`.
 - `components/board/card/roadmap-dates-section.tsx` — same swap (two date inputs).
@@ -60,10 +68,13 @@ These are the only new deps; they're widely-used and stable.
 
 | Choice | Decision | Why |
 |---|---|---|
-| Editor type | `<textarea>` + markdown render (no WYSIWYG) | Cheap, predictable, Vim users happy. WYSIWYG out of scope. |
-| Markdown engine | `react-markdown@^10` + `remark-gfm` + `rehype-sanitize` | Vetted XSS sanitizer; no `dangerouslySetInnerHTML` directly. |
-| Mention syntax | `@[Display Name](user-id-uuid)` | Round-trips cleanly through markdown; the action parses tokens out. Visible-as-text fallback if the renderer skips. |
-| Mention popover anchor | base-ui `<Popover>` keyed to caret position via `getCaretCoordinates` (small util — vendor in `lib/textarea-caret.ts`) | Avoid heavy dep like `tribute.js`. |
+| Editor type | **WYSIWYG** via `@tiptap/react` + `@tiptap/starter-kit` | Live formatting (bold / italic / lists / headings / code) without exposing markdown syntax to users. Keyboard shortcuts come for free (`Cmd+B` etc). |
+| Storage format | Markdown (via `tiptap-markdown`) in the existing `cards.description` / `comments.body` text columns | No DB migration; comment bodies remain human-readable in DB tools / git diffs of dumps; falls back gracefully if the editor is ever swapped. |
+| Sanitization | `tiptap-markdown` round-trips through ProseMirror's schema, which only accepts whitelisted nodes/marks | No raw HTML injection paths. The render component (`<RichView>`) feeds markdown back through the same schema, dropping anything unrecognized. |
+| Mention extension | `@tiptap/extension-mention` + `@tiptap/suggestion` | Built-in caret tracking + popover wiring; no manual `getCaretCoordinates` plumbing. Configure with our workspace-profile candidates and a custom render. |
+| Mention syntax (storage) | `@[Display Name](user-id-uuid)` | Markdown serializer encodes Mention nodes to this token shape so the existing `extractMentions` parser server-side still works for notification fan-out. |
+| Image / link nodes | `@tiptap/extension-image` + `@tiptap/extension-link` | Native paste / drop / autolink support. Image src points to our Supabase Storage signed-public URL. |
+| Toolbar | Hidden by default; `Cmd+K` opens a single inline command line; bubble menu on selection for `B` / `I` / `S` / link | Keep the chrome minimal — matches our mono aesthetic. tiptap's `BubbleMenu` extension is stock. |
 | Date picker | `react-day-picker@^9` | Headless + mono-friendly. Existing libs (`@base-ui`, `lucide-react`) cover the popover trigger. |
 | Date value shape | ISO `yyyy-mm-dd` string (or `null`) | Same shape as the native `<input type="date">` it replaces — drop-in for callers. |
 
@@ -71,97 +82,376 @@ These are the only new deps; they're widely-used and stable.
 
 ## Tasks
 
-### #49 — Markdown rendering — 1.5 hr
+### #49 — WYSIWYG editor (tiptap) — 2.5 hr
 
 **Files:**
-- New: `lib/markdown/render.ts`
+- New: `components/ui/rich-editor.tsx`, `components/ui/rich-view.tsx`
 - Modified: `components/board/card/comments-section.tsx`, description editor.
 
 #### Step 1 — Add deps
 
 ```bash
-npm install react-markdown remark-gfm rehype-sanitize
+npm install @tiptap/react @tiptap/pm @tiptap/starter-kit \
+  @tiptap/extension-link @tiptap/extension-image \
+  @tiptap/extension-placeholder @tiptap/extension-mention \
+  @tiptap/suggestion tippy.js tiptap-markdown
 ```
 
-#### Step 2 — Write the renderer
+(`@tiptap/pm` is the ProseMirror peer dep. `tippy.js` is the canonical popover positioning library used by the Mention example.)
+
+#### Step 2 — Build `<RichEditor>`
 
 ```tsx
-// lib/markdown/render.ts
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+// components/ui/rich-editor.tsx
+"use client";
+import { useEditor, EditorContent, BubbleMenu } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Link from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
+import Placeholder from "@tiptap/extension-placeholder";
+import { Markdown } from "tiptap-markdown";
+import { useEffect, useMemo, useRef } from "react";
+import { mentionExtension } from "./rich-editor-mention"; // Task #50
+import { uploadFileForCard } from "@/lib/uploads/upload-file"; // Task #52
 
-// Allow our `@[Name](userId)` mention syntax to render as a `<span>` with
-// a stable className. Sanitize otherwise — no inline HTML, no <script>.
-const schema = {
-  ...defaultSchema,
-  attributes: {
-    ...defaultSchema.attributes,
-    span: [...(defaultSchema.attributes?.span ?? []), ["data-mention", true], ["data-user-id", true]],
-  },
+export type RichEditorProps = {
+  value: string; // markdown
+  onChange: (markdown: string) => void;
+  /** Called when the set of mention user-ids in the document changes. */
+  onMentionsChange?: (userIds: string[]) => void;
+  /** Card id is required so paste / drop can upload to /api/upload. */
+  cardId: string;
+  placeholder?: string;
+  disabled?: boolean;
+  testId?: string;
+  /** Pass workspace profiles in for mention typeahead. */
+  mentionCandidates: { userId: string; displayName: string }[];
 };
 
-export function MarkdownView({ source }: { source: string }) {
+export function RichEditor({
+  value,
+  onChange,
+  onMentionsChange,
+  cardId,
+  placeholder = "Write…",
+  disabled,
+  testId = "rich-editor",
+  mentionCandidates,
+}: RichEditorProps) {
+  // Stable callbacks via refs so editor extension config doesn't re-init.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const onMentionsChangeRef = useRef(onMentionsChange);
+  onMentionsChangeRef.current = onMentionsChange;
+  const candidatesRef = useRef(mentionCandidates);
+  candidatesRef.current = mentionCandidates;
+
+  const extensions = useMemo(
+    () => [
+      StarterKit.configure({
+        // Disable headings beyond h3 (mono palette doesn't differentiate).
+        heading: { levels: [1, 2, 3] },
+      }),
+      Link.configure({
+        openOnClick: false, // we render via bubble menu / Cmd+click
+        autolink: true,
+        HTMLAttributes: {
+          class: "underline underline-offset-2 hover:text-fg",
+          rel: "noopener noreferrer",
+          target: "_blank",
+        },
+      }),
+      Image.configure({
+        inline: false,
+        allowBase64: false, // we always upload through /api/upload
+      }),
+      Placeholder.configure({ placeholder }),
+      Markdown.configure({
+        // Round-trip markdown so storage shape matches today's text columns.
+        html: false,
+        tightLists: true,
+        bulletListMarker: "-",
+        linkify: true,
+        breaks: true,
+        transformPastedText: true,
+        transformCopiedText: true,
+      }),
+      mentionExtension({ candidatesRef }),
+    ],
+    [placeholder],
+  );
+
+  const editor = useEditor({
+    extensions,
+    editable: !disabled,
+    content: value, // markdown — tiptap-markdown's `setContent` parses on init
+    immediatelyRender: false, // SSR-safe (Next.js 15 App Router)
+    onUpdate: ({ editor }) => {
+      // tiptap-markdown adds `editor.storage.markdown.getMarkdown()`.
+      const md = (
+        editor.storage.markdown as { getMarkdown: () => string }
+      ).getMarkdown();
+      onChangeRef.current(md);
+      if (onMentionsChangeRef.current) {
+        const ids = new Set<string>();
+        editor.state.doc.descendants((node) => {
+          if (node.type.name === "mention") {
+            const id = node.attrs.id as string | undefined;
+            if (id) ids.add(id);
+          }
+        });
+        onMentionsChangeRef.current([...ids]);
+      }
+    },
+    editorProps: {
+      attributes: {
+        // Tailwind prose for typography; mono-friendly overrides via globals.
+        class:
+          "prose prose-sm prose-invert max-w-none focus:outline-none min-h-[6rem] py-2",
+        "data-testid": testId,
+      },
+      handlePaste: (view, event) => {
+        // #51 — paste image. Walk clipboard, upload, insert image node.
+        for (const item of event.clipboardData?.items ?? []) {
+          if (item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (!file) continue;
+            event.preventDefault();
+            void (async () => {
+              try {
+                const { url } = await uploadFileForCard(cardId, file);
+                view.dispatch(
+                  view.state.tr.replaceSelectionWith(
+                    view.state.schema.nodes.image.create({
+                      src: url,
+                      alt: file.name,
+                    }),
+                  ),
+                );
+              } catch (err) {
+                console.error("paste-image upload failed", err);
+              }
+            })();
+            return true;
+          }
+        }
+        return false;
+      },
+      handleDrop: (view, event) => {
+        // #52 — file drop. Same upload flow.
+        const files = event.dataTransfer?.files;
+        if (!files || files.length === 0) return false;
+        event.preventDefault();
+        const pos = view.posAtCoords({
+          left: event.clientX,
+          top: event.clientY,
+        })?.pos;
+        void (async () => {
+          for (const file of files) {
+            try {
+              const { url } = await uploadFileForCard(cardId, file);
+              const isImage = file.type.startsWith("image/");
+              const node = isImage
+                ? view.state.schema.nodes.image.create({
+                    src: url,
+                    alt: file.name,
+                  })
+                : view.state.schema.text(file.name, [
+                    view.state.schema.marks.link.create({ href: url }),
+                  ]);
+              const tr =
+                pos != null
+                  ? view.state.tr.insert(pos, node)
+                  : view.state.tr.replaceSelectionWith(node);
+              view.dispatch(tr);
+            } catch (err) {
+              console.error("drop upload failed", err);
+            }
+          }
+        })();
+        return true;
+      },
+    },
+  });
+
+  // Reflect external `value` changes (e.g. parent reset on submit).
+  useEffect(() => {
+    if (!editor) return;
+    const current = (
+      editor.storage.markdown as { getMarkdown: () => string }
+    ).getMarkdown();
+    if (current !== value) editor.commands.setContent(value, false);
+  }, [editor, value]);
+
+  if (!editor) return null;
   return (
-    <div className="prose prose-invert max-w-none text-sm leading-relaxed">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[[rehypeSanitize, schema]]}
-        components={{
-          // Strip raw <a> targeting other origins; keep simple links.
-          a: ({ children, href, ...rest }) => (
-            <a
-              {...rest}
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-2 hover:text-fg"
+    <div
+      data-testid={`${testId}-wrap`}
+      className="rounded-md border border-hairline bg-[color:var(--surface)] px-3"
+    >
+      <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
+        <div className="flex items-center gap-1 rounded-md border border-hairline bg-[color:var(--surface-strong)] px-1 py-0.5 shadow-lg">
+          {(
+            [
+              { name: "B", cmd: () => editor.chain().focus().toggleBold().run(), active: editor.isActive("bold") },
+              { name: "I", cmd: () => editor.chain().focus().toggleItalic().run(), active: editor.isActive("italic") },
+              { name: "S", cmd: () => editor.chain().focus().toggleStrike().run(), active: editor.isActive("strike") },
+              { name: "</>", cmd: () => editor.chain().focus().toggleCode().run(), active: editor.isActive("code") },
+              {
+                name: "Link",
+                cmd: () => {
+                  const url = window.prompt("URL");
+                  if (!url) return;
+                  editor.chain().focus().setLink({ href: url }).run();
+                },
+                active: editor.isActive("link"),
+              },
+            ] as const
+          ).map((b) => (
+            <button
+              key={b.name}
+              type="button"
+              data-testid={`rich-bubble-${b.name.toLowerCase()}`}
+              onClick={b.cmd}
+              className={`mono-meta-sm px-1.5 py-0.5 rounded hover:bg-fg/10 ${
+                b.active ? "bg-fg/15 text-fg" : "text-fg-muted"
+              }`}
             >
-              {children}
-            </a>
-          ),
-        }}
-      >
-        {source}
-      </ReactMarkdown>
+              {b.name}
+            </button>
+          ))}
+        </div>
+      </BubbleMenu>
+      <EditorContent editor={editor} />
     </div>
   );
 }
 ```
 
-#### Step 3 — Wire into comments
+#### Step 3 — Build `<RichView>` (read-only render)
 
-In `components/board/card/comments-section.tsx`, replace the plain-text comment body render with `<MarkdownView source={comment.body} />`. Comment input stays a `<textarea>` — users type markdown, see preview on submit.
+```tsx
+// components/ui/rich-view.tsx
+"use client";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Link from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
+import { Markdown } from "tiptap-markdown";
+import Mention from "@tiptap/extension-mention";
+import { useEffect, useMemo } from "react";
 
-Add a "Preview" toggle next to the submit button: shows the same `<MarkdownView>` over the typed body before send.
+export function RichView({ source }: { source: string }) {
+  const extensions = useMemo(
+    () => [
+      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      Link.configure({
+        openOnClick: true,
+        HTMLAttributes: {
+          class: "underline underline-offset-2 hover:text-fg",
+          rel: "noopener noreferrer",
+          target: "_blank",
+        },
+      }),
+      Image.configure({ inline: false, allowBase64: false }),
+      Mention.configure({
+        HTMLAttributes: {
+          "data-mention": "true",
+          class: "rounded bg-fg/10 px-1 mono-meta-sm",
+        },
+      }),
+      Markdown.configure({ html: false }),
+    ],
+    [],
+  );
+  const editor = useEditor({
+    extensions,
+    editable: false,
+    content: source,
+    immediatelyRender: false,
+  });
+  useEffect(() => {
+    if (editor) editor.commands.setContent(source, false);
+  }, [editor, source]);
+  if (!editor) return null;
+  return (
+    <div className="prose prose-sm prose-invert max-w-none">
+      <EditorContent editor={editor} />
+    </div>
+  );
+}
+```
 
-#### Step 4 — Wire into description editor
+#### Step 4 — Wire into comments
 
-Same pattern. Description renders as `<MarkdownView />` when not editing; click to edit reveals the textarea.
+In `components/board/card/comments-section.tsx`:
 
-#### Step 5 — Verify
+```tsx
+// Replace the existing <textarea> block with:
+const [body, setBody] = useState("");
+const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
+const candidates = useMemo(
+  () => boardProfiles.map((p) => ({ userId: p.id, displayName: p.displayName })),
+  [boardProfiles],
+);
+
+// …
+<RichEditor
+  value={body}
+  onChange={setBody}
+  onMentionsChange={setMentionedUserIds}
+  cardId={cardId}
+  placeholder="Add a comment…"
+  testId="comment-editor"
+  mentionCandidates={candidates}
+/>
+<Button
+  type="button"
+  onClick={() => {
+    void createComment({ cardId, body, mentionedUserIds });
+    setBody("");
+    setMentionedUserIds([]);
+  }}
+  disabled={!body.trim()}
+  data-testid="comment-submit"
+>
+  Comment
+</Button>
+
+// And replace the body render with:
+<RichView source={comment.body} />
+```
+
+#### Step 5 — Wire into description editor
+
+Same pattern. The description editor is currently click-to-edit → textarea → save. Replace with `<RichEditor>` mounted in-place; an explicit `Save` button writes the markdown via `updateCard({ id, description: body })`.
+
+(No mention notifications for description edits in v1.)
+
+#### Step 6 — Verify
 
 - `npx tsc --noEmit`
-- Visit a card; type `**bold** and a [link](https://example.com)` in a comment; preview shows formatted; submit; rendered correctly.
-- XSS smoke: comment body `<script>alert(1)</script>` renders as escaped text, no script execution.
+- Visit a card; comment with **bold**, *italic*, `Cmd+B` toggle works; bubble menu appears on text selection.
+- XSS smoke: paste `<script>alert(1)</script>` — tiptap parses as plain text (script tag isn't in the schema), no execution.
+- Reload — markdown round-trips, formatting preserved.
 
 #### Commit
 
 ```
-feat(forms): #49 markdown rendering for descriptions + comments
+feat(forms): #49 WYSIWYG editor (tiptap) for descriptions + comments
 ```
 
 ---
 
-### #50 — Mention autocomplete — 2 hr
+### #50 — Mention autocomplete (tiptap-mention) — 2 hr
 
 **Files:**
-- New: `lib/markdown/mentions.ts` (extract + replace tokens)
-- New: `tests/unit/markdown-mentions.test.ts` (TDD)
-- New: `components/ui/mention-popover.tsx`
-- New: `lib/textarea-caret.ts` (vendored caret-coords util)
-- Modified: `components/board/card/comments-section.tsx`
-- Modified: `actions/comments.ts` (already accepts mentionedUserIds — verify)
+- New: `components/ui/rich-editor-mention.tsx` (tiptap Mention extension config + suggestion render)
+- New: `lib/markdown/mentions.ts` (server-side parser for notification fan-out — kept because the action layer still needs it)
+- New: `tests/unit/markdown-mentions.test.ts` (TDD for the parser)
+- Modified: `actions/comments.ts` (verify it accepts `mentionedUserIds` — extend if not)
+
+The visible UI plumbing — caret tracking, suggestion popover, keyboard navigation — is all handled by `@tiptap/extension-mention` + `@tiptap/suggestion` + `tippy.js`. We don't write a custom popover.
 
 #### Step 1 — TDD: extractMentions / replaceMentionTokens
 
@@ -232,68 +522,57 @@ export function replaceMentionTokens(body: string): string {
 }
 ```
 
-#### Step 3 — Vendor caret-coords helper
-
-Vendor a small public-domain function (e.g. textarea-caret-position by Jonathan Ong, ~80 lines) into `lib/textarea-caret.ts`. Exposes `getCaretCoordinates(textarea, position): { top: number; left: number; height: number }`.
-
-#### Step 4 — Build `<MentionPopover>`
+#### Step 3 — Build the Mention extension config
 
 ```tsx
-// components/ui/mention-popover.tsx
+// components/ui/rich-editor-mention.tsx
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import Mention from "@tiptap/extension-mention";
+import { ReactRenderer } from "@tiptap/react";
+import tippy, { type Instance as TippyInstance } from "tippy.js";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import type { MutableRefObject } from "react";
+import type { SuggestionProps, SuggestionKeyDownProps } from "@tiptap/suggestion";
 
-export type MentionCandidate = {
-  userId: string;
-  displayName: string;
-};
+export type MentionCandidate = { userId: string; displayName: string };
 
-export function MentionPopover({
-  candidates,
-  query,
-  anchor,
-  onPick,
-  onCancel,
-}: {
-  candidates: MentionCandidate[];
-  query: string;
-  anchor: { top: number; left: number };
-  onPick: (c: MentionCandidate) => void;
-  onCancel: () => void;
-}) {
-  const filtered = useMemo(
-    () =>
-      candidates
-        .filter((c) =>
-          c.displayName.toLowerCase().includes(query.toLowerCase()),
-        )
-        .slice(0, 8),
-    [candidates, query],
-  );
+const MentionList = forwardRef<
+  { onKeyDown: (e: SuggestionKeyDownProps) => boolean },
+  SuggestionProps<MentionCandidate>
+>(function MentionList({ items, command }, ref) {
   const [active, setActive] = useState(0);
-  useEffect(() => {
-    setActive(0);
-  }, [query]);
+  useEffect(() => setActive(0), [items]);
 
-  // Keyboard handlers exposed via ref so the host textarea can forward keys.
-  // The caller wires window keyboard listeners while the popover is open.
+  useImperativeHandle(ref, () => ({
+    onKeyDown: ({ event }) => {
+      if (event.key === "ArrowUp") {
+        setActive((a) => (a - 1 + items.length) % Math.max(1, items.length));
+        return true;
+      }
+      if (event.key === "ArrowDown") {
+        setActive((a) => (a + 1) % Math.max(1, items.length));
+        return true;
+      }
+      if (event.key === "Enter") {
+        const item = items[active];
+        if (item) command({ id: item.userId, label: item.displayName });
+        return true;
+      }
+      return false;
+    },
+  }));
 
-  if (filtered.length === 0) return null;
+  if (items.length === 0) return null;
   return (
     <div
       data-testid="mention-popover"
       role="listbox"
-      style={{
-        position: "absolute",
-        top: anchor.top + 24,
-        left: anchor.left,
-        zIndex: 50,
-      }}
       className="w-64 rounded-md border border-hairline bg-[color:var(--surface-strong)] shadow-2xl py-1"
     >
-      {filtered.map((c, i) => (
+      {items.map((c, i) => (
         <button
           key={c.userId}
+          type="button"
           role="option"
           aria-selected={i === active}
           data-testid="mention-popover-item"
@@ -302,182 +581,178 @@ export function MentionPopover({
             i === active ? "bg-fg/15" : ""
           }`}
           onMouseEnter={() => setActive(i)}
-          onClick={() => onPick(c)}
+          onClick={() => command({ id: c.userId, label: c.displayName })}
         >
           {c.displayName}
         </button>
       ))}
     </div>
   );
+});
+
+export function mentionExtension({
+  candidatesRef,
+}: {
+  candidatesRef: MutableRefObject<MentionCandidate[]>;
+}) {
+  return Mention.configure({
+    HTMLAttributes: {
+      "data-mention": "true",
+      class: "rounded bg-fg/10 px-1 mono-meta-sm",
+    },
+    // Markdown serialization: tiptap-markdown sees `mention` nodes and we
+    // emit the `@[Name](id)` token via the renderText fallback.
+    renderText({ node }) {
+      return `@[${node.attrs.label}](${node.attrs.id})`;
+    },
+    suggestion: {
+      char: "@",
+      items: ({ query }) =>
+        candidatesRef.current
+          .filter((c) =>
+            c.displayName.toLowerCase().includes(query.toLowerCase()),
+          )
+          .slice(0, 8),
+      render: () => {
+        let component: ReactRenderer<{ onKeyDown: (e: SuggestionKeyDownProps) => boolean }> | null = null;
+        let popup: TippyInstance | null = null;
+        return {
+          onStart: (props) => {
+            component = new ReactRenderer(MentionList, {
+              props,
+              editor: props.editor,
+            });
+            popup = tippy("body", {
+              getReferenceClientRect: props.clientRect as () => DOMRect,
+              appendTo: () => document.body,
+              content: component.element,
+              showOnCreate: true,
+              interactive: true,
+              trigger: "manual",
+              placement: "bottom-start",
+            })[0];
+          },
+          onUpdate(props) {
+            component?.updateProps(props);
+            popup?.setProps({ getReferenceClientRect: props.clientRect as () => DOMRect });
+          },
+          onKeyDown(props) {
+            if (props.event.key === "Escape") {
+              popup?.hide();
+              return true;
+            }
+            return component?.ref?.onKeyDown(props) ?? false;
+          },
+          onExit() {
+            popup?.destroy();
+            component?.destroy();
+          },
+        };
+      },
+    },
+  });
 }
 ```
 
-#### Step 5 — Wire into comments textarea
+This is the canonical pattern from tiptap's docs — we wire it once and the editor handles caret tracking, popover positioning, keyboard navigation, and node insertion.
 
-In `comments-section.tsx`:
+#### Step 4 — Markdown serialization sanity
+
+`tiptap-markdown` ships with serializer hooks for default nodes. The Mention node isn't default; we emit the `@[Name](id)` token via `renderText` (above). On parse, tiptap-markdown re-reads the markdown — but `@[…](…)` looks like a regular link to its parser, so we need to teach the parser to recognize Mention syntax.
+
+The cleanest fix: serialize Mention as `[@Display Name](mention://user-id)`. Then on parse, a small post-processor walks Link marks whose href starts with `mention://`, converts them back to Mention nodes.
+
+Add a small helper in `components/ui/rich-editor-mention.tsx`:
+
+```ts
+// Called by the parent after `setContent` to convert the parsed link marks
+// back into Mention nodes. tiptap-markdown does the heavy lifting, we just
+// post-process the tree.
+export function rehydrateMentions(editor: Editor) {
+  const tr = editor.state.tr;
+  let modified = false;
+  editor.state.doc.descendants((node, pos) => {
+    if (!node.isText) return;
+    const linkMark = node.marks.find(
+      (m) =>
+        m.type.name === "link" &&
+        typeof m.attrs.href === "string" &&
+        m.attrs.href.startsWith("mention://"),
+    );
+    if (!linkMark) return;
+    const userId = (linkMark.attrs.href as string).slice("mention://".length);
+    const display = node.text!.replace(/^@/, "");
+    const mentionNode = editor.schema.nodes.mention.create({
+      id: userId,
+      label: display,
+    });
+    tr.replaceWith(pos, pos + node.nodeSize, mentionNode);
+    modified = true;
+  });
+  if (modified) editor.view.dispatch(tr);
+}
+```
+
+And update the `renderText` to emit the bracket-link form:
+
+```ts
+renderText({ node }) {
+  return `[@${node.attrs.label}](mention://${node.attrs.id})`;
+},
+```
+
+Call `rehydrateMentions(editor)` in `<RichEditor>`'s mount effect after the initial `setContent`. (Same call from `<RichView>`.)
+
+> If the round-trip turns out fragile in practice (e.g. tiptap-markdown drops the link mark on whitespace boundaries), fall back to storing as `@[Name](userId)` plain-text and let the Mention extension's input rule re-create the node. Document the choice in the commit body.
+
+#### Step 5 — Wire candidates into `<RichEditor>` host
+
+In comments-section.tsx (or description-section.tsx), pass workspace + board profiles:
 
 ```tsx
-const [mentionState, setMentionState] = useState<{
-  query: string;
-  anchor: { top: number; left: number };
-} | null>(null);
-
-function onChangeBody(e: React.ChangeEvent<HTMLTextAreaElement>) {
-  const value = e.target.value;
-  setBody(value);
-  // Detect the active "@" token: scan back from the caret until we hit
-  // whitespace OR a closing `)` (the tail of a previous mention token).
-  const caret = e.target.selectionStart ?? value.length;
-  const before = value.slice(0, caret);
-  const m = /(?:^|\s)@(\w*)$/.exec(before);
-  if (m) {
-    const coords = getCaretCoordinates(e.target, caret);
-    setMentionState({
-      query: m[1],
-      anchor: { top: coords.top, left: coords.left },
-    });
-  } else {
-    setMentionState(null);
-  }
-}
-
-function pickMention(c: MentionCandidate) {
-  // Replace the active `@…` partial in `body` with `@[Name](id) `.
-  const before = body.slice(0, /* caret */).replace(/@(\w*)$/, "");
-  const after = body.slice(/* caret */);
-  setBody(`${before}@[${c.displayName}](${c.userId}) ${after}`);
-  setMentionState(null);
-  textareaRef.current?.focus();
-}
+const boardProfiles = useBoardStore((s) => s.boardProfiles);
+const candidates = useMemo(
+  () => boardProfiles.map((p) => ({ userId: p.id, displayName: p.displayName })),
+  [boardProfiles],
+);
+// …
+<RichEditor mentionCandidates={candidates} … />
 ```
 
-Render `<MentionPopover candidates={boardProfiles.map(...)} ... />` when `mentionState !== null`.
-
-Wire arrow-up / arrow-down / Enter / Escape on the textarea to drive the popover (when open). Reuse popover's exposed callbacks.
+The editor reads `candidatesRef.current` on every keystroke (already wired in Task #49).
 
 #### Step 6 — Action wiring
 
-`actions/comments.ts`'s `createComment` already supports `mentionedUserIds: string[]` (verify against the existing signature). Pass `extractMentions(body).map((m) => m.userId)` from the client. The action writes `notifications` rows for each (kind `comment.mention`).
+`actions/comments.ts`'s `createComment` already supports `mentionedUserIds: string[]` (verify against the existing signature). The editor exposes `onMentionsChange` which provides the deduped list of user-ids in the doc — pass that straight in:
 
-If the action signature differs, extend it: parse mentions server-side via the same `extractMentions` helper (re-exported from `@/lib/markdown/mentions`).
+```tsx
+void createComment({ cardId, body, mentionedUserIds });
+```
+
+If the action signature differs, extend it. As a defense-in-depth measure, the action ALSO re-parses the body server-side via `extractMentions(body)` and merges the union — this catches a tampered client that sends an empty list while the body contains tokens.
 
 #### Step 7 — Verify
 
-- `npm run test:unit` (5 new mention tests pass).
-- Manual: open card → comment textarea → type `@A` → popover shows; pick → `@[Ada](id) ` inserted; submit → comment renders with `@Ada` highlighted span; Ada's inbox shows the mention notification.
+- `npm run test:unit` (mention parser tests pass).
+- Manual: open card → editor → type `@A` → popover shows; arrow keys navigate; Enter selects; `@Ada` rendered as a styled chip in the editor; submit → comment renders with the same chip; Ada's inbox shows the mention notification.
 
 #### Commit
 
 ```
-feat(forms): #50 @mention autocomplete + notifications
+feat(forms): #50 @mention autocomplete via tiptap-mention + notifications
 ```
 
 ---
 
-### #51 — Paste image — 1 hr
+### #51 — Paste image (tiptap `handlePaste`) — 30 min
 
 **Files:**
-- Modified: `components/board/card/comments-section.tsx`, description editor
+- Modified (already done in #49 via `editorProps.handlePaste`): `components/ui/rich-editor.tsx`
+- New: `lib/uploads/upload-file.ts` (shared upload helper — needed by tiptap's paste hook)
 
-The existing `/api/upload` endpoint (verified at `app/api/upload/route.ts`) already returns a signed-upload URL + `path`. Reuse its flow.
+The `handlePaste` editorProp wired in Task #49 walks `event.clipboardData.items`, finds `image/*` entries, uploads via `uploadFileForCard`, and inserts an Image node at the caret. The actual code is already in the #49 listing — this task is just **landing the shared upload helper** so the wired-in code isn't a forward reference.
 
-#### Step 1 — Paste handler
-
-```tsx
-async function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-  for (const item of e.clipboardData.items) {
-    if (item.type.startsWith("image/")) {
-      const file = item.getAsFile();
-      if (!file) continue;
-      e.preventDefault();
-      const ext = file.type.split("/")[1] ?? "png";
-      const filename = `paste-${Date.now()}.${ext}`;
-      try {
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cardId, filename }),
-        });
-        if (!res.ok) throw new Error(`upload init ${res.status}`);
-        const { signedUrl, token, path } = await res.json();
-        const supa = createSupabaseBrowser();
-        const up = await supa.storage
-          .from("card-attachments")
-          .uploadToSignedUrl(path, token, file);
-        if (up.error) throw up.error;
-        // Use the public-ish path (signed-read). The renderer will
-        // sign-on-demand via Supabase's getPublicUrl / createSignedUrl
-        // depending on bucket policy.
-        const url = supa.storage
-          .from("card-attachments")
-          .getPublicUrl(path).data.publicUrl;
-        // Insert markdown image at caret position.
-        insertAtCaret(`![${file.name}](${url})\n`);
-        toast.success("Image pasted");
-      } catch (err) {
-        toast.error((err as Error).message);
-      }
-      return;
-    }
-  }
-}
-```
-
-(Adapt to the existing signed-URL shape used by `attachments-section.tsx:32` — the cited code already uses the PUT-to-signed-URL path. Mirror it for consistency.)
-
-`insertAtCaret(text: string)` — small helper that takes the textarea ref + current `body` state, splices the text at `selectionStart`, sets the new body, restores caret position.
-
-#### Step 2 — Verify
-
-- Open a card → comment textarea → screenshot tool / paste image from clipboard → image appears as markdown reference; preview renders the image.
-- Manual smoke; no new automated test (clipboard data is awkward in Playwright).
-
-#### Commit
-
-```
-feat(forms): #51 paste image into comment / description
-```
-
----
-
-### #52 — File drop — 1 hr
-
-**Files:**
-- Modified: `components/board/card/comments-section.tsx`, description editor
-
-#### Step 1 — Drop handlers
-
-```tsx
-function onDragOver(e: React.DragEvent<HTMLTextAreaElement>) {
-  if (e.dataTransfer.types.includes("Files")) {
-    e.preventDefault();
-    setDropHover(true);
-  }
-}
-function onDragLeave() {
-  setDropHover(false);
-}
-async function onDrop(e: React.DragEvent<HTMLTextAreaElement>) {
-  e.preventDefault();
-  setDropHover(false);
-  for (const file of e.dataTransfer.files) {
-    // …same upload flow as paste handler…
-    const isImage = file.type.startsWith("image/");
-    const url = await uploadAndGetUrl(file); // shared helper, extracted from #51
-    insertAtCaret(
-      isImage
-        ? `![${file.name}](${url})\n`
-        : `[${file.name}](${url})\n`,
-    );
-  }
-}
-```
-
-Visual hint: when `dropHover` is true, show a 2px ring around the textarea (`ring-2 ring-fg/50`).
-
-#### Step 2 — Extract upload helper
-
-Pull the upload logic from `attachments-section.tsx` and the paste handler in #51 into `lib/uploads/upload-file.ts`:
+#### Step 1 — Extract `lib/uploads/upload-file.ts`
 
 ```ts
 // lib/uploads/upload-file.ts
@@ -512,17 +787,69 @@ export async function uploadFileForCard(
 }
 ```
 
-Refactor `attachments-section.tsx` to consume this helper. Bonus: dedupes existing duplication between attachments-section and cover-picker.
+#### Step 2 — Refactor `attachments-section.tsx` + `cover-picker.tsx`
 
-#### Step 3 — Verify
+Both currently inline the same upload logic. Replace each with:
 
-- Drag a file onto a comment textarea; markdown link appears; preview renders.
-- Drag an image onto a description; markdown image appears.
+```ts
+import { uploadFileForCard } from "@/lib/uploads/upload-file";
+// …
+const { path, sizeBytes, mime } = await uploadFileForCard(cardId, file);
+const row = await registerAttachment({ cardId, storagePath: path, filename: file.name, mime, sizeBytes });
+```
+
+Verifies: existing attach-via-button + cover-image-upload still work end-to-end.
+
+#### Step 3 — Verify paste path
+
+- Open card → editor → screenshot tool / clipboard paste of an image → tiptap inserts an Image node; the markdown round-trip stores `![filename](signed-url)`.
+- No new automated test (clipboard data is awkward in Playwright; covered by E2E only via mock or skipped).
 
 #### Commit
 
 ```
-feat(forms): #52 drag-drop file upload + shared upload helper
+feat(forms): #51 paste image via tiptap handlePaste + shared upload helper
+```
+
+---
+
+### #52 — File drop (tiptap `handleDrop`) — 30 min
+
+**Files:**
+- Modified (already done in #49 via `editorProps.handleDrop`): `components/ui/rich-editor.tsx`
+
+This task is fully wired by Task #49. Listing it separately for queue tracking + commit cadence.
+
+#### Step 1 — Verify the drop path
+
+- Drag a file from the OS onto the editor → `handleDrop` fires → `uploadFileForCard` → image: insert Image node; non-image: insert text with Link mark.
+- Drop position uses `view.posAtCoords` so the inserted node lands where the user dropped, not at the prior caret.
+- Multiple files in one drop: each is uploaded sequentially (acceptable for v1; parallel upload is a v2 polish).
+
+#### Step 2 — Visual drop indicator (optional, ≤ 5 min)
+
+tiptap's `EditorContent` accepts `onDragEnter` / `onDragLeave` props. Add a `data-drop-active` attribute:
+
+```tsx
+const [dropActive, setDropActive] = useState(false);
+// …
+<div
+  data-drop-active={dropActive ? "true" : undefined}
+  onDragEnter={(e) => {
+    if (e.dataTransfer.types.includes("Files")) setDropActive(true);
+  }}
+  onDragLeave={() => setDropActive(false)}
+  onDrop={() => setDropActive(false)}
+  className="… data-[drop-active=true]:ring-2 data-[drop-active=true]:ring-fg/50"
+>
+  <EditorContent editor={editor} />
+</div>
+```
+
+#### Commit
+
+```
+feat(forms): #52 drop file (image / link) via tiptap handleDrop
 ```
 
 ---
@@ -723,14 +1050,15 @@ test(e2e): forms — markdown, mention, date picker, file drop
 
 ## Self-Review Notes
 
-- **Spec coverage:** all 5 items have dedicated tasks. #51 paste defers automated test, documented.
-- **New dependencies:** `react-markdown`, `remark-gfm`, `rehype-sanitize`, `react-day-picker`, `date-fns`. All widely-used; total bundle delta ≈ 60 KB gzipped.
-- **Imports verified:** `createComment` already exists at `actions/comments.ts:6`, signed-upload at `app/api/upload/route.ts`. `useBoardStore.boardProfiles` confirmed.
-- **XSS:** `rehype-sanitize` with `defaultSchema` strips `<script>`, `<iframe>`, on-event handlers. The mention-token render path uses a controlled `<span>` with two whitelisted attributes (`data-mention`, `data-user-id`).
-- **Caret-coords vendoring:** the upstream library is MIT and ~80 lines. We vendor rather than depend to avoid pulling in a `package`-style dep that hasn't been touched in 4+ years.
-- **Markdown editor vs WYSIWYG:** stayed with textarea + render. WYSIWYG (e.g. tiptap) would also collide with the mention popover's caret math — mention insertion in tiptap requires a custom node type. Defer to v2 if user asks.
+- **Spec coverage:** all 5 items have dedicated tasks. #51 paste defers automated test (clipboard data is hard to fake in Playwright); documented.
+- **New dependencies:** `@tiptap/react`, `@tiptap/pm`, `@tiptap/starter-kit`, `@tiptap/extension-link`, `@tiptap/extension-image`, `@tiptap/extension-placeholder`, `@tiptap/extension-mention`, `@tiptap/suggestion`, `tippy.js`, `tiptap-markdown`, `react-day-picker`, `date-fns`. All widely-used; total bundle delta ≈ 130 KB gzipped (tiptap + ProseMirror is the bulk; tree-shakable).
+- **Imports verified:** `createComment` already exists at `actions/comments.ts:6`, signed-upload at `app/api/upload/route.ts`. `useBoardStore.boardProfiles` confirmed. tiptap's `BubbleMenu` + `Mention` + `Image` are the canonical extension exports.
+- **XSS:** tiptap parses input through ProseMirror's schema, which only accepts whitelisted nodes / marks. Raw HTML / `<script>` simply doesn't have a target type and is dropped. `<RichView>` uses the same schema in `editable: false` mode — same defenses. Image src URLs go through Supabase Storage; no user-supplied `data:` / `javascript:` URIs are emitted by the editor (image node config disables `allowBase64`).
+- **WYSIWYG choice (locked):** tiptap over react-markdown + textarea. Live formatting is the user-facing improvement (Cmd+B works, bubble menu on selection); markdown round-trip via `tiptap-markdown` keeps the storage shape unchanged so no DB migration is needed. The trade-off is bundle size (≈ 130 KB vs ≈ 60 KB) and one round-trip helper for Mention nodes (`rehydrateMentions`); both are acceptable.
+- **Mention node ↔ markdown round-trip:** Mention serializes to `[@Display Name](mention://userId)`, parses as a Link mark, and `rehydrateMentions` walks the tree on init/update to recreate Mention nodes. Tested by the unit suite via the parser helpers (the editor itself isn't unit-testable without jsdom, so the round-trip is exercised at E2E only).
 - **Date picker vs native:** native `<input type="date">` keeps keyboard accessibility for free. The DatePicker primitive must add `aria-label` + escape-to-close + arrow-key navigation (react-day-picker handles this) to maintain parity. Verify in γ-F a11y plan.
 - **Roadmap bar inline date inputs:** flagged — only replace if the popover doesn't interact badly with the overflow menu's positioning. If skipped, document in concerns.md.
+- **SSR safety:** `useEditor` is configured with `immediatelyRender: false` (Next.js 15 App Router requirement; otherwise hydration mismatches because tiptap can't deterministically render the same content server-side without DOM).
 
 ---
 
@@ -738,12 +1066,12 @@ test(e2e): forms — markdown, mention, date picker, file drop
 
 | Task | Effort |
 |---|---|
-| #49 — markdown render | 1.5 hr |
-| #50 — mention autocomplete | 2 hr |
-| #51 — paste image | 1 hr |
-| #52 — file drop + extract upload helper | 1 hr |
+| #49 — WYSIWYG editor (tiptap + bubble menu + read-only view) | 2.5 hr |
+| #50 — mention extension (config + popover render + markdown round-trip) | 2 hr |
+| #51 — paste image (extract shared upload helper + refactor existing inline call sites) | 30 min |
+| #52 — file drop (already wired in #49; adds optional drop indicator) | 30 min |
 | #53 — date picker + 6 site swap | 1.5 hr |
 | E2E | 1 hr |
 | **Total** | **~8 hrs** subagent (~1 day) |
 
-(Slightly higher than the queue's "~6 hrs" estimate because #50 mention popover + #53 6-site swap add up. Real measure by the implementer; budget 8.)
+(Same total as the textarea-based plan, redistributed: #49 grows because tiptap setup is heavier, but #51/#52 shrink because tiptap's `handlePaste` / `handleDrop` editorProps cover the work that was previously a custom textarea handler. The queue's "~6 hr" estimate is unchanged in spirit; budget 8 to be safe.)
