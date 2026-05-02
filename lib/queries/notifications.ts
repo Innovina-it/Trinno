@@ -20,6 +20,7 @@ export type NotificationRow = {
   createdAt: Date;
   cardTitle: string | null;
   boardTitle: string | null;
+  workspaceId: string | null;
 };
 
 export async function listNotifications(
@@ -52,6 +53,7 @@ export async function listNotifications(
         createdAt: notifications.createdAt,
         cardTitle: cards.title,
         boardTitle: boards.title,
+        workspaceId: boards.workspaceId,
       })
       .from(notifications)
       .leftJoin(profiles, eq(profiles.id, notifications.actorUserId))

@@ -39,6 +39,7 @@ type N = {
   actorName: string | null;
   cardTitle: string | null;
   boardTitle: string | null;
+  workspaceId: string | null;
   readAt: Date | string | null;
   createdAt: Date | string;
 };
@@ -128,7 +129,11 @@ export function InboxList({
                 </span>{" "}
                 {n.relatedCardId && n.relatedBoardId ? (
                   <Link
-                    href={`/b/${n.relatedBoardId}/c/${n.relatedCardId}`}
+                    href={
+                      n.kind === "card.dates" && n.workspaceId
+                        ? `/w/${n.workspaceId}/roadmap?focus=${n.relatedCardId}`
+                        : `/b/${n.relatedBoardId}/c/${n.relatedCardId}`
+                    }
                     className="font-medium underline-offset-2 hover:underline"
                   >
                     {n.cardTitle ?? "card"}

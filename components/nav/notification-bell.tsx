@@ -20,6 +20,7 @@ type N = {
   actorName: string | null;
   cardTitle: string | null;
   boardTitle: string | null;
+  workspaceId: string | null;
   readAt: string | null;
   createdAt: string;
 };
@@ -157,7 +158,9 @@ export function NotificationBell({ userId }: { userId: string }) {
               <Link
                 href={
                   n.relatedCardId && n.relatedBoardId
-                    ? `/b/${n.relatedBoardId}/c/${n.relatedCardId}`
+                    ? n.kind === "card.dates" && n.workspaceId
+                      ? `/w/${n.workspaceId}/roadmap?focus=${n.relatedCardId}`
+                      : `/b/${n.relatedBoardId}/c/${n.relatedCardId}`
                     : "/inbox"
                 }
                 onClick={() => !n.readAt && markRead(n.id)}
