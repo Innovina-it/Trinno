@@ -627,3 +627,130 @@
 @utility pulse-ring {
   animation: pulse-ring 2.4s ease-out infinite;
 }
+
+/* -------------------------------------------------------------------------
+   Plan #16b-γ-Gantt C8 — Print stylesheet
+   --------------------------------------------------------------------------
+   Goal: when the user prints the roadmap (Cmd/Ctrl+P), produce a clean
+   landscape sheet that hides app chrome (top nav, header chips, filter bar,
+   mini-map, transient banners) and renders the canvas + bars + sprint
+   overlay full-width with original colors. Sprint bands stay because they
+   give the print useful temporal context.
+
+   We deliberately do NOT paginate per-quarter: the canvas uses absolute
+   positioning per-lane, so per-quarter page breaks would require wrapping
+   each quarter in its own block container — out of scope for a CSS-only
+   stylesheet. The browser will break wherever it pleases; we only ensure
+   individual lane label rows do not split mid-row via `break-inside: avoid`.
+   ------------------------------------------------------------------------ */
+@media print {
+  @page {
+    size: landscape;
+    margin: 1cm;
+  }
+
+  /* Page-level reset — kill the dark mesh + grain so everything prints on
+     paper white. The canvas itself preserves its own bg via
+     print-color-adjust below. */
+  html,
+  body {
+    background: white !important;
+    background-image: none !important;
+    color: black !important;
+  }
+  body::before,
+  body::after {
+    display: none !important;
+  }
+
+  /* Hide app chrome:
+     - The sticky top nav (a <header> in app/(app)/layout.tsx → TopNav).
+     - Roadmap header chips (zoom, live, critical, auto-cascade, jump, new
+       card, search, shortcuts trigger).
+     - Filter bar.
+     - Mini-map (static printout doesn't need a navigator).
+     - Transient overlays / banners (undo, error pane, tour, command palette,
+       quick-add dialog mount). */
+  header,
+  nav,
+  [data-testid="roadmap-zoom"],
+  [data-testid="roadmap-live"],
+  [data-testid="roadmap-critical-toggle"],
+  [data-testid="roadmap-auto-cascade-toggle"],
+  [data-testid="roadmap-jump-today"],
+  [data-testid="roadmap-jump-date"],
+  [data-testid="roadmap-new-card-trigger"],
+  [data-testid="roadmap-search"],
+  [data-testid="roadmap-shortcuts-trigger"],
+  [data-testid="roadmap-filter-bar"],
+  [data-testid="roadmap-mini-map"],
+  [data-testid="roadmap-parent-toggle"],
+  [data-testid="roadmap-bar-overflow"],
+  [data-testid="roadmap-bar-tooltip"],
+  [data-testid="roadmap-bar-menu"],
+  [data-testid="undo-banner"],
+  [data-testid="error-pane"],
+  [data-testid="error-pane-toggle"],
+  [role="dialog"],
+  [role="tooltip"] {
+    display: none !important;
+  }
+
+  /* The roadmap header strip is the first flex row inside `roadmap-view`
+     (siblings of `roadmap-grid` / `roadmap-empty`). The chip selectors above
+     hit every interactive element inside it, but the bare wrapper would
+     still leave whitespace. Collapse it. */
+  [data-testid="roadmap-view"] > div:first-child {
+    display: none !important;
+  }
+
+  /* Reset the app-shell <main> min-height that was set to fit the viewport
+     minus the (now hidden) nav. Without this the print canvas can be
+     forced to viewport height. */
+  main {
+    min-height: 0 !important;
+  }
+
+  /* Make the canvas fully printable:
+     - Scroller must allow content to overflow onto subsequent pages.
+     - Drop the rounded corners so paged content doesn't get clipped at
+       the boundary. */
+  [data-testid="roadmap-grid"] {
+    overflow: visible !important;
+    border-radius: 0 !important;
+  }
+  [data-testid="roadmap-scroller"] {
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+  }
+
+  /* Color fidelity: the dark theme + colored status bars must print as
+     designed. Without `print-color-adjust: exact` browsers default to
+     dropping backgrounds. */
+  [data-testid="roadmap-canvas"],
+  [data-testid="roadmap-canvas"] *,
+  [data-testid="roadmap-bar"],
+  [data-testid="roadmap-bar"] *,
+  [data-testid="roadmap-subtask-bar"],
+  [data-testid="sprint-overlay"],
+  [data-testid="sprint-overlay-band"] {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Lane label rows: avoid breaking a single lane label across pages.
+     The canvas itself is absolutely positioned per-lane so it cannot be
+     split row-wise via CSS — we accept the browser's default break
+     behavior there (see header note above). */
+  [data-testid="roadmap-grid"] > div:first-child > div {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Lane title links should print as plain text — no underline-on-print
+     noise. */
+  [data-testid="roadmap-lane-title-link"] {
+    text-decoration: none !important;
+  }
+}
