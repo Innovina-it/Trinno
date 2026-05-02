@@ -1135,7 +1135,9 @@ export function RoadmapView({
             // #6 says action failures belong on the error bus, not toasts).
             patchCardInStore(cardId, { parentCardId: origParentId });
             const raw = (err as Error).message ?? "Reparent failed";
-            const isCycle = raw.toLowerCase().includes("parent cycle");
+            // Action wraps the cycle-guard error with a stable PARENT_CYCLE
+            // prefix so we don't have to match the trigger's English text.
+            const isCycle = raw.startsWith("PARENT_CYCLE");
             const message = isCycle
               ? `Cannot move card under ${targetTitle} — cycle detected.`
               : `Reparent failed: ${raw}`;

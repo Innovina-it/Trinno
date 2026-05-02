@@ -111,10 +111,22 @@ export async function updateCardImpl(token: string, input: {
   if (parsed.coverKind !== undefined) patch.coverKind = parsed.coverKind;
   if (parsed.coverValue !== undefined) patch.coverValue = parsed.coverValue;
   return dbAsUser(token, async (tx) => {
-    const [row] = await tx.update(cards).set(patch)
-      .where(eq(cards.id, parsed.id)).returning();
-    if (!row) throw new Error("Forbidden");
-    return row;
+    try {
+      const [row] = await tx.update(cards).set(patch)
+        .where(eq(cards.id, parsed.id)).returning();
+      if (!row) throw new Error("Forbidden");
+      return row;
+    } catch (err) {
+      // Plan #8 cycle-guard trigger raises 'cards: parent cycle detected'.
+      // Wrap into a stable, code-prefixed Error so callers can detect it
+      // without matching English substrings (Server Action serializes as
+      // a plain Error so the message prefix is the contract).
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.toLowerCase().includes("parent cycle")) {
+        throw new Error("PARENT_CYCLE: parent cycle detected");
+      }
+      throw err;
+    }
   });
 }
 
