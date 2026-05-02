@@ -38,6 +38,7 @@ import {
 import { getCardStatusKind, type StatusKind } from "@/lib/status";
 import { criticalPath, type Link as CritLink } from "@/lib/roadmap/critical-path";
 import { updateCard, reorderRoadmapRow } from "@/actions/cards";
+import { errorBus } from "@/lib/errors/error-bus";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { RoadmapBar } from "./roadmap-bar";
@@ -74,6 +75,11 @@ type DragState = {
   startClientX: number;
   origStart: Date;
   origTarget: Date;
+  // Plan #16b-γ-G G2 — vertical lane-crossing reparent. Both fields are
+  // populated only in epic mode; in assignee/component mode vertical
+  // movement does not change the bar's parent so we leave them null.
+  sourceLaneId: string | null;
+  currentLaneId: string | null;
 };
 
 function fmtHeader(d: Date, zoom: Zoom): string {
@@ -208,6 +214,11 @@ export function RoadmapView({
   // or the param changes again.
   const [flashFocus, setFlashFocus] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  // Plan #16b-γ-G G2 — canvas ref for clientY → canvas-local-Y mapping
+  // during a bar drag. The lane layout uses canvas-local coords (top: 0
+  // is the canvas top, where the header strip lives), so to hit-test
+  // which lane the cursor is over we need this rect.
+  const canvasRef = useRef<HTMLDivElement | null>(null);
 
   // Plan #16b-γ-A (#3) — critical-path overlay toggle. Local state only;
   // intentionally not URL-synced because the overlay is a per-session
@@ -458,6 +469,12 @@ export function RoadmapView({
     });
   }, [lanes, expandedParents]);
 
+  // Plan #16b-γ-G G2 — bar-drag vertical hit-testing reads the latest
+  // laneLayout without re-binding the pointermove callback (which would
+  // drop the active window listeners on each frame).
+  const laneLayoutRef = useRef(laneLayout);
+  laneLayoutRef.current = laneLayout;
+
   const totalHeight =
     laneLayout.length === 0
       ? HEADER_STRIP_HEIGHT + 80
@@ -520,6 +537,13 @@ export function RoadmapView({
   // ---- Drag state (refs to avoid re-renders during pointermove) ----
   const dragRef = useRef<DragState | null>(null);
   const [, startTransition] = useTransition();
+
+  // Plan #16b-γ-G G2 — visual highlight on the lane the cursor is over
+  // while dragging a bar across lanes. Only set when hoverLaneId differs
+  // from sourceLaneId so the source lane never highlights itself. State
+  // (not ref) so the lane overlay re-renders on crossing.
+  const [dragHoverLaneId, setDragHoverLaneId] = useState<string | null>(null);
+  const dragSourceLaneIdRef = useRef<string | null>(null);
 
   // Ref to the lane label panel for row-drag hit-testing (G1). Declared
   // up here so the row-drag callbacks can reference it cleanly.
@@ -677,6 +701,35 @@ export function RoadmapView({
         startDate: nextStart,
         targetDate: nextTarget,
       });
+      // Plan #16b-γ-G G2 — vertical hit-test for cross-lane reparent.
+      // Only meaningful in epic mode + during a `move` drag (resizing
+      // never reparents). `sourceLaneId` is null in non-epic modes so we
+      // gate on it to skip the hit-test entirely there.
+      if (d.mode === "move" && d.sourceLaneId !== null) {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const localY = e.clientY - canvas.getBoundingClientRect().top;
+          const lanes = laneLayoutRef.current;
+          let nextLaneId: string | null = null;
+          for (const ll of lanes) {
+            if (localY >= ll.top && localY < ll.top + ll.height) {
+              nextLaneId = ll.lane.id;
+              break;
+            }
+          }
+          if (nextLaneId !== d.currentLaneId) {
+            d.currentLaneId = nextLaneId;
+            // Highlight the lane only when it's a different lane from
+            // the source. The source lane never highlights itself
+            // (cursor returning to the source clears the indicator).
+            const highlight =
+              nextLaneId !== null && nextLaneId !== d.sourceLaneId
+                ? nextLaneId
+                : null;
+            setDragHoverLaneId(highlight);
+          }
+        }
+      }
       // Lazily start the auto-scroll RAF on the first move of a drag.
       if (autoScrollRafRef.current === null) {
         autoScrollRafRef.current = requestAnimationFrame(tickAutoScroll);
@@ -729,15 +782,27 @@ export function RoadmapView({
     const d = dragRef.current;
     if (!d) return;
     dragRef.current = null;
+    dragSourceLaneIdRef.current = null;
+    setDragHoverLaneId(null);
     stopAutoScroll();
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onPointerUp);
     const current = cardsRef.current.find((c) => c.id === d.cardId);
     if (!current) return;
+    // Plan #16b-γ-G G2 — detect cross-lane reparent. Only valid in epic
+    // mode (sourceLaneId is null elsewhere) AND in move mode (resize
+    // never reparents). Triggers regardless of horizontal movement —
+    // a purely vertical drag is a legitimate reparent gesture that
+    // wouldn't be a click.
+    const reparented =
+      d.mode === "move" &&
+      d.sourceLaneId !== null &&
+      d.currentLaneId !== null &&
+      d.currentLaneId !== d.sourceLaneId;
     const noOp =
       current.startDate.getTime() === d.origStart.getTime() &&
       current.targetDate.getTime() === d.origTarget.getTime();
-    if (noOp) {
+    if (noOp && !reparented) {
       // A1 — a move-mode pointerdown/up with no movement is a click;
       // open the card modal. Resize handles enter resize-* mode and
       // are intentionally excluded.
@@ -746,6 +811,46 @@ export function RoadmapView({
       }
       return;
     }
+    if (reparented) {
+      // Resolve target epic id: the destination lane's headerCard.id, or
+      // null if the destination is the "uncategorized" lane (no parent).
+      const targetLane = laneLayoutRef.current.find(
+        (ll) => ll.lane.id === d.currentLaneId,
+      );
+      const targetEpicId = targetLane?.lane.headerCard?.id ?? null;
+      const targetTitle =
+        targetLane?.lane.title ??
+        (targetEpicId ? "destination" : "Uncategorized");
+      // Capture the original parent for revert on failure. Read from the
+      // store (not the projected `cards`) so we get the full nullable.
+      const origCard = storeCardsRef.current.find((c) => c.id === d.cardId);
+      const origParentId = origCard?.parentCardId ?? null;
+      // Optimistic patch — the store update flips the lane the bar
+      // belongs to so the next render places it on the destination row.
+      patchCardInStore(d.cardId, { parentCardId: targetEpicId });
+      const cardId = d.cardId;
+      startTransition(() => {
+        void (async () => {
+          try {
+            await updateCard({ id: cardId, parentCardId: targetEpicId });
+          } catch (err) {
+            // Revert + surface to the persistent error pane (plan #16b-γ-C
+            // #6 says action failures belong on the error bus, not toasts).
+            patchCardInStore(cardId, { parentCardId: origParentId });
+            const raw = (err as Error).message ?? "Reparent failed";
+            const isCycle = raw.toLowerCase().includes("parent cycle");
+            const message = isCycle
+              ? `Cannot move card under ${targetTitle} — cycle detected.`
+              : `Reparent failed: ${raw}`;
+            errorBus.push({ message });
+          }
+        })();
+      });
+      // Fall through: dates may also have changed in the same drag, so
+      // we still need to run the snap + persist branch below. If
+      // `noOp` is true the date-persist branch skips itself naturally.
+    }
+    if (noOp) return;
 
     // Plan #16b-γ-C (C4) — additional snap candidates for the START
     // edge: target_dates of any card that blocks the dragged card
@@ -834,17 +939,38 @@ export function RoadmapView({
       const c = cardsRef.current.find((x) => x.id === cardId);
       if (!c) return;
       e.preventDefault();
+      // Plan #16b-γ-G G2 — record which lane currently owns this card so
+      // pointermove can detect crossings. We resolve it by walking the
+      // current laneLayout: a card is the source-lane's headerCard, or
+      // appears in its placed-rows. Only computed in epic mode; in other
+      // modes vertical movement does NOT reparent so we skip entirely.
+      let sourceLaneId: string | null = null;
+      if (laneMode === "epic" && mode === "move") {
+        for (const ll of laneLayoutRef.current) {
+          if (ll.lane.headerCard?.id === cardId) {
+            sourceLaneId = ll.lane.id;
+            break;
+          }
+          if (ll.placed.some((p) => p.card.id === cardId)) {
+            sourceLaneId = ll.lane.id;
+            break;
+          }
+        }
+      }
+      dragSourceLaneIdRef.current = sourceLaneId;
       dragRef.current = {
         cardId,
         mode,
         startClientX: e.clientX,
         origStart: c.startDate,
         origTarget: c.targetDate,
+        sourceLaneId,
+        currentLaneId: sourceLaneId,
       };
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
     },
-    [onPointerMove, onPointerUp],
+    [laneMode, onPointerMove, onPointerUp],
   );
 
   const handleMoveStart = useCallback(
@@ -1501,6 +1627,7 @@ export function RoadmapView({
             data-testid="roadmap-scroller"
           >
             <div
+              ref={canvasRef}
               className="relative"
               style={{ width, height: totalHeight }}
               data-testid="roadmap-canvas"
@@ -1541,6 +1668,24 @@ export function RoadmapView({
                   aria-hidden
                 />
               ))}
+              {/* Plan #16b-γ-G G2 — destination-lane highlight while a
+                  bar is being dragged across lanes. Only renders when
+                  the cursor is over a lane different from the source.
+                  Sits below the bar layer (rendered next) so the bar
+                  remains fully readable while it crosses. */}
+              {dragHoverLaneId !== null &&
+                laneLayout
+                  .filter((ll) => ll.lane.id === dragHoverLaneId)
+                  .map((ll) => (
+                    <div
+                      key={`lt-${ll.lane.id}`}
+                      data-testid="roadmap-lane-target"
+                      data-lane-id={ll.lane.id}
+                      aria-hidden
+                      className="absolute left-0 right-0 ring-1 ring-fg/40 bg-fg/[0.04] pointer-events-none"
+                      style={{ top: ll.top, height: ll.height }}
+                    />
+                  ))}
               {/* Weekend shading (Sat + Sun). Skipped on quarter zoom
                   (8 px/day) where 16-px stripes clutter without informing. */}
               {zoom !== "quarter" &&
