@@ -1181,6 +1181,26 @@ export function RoadmapView({
                   aria-hidden
                 />
               ))}
+              {/* Today vertical indicator line */}
+              {(() => {
+                const today = startOfDay(new Date());
+                if (today < gridStart || today > gridEnd) return null;
+                const todayX = xForDate(today, gridStart, ppd);
+                return (
+                  <div
+                    data-testid="roadmap-today-line"
+                    aria-hidden
+                    className="absolute pointer-events-none border-l border-fg/50"
+                    style={{
+                      left: todayX,
+                      top: HEADER_STRIP_HEIGHT,
+                      bottom: 0,
+                      width: 1,
+                    }}
+                    title="Today"
+                  />
+                );
+              })()}
               {/* Sprint overlay (under the bar layer) */}
               <SprintOverlay
                 zoom={zoom}
