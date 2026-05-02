@@ -11,13 +11,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { toast } from "sonner";
 import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-} from "@/components/ui/dropdown-menu";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -58,17 +51,14 @@ import { SprintOverlay } from "./sprint-overlay";
 import { RoadmapNewCardDialog } from "./new-card-dialog";
 import { RoadmapFilterBar } from "./roadmap-filter-bar";
 import { RoadmapMiniMap } from "./mini-map";
+import {
+  RoadmapHeader,
+  ZOOMS,
+  LANE_MODES,
+  type LaneMode,
+} from "./roadmap-header";
 import { parseFilters } from "@/lib/board-filters";
-import { Plus } from "lucide-react";
 
-const ZOOMS: Zoom[] = ["week", "month", "quarter"];
-type LaneMode = "epic" | "assignee" | "component";
-const LANE_MODES: LaneMode[] = ["epic", "assignee", "component"];
-const LANE_MODE_LABEL: Record<LaneMode, string> = {
-  epic: "By epic",
-  assignee: "By assignee",
-  component: "By component",
-};
 const ROW_HEIGHT = 36; // 28px bar + 8px gap
 const LANE_HEADER_HEIGHT = 28;
 const LANE_GAP = 12;
@@ -1115,146 +1105,25 @@ export function RoadmapView({
       data-workspace-id={workspaceId}
       className="space-y-4"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              data-testid="roadmap-zoom"
-              className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
-            >
-              ZOOM: {zoom.toUpperCase()}
-              <ChevronDown className="size-3" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuRadioGroup
-                value={zoom}
-                onValueChange={(v) => setZoom(v as Zoom)}
-              >
-                {ZOOMS.map((z) => (
-                  <DropdownMenuRadioItem key={z} value={z}>
-                    {z[0].toUpperCase() + z.slice(1)}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              data-testid="roadmap-lanes"
-              className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
-            >
-              LANES: {LANE_MODE_LABEL[laneMode].toUpperCase()}
-              <ChevronDown className="size-3" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuRadioGroup
-                value={laneMode}
-                onValueChange={(v) => setLaneMode(v as LaneMode)}
-              >
-                {LANE_MODES.map((m) => (
-                  <DropdownMenuRadioItem key={m} value={m}>
-                    {LANE_MODE_LABEL[m]}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <span
-            className="inline-flex items-center gap-1.5 mono-meta-sm text-fg-faint"
-            data-testid="roadmap-live"
-            data-live={subscribed ? "true" : "false"}
-            title={subscribed ? "Realtime sync active" : "Realtime sync offline"}
-          >
-            <span
-              aria-hidden
-              className={`inline-block size-1.5 rounded-full ${
-                subscribed
-                  ? "bg-emerald-400 animate-pulse"
-                  : "bg-fg/20"
-              }`}
-            />
-            {subscribed ? "LIVE" : "OFFLINE"}
-          </span>
-          <button
-            type="button"
-            onClick={() => setShowCriticalPath((p) => !p)}
-            data-testid="roadmap-critical-toggle"
-            data-active={showCriticalPath ? "true" : "false"}
-            aria-pressed={showCriticalPath}
-            title="Highlights the longest chain of blocking dependencies — a delay on any of these pushes the project end date."
-            className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
-              showCriticalPath ? "ring-1 ring-fg/40" : ""
-            }`}
-          >
-            CRITICAL PATH: {showCriticalPath ? "ON" : "OFF"}
-          </button>
-          <button
-            type="button"
-            onClick={toggleAutoCascade}
-            data-testid="roadmap-auto-cascade-toggle"
-            data-active={autoCascade ? "true" : "false"}
-            aria-pressed={autoCascade}
-            title="Reschedule blocked dependents after a forward target_date drag"
-            className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
-              autoCascade ? "ring-1 ring-fg/40" : ""
-            }`}
-          >
-            AUTO-RESCHEDULE: {autoCascade ? "ON" : "OFF"}
-          </button>
-          <button
-            type="button"
-            onClick={() => jumpToDate(new Date())}
-            data-testid="roadmap-jump-today"
-            className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
-            title="Scroll to today"
-          >
-            TODAY
-          </button>
-          <input
-            type="date"
-            data-testid="roadmap-jump-date"
-            onChange={(e) => {
-              if (e.target.value) jumpToDate(new Date(e.target.value));
-            }}
-            className="chip inline-flex items-center mono-meta-sm bg-[color:var(--surface)] hover:bg-[rgb(255_255_255/0.08)] border-0 outline-none focus:ring-1 focus:ring-fg/40"
-            title="Jump to date"
-          />
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setNewCardOpen(true)}
-            data-testid="roadmap-new-card-trigger"
-            className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
-          >
-            <Plus className="size-3" />
-            NEW CARD
-          </button>
-          <input
-            ref={searchInputRef}
-            type="search"
-            value={queryDraft}
-            onChange={(e) => setQueryDraft(e.target.value)}
-            placeholder="Search bars…"
-            aria-label="Search roadmap"
-            data-testid="roadmap-search"
-            className="rounded-md border border-hairline bg-transparent px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:border-fg/40 w-44"
-          />
-          <button
-            type="button"
-            onClick={() => setShortcutsOpen(true)}
-            data-testid="roadmap-shortcuts-trigger"
-            aria-label="Keyboard shortcuts"
-            className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
-          >
-            ?
-          </button>
-          <span className="mono-meta-sm text-fg-faint">
-            {gridStart.toISOString().slice(0, 10)} →{" "}
-            {gridEnd.toISOString().slice(0, 10)}
-          </span>
-        </div>
-      </div>
+      <RoadmapHeader
+        zoom={zoom}
+        onSetZoom={setZoom}
+        laneMode={laneMode}
+        onSetLaneMode={setLaneMode}
+        subscribed={subscribed}
+        showCriticalPath={showCriticalPath}
+        onToggleCriticalPath={() => setShowCriticalPath((p) => !p)}
+        autoCascade={autoCascade}
+        onToggleAutoCascade={toggleAutoCascade}
+        onJumpToDate={jumpToDate}
+        onOpenNewCard={() => setNewCardOpen(true)}
+        queryDraft={queryDraft}
+        onQueryDraftChange={setQueryDraft}
+        searchInputRef={searchInputRef}
+        onOpenShortcuts={() => setShortcutsOpen(true)}
+        gridStart={gridStart}
+        gridEnd={gridEnd}
+      />
       <RoadmapFilterBar />
 
       {cards.length > 0 && (
