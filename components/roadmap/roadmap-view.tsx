@@ -1181,6 +1181,35 @@ export function RoadmapView({
                   aria-hidden
                 />
               ))}
+              {/* Weekend shading (Sat + Sun). Skipped on quarter zoom
+                  (8 px/day) where 16-px stripes clutter without informing. */}
+              {zoom !== "quarter" &&
+                (() => {
+                  const stripes: React.ReactNode[] = [];
+                  // Find first Saturday >= gridStart. UTC day: 0=Sun..6=Sat.
+                  const startDay = gridStart.getUTCDay();
+                  const daysToFirstSat = (6 - startDay + 7) % 7;
+                  let cur = addDays(gridStart, daysToFirstSat);
+                  while (cur.getTime() < gridEnd.getTime()) {
+                    const x = xForDate(cur, gridStart, ppd);
+                    stripes.push(
+                      <div
+                        key={`we-${cur.toISOString()}`}
+                        data-testid="roadmap-weekend"
+                        aria-hidden
+                        className="absolute pointer-events-none bg-fg/[0.03]"
+                        style={{
+                          left: x,
+                          top: HEADER_STRIP_HEIGHT,
+                          bottom: 0,
+                          width: 2 * ppd,
+                        }}
+                      />,
+                    );
+                    cur = addDays(cur, 7);
+                  }
+                  return <>{stripes}</>;
+                })()}
               {/* Today vertical indicator line */}
               {(() => {
                 const today = startOfDay(new Date());
