@@ -553,10 +553,59 @@ export function RoadmapView({
     [patchCardInStore, collectDependents],
   );
 
+  // Plan #16b-γ-C (C3) — auto-scroll the scroller when the cursor enters a
+  // hot zone near its left/right edge during a drag. RAF loop is lazily
+  // started on the first pointermove of a drag and stopped on pointerup /
+  // unmount. We adjust dragRef.startClientX by the actual scroll delta so
+  // the next pointermove sees a consistent deltaPx; bar position only
+  // refreshes on real cursor movement (acceptable tradeoff for the simpler
+  // implementation — a stationary cursor at the edge will see the canvas
+  // slide while the bar visually lags by ≤1 frame until the next move).
+  const lastClientXRef = useRef(0);
+  const autoScrollRafRef = useRef<number | null>(null);
+
+  const stopAutoScroll = useCallback(() => {
+    if (autoScrollRafRef.current !== null) {
+      cancelAnimationFrame(autoScrollRafRef.current);
+      autoScrollRafRef.current = null;
+    }
+  }, []);
+
+  const tickAutoScroll = useCallback(() => {
+    const scroller = scrollerRef.current;
+    const drag = dragRef.current;
+    if (!scroller || !drag) {
+      autoScrollRafRef.current = null;
+      return;
+    }
+    const rect = scroller.getBoundingClientRect();
+    const x = lastClientXRef.current;
+    const HOT = 60; // px from each edge
+    const MAX_PX = 12; // per tick (~720 px/sec at 60 fps)
+    let dx = 0;
+    if (x < rect.left + HOT) {
+      const depth = Math.min(1, (rect.left + HOT - x) / HOT);
+      dx = -Math.ceil(depth * MAX_PX);
+    } else if (x > rect.right - HOT) {
+      const depth = Math.min(1, (x - (rect.right - HOT)) / HOT);
+      dx = Math.ceil(depth * MAX_PX);
+    }
+    if (dx !== 0) {
+      const before = scroller.scrollLeft;
+      scroller.scrollLeft = before + dx;
+      // scrollLeft is clamped by the browser to [0, scrollWidth-clientWidth];
+      // shift startClientX by the ACTUAL delta so deltaPx stays consistent.
+      const actualDx = scroller.scrollLeft - before;
+      drag.startClientX -= actualDx;
+    }
+    autoScrollRafRef.current = requestAnimationFrame(tickAutoScroll);
+  }, []);
+
   const onPointerMove = useCallback(
     (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
+      lastClientXRef.current = e.clientX;
       const deltaPx = e.clientX - d.startClientX;
       const deltaDays = Math.round(deltaPx / ppd);
       let nextStart = d.origStart;
@@ -580,8 +629,12 @@ export function RoadmapView({
         startDate: nextStart,
         targetDate: nextTarget,
       });
+      // Lazily start the auto-scroll RAF on the first move of a drag.
+      if (autoScrollRafRef.current === null) {
+        autoScrollRafRef.current = requestAnimationFrame(tickAutoScroll);
+      }
     },
-    [ppd, patchCardInStore],
+    [ppd, patchCardInStore, tickAutoScroll],
   );
 
   // Plan #16b-α (#10) — snap-to-week-Monday + snap-to-sprint-end on
@@ -624,6 +677,7 @@ export function RoadmapView({
     const d = dragRef.current;
     if (!d) return;
     dragRef.current = null;
+    stopAutoScroll();
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onPointerUp);
     const current = cardsRef.current.find((c) => c.id === d.cardId);
@@ -689,7 +743,7 @@ export function RoadmapView({
         { start: snappedStart, target: snappedTarget },
       );
     });
-  }, [onPointerMove, persistDates, snapDate, patchCardInStore, router]);
+  }, [onPointerMove, persistDates, snapDate, patchCardInStore, router, stopAutoScroll]);
 
   const beginDrag = useCallback(
     (mode: DragMode, e: React.PointerEvent, cardId: string) => {
@@ -736,8 +790,9 @@ export function RoadmapView({
     return () => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
+      stopAutoScroll();
     };
-  }, [onPointerMove, onPointerUp]);
+  }, [onPointerMove, onPointerUp, stopAutoScroll]);
 
   // Plan #16b-α (#17) — persist zoom + scroll-x per workspace in
   // localStorage. On mount we read the saved viewport: the zoom is
