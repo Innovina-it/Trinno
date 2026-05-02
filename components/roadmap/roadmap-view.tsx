@@ -643,9 +643,13 @@ export function RoadmapView({
   // (preserved by the drag delta math) is kept as-is. Sprint end_dates
   // come from the workspace store; weeks are computed deterministically
   // off the dragged date itself.
+  // Plan #16b-γ-C (C4) — `extraCandidates` lets the caller add more
+  // snap targets for this invocation only. Used to snap a dragged
+  // card's start_date onto its blocker's target_date, so dropping
+  // near a dependency end snaps cleanly to it.
   const snapDate = useCallback(
-    (d: Date): Date => {
-      const candidates: Date[] = [];
+    (d: Date, extraCandidates: Date[] = []): Date => {
+      const candidates: Date[] = [...extraCandidates];
       // Nearest Monday (UTC).
       const day = d.getUTCDay();
       const sinceMonday = (day + 6) % 7; // Mon=0
@@ -695,17 +699,49 @@ export function RoadmapView({
       return;
     }
 
+    // Plan #16b-γ-C (C4) — additional snap candidates for the START
+    // edge: target_dates of any card that blocks the dragged card
+    // (`is_blocked_by` links from the dragged card). Computed here
+    // while dragRef is still meaningful and storeLinksRef/storeCardsRef
+    // hold the latest data. Filtered to blockers with a non-null
+    // target_date; null targets are skipped.
+    const blockerCardIds = storeLinksRef.current
+      .filter((l) => l.fromCardId === d.cardId && l.kind === "is_blocked_by")
+      .map((l) => l.toCardId);
+    const blockerTargets: Date[] = (() => {
+      if (blockerCardIds.length === 0) return [];
+      const cardById = new Map(
+        storeCardsRef.current.map((c) => [c.id, c]),
+      );
+      const out: Date[] = [];
+      for (const id of blockerCardIds) {
+        const c = cardById.get(id);
+        if (c && c.targetDate) {
+          out.push(
+            startOfDay(
+              c.targetDate instanceof Date
+                ? c.targetDate
+                : new Date(c.targetDate),
+            ),
+          );
+        }
+      }
+      return out;
+    })();
+
     // Apply snap depending on drag mode. In move-mode we snap the
     // edge that's closest to a target, preserving the duration; in
-    // resize modes we snap only the dragged edge.
+    // resize modes we snap only the dragged edge. Blocker target_dates
+    // are passed only to the START-edge snap calls (resize-left and
+    // move's start side); the END edge does not snap to dependency ends.
     let snappedStart = startOfDay(current.startDate);
     let snappedTarget = startOfDay(current.targetDate);
     if (d.mode === "resize-left") {
-      snappedStart = snapDate(snappedStart);
+      snappedStart = snapDate(snappedStart, blockerTargets);
     } else if (d.mode === "resize-right") {
       snappedTarget = snapDate(snappedTarget);
     } else {
-      const startSnap = snapDate(snappedStart);
+      const startSnap = snapDate(snappedStart, blockerTargets);
       const targetSnap = snapDate(snappedTarget);
       const startDelta = Math.abs(dayDiff(snappedStart, startSnap));
       const targetDelta = Math.abs(dayDiff(snappedTarget, targetSnap));
