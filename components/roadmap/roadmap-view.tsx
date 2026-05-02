@@ -150,16 +150,8 @@ function buildHeaderTicks(
 }
 
 export function RoadmapView({
-  // `initialCards` / `initialLinks` are kept as a fallback for SSR-seeded
-  // renders that don't (yet) wrap the workspace store provider — the page
-  // wraps it now, so these are effectively unused in production. We still
-  // accept them so existing tests / call sites don't break.
-  initialCards: _initialCards,
-  initialLinks: _initialLinks,
   workspaceId,
 }: {
-  initialCards: RoadmapCard[];
-  initialLinks: RoadmapLink[];
   workspaceId: string;
 }) {
   const router = useRouter();
@@ -258,8 +250,6 @@ export function RoadmapView({
     } catch {
       /* ignore */
     }
-    // Mount-only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [AUTO_CASCADE_KEY]);
   const toggleAutoCascade = useCallback(() => {
     setAutoCascade((p) => {

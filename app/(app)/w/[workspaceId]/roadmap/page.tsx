@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace } from "@/lib/queries/workspaces";
-import { listRoadmapCards, listRoadmapLinks } from "@/lib/queries/roadmap";
+import { listRoadmapCards } from "@/lib/queries/roadmap";
 import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
 import { RoadmapView } from "@/components/roadmap/roadmap-view";
@@ -17,9 +17,8 @@ export default async function RoadmapPage({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
-  const [cards, links, snapshot] = await Promise.all([
+  const [cards, snapshot] = await Promise.all([
     listRoadmapCards(token, workspaceId),
-    listRoadmapLinks(token, workspaceId),
     getWorkspaceSnapshot(token, workspaceId),
   ]);
 
@@ -44,11 +43,7 @@ export default async function RoadmapPage({
             ← Back to workspace
           </Link>
         </header>
-        <RoadmapView
-          initialCards={cards}
-          initialLinks={links}
-          workspaceId={workspaceId}
-        />
+        <RoadmapView workspaceId={workspaceId} />
       </div>
     </WorkspaceStoreProvider>
   );
