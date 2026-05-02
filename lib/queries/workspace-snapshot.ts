@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { eq, inArray, asc } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import {
@@ -87,7 +88,7 @@ export type WorkspaceSnapshot = {
   workspaceProfiles: Array<{ id: string; displayName: string }>;
 };
 
-export async function getWorkspaceSnapshot(
+export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
   token: string,
   workspaceId: string,
 ): Promise<WorkspaceSnapshot> {
@@ -297,4 +298,4 @@ export async function getWorkspaceSnapshot(
       workspaceProfiles: profileRows,
     };
   });
-}
+});
