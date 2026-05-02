@@ -60,6 +60,8 @@ export type WorkspaceSnapshot = {
     dueComplete: boolean;
     archived: boolean;
     createdAt: Date;
+    // Plan #16b-γ-G G1 — manual roadmap row order. NULL = unranked.
+    roadmapOrder: number | null;
   }>;
   sprints: Array<{
     id: string;
@@ -203,6 +205,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
           dueComplete: cards.dueComplete,
           archived: cards.archived,
           createdAt: cards.createdAt,
+          roadmapOrder: cards.roadmapOrder,
         })
         .from(cards)
         .where(inArray(cards.boardId, boardIds)),

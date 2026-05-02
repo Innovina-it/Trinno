@@ -55,6 +55,7 @@ function rowToCard(r: Record<string, unknown>): CardRow {
     priority: (r.priority ?? null) as CardRow["priority"],
     coverKind: ((r.cover_kind as string) ?? "none") as CardRow["coverKind"],
     coverValue: (r.cover_value ?? null) as string | null,
+    roadmapOrder: (r.roadmap_order ?? null) as number | null,
   };
 }
 

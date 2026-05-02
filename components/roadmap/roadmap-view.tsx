@@ -37,7 +37,7 @@ import {
 } from "@/lib/roadmap/layout";
 import { getCardStatusKind, type StatusKind } from "@/lib/status";
 import { criticalPath, type Link as CritLink } from "@/lib/roadmap/critical-path";
-import { updateCard } from "@/actions/cards";
+import { updateCard, reorderRoadmapRow } from "@/actions/cards";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { RoadmapBar } from "./roadmap-bar";
@@ -51,6 +51,7 @@ import { SprintOverlay } from "./sprint-overlay";
 import { RoadmapNewCardDialog } from "./new-card-dialog";
 import { RoadmapFilterBar } from "./roadmap-filter-bar";
 import { RoadmapMiniMap } from "./mini-map";
+import { RoadmapRowHandle } from "./roadmap-row-handle";
 import {
   RoadmapHeader,
   ZOOMS,
@@ -330,6 +331,7 @@ export function RoadmapView({
         boardId: c.boardId,
         boardTitle: boardTitleById.get(c.boardId) ?? "",
         archived: c.archived,
+        roadmapOrder: c.roadmapOrder ?? null,
       }));
   }, [storeCards, storeBoards, queryNorm, filters, sprintFilter]);
 
@@ -518,6 +520,10 @@ export function RoadmapView({
   // ---- Drag state (refs to avoid re-renders during pointermove) ----
   const dragRef = useRef<DragState | null>(null);
   const [, startTransition] = useTransition();
+
+  // Ref to the lane label panel for row-drag hit-testing (G1). Declared
+  // up here so the row-drag callbacks can reference it cleanly.
+  const labelPanelRef = useRef<HTMLDivElement | null>(null);
 
   // Refs for cascade detection — read latest store data inside async drag
   // commit without re-binding the callback.
@@ -863,6 +869,223 @@ export function RoadmapView({
     [router],
   );
 
+  // Plan #16b-γ-G G1 — row-drag state for manual roadmap row reorder.
+  // Lives in a ref + a useState pair: the ref holds the active drag
+  // metadata (no re-render on each pointermove for responsiveness) and
+  // the state mirrors the current Y so the ghost overlay re-renders.
+  // Only active in epic mode — assignee / component lanes have no
+  // stable "card identity" we'd persist a rank against.
+  type RowDragState = {
+    cardId: string;
+    boardId: string;
+    laneIndex: number;
+    startClientY: number;
+  };
+  const rowDragRef = useRef<RowDragState | null>(null);
+  const [rowDragGhost, setRowDragGhost] = useState<{
+    cardId: string;
+    laneIndex: number;
+    currentY: number;
+    insertIndex: number;
+  } | null>(null);
+
+  // Snapshot lane geometry for hit-testing during the drag. Captured at
+  // pointerdown so a re-flow of the canvas mid-drag (unlikely, but
+  // possible if a CDC echo lands) doesn't tear the math.
+  const rowDragLanesRef = useRef<
+    Array<{
+      laneIndex: number;
+      cardId: string | null;
+      boardId: string | null;
+      top: number;
+      height: number;
+    }>
+  >([]);
+
+  const onRowPointerMove = useCallback((e: PointerEvent) => {
+    const drag = rowDragRef.current;
+    if (!drag) return;
+    const lanes = rowDragLanesRef.current;
+    if (lanes.length === 0) return;
+    const y = e.clientY;
+    // Resolve the insertion index relative to the LANE LABEL panel by
+    // converting the cursor's clientY into the panel's local Y. The
+    // panel's top is captured implicitly via the lanes' canvas-local
+    // tops + the panel's bounding rect.
+    const panel = labelPanelRef.current;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    const localY = y - rect.top;
+    let insertIndex = lanes.length;
+    for (let i = 0; i < lanes.length; i++) {
+      const ln = lanes[i];
+      if (localY < ln.top + ln.height / 2) {
+        insertIndex = i;
+        break;
+      }
+    }
+    setRowDragGhost({
+      cardId: drag.cardId,
+      laneIndex: drag.laneIndex,
+      currentY: localY,
+      insertIndex,
+    });
+  }, []);
+
+  const onRowPointerUp = useCallback(() => {
+    const drag = rowDragRef.current;
+    if (!drag) return;
+    rowDragRef.current = null;
+    const ghost = rowDragGhostRef.current;
+    setRowDragGhost(null);
+    window.removeEventListener("pointermove", onRowPointerMove);
+    window.removeEventListener("pointerup", onRowPointerUp);
+    if (!ghost) return;
+    const lanes = rowDragLanesRef.current;
+    if (lanes.length === 0) return;
+
+    // Build the eligible-neighbour list, excluding the dragged lane and
+    // any non-epic lane (no headerCard → no card to rank).
+    const neighbours = lanes.filter(
+      (ln) => ln.laneIndex !== drag.laneIndex && ln.cardId !== null,
+    );
+    const insertIdx = ghost.insertIndex;
+    // Translate insert index in the FULL `lanes` array into the
+    // neighbours-array slot the dragged lane will land between.
+    let neighbourSlot = 0;
+    for (let i = 0; i < insertIdx; i++) {
+      const ln = lanes[i];
+      if (ln.laneIndex === drag.laneIndex) continue;
+      neighbourSlot++;
+    }
+    const beforeId = neighbourSlot > 0 ? neighbours[neighbourSlot - 1].cardId : null;
+    const afterId =
+      neighbourSlot < neighbours.length ? neighbours[neighbourSlot].cardId : null;
+
+    // No-op: dropped exactly where it was.
+    if (beforeId === null && afterId === null) return;
+    const origNeighbours = lanes
+      .filter((ln) => ln.cardId !== null && ln.laneIndex !== drag.laneIndex);
+    const origIdx = lanes.findIndex((ln) => ln.cardId === drag.cardId);
+    const origNeighbourBefore =
+      origIdx > 0
+        ? lanes
+            .slice(0, origIdx)
+            .reverse()
+            .find((ln) => ln.cardId !== null && ln.laneIndex !== drag.laneIndex)
+            ?.cardId ?? null
+        : null;
+    void origNeighbours;
+    if (
+      beforeId === origNeighbourBefore &&
+      afterId !== null &&
+      origIdx < lanes.findIndex((ln) => ln.cardId === afterId)
+    ) {
+      // Same slot — skip server round-trip.
+      return;
+    }
+
+    const cardId = drag.cardId;
+    const boardId = drag.boardId;
+    // Capture original roadmapOrder for revert.
+    const origCard = storeCardsRef.current.find((c) => c.id === cardId);
+    const origRoadmapOrder = origCard?.roadmapOrder ?? null;
+
+    // Optimistic patch: pick a synthetic mid-rank using the neighbours'
+    // current orders. If we can't compute one cleanly we let the server
+    // assign and wait for the realtime echo. Using fallbacks here keeps
+    // the UI from snapping back briefly during the round-trip.
+    const beforeOrd =
+      beforeId
+        ? storeCardsRef.current.find((c) => c.id === beforeId)?.roadmapOrder ??
+          null
+        : null;
+    const afterOrd =
+      afterId
+        ? storeCardsRef.current.find((c) => c.id === afterId)?.roadmapOrder ??
+          null
+        : null;
+    let optimistic: number | null = null;
+    if (beforeOrd !== null && afterOrd !== null) {
+      const m = Math.floor((beforeOrd + afterOrd) / 2);
+      if (m !== beforeOrd && m !== afterOrd) optimistic = m;
+    } else if (beforeOrd !== null) optimistic = beforeOrd + 1024;
+    else if (afterOrd !== null) optimistic = afterOrd - 1024;
+    else optimistic = 1024;
+    if (optimistic !== null) {
+      patchCardInStore(cardId, { roadmapOrder: optimistic });
+    }
+
+    startTransition(() => {
+      void (async () => {
+        try {
+          const r = await reorderRoadmapRow({
+            cardId,
+            beforeId,
+            afterId,
+            boardId,
+          });
+          patchCardInStore(cardId, { roadmapOrder: r.roadmapOrder });
+        } catch (err) {
+          patchCardInStore(cardId, { roadmapOrder: origRoadmapOrder });
+          toast.error((err as Error).message);
+        }
+      })();
+    });
+  }, [onRowPointerMove, patchCardInStore]);
+
+  // Keep the ghost in a ref so onRowPointerUp can read the latest value
+  // without re-binding (which would re-attach window listeners).
+  const rowDragGhostRef = useRef(rowDragGhost);
+  rowDragGhostRef.current = rowDragGhost;
+
+  const beginRowDrag = useCallback(
+    (cardId: string, e: React.PointerEvent) => {
+      // Only valid in epic mode + when the lane has a headerCard. The
+      // handle is gated to epic mode at render-time so we just confirm.
+      if (laneMode !== "epic") return;
+      // Capture lane geometry from the current laneLayout for hit
+      // testing. We compute the panel-local tops by subtracting the
+      // panel header strip (the "LANE" label row uses HEADER_STRIP_HEIGHT
+      // which is *also* the canvas's HEADER_STRIP_HEIGHT — they share
+      // the strip).
+      const panel = labelPanelRef.current;
+      if (!panel) return;
+      let cursor = HEADER_STRIP_HEIGHT;
+      const lanesGeo = laneLayout.map((ll, idx) => {
+        const top = cursor;
+        cursor += ll.height;
+        return {
+          laneIndex: idx,
+          cardId: ll.lane.headerCard?.id ?? null,
+          boardId: ll.lane.headerCard?.boardId ?? null,
+          top,
+          height: ll.height,
+        };
+      });
+      rowDragLanesRef.current = lanesGeo;
+      const me = lanesGeo.find((ln) => ln.cardId === cardId);
+      if (!me) return;
+      const card = storeCardsRef.current.find((c) => c.id === cardId);
+      if (!card) return;
+      rowDragRef.current = {
+        cardId,
+        boardId: card.boardId,
+        laneIndex: me.laneIndex,
+        startClientY: e.clientY,
+      };
+      setRowDragGhost({
+        cardId,
+        laneIndex: me.laneIndex,
+        currentY: e.clientY - panel.getBoundingClientRect().top,
+        insertIndex: me.laneIndex,
+      });
+      window.addEventListener("pointermove", onRowPointerMove);
+      window.addEventListener("pointerup", onRowPointerUp);
+    },
+    [laneLayout, laneMode, onRowPointerMove, onRowPointerUp],
+  );
+
   // D2 — empty-area canvas click opens the new-card dialog with start_date
   // prefilled to the date under the cursor. The `target === currentTarget`
   // guard keeps clicks on bars / overlays / lane labels / today line from
@@ -902,9 +1125,11 @@ export function RoadmapView({
     return () => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointermove", onRowPointerMove);
+      window.removeEventListener("pointerup", onRowPointerUp);
       stopAutoScroll();
     };
-  }, [onPointerMove, onPointerUp, stopAutoScroll]);
+  }, [onPointerMove, onPointerUp, onRowPointerMove, onRowPointerUp, stopAutoScroll]);
 
   // Plan #16b-α (#17) — persist zoom + scroll-x per workspace in
   // localStorage. On mount we read the saved viewport: the zoom is
@@ -1190,7 +1415,8 @@ export function RoadmapView({
         >
           {/* Lane labels (sticky) */}
           <div
-            className="shrink-0 border-r border-hairline bg-[color:var(--surface)]"
+            ref={labelPanelRef}
+            className="shrink-0 border-r border-hairline bg-[color:var(--surface)] relative"
             style={{ width: LANE_LABEL_WIDTH }}
           >
             <div
@@ -1201,12 +1427,25 @@ export function RoadmapView({
             </div>
             {laneLayout.map((ll) => {
               const epicHeader = ll.lane.headerCard;
+              const draggable = laneMode === "epic" && epicHeader !== null;
+              const isDragging =
+                rowDragGhost !== null && epicHeader?.id === rowDragGhost.cardId;
               return (
                 <div
                   key={ll.lane.id}
-                  className="border-b border-hairline px-3 flex flex-col justify-center"
+                  className={`group relative border-b border-hairline pl-7 pr-3 flex flex-col justify-center ${
+                    isDragging ? "opacity-40" : ""
+                  }`}
                   style={{ height: ll.height }}
+                  data-testid="roadmap-lane-row"
+                  data-card-id={epicHeader?.id}
                 >
+                  {draggable && epicHeader && (
+                    <RoadmapRowHandle
+                      cardId={epicHeader.id}
+                      onDragStart={beginRowDrag}
+                    />
+                  )}
                   {epicHeader ? (
                     <Link
                       href={`/b/${epicHeader.boardId}/c/${epicHeader.id}`}
@@ -1233,6 +1472,26 @@ export function RoadmapView({
                 </div>
               );
             })}
+            {/* Plan #16b-γ-G G1 — drop indicator overlay during a row
+                drag. Renders a thin line at the resolved insertion
+                point. */}
+            {rowDragGhost !== null && (() => {
+              const lanes = rowDragLanesRef.current;
+              if (lanes.length === 0) return null;
+              const idx = rowDragGhost.insertIndex;
+              const indicatorY =
+                idx >= lanes.length
+                  ? lanes[lanes.length - 1].top + lanes[lanes.length - 1].height
+                  : lanes[idx].top;
+              return (
+                <div
+                  aria-hidden
+                  data-testid="roadmap-row-drop-indicator"
+                  className="absolute left-0 right-0 h-[2px] bg-fg pointer-events-none"
+                  style={{ top: indicatorY - 1 }}
+                />
+              );
+            })()}
           </div>
 
           {/* Scrollable canvas */}

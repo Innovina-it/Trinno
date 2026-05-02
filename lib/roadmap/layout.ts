@@ -15,6 +15,10 @@ export type RoadmapCard = {
   startDate: Date;
   targetDate: Date;
   boardId: string;
+  // Plan #16b-γ-G G1 — optional manual roadmap row order. NULL = unranked
+  // (lanes fall back to alphabetical title sort). Sparse-int ranks set
+  // by drag reorder.
+  roadmapOrder?: number | null;
 };
 
 export type Lane<C extends RoadmapCard = RoadmapCard> = {
@@ -88,8 +92,19 @@ export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
     return out;
   }
 
+  // Plan #16b-γ-G G1 — sort epics by `roadmapOrder` ASC (NULLS LAST), then
+  // title ASC as the tiebreaker. Cards without an explicit rank fall to
+  // the bottom of the list, keeping the alphabetical default for any
+  // board that has never been manually reordered.
   const epicLanes: Lane<C>[] = [...epics.values()]
-    .sort((a, b) => a.title.localeCompare(b.title))
+    .sort((a, b) => {
+      const ar = a.roadmapOrder ?? null;
+      const br = b.roadmapOrder ?? null;
+      if (ar !== null && br !== null) return ar - br;
+      if (ar !== null) return -1;
+      if (br !== null) return 1;
+      return a.title.localeCompare(b.title);
+    })
     .map<Lane<C>>((e) => {
       const laneChildren = childrenByEpic.get(e.id) ?? [];
       const ids: string[] = [e.id, ...laneChildren.map((c) => c.id)];

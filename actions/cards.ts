@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq, desc, and, inArray } from "drizzle-orm";
+import { eq, desc, asc, and, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { dbAsUser } from "@/lib/db/client";
 import { cards, cardLinks, cardLabels, lists } from "@/lib/db/schema";
@@ -8,8 +8,13 @@ import { getSessionToken, requireUser } from "@/lib/auth";
 import { positionBetween } from "@/lib/ordering";
 import {
   CreateCardInput, UpdateCardInput, MoveCardInput, ArchiveCardInput,
-  CascadeShiftBlockedInput, Uuid,
+  CascadeShiftBlockedInput, ReorderRoadmapRowInput, Uuid,
 } from "@/lib/validation";
+import {
+  computeNewRank,
+  RANK_STEP,
+  RankCollisionError,
+} from "@/lib/roadmap/sparse-rank";
 
 // Plan #16b-γ-D (#8) — bulk-action validators.
 //
@@ -401,3 +406,111 @@ export async function cascadeShiftBlockedAfter(
   const r = await cascadeShiftBlockedAfterImpl(t, input);
   return r;
 }
+
+// Plan #16b-γ-G G1 — manual roadmap row reorder.
+//
+// Sparse-int rank scheme (Linear / Jira pattern): we read the current
+// `roadmap_order` of the rows that should land directly above and below
+// the moved card after the drop, pick a new rank between them, and write
+// that single value. When the gap between neighbours is too small to fit
+// an integer midpoint we renumber every card on the board with fresh
+// 1024-step ranks (NULLS sort to the bottom by `start_date ASC,
+// created_at ASC`) and retry.
+//
+// Activity logging: the existing `activity_cards_aud` trigger
+// (supabase/migrations/0016_activity_triggers.sql) does NOT capture
+// `roadmap_order` updates. Rather than extend the enum / trigger and
+// roll a second migration in this 2-hr task, we skip the activity row
+// for G1 — manual ordering is a UI affordance, not an audit-relevant
+// change. Follow-up to add `card.roadmap_order` activity if needed.
+export async function reorderRoadmapRowImpl(
+  token: string,
+  input: {
+    cardId: string;
+    beforeId: string | null;
+    afterId: string | null;
+    boardId: string;
+  },
+): Promise<{ id: string; roadmapOrder: number }> {
+  const p = ReorderRoadmapRowInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    async function readRank(id: string | null): Promise<number | null> {
+      if (id === null) return null;
+      const [row] = await tx
+        .select({ ord: cards.roadmapOrder })
+        .from(cards)
+        .where(eq(cards.id, id));
+      return row?.ord ?? null;
+    }
+
+    let beforeRank = await readRank(p.beforeId);
+    let afterRank = await readRank(p.afterId);
+
+    let newRank: number;
+    try {
+      newRank = computeNewRank(beforeRank, afterRank);
+    } catch (err) {
+      if (!(err instanceof RankCollisionError)) throw err;
+      // Renumber every card on the board with fresh sparse ranks. We
+      // sort by current `roadmap_order ASC NULLS LAST`, then by
+      // `start_date ASC NULLS LAST`, then by `created_at ASC` so the
+      // existing visual order is preserved.
+      const all = await tx
+        .select({
+          id: cards.id,
+          ord: cards.roadmapOrder,
+          startDate: cards.startDate,
+          createdAt: cards.createdAt,
+        })
+        .from(cards)
+        .where(and(eq(cards.boardId, p.boardId), eq(cards.archived, false)))
+        .orderBy(
+          sql`${cards.roadmapOrder} asc nulls last`,
+          sql`${cards.startDate} asc nulls last`,
+          asc(cards.createdAt),
+        );
+      // Bulk update via a single CASE-WHEN statement to keep round-trips
+      // bounded.
+      let i = 0;
+      for (const row of all) {
+        const next = (i + 1) * RANK_STEP;
+        i++;
+        await tx
+          .update(cards)
+          .set({ roadmapOrder: next })
+          .where(eq(cards.id, row.id));
+      }
+      // Re-read the now-renumbered neighbour ranks and retry the midpoint
+      // calc; this time the gap is guaranteed to be ≥ RANK_STEP so it
+      // can't collide.
+      beforeRank = await readRank(p.beforeId);
+      afterRank = await readRank(p.afterId);
+      newRank = computeNewRank(beforeRank, afterRank);
+    }
+
+    const [row] = await tx
+      .update(cards)
+      .set({ roadmapOrder: newRank })
+      .where(eq(cards.id, p.cardId))
+      .returning({ id: cards.id, roadmapOrder: cards.roadmapOrder });
+    if (!row) throw new Error("Forbidden");
+    return { id: row.id, roadmapOrder: row.roadmapOrder as number };
+  });
+}
+
+export async function reorderRoadmapRow(input: {
+  cardId: string;
+  beforeId: string | null;
+  afterId: string | null;
+  boardId: string;
+}) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  try {
+    return await reorderRoadmapRowImpl(t, input);
+  } catch (err) {
+    const msg = (err as Error).message;
+    throw new Error(msg === "Forbidden" ? "Forbidden" : `Reorder failed: ${msg}`);
+  }
+}
+

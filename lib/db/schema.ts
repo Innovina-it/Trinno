@@ -138,6 +138,10 @@ export const cards = pgTable("cards", {
   spentMin: integer("spent_min").notNull().default(0),
   startDate: timestamp("start_date", { withTimezone: true }),
   targetDate: timestamp("target_date", { withTimezone: true }),
+  // Plan #16b-γ-G G1 — manual order axis for roadmap rows. NULL = unranked
+  // (default sort: start_date ASC, created_at ASC). Sparse-int ranks
+  // (Linear/Jira pattern) when set; collisions trigger a board renumber.
+  roadmapOrder: integer("roadmap_order"),
   priority: cardPriority("priority"),
   coverKind: text("cover_kind").notNull().default("none"),
   coverValue: text("cover_value"),

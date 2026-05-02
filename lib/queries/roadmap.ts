@@ -14,6 +14,8 @@ export type RoadmapCard = {
   boardId: string;
   boardTitle: string;
   archived: boolean;
+  // Plan #16b-γ-G G1 — manual roadmap row order. NULL = unranked.
+  roadmapOrder: number | null;
 };
 
 export type RoadmapLink = { fromId: string; toId: string };
@@ -44,6 +46,7 @@ export async function listRoadmapCards(
         boardId: cards.boardId,
         boardTitle: boards.title,
         archived: cards.archived,
+        roadmapOrder: cards.roadmapOrder,
       })
       .from(cards)
       .innerJoin(boards, eq(boards.id, cards.boardId))
@@ -70,6 +73,7 @@ export async function listRoadmapCards(
         boardId: r.boardId,
         boardTitle: r.boardTitle,
         archived: r.archived,
+        roadmapOrder: r.roadmapOrder ?? null,
       }));
   });
 }

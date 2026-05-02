@@ -105,6 +105,16 @@ export const MoveCardInput = z.object({
 });
 export const ArchiveCardInput = z.object({ id: Uuid, archived: z.boolean() });
 
+// Plan #16b-γ-G G1 — manual roadmap row reorder. `beforeId` lands ABOVE
+// the moved card, `afterId` lands BELOW; either may be null when
+// dropping at top / bottom of the board.
+export const ReorderRoadmapRowInput = z.object({
+  cardId: Uuid,
+  beforeId: Uuid.nullable(),
+  afterId: Uuid.nullable(),
+  boardId: Uuid,
+});
+
 export const CreateLabelInput = z.object({
   boardId: Uuid,
   name: z.string().trim().max(60).default(""),
