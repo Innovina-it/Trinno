@@ -52,6 +52,7 @@ import {
 import { SprintOverlay } from "./sprint-overlay";
 import { RoadmapNewCardDialog } from "./new-card-dialog";
 import { RoadmapFilterBar } from "./roadmap-filter-bar";
+import { RoadmapMiniMap } from "./mini-map";
 import { parseFilters } from "@/lib/board-filters";
 import { Plus } from "lucide-react";
 
@@ -1191,6 +1192,16 @@ export function RoadmapView({
         </div>
       </div>
       <RoadmapFilterBar />
+
+      {cards.length > 0 && (
+        <RoadmapMiniMap
+          cards={cards}
+          gridStart={gridStart}
+          gridEnd={gridEnd}
+          canvasWidth={width}
+          scrollerRef={scrollerRef}
+        />
+      )}
 
       {cards.length === 0 ? (
         // Plan #16b-γ-C (#7) — explicit empty-state with editorial
