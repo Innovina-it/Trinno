@@ -673,7 +673,11 @@
        quick-add dialog mount). */
   header,
   nav,
+  /* MAINTENANCE: when adding a new toolbar chip with `data-testid="roadmap-*"`,
+     add it to this list. The fallback rule below collapses the toolbar wrapper
+     anyway, but explicit selectors keep this contract auditable. */
   [data-testid="roadmap-zoom"],
+  [data-testid="roadmap-lanes"],
   [data-testid="roadmap-live"],
   [data-testid="roadmap-critical-toggle"],
   [data-testid="roadmap-auto-cascade-toggle"],
