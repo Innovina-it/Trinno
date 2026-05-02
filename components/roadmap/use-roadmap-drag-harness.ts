@@ -1098,8 +1098,20 @@ export function useRoadmapDragHarness(
 
   const onCanvasEmptyPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.target !== e.currentTarget) return;
       if (e.button !== 0) return;
+      // Bail if the pointerdown landed on a known interactive descendant
+      // (bar, row handle). Decorative children — vertical grid lines,
+      // lane separators, header strip text — are pointer-events-default
+      // but rendering empty so they may swallow `e.target` even though the
+      // user's intent is "empty area paint". Walking from `e.target` up
+      // until we either hit one of those decoys (continue) or a real
+      // interactive element (bail) is more reliable than `e.target ===
+      // e.currentTarget`, which fails when divs without `pointer-events:
+      // none` happen to sit under the cursor.
+      const t = e.target as HTMLElement | null;
+      if (t && t.closest('[data-testid="roadmap-bar"]')) return;
+      if (t && t.closest('[data-testid="roadmap-row-handle"]')) return;
+      if (t && t.closest('[data-testid="roadmap-bar-overflow"]')) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
