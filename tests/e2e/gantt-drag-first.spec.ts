@@ -7,6 +7,7 @@
 //   G8.4 — priority gutter sets priority on bar drop  (G4)
 //   G8.5 — snap to dependency target                  (G6)
 //   G8.6 — header NEW CARD chip drag onto epic row    (G7)
+//   G8.7 — chip click without drag opens empty dialog (G7 click parity)
 //
 // ⚠ Migration prerequisite ⚠
 // G1 introduced `cards.roadmap_order` in `supabase/migrations/0046_roadmap_order.sql`.
@@ -795,4 +796,57 @@ test("G8.6 dragging the NEW CARD chip onto an epic row creates a child", async (
   const barCenterY = newBarBox.y + newBarBox.height / 2;
   expect(barCenterY).toBeGreaterThanOrEqual(laneBox2.y);
   expect(barCenterY).toBeLessThanOrEqual(laneBox2.y + laneBox2.height);
+});
+
+// ---------------------------------------------------------------------------
+// G8.7 — Chip click without drag opens empty dialog (G7 click parity).
+//
+// Regression net for the < 4 px branch in chip pointerdown handling: the
+// pointerdown→up sequence with no movement should still surface the
+// new-card dialog with no prefill, matching the pre-G7 click behavior.
+// ---------------------------------------------------------------------------
+
+test("G8.7 chip click without drag opens empty new-card dialog", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const { workspaceId } = await signupAndLandOnWorkspace(page, "g87");
+  await page.goto(`/w/${workspaceId}`);
+  await createBoard(page, "G87");
+  await addList(page, "Backlog");
+
+  await page.goto(`/w/${workspaceId}/roadmap`);
+  await expect(page.getByTestId("roadmap-grid")).toBeVisible({ timeout: 8000 });
+
+  const chip = page.getByTestId("roadmap-new-card-trigger");
+  await expect(chip).toBeVisible({ timeout: 5000 });
+  const chipBox = await chip.boundingBox();
+  if (!chipBox) throw new Error("missing chip bbox");
+  const cx = chipBox.x + chipBox.width / 2;
+  const cy = chipBox.y + chipBox.height / 2;
+
+  // Pointerdown + 1 px nudge + up — under the 4 px CHIP_DRAG_THRESHOLD.
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 1, cy, { steps: 1 });
+  await page.mouse.up();
+
+  // Dialog opens.
+  const dialog = page.getByTestId("roadmap-new-card-dialog");
+  await expect(dialog).toBeVisible({ timeout: 5000 });
+
+  // No prefill: start defaults to today (matches todayISO()), title empty.
+  const titleVal = await dialog
+    .getByTestId("roadmap-new-card-title")
+    .inputValue();
+  expect(titleVal).toBe("");
+  const today = new Date().toISOString().slice(0, 10);
+  const startVal = await dialog
+    .getByTestId("roadmap-new-card-start")
+    .inputValue();
+  expect(startVal).toBe(today);
+
+  // Cancel — no card created.
+  await dialog.getByRole("button", { name: /cancel/i }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 5000 });
 });
