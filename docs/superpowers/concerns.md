@@ -36,7 +36,7 @@ Living doc of intentional gaps, deferred items, and workarounds in the trello-fo
 
 | Area | Limit | Status |
 |---|---|---|
-| `card_links` workspace realtime | Pending (γ-Master B4). Cross-board link changes propagate on next store invalidation, not live. | 🟡 |
+| `card_links` workspace realtime | Live on board pages (γ-Master B4 — `useWorkspaceRealtime` mounted in `BoardView`). Per-board + per-workspace channels both subscribe to current board's tables; accepted dual-write into separate stores. | ✅ |
 | Inbox `card.dates` deep-link | Routes to card modal, not Gantt focus. Fix queued (γ-Master D3). | 🟡 |
 | Activity "set roadmap dates" link | Opens card modal instead of roadmap view. Fix queued (γ-Master D4). | 🟡 |
 
