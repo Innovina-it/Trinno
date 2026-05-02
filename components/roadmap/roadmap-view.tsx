@@ -821,6 +821,22 @@ export function RoadmapView({
     [router],
   );
 
+  // Plan #16b-γ-Gantt-Master Group C (C5) — jump-to-date control.
+  // Centers the given date in the scroller viewport, clamped to the
+  // scrollable range. Smooth scroll for nicer UX.
+  const jumpToDate = useCallback(
+    (target: Date) => {
+      const scroller = scrollerRef.current;
+      if (!scroller) return;
+      const x = xForDate(startOfDay(target), gridStart, ppd);
+      const desired = x - scroller.clientWidth / 2;
+      const max = scroller.scrollWidth - scroller.clientWidth;
+      const left = Math.max(0, Math.min(max, desired));
+      scroller.scrollTo({ left, behavior: "smooth" });
+    },
+    [gridStart, ppd],
+  );
+
   // Cleanup any dangling listeners if the component unmounts mid-drag.
   useEffect(() => {
     return () => {
@@ -1120,6 +1136,24 @@ export function RoadmapView({
           >
             AUTO-RESCHEDULE: {autoCascade ? "ON" : "OFF"}
           </button>
+          <button
+            type="button"
+            onClick={() => jumpToDate(new Date())}
+            data-testid="roadmap-jump-today"
+            className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
+            title="Scroll to today"
+          >
+            TODAY
+          </button>
+          <input
+            type="date"
+            data-testid="roadmap-jump-date"
+            onChange={(e) => {
+              if (e.target.value) jumpToDate(new Date(e.target.value));
+            }}
+            className="chip inline-flex items-center mono-meta-sm bg-[color:var(--surface)] hover:bg-[rgb(255_255_255/0.08)] border-0 outline-none focus:ring-1 focus:ring-fg/40"
+            title="Jump to date"
+          />
         </div>
         <div className="flex items-center gap-3">
           <button
