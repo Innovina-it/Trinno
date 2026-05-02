@@ -60,11 +60,18 @@ export function RoadmapMiniMap({
     const scroller = scrollerRef.current;
     if (!scroller) return;
     const handler = () => {
-      setScrollState({
+      const next = {
         left: scroller.scrollLeft,
         width: scroller.clientWidth,
         scrollWidth: scroller.scrollWidth,
-      });
+      };
+      setScrollState((prev) =>
+        prev.left === next.left &&
+        prev.width === next.width &&
+        prev.scrollWidth === next.scrollWidth
+          ? prev
+          : next,
+      );
     };
     handler();
     scroller.addEventListener("scroll", handler, { passive: true });
@@ -84,11 +91,18 @@ export function RoadmapMiniMap({
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    setScrollState({
+    const next = {
       left: scroller.scrollLeft,
       width: scroller.clientWidth,
       scrollWidth: scroller.scrollWidth,
-    });
+    };
+    setScrollState((prev) =>
+      prev.left === next.left &&
+      prev.width === next.width &&
+      prev.scrollWidth === next.scrollWidth
+        ? prev
+        : next,
+    );
   }, [canvasWidth, cards.length, scrollerRef]);
 
   const ratio =
