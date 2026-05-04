@@ -7,11 +7,18 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Archive } from "lucide-react";
+import { Archive, Trash2, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import type { ListRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
-import { archiveList } from "@/actions/lists";
+import { archiveList, deleteList } from "@/actions/lists";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { undoBus } from "@/lib/undo-bus";
 import { errorBus } from "@/lib/errors/error-bus";
 import { CardTile } from "./card-tile";
@@ -106,7 +113,28 @@ export function ListColumn({
   // list (and its cards) optimistically via the realtime subscription.
   // The undo callback restores via archiveList(id, archived=false).
   const updateListLocal = useBoardStore((s) => s.updateList);
+  const removeListLocal = useBoardStore((s) => s.removeList);
   const [, startArchive] = useTransition();
+  const [, startDelete] = useTransition();
+  function onDelete() {
+    if (
+      !window.confirm(
+        `Delete list "${list.title}" PERMANENTLY? All cards in it will also be deleted. Cannot be undone.`,
+      )
+    )
+      return;
+    startDelete(async () => {
+      try {
+        await deleteList({ id: list.id });
+        removeListLocal(list.id);
+        toast.success(`Deleted list "${list.title}"`);
+      } catch (err) {
+        const m = (err as Error).message;
+        toast.error(`Delete failed: ${m}`);
+        errorBus.push({ message: `Delete list failed: ${m}` });
+      }
+    });
+  }
   function onArchive() {
     if (
       !window.confirm(
@@ -182,19 +210,34 @@ export function ListColumn({
             {list.title}
           </h3>
         </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onArchive();
-          }}
-          aria-label="Archive list"
-          data-testid="list-archive"
-          className="absolute right-2 top-2 rounded p-1.5 text-fg-faint opacity-0 transition-opacity duration-150 hover:bg-[rgb(255_255_255/0.06)] hover:text-fg group-hover/list:opacity-100"
-          title="Archive list"
-        >
-          <Archive className="size-3.5" />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="absolute right-2 top-2 rounded p-1.5 text-fg-muted hover:bg-[rgb(255_255_255/0.06)] hover:text-fg transition-colors"
+            aria-label="List actions"
+            data-testid="list-actions"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoreVertical className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem
+              data-testid="list-archive"
+              onClick={() => onArchive()}
+            >
+              <Archive className="size-3.5" />
+              <span>Archive list</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              data-testid="list-delete"
+              onClick={() => onDelete()}
+            >
+              <Trash2 className="size-3.5" />
+              <span>Delete permanently</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div

@@ -7,7 +7,7 @@ import { getSessionToken, requireUser } from "@/lib/auth";
 import { positionBetween } from "@/lib/ordering";
 import {
   CreateListInput, RenameListInput, MoveListInput, ArchiveListInput,
-  SetWipLimitInput, SetListStatusKindInput,
+  SetWipLimitInput, SetListStatusKindInput, DeleteListInput,
 } from "@/lib/validation";
 
 export async function createListImpl(token: string, input: { boardId: string; title: string }) {
@@ -112,6 +112,29 @@ export async function moveList(input: { id: string; position: string }) {
   revalidatePath(`/b/${r.boardId}`);
   return r;
 }
+export async function deleteListImpl(
+  token: string,
+  input: { id: string },
+) {
+  const parsed = DeleteListInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const r = await tx
+      .delete(lists)
+      .where(eq(lists.id, parsed.id))
+      .returning({ id: lists.id, boardId: lists.boardId });
+    if (r.length === 0) throw new Error("Forbidden");
+    return r[0];
+  });
+}
+
+export async function deleteList(input: { id: string }) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const r = await deleteListImpl(t, input);
+  revalidatePath(`/b/${r.boardId}`);
+  revalidatePath(`/b/${r.boardId}/settings`);
+}
+
 export async function archiveList(input: { id: string; archived: boolean }) {
   await requireUser();
   const t = (await getSessionToken())!;
