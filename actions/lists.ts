@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { lists } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
@@ -106,6 +106,7 @@ export async function ensureStatusListImpl(
 ) {
   const parsed = EnsureStatusListInput.parse(input);
   return dbAsUser(token, async (tx) => {
+    // Fast path: row already exists.
     const [existing] = await tx
       .select()
       .from(lists)
@@ -118,6 +119,9 @@ export async function ensureStatusListImpl(
       .limit(1);
     if (existing) return existing;
 
+    // Insert with ON CONFLICT to handle the race against a concurrent
+    // call. The unique index from 0054 covers (board_id, status_kind)
+    // when status_kind IS NOT NULL.
     const [last] = await tx
       .select({ position: lists.position })
       .from(lists)
@@ -126,7 +130,7 @@ export async function ensureStatusListImpl(
       .limit(1);
     const pos = positionBetween(last?.position ?? null, null);
 
-    const [row] = await tx
+    const inserted = await tx
       .insert(lists)
       .values({
         boardId: parsed.boardId,
@@ -134,9 +138,28 @@ export async function ensureStatusListImpl(
         position: pos,
         statusKind: parsed.statusKind,
       })
+      .onConflictDoNothing({
+        target: [lists.boardId, lists.statusKind],
+        where: sql`${lists.statusKind} is not null`,
+      })
       .returning();
-    if (!row) throw new Error("Forbidden");
-    return row;
+
+    if (inserted.length > 0) return inserted[0];
+
+    // Lost the race: another concurrent call inserted the row first.
+    // Re-SELECT to fetch their winning row.
+    const [winner] = await tx
+      .select()
+      .from(lists)
+      .where(
+        and(
+          eq(lists.boardId, parsed.boardId),
+          eq(lists.statusKind, parsed.statusKind),
+        ),
+      )
+      .limit(1);
+    if (!winner) throw new Error("Forbidden");
+    return winner;
   });
 }
 

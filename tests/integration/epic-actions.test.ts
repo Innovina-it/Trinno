@@ -70,4 +70,31 @@ describe("ensureStatusListImpl", () => {
     );
     expect(allInProgress).toHaveLength(1);
   });
+
+  it("survives a concurrent call: only one list created per (board, status)", async () => {
+    const u = await makeUser("ensure-race");
+    const ws = await createWorkspaceImpl(u.jwt, { name: "WS" });
+    const b = await createBoardImpl(u.jwt, {
+      workspaceId: ws.id, title: "B",
+      backgroundKind: "color", backgroundValue: "#fafafa",
+    });
+    // Fire 5 concurrent calls for the same (board, status). They must
+    // all return the same list id, and the DB must contain exactly one
+    // row matching that (board, status).
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        ensureStatusListImpl(u.jwt, { boardId: b.id, statusKind: "review" }),
+      ),
+    );
+    const ids = new Set(results.map((r) => r.id));
+    expect(ids.size).toBe(1);
+
+    const allReview = await dbAsUser(u.jwt, async (tx) =>
+      tx
+        .select()
+        .from(lists)
+        .where(and(eq(lists.boardId, b.id), eq(lists.statusKind, "review"))),
+    );
+    expect(allReview).toHaveLength(1);
+  });
 });
