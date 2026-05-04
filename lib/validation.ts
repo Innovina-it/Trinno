@@ -85,6 +85,14 @@ export const SetListStatusKindInput = z.object({
   statusKind: ListStatusKindZ.nullable(),
 });
 
+// Plan #epic-as-kanban — idempotent resolver: find or create the list on
+// `boardId` mapped to `statusKind`. Used by the epic-kanban drag handler
+// so the five status columns appear automatically.
+export const EnsureStatusListInput = z.object({
+  boardId: Uuid,
+  statusKind: ListStatusKindZ,
+});
+
 // Plan #16b-γ-A (#4) — cascade-shift dependents of a card by N days. The
 // recursive walk is server-side and capped at depth 50 with cycle
 // protection; values outside ±365 days are rejected.

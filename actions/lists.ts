@@ -1,13 +1,15 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { lists } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { positionBetween } from "@/lib/ordering";
+import { STATUS_DEFAULT_TITLE, type StatusKind } from "@/lib/status";
 import {
   CreateListInput, RenameListInput, MoveListInput, ArchiveListInput,
   SetWipLimitInput, SetListStatusKindInput, DeleteListInput,
+  EnsureStatusListInput,
 } from "@/lib/validation";
 
 export async function createListImpl(token: string, input: { boardId: string; title: string }) {
@@ -85,6 +87,53 @@ export async function setListStatusKindImpl(
       .update(lists)
       .set({ statusKind: p.statusKind })
       .where(eq(lists.id, p.id))
+      .returning();
+    if (!row) throw new Error("Forbidden");
+    return row;
+  });
+}
+
+/**
+ * Plan #epic-as-kanban — idempotent: return the first list on `boardId`
+ * whose `status_kind = statusKind`. Create one if none exists. Used by
+ * the epic-kanban drag handler so columns appear automatically.
+ *
+ * Caller must have write access to the board (RLS on lists handles this).
+ */
+export async function ensureStatusListImpl(
+  token: string,
+  input: { boardId: string; statusKind: StatusKind },
+) {
+  const parsed = EnsureStatusListInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(lists)
+      .where(
+        and(
+          eq(lists.boardId, parsed.boardId),
+          eq(lists.statusKind, parsed.statusKind),
+        ),
+      )
+      .limit(1);
+    if (existing) return existing;
+
+    const [last] = await tx
+      .select({ position: lists.position })
+      .from(lists)
+      .where(eq(lists.boardId, parsed.boardId))
+      .orderBy(desc(lists.position))
+      .limit(1);
+    const pos = positionBetween(last?.position ?? null, null);
+
+    const [row] = await tx
+      .insert(lists)
+      .values({
+        boardId: parsed.boardId,
+        title: STATUS_DEFAULT_TITLE[parsed.statusKind],
+        position: pos,
+        statusKind: parsed.statusKind,
+      })
       .returning();
     if (!row) throw new Error("Forbidden");
     return row;

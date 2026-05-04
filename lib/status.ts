@@ -21,6 +21,17 @@ export const STATUS_LABEL: Record<StatusKind, string> = {
   blocked: "blocked",
 };
 
+// Plan #epic-as-kanban — display titles used when auto-creating a list
+// for a given status_kind. Mirrors STATUS_LABEL but in title-case for
+// list-name (a list called "in progress" lower-case looks wrong).
+export const STATUS_DEFAULT_TITLE: Record<StatusKind, string> = {
+  todo: "Todo",
+  in_progress: "In progress",
+  review: "Review",
+  done: "Done",
+  blocked: "Blocked",
+};
+
 type CardLike = { listId: string };
 type ListLike = { id: string; statusKind: StatusKind | null };
 
