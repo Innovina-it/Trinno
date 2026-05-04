@@ -46,6 +46,7 @@ Living doc of intentional gaps, deferred items, and workarounds in the trello-fo
 | `card_links` workspace realtime | Live on board pages (γ-Master B4 — `useWorkspaceRealtime` mounted in `BoardView`). Per-board + per-workspace channels both subscribe to current board's tables; accepted dual-write into separate stores. | ✅ |
 | Inbox `card.dates` deep-link | Shipped (γ-Master D3). Routes to `/w/<workspaceId>/roadmap?focus=<cardId>` for both inbox list and notification bell. Other notification kinds keep the card modal link. | ✅ |
 | Activity "set roadmap dates" link | Shipped (γ-Master D4). Board ActivityFeed and CardActivity panel both wrap `card.dates` rows in a roadmap-focus link. | ✅ |
+| Aggregate Kanban (My Tasks) | Shipped — `/w/<id>/all-tasks`. Workspace-wide view, columns by `lists.statusKind`, default scope `mine`. Drag changes status (same-board only — cross-board drag deferred). | ✅ |
 
 ## Bulk operations
 
@@ -100,6 +101,7 @@ The following were explicitly out of scope for #16b-γ and are not yet planned:
 - Public board sharing / read-only links
 - Per-board permissions beyond workspace role
 - Webhooks / external integrations
+- Cross-board drag in the aggregate kanban (drop a card onto a column whose target list lives on a different board would require a `moveCardCrossBoard` call from the aggregate view; v1 keeps the existing `moveCard` same-board path for simplicity)
 
 ## How to update this doc
 
