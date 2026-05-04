@@ -56,13 +56,29 @@ export function NewEpicLaneButton() {
     e.preventDefault();
     const trimmed = title.trim();
     if (!canCreate || !trimmed) return;
+    // Seed default dates so the epic lane is immediately visible on the
+    // roadmap. The roadmap filters out cards lacking either start or
+    // target date — without this, a freshly created epic looks invisible.
+    // 2-week default span starting today (UTC midnight); user can edit
+    // via the right-click menu's Edit dates.
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const target = new Date(today);
+    target.setUTCDate(target.getUTCDate() + 14);
+    const startISO = today.toISOString();
+    const targetISO = target.toISOString();
     startTransition(async () => {
       try {
         const card = await createCard({
           listId: firstListOnBoard!.id,
           title: trimmed,
         });
-        await updateCard({ id: card.id, type: "epic" });
+        await updateCard({
+          id: card.id,
+          type: "epic",
+          startDate: startISO,
+          targetDate: targetISO,
+        });
         toast.success(`Epic "${trimmed}" created`);
         setTitle("");
         setOpen(false);
