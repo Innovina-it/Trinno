@@ -5,7 +5,7 @@ import { ChevronRight } from "lucide-react";
 const STORAGE_KEY = "trinnovina:activity-open";
 
 export function ActivityShell({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -27,8 +27,19 @@ export function ActivityShell({ children }: { children: React.ReactNode }) {
   }
 
   if (!hydrated) {
-    // Server-render the open state to avoid layout flash
-    return <div className="relative shrink-0">{children}</div>;
+    // Render collapsed pill on the server to match the new default;
+    // localStorage may flip to open after hydration.
+    return (
+      <button
+        type="button"
+        className="glass rounded-2xl px-3 py-2.5 self-start flex items-center gap-2 text-fg-muted opacity-70"
+        aria-hidden
+        tabIndex={-1}
+      >
+        <ChevronRight className="size-4 rotate-180" />
+        <span className="mono-meta-sm">ACTIVITY</span>
+      </button>
+    );
   }
 
   if (!open) {
