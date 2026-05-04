@@ -20,6 +20,19 @@ export const ChangeMemberRoleInput = z.object({
 });
 export const RemoveMemberInput = z.object({ workspaceId: Uuid, userId: Uuid });
 
+// Board-level membership: invite by email + change role + remove.
+export const InviteBoardMemberInput = z.object({
+  boardId: Uuid,
+  email: Email,
+  role: z.enum(["admin", "member", "observer"]),
+});
+export const ChangeBoardMemberRoleInput = z.object({
+  boardId: Uuid,
+  userId: Uuid,
+  role: z.enum(["admin", "member", "observer"]),
+});
+export const RemoveBoardMemberInput = z.object({ boardId: Uuid, userId: Uuid });
+
 export const CreateBoardInput = z.object({
   workspaceId: Uuid,
   title: Title,

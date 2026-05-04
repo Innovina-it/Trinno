@@ -6,7 +6,9 @@ import { BoardSettingsForm } from "@/components/board/board-settings-form";
 import { ListsAdminPanel } from "@/components/board/lists-admin-panel";
 import { SlaPoliciesPanel } from "@/components/board/sla-policies-panel";
 import { ComponentsPanel } from "@/components/components/components-panel";
-import { listFavoriteBoardIds } from "@/lib/queries/favorites";
+import { BoardMembersPanel } from "@/components/board/board-members-panel";
+import { listFavoriteBoardIds, } from "@/lib/queries/favorites";
+import { listBoardMembersFor } from "@/lib/queries/workspaces";
 
 export default async function BoardSettingsPage({
   params,
@@ -21,6 +23,7 @@ export default async function BoardSettingsPage({
   const b = snap.board;
   const slaPolicies = await listSlaPoliciesForBoard(token, boardId);
   const favoritedIds = await listFavoriteBoardIds(token);
+  const boardMembers = await listBoardMembersFor(token, boardId);
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-6 py-10">
       <h1 className="text-2xl font-semibold">{b.title} — Board settings</h1>
@@ -59,6 +62,14 @@ export default async function BoardSettingsPage({
       <section className="space-y-4">
         <h2 className="mono-meta">Components</h2>
         <ComponentsPanel boardId={boardId} />
+      </section>
+      <section className="space-y-4">
+        <h2 className="mono-meta">Board members</h2>
+        <p className="text-fg-muted text-sm">
+          Add specific users to this board. Workspace members already see
+          workspace-visible boards by default.
+        </p>
+        <BoardMembersPanel boardId={boardId} members={boardMembers} />
       </section>
     </div>
   );

@@ -28,6 +28,23 @@ export async function getWorkspace(token: string, id: string) {
   });
 }
 
+export async function listBoardMembersFor(token: string, boardId: string) {
+  const { dbAsUser: _ } = await import("@/lib/db/client");
+  const { boardMembers, profiles } = await import("@/lib/db/schema");
+  return _(token, async (tx) =>
+    tx
+      .select({
+        userId: boardMembers.userId,
+        role: boardMembers.role,
+        displayName: profiles.displayName,
+        avatarUrl: profiles.avatarUrl,
+      })
+      .from(boardMembers)
+      .innerJoin(profiles, eq(profiles.id, boardMembers.userId))
+      .where(eq(boardMembers.boardId, boardId)),
+  );
+}
+
 export async function listMembers(token: string, workspaceId: string) {
   return dbAsUser(token, async (tx) =>
     tx
