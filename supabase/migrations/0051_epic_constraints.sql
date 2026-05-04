@@ -50,3 +50,29 @@ drop trigger if exists cards_co_locate_with_epic_parent_biu on public.cards;
 create trigger cards_co_locate_with_epic_parent_biu
   before insert or update of parent_card_id on public.cards
   for each row execute function public.cards_co_locate_with_epic_parent();
+
+-- Plan #epic-as-kanban (Q10) — close the type-flip loophole. The
+-- validate trigger above fires on the *child* row; flipping a parent's
+-- type to 'epic' while it already has epic children would otherwise
+-- bypass the invariant. This trigger fires on the parent row when its
+-- type flips to 'epic' and rejects if any child is also an epic.
+
+create or replace function public.cards_reject_epic_with_epic_children()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.type = 'epic' and (old.type is distinct from 'epic') then
+    if exists (
+      select 1 from public.cards
+      where parent_card_id = new.id and type = 'epic'
+    ) then
+      raise exception 'cards: epic cannot have an epic as parent';
+    end if;
+  end if;
+  return new;
+end$$;
+
+drop trigger if exists cards_reject_epic_with_epic_children_bu on public.cards;
+create trigger cards_reject_epic_with_epic_children_bu
+  before update of type on public.cards
+  for each row execute function public.cards_reject_epic_with_epic_children();

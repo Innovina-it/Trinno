@@ -87,4 +87,25 @@ describe("0051 epic constraints", () => {
     );
     expect(row.boardId).toBe(bA.id); // co-located onto epic's board
   });
+
+  it("rejects flipping a card to type=epic while it already has an epic child (parent-side type-flip)", async () => {
+    const u = await makeUser("epic-flip");
+    const { l } = await setup(u.jwt);
+    const p = await createCardImpl(u.jwt, { listId: l.id, title: "P" });
+    const c = await createCardImpl(u.jwt, { listId: l.id, title: "C" });
+    await updateCardImpl(u.jwt, { id: c.id, parentCardId: p.id });
+    await updateCardImpl(u.jwt, { id: c.id, type: "epic" });
+    // P is still type=task at this point. Flipping it to epic should fail
+    // because C is already an epic with parent_card_id = P.id.
+    let caught: unknown;
+    try {
+      await updateCardImpl(u.jwt, { id: p.id, type: "epic" });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeDefined();
+    const err = caught as Error & { cause?: { message?: string } };
+    const combined = `${err.message ?? ""} ${err.cause?.message ?? ""}`;
+    expect(combined).toMatch(/epic cannot have an epic as parent/i);
+  });
 });
