@@ -1,19 +1,16 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { logout } from "@/actions/auth";
 import { WorkspaceSwitcher, type WorkspaceLite } from "@/components/workspace/workspace-switcher";
 import { SearchBox } from "@/components/nav/search-box";
-import { NotificationBell } from "@/components/nav/notification-bell";
-import { FavoritesDropdown, type FavoriteEntry } from "@/components/nav/favorites-dropdown";
-import { RecentDropdown, type RecentEntry } from "@/components/nav/recent-dropdown";
+import { AccountMenu } from "@/components/nav/account-menu";
+import type { FavoriteEntry } from "@/components/nav/favorites-dropdown";
+import type { RecentEntry } from "@/components/nav/recent-dropdown";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { LayoutDashboard, Inbox, Calendar, Map, Tag, Menu } from "lucide-react";
+import { Calendar, Map, Tag, Menu } from "lucide-react";
 
 const linkCls =
   "mono-meta-sm tracking-[0.14em] text-fg-muted hover:text-fg transition-colors px-2.5 py-1.5 rounded hover:bg-[rgb(255_255_255/0.05)] inline-flex items-center gap-1.5";
@@ -94,62 +91,17 @@ export function TopNav({
 
         <span aria-hidden className="hidden lg:inline h-6 w-px bg-hairline" />
 
-        {/* RIGHT: personal cluster (search + dashboards/inbox + favorites/recents/bell + logout) */}
-        <div className="flex items-center gap-1 shrink-0">
-          <div className="hidden md:block mr-1">
+        {/* RIGHT: search + account avatar (which contains everything else) */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="hidden md:block">
             <SearchBox />
           </div>
-          <Link
-            href="/dashboards"
-            className={linkCls + " hidden md:inline-flex"}
-            data-testid="nav-dashboards"
-            aria-label="Dashboards"
-          >
-            <LayoutDashboard className="size-3.5" />
-            <span className="hidden xl:inline">DASHBOARDS</span>
-          </Link>
-          <Link
-            href="/inbox"
-            className={linkCls + " hidden md:inline-flex"}
-            data-testid="nav-inbox"
-            aria-label="Inbox"
-          >
-            <Inbox className="size-3.5" />
-            <span className="hidden xl:inline">INBOX</span>
-          </Link>
-          <FavoritesDropdown favorites={favorites} />
-          <RecentDropdown recents={recents} />
-          <NotificationBell userId={userId} />
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className="ml-1 p-1.5 rounded-full bg-gradient-to-br from-accent-cyan to-accent-magenta size-7 text-[10px] font-bold text-white shrink-0 hover:scale-105 transition-transform"
-              aria-label={`Account (${email})`}
-              title={email}
-            >
-              {email.slice(0, 2).toUpperCase()}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem disabled className="text-fg-faint">
-                <span className="mono-meta-sm truncate">{email}</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem render={<Link href="/dashboards" />} className="md:hidden">
-                <LayoutDashboard className="size-3.5" /> Dashboards
-              </DropdownMenuItem>
-              <DropdownMenuItem render={<Link href="/inbox" />} className="md:hidden">
-                <Inbox className="size-3.5" /> Inbox
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="md:hidden" />
-              <form action={logout}>
-                <button
-                  type="submit"
-                  className="w-full text-left px-2.5 py-2 text-sm text-[color:var(--accent-magenta)] hover:bg-[rgb(255_43_214/0.08)] rounded-lg transition-colors"
-                >
-                  Log out
-                </button>
-              </form>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <AccountMenu
+            userId={userId}
+            email={email}
+            favorites={favorites}
+            recents={recents}
+          />
         </div>
       </div>
     </header>
