@@ -55,6 +55,10 @@ async function closeCardModal(page: Page) {
 test("card features: labels + due date + comment", async ({ page }) => {
   // 1. Sign up and land on default workspace.
   await signupAndLandOnDefaultWorkspace(page);
+  // Workspace landing now redirects to /roadmap; visit /boards for the
+  // new-board CTA.
+  await page.getByTestId("nav-boards").click();
+  await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}\/boards/);
 
   // 2. Create a board. Two-step dialog post Plan #16b-γ-B.
   await page.getByRole("button", { name: /new board/i }).click();

@@ -50,8 +50,12 @@ test("workspace+board lifecycle", async ({ page }) => {
 
   await page.getByLabel("Name").fill("Side Project");
   await page.getByRole("button", { name: /^create$/i }).click();
-  // Should navigate to the new workspace page
+  // Should navigate to the new workspace; landing now redirects to /roadmap.
   await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}/);
+  // Open the board grid (now lives at /w/{id}/boards) so the workspace
+  // heading + new-board CTA are visible.
+  await page.getByTestId("nav-boards").click();
+  await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}\/boards/);
   await expect(page.getByRole("heading", { name: "Side Project" })).toBeVisible();
 
   // Create board (step 1: pick template — "Blank" is selected by default,
@@ -75,6 +79,9 @@ test("workspace+board lifecycle", async ({ page }) => {
   // Navigate back to the workspace via the breadcrumb-style link
   await page.getByRole("link", { name: "Trello Clone" }).click();
   await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}/);
+  // Open the board grid (workspace landing now redirects to /roadmap).
+  await page.getByTestId("nav-boards").click();
+  await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}\/boards/);
   // Roadmap should not appear in the grid (archived boards filtered out).
   // Scope the assertion to board tiles so it doesn't match the ROADMAP nav link.
   await expect(

@@ -94,7 +94,12 @@ test("card type, parent breadcrumb, sub-tasks, links, components, versions all p
 
   // 1. Sign up + create workspace board.
   await signupAndLandOnDefaultWorkspace(page);
-  const wsUrl = page.url();
+  // After landing, the URL might be /w/{id}/roadmap (workspace landing now
+  // redirects to roadmap). Derive the canonical /w/{id} prefix so wsUrl +
+  // "/settings" composes correctly later, then visit /boards to access the
+  // create-board CTA.
+  const wsUrl = page.url().replace(/\/(roadmap|boards|backlog|all-tasks|versions)(\/.*)?$/, "");
+  await page.goto(wsUrl + "/boards");
 
   await page.getByRole("button", { name: /new board/i }).click();
   await page.getByRole("button", { name: /^continue$/i }).click();

@@ -10,7 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Calendar, Map, Tag, Menu, ListChecks } from "lucide-react";
+import { Calendar, Map, Tag, Menu, ListChecks, Columns } from "lucide-react";
 
 const linkCls =
   "mono-meta-sm tracking-[0.14em] text-fg-muted hover:text-fg transition-colors px-2.5 py-1.5 rounded hover:bg-[rgb(255_255_255/0.05)] inline-flex items-center gap-1.5";
@@ -28,18 +28,18 @@ export function TopNav({
   const wsForLinks = activeWorkspaceId ?? workspaces[0]?.id;
   const wsLinks = wsForLinks
     ? [
-        // Plan #aggregate-kanban — workspace-level "My tasks" entry; positioned
-        // first so it sits between the workspace switcher (left) and the rest
-        // of the workspace nav, matching the planned IA.
+        // Plan epic-as-kanban / Task 16 — IA reordered so Roadmap (the workspace
+        // landing) is first, followed by Boards (new), Backlog, My tasks, Versions.
+        { href: `/w/${wsForLinks}/roadmap`, label: "Roadmap", Icon: Map, testId: "nav-roadmap" },
+        { href: `/w/${wsForLinks}/boards`, label: "Boards", Icon: Columns, testId: "nav-boards" },
+        { href: `/w/${wsForLinks}/backlog`, label: "Backlog", Icon: Tag, testId: "nav-backlog" },
         {
           href: `/w/${wsForLinks}/all-tasks`,
           label: "My tasks",
           Icon: ListChecks,
           testId: "nav-all-tasks",
         },
-        { href: `/w/${wsForLinks}/backlog`, label: "Backlog", Icon: Tag },
-        { href: `/w/${wsForLinks}/roadmap`, label: "Roadmap", Icon: Map },
-        { href: `/w/${wsForLinks}/versions`, label: "Versions", Icon: Calendar },
+        { href: `/w/${wsForLinks}/versions`, label: "Versions", Icon: Calendar, testId: "nav-versions" },
       ]
     : [];
 

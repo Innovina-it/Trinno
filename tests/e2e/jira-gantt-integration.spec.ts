@@ -130,7 +130,9 @@ test("jira-gantt integration: drag, critical path, cascade, cross-context realti
 
   // 1. Sign up both users.
   await signupAndLandOnDefaultWorkspace(a, emailA);
-  const wsUrlA = a.url();
+  // Workspace landing redirects to /roadmap; strip any trailing subpath so
+  // wsUrlA composes cleanly with "/settings", "/boards", etc.
+  const wsUrlA = a.url().replace(/\/(roadmap|boards|backlog|all-tasks|versions)(\/.*)?$/, "");
   const wsId = wsUrlA.match(/\/w\/([0-9a-f-]{36})/)![1];
   await signupAndLandOnDefaultWorkspace(b, emailB);
   const localPartB = emailB.split("@")[0];
@@ -142,7 +144,7 @@ test("jira-gantt integration: drag, critical path, cascade, cross-context realti
   await expect(a.getByText(localPartB)).toBeVisible({ timeout: 5000 });
 
   // 3. A creates a board.
-  await a.goto(wsUrlA);
+  await a.goto(wsUrlA + "/boards");
   await a.getByRole("button", { name: /new board/i }).click();
   await a.getByRole("button", { name: /^continue$/i }).click();
   await a.getByLabel("Title").fill("Gantt");

@@ -35,6 +35,10 @@ async function signupAndCreateBoard(page: Page) {
   await page.goto(link);
   await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}/);
 
+  // Workspace landing redirects to /roadmap; visit /boards for the new-board CTA.
+  await page.getByTestId("nav-boards").click();
+  await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}\/boards/);
+
   await page.getByRole("button", { name: /new board/i }).click();
   await page.getByRole("button", { name: /^continue$/i }).click();
   await page.getByLabel("Title").fill("Demo");

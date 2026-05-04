@@ -206,7 +206,7 @@ function addDays(d: Date, n: number): Date {
 test("G8.1 row reorder persists across reload", async ({ page }) => {
   test.setTimeout(120_000);
   const { workspaceId } = await signupAndLandOnWorkspace(page, "g81");
-  await page.goto(`/w/${workspaceId}`);
+  await page.goto(`/w/${workspaceId}/boards`);
   await createBoard(page, "G81");
   await addList(page, "Backlog");
 
@@ -307,7 +307,7 @@ test("G8.1 row reorder persists across reload", async ({ page }) => {
 test("G8.2 reparent across epics via vertical bar drag", async ({ page }) => {
   test.setTimeout(120_000);
   const { workspaceId } = await signupAndLandOnWorkspace(page, "g82");
-  await page.goto(`/w/${workspaceId}`);
+  await page.goto(`/w/${workspaceId}/boards`);
   await createBoard(page, "G82");
   await addList(page, "Backlog");
 
@@ -355,7 +355,7 @@ test("G8.2 reparent across epics via vertical bar drag", async ({ page }) => {
   // Resolve Epic B's lane vertical range via its lane-row bbox.
   const epicBLane = page
     .getByTestId("roadmap-lane-row")
-    .filter({ has: page.getByTestId("roadmap-lane-title-link").filter({ hasText: "Epic B" }) })
+    .filter({ has: page.getByTestId("lane-epic-header-link").filter({ hasText: "Epic B" }) })
     .first();
   await expect(epicBLane).toBeVisible({ timeout: 5000 });
 
@@ -394,7 +394,7 @@ test("G8.2 reparent across epics via vertical bar drag", async ({ page }) => {
   const epicBLane2 = page
     .getByTestId("roadmap-lane-row")
     .filter({
-      has: page.getByTestId("roadmap-lane-title-link").filter({ hasText: "Epic B" }),
+      has: page.getByTestId("lane-epic-header-link").filter({ hasText: "Epic B" }),
     })
     .first();
   const barBox2 = await storyBar2.boundingBox();
@@ -422,7 +422,7 @@ test("G8.3 drag-paint on empty canvas opens prefilled new-card dialog", async ({
 }) => {
   test.setTimeout(120_000);
   const { workspaceId } = await signupAndLandOnWorkspace(page, "g83");
-  await page.goto(`/w/${workspaceId}`);
+  await page.goto(`/w/${workspaceId}/boards`);
   await createBoard(page, "G83");
   await addList(page, "Backlog");
 
@@ -445,7 +445,7 @@ test("G8.3 drag-paint on empty canvas opens prefilled new-card dialog", async ({
   const epicLane = page
     .getByTestId("roadmap-lane-row")
     .filter({
-      has: page.getByTestId("roadmap-lane-title-link").filter({ hasText: "Epic Alpha" }),
+      has: page.getByTestId("lane-epic-header-link").filter({ hasText: "Epic Alpha" }),
     })
     .first();
   await expect(epicLane).toBeVisible({ timeout: 5000 });
@@ -523,7 +523,7 @@ test("G8.4 dragging bar into priority gutter band sets priority", async ({
 }) => {
   test.setTimeout(120_000);
   const { workspaceId } = await signupAndLandOnWorkspace(page, "g84");
-  await page.goto(`/w/${workspaceId}`);
+  await page.goto(`/w/${workspaceId}/boards`);
   await createBoard(page, "G84");
   await addList(page, "Backlog");
 
@@ -623,7 +623,7 @@ test("G8.5 dragging start edge near a blocker target snaps exactly", async ({
 }) => {
   test.setTimeout(120_000);
   const { workspaceId } = await signupAndLandOnWorkspace(page, "g85");
-  await page.goto(`/w/${workspaceId}`);
+  await page.goto(`/w/${workspaceId}/boards`);
   await createBoard(page, "G85");
   await addList(page, "Backlog");
 
@@ -741,7 +741,7 @@ test("G8.6 dragging the NEW CARD chip onto an epic row creates a child", async (
 }) => {
   test.setTimeout(120_000);
   const { workspaceId } = await signupAndLandOnWorkspace(page, "g86");
-  await page.goto(`/w/${workspaceId}`);
+  await page.goto(`/w/${workspaceId}/boards`);
   await createBoard(page, "G86");
   await addList(page, "Backlog");
 
@@ -766,7 +766,7 @@ test("G8.6 dragging the NEW CARD chip onto an epic row creates a child", async (
   const epicLane = page
     .getByTestId("roadmap-lane-row")
     .filter({
-      has: page.getByTestId("roadmap-lane-title-link").filter({ hasText: "Epic Drop" }),
+      has: page.getByTestId("lane-epic-header-link").filter({ hasText: "Epic Drop" }),
     })
     .first();
   await expect(epicLane).toBeVisible({ timeout: 5000 });
@@ -821,7 +821,7 @@ test("G8.6 dragging the NEW CARD chip onto an epic row creates a child", async (
   const epicLane2 = page
     .getByTestId("roadmap-lane-row")
     .filter({
-      has: page.getByTestId("roadmap-lane-title-link").filter({ hasText: "Epic Drop" }),
+      has: page.getByTestId("lane-epic-header-link").filter({ hasText: "Epic Drop" }),
     })
     .first();
   const laneBox2 = await epicLane2.boundingBox();
@@ -847,7 +847,7 @@ test("G8.7 chip click without drag opens empty new-card dialog", async ({
 }) => {
   test.setTimeout(60_000);
   const { workspaceId } = await signupAndLandOnWorkspace(page, "g87");
-  await page.goto(`/w/${workspaceId}`);
+  await page.goto(`/w/${workspaceId}/boards`);
   await createBoard(page, "G87");
   await addList(page, "Backlog");
 

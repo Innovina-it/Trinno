@@ -118,8 +118,10 @@ test("watchers, mentions, inbox, time tracking, dashboards", async ({
 
   // 1. Sign up user A. Create board with one card "Bug X".
   await signupAndConfirm(a, emailA);
-  const wsUrlA = a.url();
+  // Workspace landing redirects to /roadmap; capture the canonical /w/{id}.
+  const wsUrlA = a.url().replace(/\/(roadmap|boards|backlog|all-tasks|versions)(\/.*)?$/, "");
   const wsIdA = wsUrlA.match(/\/w\/([0-9a-f-]{36})/)![1];
+  await a.goto(wsUrlA + "/boards");
 
   await a.getByRole("button", { name: /new board/i }).click();
   await a.getByRole("button", { name: /^continue$/i }).click();

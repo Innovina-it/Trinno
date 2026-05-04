@@ -123,6 +123,10 @@ async function getCardOrderInList(page: Page, listTitle: string) {
 test("list + card + drag lifecycle", async ({ page }) => {
   // 1. Sign up → default workspace.
   await signupAndLandOnDefaultWorkspace(page);
+  // Workspace landing now redirects to /roadmap; visit /boards for the
+  // new-board CTA.
+  await page.getByTestId("nav-boards").click();
+  await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}\/boards/);
 
   // 2. Create board "Roadmap". Step 1 picks the template (Blank by default
   // post Plan #16b-γ-B); step 2 fills Title + tone.

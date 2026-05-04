@@ -109,8 +109,11 @@ test("sprints, backlog, story points, WIP, filters, swimlanes, roadmap", async (
 
   // 1. Sign up + create board.
   await signupAndLandOnDefaultWorkspace(page);
-  const wsUrl = page.url();
+  // Workspace landing now redirects to /roadmap; strip any subpath so wsUrl
+  // is the canonical /w/{id}, then visit /boards for the new-board CTA.
+  const wsUrl = page.url().replace(/\/(roadmap|boards|backlog|all-tasks|versions)(\/.*)?$/, "");
   const wsId = wsUrl.match(/\/w\/([0-9a-f-]{36})/)![1];
+  await page.goto(wsUrl + "/boards");
 
   await page.getByRole("button", { name: /new board/i }).click();
   await page.getByRole("button", { name: /^continue$/i }).click();

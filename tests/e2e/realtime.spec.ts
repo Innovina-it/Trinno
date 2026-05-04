@@ -52,6 +52,10 @@ test("user A creates a list → user B sees it within 3 s", async ({ browser }) 
   await signupAndConfirm(a, emailA);
   await signupAndConfirm(b, emailB);
 
+  // Workspace landing redirects to /roadmap; visit /boards for the new-board CTA.
+  await a.getByTestId("nav-boards").click();
+  await expect(a).toHaveURL(/\/w\/[0-9a-f-]{36}\/boards/);
+
   // A creates board in their default workspace
   await a.getByRole("button", { name: /new board/i }).click();
   await a.getByRole("button", { name: /^continue$/i }).click();

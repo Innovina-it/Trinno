@@ -94,7 +94,7 @@ test("dragging a card between status columns persists the move", async ({
 }) => {
   test.setTimeout(180_000);
   const { workspaceId } = await signupAndLand(page, "agg-drag");
-  await page.goto(`/w/${workspaceId}`);
+  await page.goto(`/w/${workspaceId}/boards`);
 
   // Create one board.
   await page.getByRole("button", { name: /new board/i }).click();
