@@ -17,6 +17,8 @@ import {
   RANK_STEP,
   RankCollisionError,
 } from "@/lib/roadmap/sparse-rank";
+import { ensureStatusListImpl } from "@/actions/lists";
+import type { StatusKind } from "@/lib/status";
 
 // Plan #16b-γ-D (#8) — bulk-action validators.
 //
@@ -169,6 +171,60 @@ export async function moveCardImpl(token: string, input: {
       .where(eq(cards.id, parsed.id)).returning();
     if (!row) throw new Error("Forbidden");
     return row;
+  });
+}
+
+/**
+ * Plan #epic-as-kanban — drag-end handler for the epic-kanban view.
+ * Resolves (or creates) a list on the card's board with the target
+ * status_kind, then moves the card into it at end-of-list. Single
+ * transaction so the create+move is atomic.
+ *
+ * No-op when the card already lives in a list with that status_kind.
+ */
+export async function moveCardToStatusImpl(
+  token: string,
+  input: { cardId: string; statusKind: StatusKind },
+): Promise<{ cardId: string; listId: string }> {
+  const cardId = input.cardId;
+  return dbAsUser(token, async (tx) => {
+    const [card] = await tx
+      .select({ id: cards.id, boardId: cards.boardId, listId: cards.listId })
+      .from(cards)
+      .where(eq(cards.id, cardId));
+    if (!card) throw new Error("Forbidden");
+
+    // No-op if already in a list with that status_kind.
+    const [currentList] = await tx
+      .select({ id: lists.id, statusKind: lists.statusKind })
+      .from(lists)
+      .where(eq(lists.id, card.listId));
+    if (currentList?.statusKind === input.statusKind) {
+      return { cardId, listId: card.listId };
+    }
+
+    // Resolve target list (idempotent create).
+    const target = await ensureStatusListImpl(token, {
+      boardId: card.boardId,
+      statusKind: input.statusKind,
+    });
+
+    // Position = end of target list.
+    const [last] = await tx
+      .select({ position: cards.position })
+      .from(cards)
+      .where(eq(cards.listId, target.id))
+      .orderBy(desc(cards.position))
+      .limit(1);
+    const pos = positionBetween(last?.position ?? null, null);
+
+    const [row] = await tx
+      .update(cards)
+      .set({ listId: target.id, position: pos })
+      .where(eq(cards.id, cardId))
+      .returning();
+    if (!row) throw new Error("Forbidden");
+    return { cardId, listId: target.id };
   });
 }
 
@@ -430,6 +486,16 @@ export async function moveCard(input: Parameters<typeof moveCardImpl>[1]) {
   const r = await moveCardImpl(t, input);
   revalidatePath(`/b/${r.boardId}`);
   return r;
+}
+// Plan #epic-as-kanban — server-action wrapper for the epic-kanban
+// drag-end handler. No `revalidatePath`: the kanban view relies on
+// realtime CDC for updates, not Next router cache invalidation.
+export async function moveCardToStatus(input: {
+  cardId: string; statusKind: StatusKind;
+}) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  return moveCardToStatusImpl(t, input);
 }
 export async function archiveCard(input: { id: string; archived: boolean }) {
   await requireUser();

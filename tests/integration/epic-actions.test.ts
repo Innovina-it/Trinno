@@ -2,11 +2,12 @@ import { describe, it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { eq, and } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { lists } from "@/lib/db/schema";
+import { lists, cards } from "@/lib/db/schema";
 import { ensureStatusListImpl } from "@/actions/lists";
 import { createWorkspaceImpl } from "@/actions/workspaces";
 import { createBoardImpl } from "@/actions/boards";
 import { createListImpl, setListStatusKindImpl } from "@/actions/lists";
+import { createCardImpl, moveCardToStatusImpl } from "@/actions/cards";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -96,5 +97,53 @@ describe("ensureStatusListImpl", () => {
         .where(and(eq(lists.boardId, b.id), eq(lists.statusKind, "review"))),
     );
     expect(allReview).toHaveLength(1);
+  });
+});
+
+describe("moveCardToStatusImpl", () => {
+  it("moves the card into a list with matching status_kind on its current board", async () => {
+    const u = await makeUser("move-status-1");
+    const ws = await createWorkspaceImpl(u.jwt, { name: "WS" });
+    const b = await createBoardImpl(u.jwt, {
+      workspaceId: ws.id, title: "B",
+      backgroundKind: "color", backgroundValue: "#fafafa",
+    });
+    const lTodo = await createListImpl(u.jwt, { boardId: b.id, title: "T" });
+    await setListStatusKindImpl(u.jwt, { id: lTodo.id, statusKind: "todo" });
+    const c = await createCardImpl(u.jwt, { listId: lTodo.id, title: "C" });
+
+    const r = await moveCardToStatusImpl(u.jwt, {
+      cardId: c.id, statusKind: "done",
+    });
+
+    // Auto-created a "done" list, then moved card.
+    const [card] = await dbAsUser(u.jwt, async (tx) =>
+      tx.select().from(cards).where(eq(cards.id, c.id)),
+    );
+    expect(card.listId).toBe(r.listId);
+    const [doneList] = await dbAsUser(u.jwt, async (tx) =>
+      tx
+        .select()
+        .from(lists)
+        .where(and(eq(lists.boardId, b.id), eq(lists.statusKind, "done"))),
+    );
+    expect(doneList.id).toBe(r.listId);
+  });
+
+  it("is a no-op when the card already lives in a list with that status_kind", async () => {
+    const u = await makeUser("move-status-2");
+    const ws = await createWorkspaceImpl(u.jwt, { name: "WS" });
+    const b = await createBoardImpl(u.jwt, {
+      workspaceId: ws.id, title: "B",
+      backgroundKind: "color", backgroundValue: "#fafafa",
+    });
+    const l = await createListImpl(u.jwt, { boardId: b.id, title: "Done" });
+    await setListStatusKindImpl(u.jwt, { id: l.id, statusKind: "done" });
+    const c = await createCardImpl(u.jwt, { listId: l.id, title: "C" });
+
+    const r = await moveCardToStatusImpl(u.jwt, {
+      cardId: c.id, statusKind: "done",
+    });
+    expect(r.listId).toBe(l.id);
   });
 });
