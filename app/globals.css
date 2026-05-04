@@ -116,6 +116,16 @@
   --accent-lime:    rgb(250 250 250 / 0.85);
   --accent-amber:   rgb(250 250 250 / 0.70);
 
+  /* Status-kind tokens — the only semantic colors allowed inside the
+     monochrome theme. Reserved for list status_kind and Gantt cells so
+     workflow state is legible at a glance. Keep saturation modest so
+     they read as signals, not decoration. */
+  --status-todo:        rgb(148 163 184);
+  --status-in-progress: rgb(245 158 11);
+  --status-review:      rgb(56 189 248);
+  --status-done:        rgb(34 197 94);
+  --status-blocked:     rgb(244 63 94);
+
   /* Legacy editorial tokens — remapped onto studio palette */
   --paper:          var(--bg-deep);
   --paper-shadow:   var(--surface-strong);

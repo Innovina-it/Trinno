@@ -222,7 +222,11 @@ export function CardTile({
                 data-testid="tile-status"
                 data-status-kind={statusKind}
                 title={`Status: ${STATUS_LABEL[statusKind]}`}
-                className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted"
+                className="chip mono-meta-sm inline-flex items-center gap-1"
+                style={{
+                  color: `var(--status-${statusKind.replace("_", "-")})`,
+                  boxShadow: `inset 0 0 0 1px color-mix(in oklab, var(--status-${statusKind.replace("_", "-")}) 50%, transparent)`,
+                }}
               >
                 <CircleDot className="size-3" />
                 {STATUS_LABEL[statusKind].toUpperCase()}

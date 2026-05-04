@@ -40,6 +40,18 @@ const ACCENT_PALETTE = [
   "rgb(250 250 250 / 0.45)",
 ];
 
+// Semantic status colors — the only chromatic exception in the
+// monochrome theme. When a list has a status_kind set in Settings, its
+// accent strip and WIP chip pick up the workflow color so state is
+// visible without opening the card.
+const STATUS_ACCENT: Record<string, string> = {
+  todo:        "var(--status-todo)",
+  in_progress: "var(--status-in-progress)",
+  review:      "var(--status-review)",
+  done:        "var(--status-done)",
+  blocked:     "var(--status-blocked)",
+};
+
 function hashId(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i++) {
@@ -91,7 +103,9 @@ export function ListColumn({
     data: { type: "list-drop", listId: list.id },
   });
 
-  const accent = ACCENT_PALETTE[hashId(list.id) % ACCENT_PALETTE.length];
+  const statusAccent = list.statusKind ? STATUS_ACCENT[list.statusKind] : undefined;
+  const accent =
+    statusAccent ?? ACCENT_PALETTE[hashId(list.id) % ACCENT_PALETTE.length];
 
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),
@@ -174,12 +188,18 @@ export function ListColumn({
       data-dragging={isDragging ? "true" : undefined}
       className="group/list relative flex w-80 shrink-0 flex-col rounded-2xl glass overflow-hidden transition-all duration-300 ease-out data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02]"
     >
-      {/* Per-list accent strip — vertical bar on the left edge, fades top-to-bottom */}
+      {/* Per-list accent strip — vertical bar on the left edge, fades top-to-bottom.
+          Status-coloured lists get a thicker strip + soft glow so the workflow
+          color reads at a glance; monochrome lists stay subtle. */}
       <span
         aria-hidden
-        className="pointer-events-none absolute left-0 top-0 bottom-0 w-[2px]"
+        className="pointer-events-none absolute left-0 top-0 bottom-0"
         style={{
+          width: statusAccent ? "3px" : "2px",
           background: `linear-gradient(180deg, ${accent} 0%, transparent 100%)`,
+          boxShadow: statusAccent
+            ? `0 0 12px ${statusAccent}, 0 0 4px ${statusAccent}`
+            : undefined,
         }}
       />
 
@@ -199,6 +219,14 @@ export function ListColumn({
             <span
               data-testid="list-wip-chip"
               className={`chip tabular-nums ${overLimit ? "bg-red-900/40 text-red-200 ring-1 ring-red-500/30" : ""}`}
+              style={
+                statusAccent && !overLimit
+                  ? {
+                      boxShadow: `inset 0 0 0 1px ${statusAccent}`,
+                      color: statusAccent,
+                    }
+                  : undefined
+              }
             >
               {filtered.length}{list.wipLimit != null ? `/${list.wipLimit}` : ""}
             </span>

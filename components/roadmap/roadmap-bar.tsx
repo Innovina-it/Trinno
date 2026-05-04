@@ -57,33 +57,45 @@ function statusFill(status: StatusKind | null, isHeader: boolean): {
   }
   switch (status) {
     case "todo":
-      return { className: "bg-fg/15", style: {} };
+      return {
+        className: "",
+        style: { background: "color-mix(in oklab, var(--status-todo) 22%, transparent)" },
+      };
     case "in_progress":
       return {
-        className:
-          "bg-fg/40 ring-1 ring-fg/30 ring-inset animate-pulse",
-        style: {},
+        className: "ring-1 ring-inset animate-pulse",
+        style: {
+          background: "color-mix(in oklab, var(--status-in-progress) 38%, transparent)",
+          boxShadow: "inset 0 0 0 1px color-mix(in oklab, var(--status-in-progress) 55%, transparent)",
+        },
       };
     case "review":
       return {
-        className: "bg-fg/15",
+        className: "",
         style: {
+          background: "color-mix(in oklab, var(--status-review) 22%, transparent)",
           backgroundImage:
-            "repeating-linear-gradient(45deg, rgb(255 255 255 / 0.2) 0 4px, transparent 4px 8px)",
+            "repeating-linear-gradient(45deg, color-mix(in oklab, var(--status-review) 45%, transparent) 0 4px, transparent 4px 8px)",
         },
       };
     case "done":
       return {
-        className: "bg-fg/15",
+        className: "",
         style: {
+          background: "color-mix(in oklab, var(--status-done) 22%, transparent)",
           backgroundImage:
-            "repeating-linear-gradient(0deg, rgb(255 255 255 / 0.3) 0 2px, transparent 2px 6px)",
+            "repeating-linear-gradient(0deg, color-mix(in oklab, var(--status-done) 50%, transparent) 0 2px, transparent 2px 6px)",
         },
       };
     case "blocked":
       return {
-        className: `${isHeader ? "bg-fg/15" : "bg-fg/8"} ring-2 ring-red-500/60 ring-inset`,
-        style: {},
+        className: "ring-2 ring-inset",
+        style: {
+          background: isHeader
+            ? "color-mix(in oklab, var(--status-blocked) 18%, transparent)"
+            : "color-mix(in oklab, var(--status-blocked) 12%, transparent)",
+          boxShadow: "inset 0 0 0 2px color-mix(in oklab, var(--status-blocked) 60%, transparent)",
+        },
       };
   }
 }
