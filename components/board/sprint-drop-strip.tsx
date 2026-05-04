@@ -1,4 +1,5 @@
 "use client";
+import { useMemo } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 
@@ -70,8 +71,10 @@ function SprintBand({
 export function SprintDropStrip() {
   // Filter out completed sprints — only planned + active are useful drop
   // targets. (sprint_state enum: planned | active | completed)
-  const sprints = useWorkspaceStore((s) =>
-    s.sprints.filter((sp) => sp.state !== "completed"),
+  const allSprints = useWorkspaceStore((s) => s.sprints);
+  const sprints = useMemo(
+    () => allSprints.filter((sp) => sp.state !== "completed"),
+    [allSprints],
   );
   if (sprints.length === 0) return null;
   return (
