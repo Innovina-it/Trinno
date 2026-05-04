@@ -352,15 +352,15 @@
     0 40px 100px -32px rgb(0 0 0 / 0.6);
 }
 
-/* Even more opaque — tooltips/popovers on top of glass. */
+/* Mono opaque popover surface — readable over any background. */
 @utility glass-hi {
-  background: rgb(20 12 40 / 0.78);
-  backdrop-filter: blur(32px) saturate(160%);
-  -webkit-backdrop-filter: blur(32px) saturate(160%);
+  background: rgb(15 15 15 / 0.94);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
   border: 1px solid var(--hairline-hi);
   box-shadow:
-    0 1px 0 0 rgb(255 255 255 / 0.12) inset,
-    0 24px 60px -16px rgb(0 0 0 / 0.55);
+    0 1px 0 0 rgb(255 255 255 / 0.10) inset,
+    0 24px 60px -16px rgb(0 0 0 / 0.7);
 }
 
 /* Mono fade — replaces the rainbow gradient. White → translucent. */
