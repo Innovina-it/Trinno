@@ -10,7 +10,7 @@ import { CommandPalette } from "@/components/command-palette";
 import { listWorkspaces } from "@/lib/queries/workspaces";
 import { listFavoriteBoards, listRecentBoardViews } from "@/lib/queries/favorites";
 import { dbAsUser } from "@/lib/db/client";
-import { profiles, boards } from "@/lib/db/schema";
+import { profiles, boards, dashboards } from "@/lib/db/schema";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -22,6 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let activeWorkspaceId: string | undefined;
   const wsMatch = path.match(/^\/w\/([0-9a-f-]{36})/);
   const boardMatch = path.match(/^\/b\/([0-9a-f-]{36})/);
+  const dashboardMatch = path.match(/^\/dashboards\/([0-9a-f-]{36})/);
   if (wsMatch) {
     activeWorkspaceId = wsMatch[1];
   } else if (boardMatch) {
@@ -37,6 +38,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           .where(eq(boards.id, boardMatch[1])),
       );
       activeWorkspaceId = row?.workspaceId;
+    } catch {
+      activeWorkspaceId = undefined;
+    }
+  } else if (dashboardMatch) {
+    // On a workspace-scoped dashboard, resolve the workspace from the
+    // dashboard row so the top-nav links route to that workspace
+    // instead of falling back to workspaces[0]. Personal-scope
+    // dashboards have a null workspaceId, in which case we leave
+    // activeWorkspaceId undefined and the nav uses its own fallback.
+    try {
+      const [row] = await dbAsUser(token, async (tx) =>
+        tx
+          .select({ workspaceId: dashboards.workspaceId })
+          .from(dashboards)
+          .where(eq(dashboards.id, dashboardMatch[1])),
+      );
+      activeWorkspaceId = row?.workspaceId ?? undefined;
     } catch {
       activeWorkspaceId = undefined;
     }
