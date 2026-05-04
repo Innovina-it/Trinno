@@ -21,6 +21,7 @@ import {
 } from "@/lib/aggregate-kanban/group";
 import { AllTasksColumn } from "./all-tasks-column";
 import { AllTasksCard } from "./all-tasks-card";
+import { AllTasksEmptyState } from "./all-tasks-empty-state";
 import type { CardPriority } from "@/components/board/card/priority-picker";
 import { moveCard } from "@/actions/cards";
 import { errorBus } from "@/lib/errors/error-bus";
@@ -116,9 +117,19 @@ export function AllTasksView({
     [filtered, sortedLists],
   );
 
-  // Reference boards so future empty-state branch can read it without
-  // re-subscribing — keeps the selector in scope.
-  void boards;
+  // Empty-state classification: ordered from most-fundamental to least.
+  const totalFiltered = filtered.length;
+  const anyStatusMapped = lists.some((l) => l.statusKind !== null);
+  let emptyReason:
+    | "no-boards"
+    | "no-mine"
+    | "no-status-mapping"
+    | "filtered-out"
+    | null = null;
+  if (boards.length === 0) emptyReason = "no-boards";
+  else if (!anyStatusMapped) emptyReason = "no-status-mapping";
+  else if (totalFiltered === 0 && scope === "mine") emptyReason = "no-mine";
+  else if (totalFiltered === 0) emptyReason = "filtered-out";
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -248,33 +259,37 @@ export function AllTasksView({
           </select>
         )}
       </div>
-      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-          {AGGREGATE_COLUMNS.map((col) => (
-            <AllTasksColumn
-              key={col.id}
-              id={col.id}
-              label={col.label}
-              count={grouped[col.id].length}
-            >
-              {grouped[col.id].map((c) => (
-                <AllTasksCard
-                  key={c.id}
-                  cardId={c.id}
-                  boardId={c.boardId}
-                  boardTitle={boardTitleById.get(c.boardId) ?? null}
-                  title={c.title}
-                  listId={c.listId}
-                  sprintId={c.sprintId}
-                  sprintName={c.sprintId ? sprintNameById.get(c.sprintId) ?? null : null}
-                  priority={c.priority as CardPriority | null}
-                  dueDate={c.dueDate}
-                />
-              ))}
-            </AllTasksColumn>
-          ))}
-        </div>
-      </DndContext>
+      {emptyReason ? (
+        <AllTasksEmptyState workspaceId={workspaceId} reason={emptyReason} />
+      ) : (
+        <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+            {AGGREGATE_COLUMNS.map((col) => (
+              <AllTasksColumn
+                key={col.id}
+                id={col.id}
+                label={col.label}
+                count={grouped[col.id].length}
+              >
+                {grouped[col.id].map((c) => (
+                  <AllTasksCard
+                    key={c.id}
+                    cardId={c.id}
+                    boardId={c.boardId}
+                    boardTitle={boardTitleById.get(c.boardId) ?? null}
+                    title={c.title}
+                    listId={c.listId}
+                    sprintId={c.sprintId}
+                    sprintName={c.sprintId ? sprintNameById.get(c.sprintId) ?? null : null}
+                    priority={c.priority as CardPriority | null}
+                    dueDate={c.dueDate}
+                  />
+                ))}
+              </AllTasksColumn>
+            ))}
+          </div>
+        </DndContext>
+      )}
     </div>
   );
 }
