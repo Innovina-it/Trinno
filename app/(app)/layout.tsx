@@ -115,6 +115,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <QuickAddCardMount hasWorkspaces={ws.length > 0} />
       <CommandPalette
         workspaces={ws.map((w) => ({ id: w.id, name: w.name }))}
+        activeWorkspaceId={activeWorkspaceId}
         favorites={favorites.map((f) => ({
           boardId: f.boardId,
           boardTitle: f.boardTitle,

@@ -58,10 +58,12 @@ type CardResult = Awaited<ReturnType<typeof search>>[number];
  */
 export function CommandPalette({
   workspaces,
+  activeWorkspaceId,
   favorites,
   recents,
 }: {
   workspaces: { id: string; name: string }[];
+  activeWorkspaceId?: string;
   favorites: PaletteFavorite[];
   recents: PaletteRecent[];
 }) {
@@ -170,9 +172,12 @@ export function CommandPalette({
     }
 
     // Actions — always shown but filtered by q if present.
+    // Plan #workspace-routing — "Open my tasks" and "New board…" route
+    // to the *active* workspace (resolved server-side from the URL),
+    // falling back to the first workspace only when the active one is
+    // unknown (e.g. /inbox or a personal-scope dashboard).
+    const targetWsId = activeWorkspaceId ?? workspaces[0]?.id;
     const actions: PaletteItem[] = [
-      // Plan #aggregate-kanban — "Open my tasks" routes to the workspace
-      // aggregate kanban view of the user's first workspace.
       {
         id: "act:open-my-tasks",
         section: "Actions",
@@ -180,8 +185,7 @@ export function CommandPalette({
         sub: "Workspace-wide kanban grouped by status",
         icon: <ListChecks className="size-3.5 text-fg-muted" />,
         onSelect: () => {
-          const ws = workspaces[0];
-          if (ws) router.push(`/w/${ws.id}/all-tasks`);
+          if (targetWsId) router.push(`/w/${targetWsId}/all-tasks`);
           setOpen(false);
         },
       },
@@ -189,11 +193,10 @@ export function CommandPalette({
         id: "act:new-board",
         section: "Actions",
         label: "New board…",
-        sub: "Open the first workspace and create",
+        sub: "Open the active workspace and create",
         icon: <PlusSquare className="size-3.5 text-fg-muted" />,
         onSelect: () => {
-          const ws = workspaces[0];
-          if (ws) router.push(`/w/${ws.id}?new-board=1`);
+          if (targetWsId) router.push(`/w/${targetWsId}?new-board=1`);
           setOpen(false);
         },
       },
@@ -236,7 +239,7 @@ export function CommandPalette({
     }
 
     return out;
-  }, [q, recents, favorites, cardResults, workspaces, theme, setTheme, router]);
+  }, [q, recents, favorites, cardResults, workspaces, activeWorkspaceId, theme, setTheme, router]);
 
   // Group items per section for rendering.
   const grouped = useMemo(() => {
