@@ -6,6 +6,17 @@ import { SearchBox } from "@/components/nav/search-box";
 import { NotificationBell } from "@/components/nav/notification-bell";
 import { FavoritesDropdown, type FavoriteEntry } from "@/components/nav/favorites-dropdown";
 import { RecentDropdown, type RecentEntry } from "@/components/nav/recent-dropdown";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { LogOut, Menu } from "lucide-react";
+
+const linkCls =
+  "mono-meta-sm tracking-[0.14em] text-fg-muted hover:text-fg transition-colors px-2 py-1 rounded hover:bg-[rgb(255_255_255/0.04)]";
 
 export function TopNav({
   email, userId, workspaces, activeWorkspaceId, favorites, recents,
@@ -18,13 +29,24 @@ export function TopNav({
   recents: RecentEntry[];
 }) {
   const wsForLinks = activeWorkspaceId ?? workspaces[0]?.id;
+  const wsLinks = wsForLinks
+    ? [
+        { href: `/w/${wsForLinks}/backlog`, label: "BACKLOG" },
+        { href: `/w/${wsForLinks}/roadmap`, label: "ROADMAP" },
+        { href: `/w/${wsForLinks}/versions`, label: "VERSIONS" },
+      ]
+    : [];
+  const globalLinks = [
+    { href: "/dashboards", label: "DASHBOARDS", testId: "nav-dashboards" },
+    { href: "/inbox", label: "INBOX", testId: "nav-inbox" },
+  ];
+
   return (
     <header className="sticky top-0 z-40 border-b border-hairline bg-[color:rgb(15_8_42/0.55)] backdrop-blur-2xl">
-      {/* Soft violet wash inside the bar — adds atmospheric tint */}
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-[color:rgb(139_92_246/0.06)] to-transparent" />
-      <div className="relative max-w-6xl mx-auto px-5 h-14 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          {/* Logo dot — animated gradient ring */}
+      <div className="relative mx-auto max-w-screen-2xl px-4 h-14 flex items-center gap-3">
+        {/* Brand + workspace */}
+        <div className="flex items-center gap-2 shrink-0">
           <span aria-hidden className="relative flex size-7 items-center justify-center">
             <span className="absolute inset-0 rounded-full bg-gradient-to-br from-accent-cyan via-accent-magenta to-accent-violet opacity-90" />
             <span className="absolute inset-[3px] rounded-full bg-[color:var(--bg-deep)]" />
@@ -33,66 +55,74 @@ export function TopNav({
           <Link
             href="/"
             aria-label="Trello Clone"
-            className="mono-meta tracking-[0.18em] text-fg transition-opacity hover:opacity-80"
+            className="mono-meta tracking-[0.18em] text-fg transition-opacity hover:opacity-80 hidden sm:inline"
           >
             TRINNOVIN<span className="gradient-text-static font-bold">A</span>
           </Link>
-          <span className="text-fg-faint select-none" aria-hidden>/</span>
+          <span className="text-fg-faint select-none ml-1 hidden sm:inline" aria-hidden>/</span>
           <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspaceId} />
-          {wsForLinks && (
-            <>
-              <span className="text-fg-faint select-none" aria-hidden>/</span>
-              <Link
-                href={`/w/${wsForLinks}/backlog`}
-                className="mono-meta-sm tracking-[0.18em] text-fg-muted hover:text-fg transition-colors"
-              >
-                BACKLOG
-              </Link>
-              <span className="text-fg-faint select-none" aria-hidden>/</span>
-              <Link
-                href={`/w/${wsForLinks}/roadmap`}
-                className="mono-meta-sm tracking-[0.18em] text-fg-muted hover:text-fg transition-colors"
-              >
-                ROADMAP
-              </Link>
-              <span className="text-fg-faint select-none" aria-hidden>/</span>
-              <Link
-                href={`/w/${wsForLinks}/versions`}
-                className="mono-meta-sm tracking-[0.18em] text-fg-muted hover:text-fg transition-colors"
-              >
-                VERSIONS
-              </Link>
-            </>
-          )}
-          <span className="text-fg-faint select-none" aria-hidden>/</span>
-          <Link
-            href="/dashboards"
-            className="mono-meta-sm tracking-[0.18em] text-fg-muted hover:text-fg transition-colors"
-            data-testid="nav-dashboards"
-          >
-            DASHBOARDS
-          </Link>
-          <span className="text-fg-faint select-none" aria-hidden>/</span>
-          <Link
-            href="/inbox"
-            className="mono-meta-sm tracking-[0.18em] text-fg-muted hover:text-fg transition-colors"
-            data-testid="nav-inbox"
-          >
-            INBOX
-          </Link>
-          <span className="text-fg-faint select-none" aria-hidden>/</span>
-          <FavoritesDropdown favorites={favorites} />
-          <span className="text-fg-faint select-none" aria-hidden>/</span>
-          <RecentDropdown recents={recents} />
         </div>
-        <div className="flex items-center gap-3">
-          <SearchBox />
+
+        {/* Primary nav (lg+ only) */}
+        <nav className="hidden lg:flex items-center gap-1 ml-2 min-w-0 flex-1">
+          {wsLinks.map((l) => (
+            <Link key={l.href} href={l.href} className={linkCls}>
+              {l.label}
+            </Link>
+          ))}
+          {wsLinks.length > 0 && globalLinks.length > 0 && (
+            <span aria-hidden className="mx-1 h-4 w-px bg-hairline" />
+          )}
+          {globalLinks.map((l) => (
+            <Link key={l.href} href={l.href} className={linkCls} data-testid={l.testId}>
+              {l.label}
+            </Link>
+          ))}
+        </nav>
+
+        {/* Compact nav (md and below) — hamburger */}
+        <div className="lg:hidden flex-1 flex justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="p-1.5 rounded text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)] transition-colors"
+              aria-label="Open navigation"
+            >
+              <Menu className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {wsLinks.map((l) => (
+                <DropdownMenuItem key={l.href} render={<Link href={l.href} />}>
+                  {l.label}
+                </DropdownMenuItem>
+              ))}
+              {wsLinks.length > 0 && globalLinks.length > 0 && <DropdownMenuSeparator />}
+              {globalLinks.map((l) => (
+                <DropdownMenuItem key={l.href} render={<Link href={l.href} />}>
+                  {l.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Right cluster: search + favorites + recents + bell + logout */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="hidden md:block">
+            <SearchBox />
+          </div>
+          <FavoritesDropdown favorites={favorites} />
+          <RecentDropdown recents={recents} />
           <NotificationBell userId={userId} />
-          <span className="hidden md:inline mono-meta-sm text-fg-faint truncate max-w-[160px]">
-            {email}
-          </span>
           <form action={logout}>
-            <Button type="submit" variant="ghost" size="sm">Log out</Button>
+            <Button
+              type="submit"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Log out (${email})`}
+              title={email}
+            >
+              <LogOut className="size-3.5" />
+            </Button>
           </form>
         </div>
       </div>
