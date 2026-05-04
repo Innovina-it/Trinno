@@ -1112,6 +1112,16 @@ export function useRoadmapDragHarness(
       if (t && t.closest('[data-testid="roadmap-bar"]')) return;
       if (t && t.closest('[data-testid="roadmap-row-handle"]')) return;
       if (t && t.closest('[data-testid="roadmap-bar-overflow"]')) return;
+      // Bail when pointerdown originates inside any floating UI rendered
+      // over the canvas (context menu, dialog, dropdown, popover). These
+      // are sometimes nested in the canvas DOM (fixed-position menu) or
+      // sit logically above it; either way, clicks belong to that UI,
+      // not to a canvas paint operation.
+      if (t && t.closest('[role="menu"]')) return;
+      if (t && t.closest('[role="dialog"]')) return;
+      if (t && t.closest('[data-slot="dialog-content"]')) return;
+      if (t && t.closest('[data-slot="dialog-overlay"]')) return;
+      if (t && t.closest('[data-slot="dropdown-menu-content"]')) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
