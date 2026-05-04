@@ -123,4 +123,15 @@ describe("0051 epic constraints", () => {
     expect(error).toBeNull();
     expect(data).toBe(0);
   });
+
+  it("0053: zero nested-epic-parent violations post-migration", async () => {
+    const sqlClient = createClient(
+      url,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } },
+    );
+    const { data, error } = await sqlClient.rpc("count_nested_epic_parents");
+    expect(error).toBeNull();
+    expect(data).toBe(0);
+  });
 });
