@@ -32,6 +32,7 @@ Plans listed here are committed + ready for execution. Other Claude sessions can
 - #16b-γ-D power+bulk+nav (palette, quick-add, [], multi-select, undo, cross-board, ws-search)
 - #16b-γ-Gantt-Master (A1-9, B1-5, C1-10, D1-4 — 28 changes shipped in worktree)
 - #16b-γ-G drag-first Gantt (G1-8 — row reorder, reparent, drag-paint, priority gutter, snap, auto-scroll, chip drag, E2E)
+- **Epic-as-kanban / roadmap-first IA** — shipped 2026-05-04 (18 tasks; spec `docs/superpowers/specs/2026-04-30-epic-as-kanban-design.md`, plan `docs/superpowers/plans/2026-04-30-epic-as-kanban.md`). Roadmap is now the workspace landing surface; each epic opens a 5-column status kanban at `/w/[wsId]/e/[epicId]`. Migrations 0052-0054 + race-safe `ensureStatusList` resolver, `moveCardToStatus` action, `listEpicChildren` query helper, status-list unique partial index.
 
 ## Concurrency rules
 
