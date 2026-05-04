@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChevronDown, GripVertical, Plus } from "lucide-react";
 import type { Zoom } from "@/lib/roadmap/dates";
-import { NewEpicLaneButton } from "./new-epic-lane-button";
 
 export const ZOOMS: Zoom[] = ["week", "month", "quarter"];
 export type LaneMode = "epic" | "assignee" | "component";
@@ -112,10 +111,9 @@ export function RoadmapHeader({
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-        {/* Plan #lane-as-kanban — quick-add affordance for epic lanes.
-         * Renders only in epic mode (assignee/component lanes derive from
-         * card metadata, not from epic cards themselves). */}
-        {laneMode === "epic" && <NewEpicLaneButton />}
+        {/* + New epic dialog removed — the "+ NEW CARD" chip's dialog
+         * now exposes a TYPE picker (Task / Story / Bug / Epic), so
+         * epics are created through the same path as everything else. */}
         <span
           className="inline-flex items-center gap-1.5 mono-meta-sm text-fg-faint"
           data-testid="roadmap-live"

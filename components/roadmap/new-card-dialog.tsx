@@ -23,6 +23,14 @@ function plus14ISO(): string {
   return d.toISOString().slice(0, 10);
 }
 
+type CardType = "task" | "epic" | "story" | "bug";
+const TYPE_OPTIONS: Array<{ value: CardType; label: string }> = [
+  { value: "task", label: "Task" },
+  { value: "story", label: "Story" },
+  { value: "bug", label: "Bug" },
+  { value: "epic", label: "Epic" },
+];
+
 export function RoadmapNewCardDialog({
   open,
   onOpenChange,
@@ -44,6 +52,7 @@ export function RoadmapNewCardDialog({
   defaultParent?: string | null;
 }) {
   const [title, setTitle] = useState("");
+  const [type, setType] = useState<CardType>("task");
   const [boardId, setBoardId] = useState(defaultBoard ?? "");
   const [listId, setListId] = useState(defaultList ?? "");
   const [start, setStart] = useState(defaultStart ?? todayISO());
@@ -91,6 +100,7 @@ export function RoadmapNewCardDialog({
 
   function reset() {
     setTitle("");
+    setType("task");
     setStart(defaultStart ?? todayISO());
     setTarget(defaultTarget ?? plus14ISO());
     // Note: we intentionally do NOT carry the prior defaultParent forward —
@@ -122,11 +132,15 @@ export function RoadmapNewCardDialog({
           id: created.id,
           startDate: startISO,
           targetDate: targetISO,
+          // Only thread `type` when the user picked something other than
+          // the default — keeps the patch minimal and avoids overwriting
+          // a smarter default the action layer might apply later.
+          ...(type !== "task" ? { type } : {}),
           // Only thread parentCardId through when the caller asked for it;
           // omit otherwise so the action treats it as "leave unchanged".
           ...(parentId ? { parentCardId: parentId } : {}),
         });
-        toast.success(`Created "${t}"`);
+        toast.success(`Created ${type === "epic" ? "epic" : "card"} "${t}"`);
         onOpenChange(false);
         reset();
       } catch (err) {
@@ -156,6 +170,30 @@ export function RoadmapNewCardDialog({
               className="w-full rounded-md border border-hairline bg-transparent px-2 py-1.5 text-fg outline-none focus:border-fg/40"
             />
           </label>
+          <div className="space-y-1 text-xs">
+            <span className="mono-meta-sm text-fg-faint">TYPE</span>
+            <div
+              className="flex gap-1.5"
+              role="radiogroup"
+              aria-label="Card type"
+              data-testid="roadmap-new-card-type"
+            >
+              {TYPE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={type === opt.value}
+                  data-testid={`roadmap-new-card-type-${opt.value}`}
+                  data-selected={type === opt.value ? "true" : undefined}
+                  onClick={() => setType(opt.value)}
+                  className="chip mono-meta-sm capitalize hover:bg-[rgb(255_255_255/0.08)] data-[selected=true]:bg-[rgb(255_255_255/0.14)] data-[selected=true]:text-fg data-[selected=true]:ring-1 data-[selected=true]:ring-fg/40"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1 text-xs">
               <span className="mono-meta-sm text-fg-faint">BOARD</span>
