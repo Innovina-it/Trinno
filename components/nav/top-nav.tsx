@@ -10,7 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Calendar, Map, Tag, Menu, ListChecks, Columns } from "lucide-react";
+import { Calendar, Map, Tag, Menu, ListChecks, Columns, Archive } from "lucide-react";
 
 const linkCls =
   "mono-meta-sm tracking-[0.14em] text-fg-muted hover:text-fg transition-colors px-2.5 py-1.5 rounded hover:bg-[rgb(255_255_255/0.05)] inline-flex items-center gap-1.5";
@@ -40,6 +40,7 @@ export function TopNav({
           testId: "nav-all-tasks",
         },
         { href: `/w/${wsForLinks}/versions`, label: "Versions", Icon: Calendar, testId: "nav-versions" },
+        { href: `/w/${wsForLinks}/archive`, label: "Archive", Icon: Archive, testId: "nav-archive" },
       ]
     : [];
 
