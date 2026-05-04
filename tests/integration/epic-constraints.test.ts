@@ -108,4 +108,44 @@ describe("0051 epic constraints", () => {
     const combined = `${err.message ?? ""} ${err.cause?.message ?? ""}`;
     expect(combined).toMatch(/epic cannot have an epic as parent/i);
   });
+
+  it("backfill (0052): zero cross-board children of epics post-migration", async () => {
+    // The 0052 backfill ran during db reset that created this test
+    // environment. Combined with the 0051 BEFORE trigger, the schema
+    // invariant is: no live row in cards has parent_card_id pointing at
+    // an epic-typed card on a different board.
+    const sqlClient = createClient(
+      url,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } },
+    );
+    const { data, error } = await sqlClient.rpc("count_cross_board_epic_children");
+    expect(error).toBeNull();
+    expect(data).toBe(0);
+  });
+
+  it("backfill (0052) + trigger: a manually-created cross-board child gets co-located", async () => {
+    // Sanity check that the 0051 trigger still holds after 0052 ran.
+    const u = await makeUser("backfill-2");
+    const ws = await createWorkspaceImpl(u.jwt, { name: "WS" });
+    const bA = await createBoardImpl(u.jwt, {
+      workspaceId: ws.id, title: "A",
+      backgroundKind: "color", backgroundValue: "#fafafa",
+    });
+    const bB = await createBoardImpl(u.jwt, {
+      workspaceId: ws.id, title: "B",
+      backgroundKind: "color", backgroundValue: "#fafafa",
+    });
+    const lA = await createListImpl(u.jwt, { boardId: bA.id, title: "L" });
+    const lB = await createListImpl(u.jwt, { boardId: bB.id, title: "L" });
+    const epic = await createCardImpl(u.jwt, { listId: lA.id, title: "E" });
+    await updateCardImpl(u.jwt, { id: epic.id, type: "epic" });
+    const child = await createCardImpl(u.jwt, { listId: lB.id, title: "C" });
+    expect(child.boardId).toBe(bB.id);
+    await updateCardImpl(u.jwt, { id: child.id, parentCardId: epic.id });
+    const [row] = await dbAsUser(u.jwt, async (tx) =>
+      tx.select().from(cards).where(eq(cards.id, child.id)),
+    );
+    expect(row.boardId).toBe(bA.id);
+  });
 });
