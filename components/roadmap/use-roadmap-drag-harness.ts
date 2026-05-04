@@ -98,6 +98,10 @@ type DragState = {
   // Priority-gutter mode.
   gutterBand: CardPriority | null;
   origPriority: CardPriority | null;
+  // True once the pointer crossed a small movement threshold during the
+  // drag. Distinguishes a real drag-and-return-to-origin from a true
+  // click — the former should NOT open the card modal on pointerup.
+  moved: boolean;
 };
 
 type RowDragState = {
@@ -471,6 +475,12 @@ export function useRoadmapDragHarness(
       if (!d) return;
       lastClientXRef.current = e.clientX;
       lastAltKeyRef.current = e.altKey;
+      // Stamp `moved` once the pointer has crossed a small threshold so
+      // pointerup can distinguish a real drag-and-return-to-origin from
+      // an unintended click.
+      if (!d.moved && Math.abs(e.clientX - d.startClientX) > 4) {
+        d.moved = true;
+      }
 
       // Gutter detection (move + gutter on).
       if (d.mode === "move" && gutterOnRef.current) {
@@ -654,8 +664,10 @@ export function useRoadmapDragHarness(
       current.startDate.getTime() === d.origStart.getTime() &&
       current.targetDate.getTime() === d.origTarget.getTime();
     if (noOp && !reparented) {
-      // A1 — no-movement = click → open card.
-      if (d.mode === "move") {
+      // A1 — no-movement = click → open card. Only fire when the pointer
+      // never crossed the movement threshold; otherwise the user
+      // genuinely dragged and returned to origin (treat as cancelled).
+      if (d.mode === "move" && !d.moved) {
         onOpenCard(d.cardId, current.boardId);
       }
       return;
@@ -807,6 +819,7 @@ export function useRoadmapDragHarness(
         currentLaneId: sourceLaneId,
         gutterBand: null,
         origPriority: c.priority ?? null,
+        moved: false,
       };
       const sprintEnds: Array<{ date: Date; name: string }> = [];
       for (const s of storeSprintsRef.current) {
