@@ -409,7 +409,13 @@ export async function bulkAddLabelImpl(
 export async function moveCardCrossBoardImpl(
   token: string,
   input: { cardId: string; toListId: string },
-): Promise<{ id: string; boardId: string; listId: string; position: string }> {
+): Promise<{
+  id: string;
+  boardId: string;
+  fromBoardId: string;
+  listId: string;
+  position: string;
+}> {
   const p = MoveCardCrossBoardInput.parse(input);
   return dbAsUser(token, async (tx) => {
     // Resolve destination board via the target list. If the user can't
@@ -419,6 +425,16 @@ export async function moveCardCrossBoardImpl(
       .from(lists)
       .where(eq(lists.id, p.toListId));
     if (!tlist) throw new Error("Forbidden");
+
+    // Snapshot the source boardId before the move so the wrapper can
+    // revalidate the source page as well — otherwise the source
+    // board's RSC cache still shows the moved card until a hard
+    // navigation. RLS gates this select; if 0 rows we 403.
+    const [src] = await tx
+      .select({ boardId: cards.boardId })
+      .from(cards)
+      .where(eq(cards.id, p.cardId));
+    if (!src) throw new Error("Forbidden");
 
     // Pick a position at the tail of the destination list.
     const [last] = await tx
@@ -445,6 +461,7 @@ export async function moveCardCrossBoardImpl(
     return {
       id: row.id,
       boardId: row.boardId,
+      fromBoardId: src.boardId,
       listId: row.listId,
       position: row.position,
     };
@@ -458,7 +475,13 @@ export async function moveCardCrossBoard(input: {
   await requireUser();
   const t = (await getSessionToken())!;
   const r = await moveCardCrossBoardImpl(t, input);
+  // Revalidate both source and destination so the card disappears
+  // from the source page and appears on the destination page on
+  // the user's next navigation.
   revalidatePath(`/b/${r.boardId}`);
+  if (r.fromBoardId !== r.boardId) {
+    revalidatePath(`/b/${r.fromBoardId}`);
+  }
   return r;
 }
 
