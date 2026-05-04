@@ -405,6 +405,12 @@ export function RoadmapBar({
           role="menu"
           data-testid="roadmap-bar-menu"
           style={menuStyle}
+          // Stop pointerdown from bubbling to the canvas's
+          // onCanvasEmptyPointerDown which would start a phantom paint
+          // operation. The paint then completes on the next pointerup
+          // (often the user clicking "Save" in a follow-on dialog) and
+          // pops open the new-card dialog over the user's actual save.
+          onPointerDown={(e) => e.stopPropagation()}
           className="min-w-48 rounded-md border border-hairline bg-[color:var(--surface-strong)] shadow-lg backdrop-blur-md py-1 text-sm"
         >
           <button
