@@ -5,11 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   closestCorners,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -165,7 +167,25 @@ export function BoardView({
     [lists],
   );
 
+  // Track the actively dragged card so we can render it inside <DragOverlay>.
+  // Without an overlay, the card stays inside its source list's
+  // overflow-y-auto container and visually clips at column edges — making
+  // it look like it can't leave the list. The overlay floats outside any
+  // ancestor scroll/transform and follows the cursor freely.
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const activeCard = useMemo(
+    () => (activeCardId ? cards.find((c) => c.id === activeCardId) ?? null : null),
+    [activeCardId, cards],
+  );
+
+  function onDragStart(e: DragStartEvent) {
+    const k = decodeId(String(e.active.id));
+    if (k?.type === "card") setActiveCardId(k.id);
+    else setActiveCardId(null);
+  }
+
   function onDragEnd(e: DragEndEvent) {
+    setActiveCardId(null);
     const { active, over } = e;
     if (!over || active.id === over.id) return;
 
@@ -414,7 +434,9 @@ export function BoardView({
             id={`dnd-board-${board.id}`}
             sensors={sensors}
             collisionDetection={closestCorners}
+            onDragStart={onDragStart}
             onDragEnd={onDragEnd}
+            onDragCancel={() => setActiveCardId(null)}
           >
             {/* Plan #16b-γ-Master-D D1 — droppable strip lives inside the
                 DndContext so the bands' useDroppable() registrations are
@@ -481,6 +503,20 @@ export function BoardView({
                 </div>
               </div>
             )}
+            {/* DragOverlay floats the active card outside any ancestor
+                scroll/transform container so it follows the cursor freely
+                across the viewport (instead of clipping at the source
+                list's overflow boundary). Visual-only — drop logic stays
+                on the original sortable card. */}
+            <DragOverlay dropAnimation={null}>
+              {activeCard ? (
+                <div className="rounded-xl bg-[color:var(--surface-strong)] backdrop-blur-md border border-[color:var(--hairline-hi)] text-fg shadow-[0_0_0_1px_rgb(255_255_255/0.10),0_24px_50px_-12px_rgb(0_0_0/0.7)] px-3 py-2 w-72 rotate-[2deg] cursor-grabbing">
+                  <span className="block text-sm leading-snug">
+                    {activeCard.title}
+                  </span>
+                </div>
+              ) : null}
+            </DragOverlay>
           </DndContext>
         </div>
         {children}
