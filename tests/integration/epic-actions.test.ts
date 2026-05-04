@@ -146,4 +146,35 @@ describe("moveCardToStatusImpl", () => {
     });
     expect(r.listId).toBe(l.id);
   });
+
+  it("moves a card from a 'todo' list to an existing 'done' list (does not create new column)", async () => {
+    const u = await makeUser("move-status-3");
+    const ws = await createWorkspaceImpl(u.jwt, { name: "WS" });
+    const b = await createBoardImpl(u.jwt, {
+      workspaceId: ws.id, title: "B",
+      backgroundKind: "color", backgroundValue: "#fafafa",
+    });
+    const lTodo = await createListImpl(u.jwt, { boardId: b.id, title: "T" });
+    await setListStatusKindImpl(u.jwt, { id: lTodo.id, statusKind: "todo" });
+    const lDone = await createListImpl(u.jwt, { boardId: b.id, title: "D" });
+    await setListStatusKindImpl(u.jwt, { id: lDone.id, statusKind: "done" });
+    const c = await createCardImpl(u.jwt, { listId: lTodo.id, title: "C" });
+
+    const r = await moveCardToStatusImpl(u.jwt, {
+      cardId: c.id, statusKind: "done",
+    });
+    expect(r.listId).toBe(lDone.id);
+
+    // Source list should now be empty.
+    const sourceCards = await dbAsUser(u.jwt, async (tx) =>
+      tx.select().from(cards).where(eq(cards.listId, lTodo.id)),
+    );
+    expect(sourceCards).toHaveLength(0);
+
+    // Destination list should have exactly the moved card.
+    const destCards = await dbAsUser(u.jwt, async (tx) =>
+      tx.select().from(cards).where(eq(cards.listId, lDone.id)),
+    );
+    expect(destCards.map((x) => x.id)).toEqual([c.id]);
+  });
 });

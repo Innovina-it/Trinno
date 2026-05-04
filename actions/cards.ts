@@ -177,8 +177,19 @@ export async function moveCardImpl(token: string, input: {
 /**
  * Plan #epic-as-kanban — drag-end handler for the epic-kanban view.
  * Resolves (or creates) a list on the card's board with the target
- * status_kind, then moves the card into it at end-of-list. Single
- * transaction so the create+move is atomic.
+ * status_kind, then moves the card into it at end-of-list.
+ *
+ * Sequence (no shared transaction — each impl manages its own dbAsUser
+ * scope to avoid pool-connection deadlock under burst load):
+ *   1. Probe: read card boardId + its current list's status_kind.
+ *   2. No-op short-circuit if already in a matching status_kind list.
+ *   3. ensureStatusListImpl resolves (or creates) the target list.
+ *   4. Move: end-of-list positional update on cards.
+ *
+ * Failure between (3) and (4) leaves an orphan empty status column
+ * created by step 3. The column is recoverable (admin can rename or
+ * delete) and matches the established cross-impl pattern in
+ * createBoardFromTemplateImpl.
  *
  * No-op when the card already lives in a list with that status_kind.
  */
@@ -187,29 +198,39 @@ export async function moveCardToStatusImpl(
   input: { cardId: string; statusKind: StatusKind },
 ): Promise<{ cardId: string; listId: string }> {
   const cardId = input.cardId;
-  return dbAsUser(token, async (tx) => {
+
+  // Phase 1: probe.
+  const probe = await dbAsUser(token, async (tx) => {
     const [card] = await tx
       .select({ id: cards.id, boardId: cards.boardId, listId: cards.listId })
       .from(cards)
       .where(eq(cards.id, cardId));
-    if (!card) throw new Error("Forbidden");
-
-    // No-op if already in a list with that status_kind.
+    if (!card) return null;
     const [currentList] = await tx
       .select({ id: lists.id, statusKind: lists.statusKind })
       .from(lists)
       .where(eq(lists.id, card.listId));
-    if (currentList?.statusKind === input.statusKind) {
-      return { cardId, listId: card.listId };
-    }
-
-    // Resolve target list (idempotent create).
-    const target = await ensureStatusListImpl(token, {
+    return {
       boardId: card.boardId,
-      statusKind: input.statusKind,
-    });
+      listId: card.listId,
+      currentStatusKind: currentList?.statusKind ?? null,
+    };
+  });
+  if (!probe) throw new Error("Forbidden");
 
-    // Position = end of target list.
+  // Phase 2: no-op short-circuit.
+  if (probe.currentStatusKind === input.statusKind) {
+    return { cardId, listId: probe.listId };
+  }
+
+  // Phase 3: resolve / create the target list (own tx).
+  const target = await ensureStatusListImpl(token, {
+    boardId: probe.boardId,
+    statusKind: input.statusKind,
+  });
+
+  // Phase 4: positional move (own tx).
+  return dbAsUser(token, async (tx) => {
     const [last] = await tx
       .select({ position: cards.position })
       .from(cards)
@@ -217,7 +238,6 @@ export async function moveCardToStatusImpl(
       .orderBy(desc(cards.position))
       .limit(1);
     const pos = positionBetween(last?.position ?? null, null);
-
     const [row] = await tx
       .update(cards)
       .set({ listId: target.id, position: pos })
