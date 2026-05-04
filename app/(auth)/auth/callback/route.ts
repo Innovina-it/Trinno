@@ -5,6 +5,13 @@ import { seedDemoWorkspaceImpl } from "@/actions/seed";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
+  // Preserve the browser's origin (Host header) so LAN clients accessing
+  // the dev server via the host's LAN IP get redirected back to that IP,
+  // not to localhost. Next dev sometimes resolves req.url against its own
+  // bind host; the Host header carries the URL the browser actually used.
+  const host = req.headers.get("host") ?? url.host;
+  const proto = req.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
+  const browserOrigin = `${proto}://${host}`;
   const code = url.searchParams.get("code");
 
   // Plan #epic-as-kanban — auto-confirm signup path. supabase.auth.signUp
@@ -18,7 +25,7 @@ export async function GET(req: Request) {
     const { data, error } = await supa.auth.exchangeCodeForSession(code);
     if (error) {
       return NextResponse.redirect(
-        new URL(`/login?error=${encodeURIComponent(error.message)}`, url.origin)
+        new URL(`/login?error=${encodeURIComponent(error.message)}`, browserOrigin)
       );
     }
     token = data.session?.access_token;
@@ -30,11 +37,11 @@ export async function GET(req: Request) {
     // locally without auth-server validation.
     const { data: userData } = await supa.auth.getUser();
     if (!userData.user) {
-      return NextResponse.redirect(new URL("/login", url.origin));
+      return NextResponse.redirect(new URL("/login", browserOrigin));
     }
     const { data: sessData } = await supa.auth.getSession();
     if (!sessData.session) {
-      return NextResponse.redirect(new URL("/login", url.origin));
+      return NextResponse.redirect(new URL("/login", browserOrigin));
     }
     token = sessData.session.access_token;
   }
@@ -61,5 +68,5 @@ export async function GET(req: Request) {
   }
 
   const dest = seededWsId ? `/w/${seededWsId}` : "/";
-  return NextResponse.redirect(new URL(dest, url.origin));
+  return NextResponse.redirect(new URL(dest, browserOrigin));
 }
