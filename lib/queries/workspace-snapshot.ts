@@ -36,6 +36,10 @@ export type WorkspaceSnapshot = {
     id: string;
     boardId: string;
     title: string;
+    // Plan #aggregate-kanban — fractional-indexing position; aggregate
+    // kanban view sorts by this to pick the visually-first matching list
+    // per board for cross-status drops.
+    position: string;
     statusKind:
       | "todo"
       | "in_progress"
@@ -60,6 +64,10 @@ export type WorkspaceSnapshot = {
     dueComplete: boolean;
     archived: boolean;
     createdAt: Date;
+    // Plan #aggregate-kanban — fractional-indexing position used to
+    // append a card to the end of a target list when dragged across
+    // status columns in the workspace-aggregate view.
+    position: string;
     // Plan #16b-γ-G G1 — manual roadmap row order. NULL = unranked.
     roadmapOrder: number | null;
     // Plan #16b-γ-G G4 — priority enum (P0-P4). NULL = unset.
@@ -186,6 +194,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
           id: lists.id,
           boardId: lists.boardId,
           title: lists.title,
+          position: lists.position,
           statusKind: lists.statusKind,
         })
         .from(lists)
@@ -207,6 +216,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
           dueComplete: cards.dueComplete,
           archived: cards.archived,
           createdAt: cards.createdAt,
+          position: cards.position,
           roadmapOrder: cards.roadmapOrder,
           priority: cards.priority,
         })

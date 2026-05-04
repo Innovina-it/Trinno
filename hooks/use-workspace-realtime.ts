@@ -33,6 +33,7 @@ function rowToCard(r: Record<string, unknown>, boardId: string): CardSnap {
     dueComplete: Boolean(r.due_complete),
     archived: Boolean(r.archived),
     createdAt: r.created_at ? new Date(r.created_at as string) : new Date(),
+    position: (r.position as string) ?? "",
     roadmapOrder: (r.roadmap_order as number | null) ?? null,
     priority:
       (r.priority as "p0" | "p1" | "p2" | "p3" | "p4" | null) ?? null,
@@ -99,6 +100,7 @@ export function useWorkspaceRealtime(workspaceId: string) {
                 id: r.id as string,
                 boardId: b.id,
                 title: r.title as string,
+                position: (r.position as string) ?? "",
                 statusKind:
                   (r.status_kind as
                     | "todo"
@@ -115,6 +117,7 @@ export function useWorkspaceRealtime(workspaceId: string) {
               } else {
                 patchList(r.id as string, {
                   title: r.title as string,
+                  position: (r.position as string) ?? "",
                   statusKind:
                     (r.status_kind as
                       | "todo"

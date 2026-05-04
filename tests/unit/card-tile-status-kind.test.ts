@@ -39,9 +39,9 @@ function pickStatusKind(state: WorkspaceState, card: { listId: string }) {
 
 describe("CardTile status-kind selector (B3)", () => {
   const lists: WorkspaceSnapshot["lists"] = [
-    { id: "l1", boardId: "b1", title: "In progress", statusKind: "in_progress" },
-    { id: "l2", boardId: "b1", title: "Notes", statusKind: null },
-    { id: "l3", boardId: "b1", title: "Done", statusKind: "done" },
+    { id: "l1", boardId: "b1", title: "In progress", position: "a0", statusKind: "in_progress" },
+    { id: "l2", boardId: "b1", title: "Notes", position: "a1", statusKind: null },
+    { id: "l3", boardId: "b1", title: "Done", position: "a2", statusKind: "done" },
   ];
 
   it("returns the statusKind of the card's list when set", () => {
