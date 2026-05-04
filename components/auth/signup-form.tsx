@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronRight, Loader2, MailCheck } from "lucide-react";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 export function SignupForm() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [seedDemo, setSeedDemo] = useState(true);
@@ -27,12 +29,25 @@ export function SignupForm() {
     }
 
     const supa = createSupabaseBrowser();
-    const { error } = await supa.auth.signUp({
+    const { data, error } = await supa.auth.signUp({
       email, password,
       options: { emailRedirectTo: `${location.origin}/auth/callback` },
     });
+    if (error) {
+      setSubmitting(false);
+      return toast.error(error.message);
+    }
+    // Auto-confirm enabled (auth.email.enable_confirmations=false): if a
+    // session is returned immediately, skip the "check your email" screen
+    // and route the user straight in. If demo seed was requested, hit the
+    // callback once to drain the cookie + run the seed.
+    if (data.session) {
+      const target = seedDemo ? "/auth/callback" : "/";
+      router.replace(target);
+      router.refresh();
+      return;
+    }
     setSubmitting(false);
-    if (error) return toast.error(error.message);
     setSent(true);
   }
 
