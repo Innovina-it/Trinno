@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { BookOpen, Bug, Mountain, Square } from "lucide-react";
 import { createCard, updateCard } from "@/actions/cards";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import {
@@ -24,11 +25,40 @@ function plus14ISO(): string {
 }
 
 type CardType = "task" | "epic" | "story" | "bug";
-const TYPE_OPTIONS: Array<{ value: CardType; label: string }> = [
-  { value: "task", label: "Task" },
-  { value: "story", label: "Story" },
-  { value: "bug", label: "Bug" },
-  { value: "epic", label: "Epic" },
+type TypeOption = {
+  value: CardType;
+  label: string;
+  Icon: typeof Square;
+  // Tailwind classes — text color baseline + selected-state ring/bg.
+  text: string;
+  ringSelected: string;
+  bgSelected: string;
+};
+const TYPE_OPTIONS: TypeOption[] = [
+  {
+    value: "task", label: "Task", Icon: Square,
+    text: "text-fg-muted",
+    ringSelected: "ring-fg/40",
+    bgSelected: "bg-[rgb(255_255_255/0.10)]",
+  },
+  {
+    value: "story", label: "Story", Icon: BookOpen,
+    text: "text-emerald-300",
+    ringSelected: "ring-emerald-400/60",
+    bgSelected: "bg-emerald-500/15",
+  },
+  {
+    value: "bug", label: "Bug", Icon: Bug,
+    text: "text-rose-300",
+    ringSelected: "ring-rose-400/60",
+    bgSelected: "bg-rose-500/15",
+  },
+  {
+    value: "epic", label: "Epic", Icon: Mountain,
+    text: "text-violet-300",
+    ringSelected: "ring-violet-400/60",
+    bgSelected: "bg-violet-500/15",
+  },
 ];
 
 export function RoadmapNewCardDialog({
@@ -173,25 +203,38 @@ export function RoadmapNewCardDialog({
           <div className="space-y-1 text-xs">
             <span className="mono-meta-sm text-fg-faint">TYPE</span>
             <div
-              className="flex gap-1.5"
+              className="grid grid-cols-4 gap-1.5"
               role="radiogroup"
               aria-label="Card type"
               data-testid="roadmap-new-card-type"
             >
-              {TYPE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={type === opt.value}
-                  data-testid={`roadmap-new-card-type-${opt.value}`}
-                  data-selected={type === opt.value ? "true" : undefined}
-                  onClick={() => setType(opt.value)}
-                  className="chip mono-meta-sm capitalize hover:bg-[rgb(255_255_255/0.08)] data-[selected=true]:bg-[rgb(255_255_255/0.14)] data-[selected=true]:text-fg data-[selected=true]:ring-1 data-[selected=true]:ring-fg/40"
-                >
-                  {opt.label}
-                </button>
-              ))}
+              {TYPE_OPTIONS.map((opt) => {
+                const selected = type === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    data-testid={`roadmap-new-card-type-${opt.value}`}
+                    data-selected={selected ? "true" : undefined}
+                    onClick={() => setType(opt.value)}
+                    className={[
+                      "inline-flex items-center justify-center gap-1.5",
+                      "rounded-full border border-hairline px-2.5 py-1.5",
+                      "mono-meta-sm transition-all duration-150",
+                      "hover:bg-[rgb(255_255_255/0.06)]",
+                      opt.text,
+                      selected
+                        ? `${opt.bgSelected} ring-1 ${opt.ringSelected} border-transparent`
+                        : "",
+                    ].join(" ")}
+                  >
+                    <opt.Icon className="size-3.5" aria-hidden />
+                    <span className={selected ? "text-fg" : ""}>{opt.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
