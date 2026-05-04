@@ -53,7 +53,7 @@ export function TopNav({
             <span className="relative size-1.5 rounded-full bg-gradient-to-br from-accent-cyan to-accent-magenta" />
           </span>
           <Link
-            href="/"
+            href={wsForLinks ? `/w/${wsForLinks}` : "/"}
             aria-label="Trello Clone"
             className="mono-meta tracking-[0.18em] text-fg transition-opacity hover:opacity-80 hidden sm:inline"
           >
