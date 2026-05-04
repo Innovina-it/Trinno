@@ -10,7 +10,7 @@ import { CommandPalette } from "@/components/command-palette";
 import { listWorkspaces } from "@/lib/queries/workspaces";
 import { listFavoriteBoards, listRecentBoardViews } from "@/lib/queries/favorites";
 import { dbAsUser } from "@/lib/db/client";
-import { profiles } from "@/lib/db/schema";
+import { profiles, boards } from "@/lib/db/schema";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -19,8 +19,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const h = await headers();
   const path = h.get("x-pathname") ?? "";
-  const m = path.match(/^\/w\/([0-9a-f-]{36})/);
-  const activeWorkspaceId = m ? m[1] : undefined;
+  let activeWorkspaceId: string | undefined;
+  const wsMatch = path.match(/^\/w\/([0-9a-f-]{36})/);
+  const boardMatch = path.match(/^\/b\/([0-9a-f-]{36})/);
+  if (wsMatch) {
+    activeWorkspaceId = wsMatch[1];
+  } else if (boardMatch) {
+    // On board / card pages there's no workspace in the URL. Resolve via
+    // the board's workspace_id so the top-nav links (Roadmap, Boards,
+    // Backlog…) stay in the right workspace instead of falling back to
+    // workspaces[0] which is usually Demo.
+    try {
+      const [row] = await dbAsUser(token, async (tx) =>
+        tx
+          .select({ workspaceId: boards.workspaceId })
+          .from(boards)
+          .where(eq(boards.id, boardMatch[1])),
+      );
+      activeWorkspaceId = row?.workspaceId;
+    } catch {
+      activeWorkspaceId = undefined;
+    }
+  }
 
   // Plan #16b-γ-B (#7) — fetch the onboarding flag so we can decide
   // whether to render the first-run tour. On any error (RLS, transient DB
