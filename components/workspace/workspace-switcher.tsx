@@ -1,5 +1,5 @@
 "use client";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChevronDown, Plus, Check, Search } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
@@ -23,6 +23,7 @@ const SEARCH_THRESHOLD = 5;
 export function WorkspaceSwitcher({
   workspaces, activeId,
 }: { workspaces: WorkspaceLite[]; activeId?: string }) {
+  const router = useRouter();
   const [openCreate, setOpenCreate] = useState(false);
   const [q, setQ] = useState("");
   const active = workspaces.find(w => w.id === activeId) ?? workspaces[0];
@@ -90,7 +91,12 @@ export function WorkspaceSwitcher({
               return (
                 <DropdownMenuItem
                   key={w.id}
-                  render={<Link href={`/w/${w.id}`} />}
+                  onClick={() => {
+                    if (!isActive) {
+                      router.push(`/w/${w.id}`);
+                      router.refresh();
+                    }
+                  }}
                   className={isActive ? "bg-[color:var(--surface-hi)] text-fg" : undefined}
                 >
                   <span className="flex-1 truncate text-sm">{w.name}</span>
