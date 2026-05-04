@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import type { FavoriteEntry } from "@/components/nav/favorites-dropdown";
@@ -84,79 +85,87 @@ export function AccountMenu({
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72 max-h-[80vh] overflow-y-auto">
-        <DropdownMenuLabel>
-          <div className="flex flex-col gap-0.5">
-            <span className="mono-meta-sm text-fg-faint">SIGNED IN</span>
-            <span className="text-sm truncate">{email}</span>
-          </div>
-        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            <div className="flex flex-col gap-0.5">
+              <span className="mono-meta-sm text-fg-faint">SIGNED IN</span>
+              <span className="text-sm truncate">{email}</span>
+            </div>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem render={<Link href="/inbox" />}>
-          <Inbox className="size-3.5" />
-          <span className="flex-1">Inbox</span>
-          {unread > 0 && (
-            <span className="mono-meta-sm bg-[color:var(--accent-magenta)] text-white px-1.5 py-0.5 rounded tabular-nums">
-              {unread}
+        <DropdownMenuGroup>
+          <DropdownMenuItem render={<Link href="/inbox" />}>
+            <Inbox className="size-3.5" />
+            <span className="flex-1">Inbox</span>
+            {unread > 0 && (
+              <span className="mono-meta-sm bg-[color:var(--accent-magenta)] text-white px-1.5 py-0.5 rounded tabular-nums">
+                {unread}
+              </span>
+            )}
+          </DropdownMenuItem>
+          <DropdownMenuItem render={<Link href="/dashboards" />}>
+            <LayoutDashboard className="size-3.5" />
+            <span>Dashboards</span>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            <span className="mono-meta-sm text-fg-faint inline-flex items-center gap-1.5">
+              <Star className="size-3" /> FAVORITES
             </span>
+          </DropdownMenuLabel>
+          {favs.length === 0 ? (
+            <div className="px-2.5 py-1.5 text-xs text-fg-faint">
+              Star a board to pin it here.
+            </div>
+          ) : (
+            favs.map((f) => (
+              <DropdownMenuItem
+                key={f.boardId}
+                render={<Link href={`/b/${f.boardId}`} />}
+              >
+                <span className="flex flex-col min-w-0">
+                  <span className="text-sm truncate">{f.boardTitle}</span>
+                  <span className="mono-meta-sm text-fg-faint truncate">
+                    {f.workspaceName}
+                  </span>
+                </span>
+              </DropdownMenuItem>
+            ))
           )}
-        </DropdownMenuItem>
-        <DropdownMenuItem render={<Link href="/dashboards" />}>
-          <LayoutDashboard className="size-3.5" />
-          <span>Dashboards</span>
-        </DropdownMenuItem>
+        </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>
-          <span className="mono-meta-sm text-fg-faint inline-flex items-center gap-1.5">
-            <Star className="size-3" /> FAVORITES
-          </span>
-        </DropdownMenuLabel>
-        {favs.length === 0 ? (
-          <div className="px-2.5 py-1.5 text-xs text-fg-faint">
-            Star a board to pin it here.
-          </div>
-        ) : (
-          favs.map((f) => (
-            <DropdownMenuItem
-              key={f.boardId}
-              render={<Link href={`/b/${f.boardId}`} />}
-            >
-              <span className="flex flex-col min-w-0">
-                <span className="text-sm truncate">{f.boardTitle}</span>
-                <span className="mono-meta-sm text-fg-faint truncate">
-                  {f.workspaceName}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            <span className="mono-meta-sm text-fg-faint inline-flex items-center gap-1.5">
+              <History className="size-3" /> RECENT
+            </span>
+          </DropdownMenuLabel>
+          {recs.length === 0 ? (
+            <div className="px-2.5 py-1.5 text-xs text-fg-faint">
+              Boards you visit appear here.
+            </div>
+          ) : (
+            recs.map((r) => (
+              <DropdownMenuItem
+                key={r.boardId}
+                render={<Link href={`/b/${r.boardId}`} />}
+              >
+                <span className="flex flex-col min-w-0">
+                  <span className="text-sm truncate">{r.boardTitle}</span>
+                  <span className="mono-meta-sm text-fg-faint truncate">
+                    {r.workspaceName}
+                  </span>
                 </span>
-              </span>
-            </DropdownMenuItem>
-          ))
-        )}
-
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>
-          <span className="mono-meta-sm text-fg-faint inline-flex items-center gap-1.5">
-            <History className="size-3" /> RECENT
-          </span>
-        </DropdownMenuLabel>
-        {recs.length === 0 ? (
-          <div className="px-2.5 py-1.5 text-xs text-fg-faint">
-            Boards you visit appear here.
-          </div>
-        ) : (
-          recs.map((r) => (
-            <DropdownMenuItem
-              key={r.boardId}
-              render={<Link href={`/b/${r.boardId}`} />}
-            >
-              <span className="flex flex-col min-w-0">
-                <span className="text-sm truncate">{r.boardTitle}</span>
-                <span className="mono-meta-sm text-fg-faint truncate">
-                  {r.workspaceName}
-                </span>
-              </span>
-            </DropdownMenuItem>
-          ))
-        )}
+              </DropdownMenuItem>
+            ))
+          )}
+        </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
         <form action={logout}>
