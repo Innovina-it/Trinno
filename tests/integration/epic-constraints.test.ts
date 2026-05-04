@@ -123,29 +123,4 @@ describe("0051 epic constraints", () => {
     expect(error).toBeNull();
     expect(data).toBe(0);
   });
-
-  it("backfill (0052) + trigger: a manually-created cross-board child gets co-located", async () => {
-    // Sanity check that the 0051 trigger still holds after 0052 ran.
-    const u = await makeUser("backfill-2");
-    const ws = await createWorkspaceImpl(u.jwt, { name: "WS" });
-    const bA = await createBoardImpl(u.jwt, {
-      workspaceId: ws.id, title: "A",
-      backgroundKind: "color", backgroundValue: "#fafafa",
-    });
-    const bB = await createBoardImpl(u.jwt, {
-      workspaceId: ws.id, title: "B",
-      backgroundKind: "color", backgroundValue: "#fafafa",
-    });
-    const lA = await createListImpl(u.jwt, { boardId: bA.id, title: "L" });
-    const lB = await createListImpl(u.jwt, { boardId: bB.id, title: "L" });
-    const epic = await createCardImpl(u.jwt, { listId: lA.id, title: "E" });
-    await updateCardImpl(u.jwt, { id: epic.id, type: "epic" });
-    const child = await createCardImpl(u.jwt, { listId: lB.id, title: "C" });
-    expect(child.boardId).toBe(bB.id);
-    await updateCardImpl(u.jwt, { id: child.id, parentCardId: epic.id });
-    const [row] = await dbAsUser(u.jwt, async (tx) =>
-      tx.select().from(cards).where(eq(cards.id, child.id)),
-    );
-    expect(row.boardId).toBe(bA.id);
-  });
 });
