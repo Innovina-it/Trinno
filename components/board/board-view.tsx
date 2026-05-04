@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -98,15 +98,19 @@ export function BoardView({
   // Plan #16b-γ-Master-D D1 — toggle for the sprint drop strip. Persisted
   // to localStorage so the user's preference survives navigation. Initial
   // read happens lazily so SSR doesn't crash.
-  const [showSprintStrip, setShowSprintStrip] = useState(() => {
+  // Default to false so SSR + first client paint match. Hydrate the
+  // persisted preference in an effect; otherwise React flags an
+  // aria-pressed/className mismatch on the toggle button.
+  const [showSprintStrip, setShowSprintStrip] = useState(false);
+  useEffect(() => {
     try {
-      return typeof window !== "undefined"
-        ? window.localStorage.getItem(SPRINT_STRIP_KEY) === "1"
-        : false;
+      if (window.localStorage.getItem(SPRINT_STRIP_KEY) === "1") {
+        setShowSprintStrip(true);
+      }
     } catch {
-      return false;
+      /* ignore */
     }
-  });
+  }, []);
   const toggleSprintStrip = useCallback(() => {
     setShowSprintStrip((prev) => {
       const next = !prev;
