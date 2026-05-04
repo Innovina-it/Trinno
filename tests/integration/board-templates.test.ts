@@ -105,7 +105,7 @@ describe("board templates", () => {
       "Closed",
     ]);
     expect(ls.map((l) => l.statusKind)).toEqual([
-      "todo",
+      null,
       "todo",
       "in_progress",
       "review",

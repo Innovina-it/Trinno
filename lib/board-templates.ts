@@ -56,7 +56,9 @@ export const BOARD_TEMPLATES: BoardTemplate[] = [
     name: "Bug triage",
     description: "Inbox / Triaging / In progress / Verifying / Closed.",
     lists: [
-      { title: "Inbox", statusKind: "todo" },
+      // "Inbox" is intentionally unmapped — it represents items not yet
+      // triaged, distinct from the "todo" pipeline state.
+      { title: "Inbox" },
       { title: "Triaging", statusKind: "todo" },
       { title: "In progress", statusKind: "in_progress" },
       { title: "Verifying", statusKind: "review" },
@@ -75,7 +77,12 @@ export const BOARD_TEMPLATES: BoardTemplate[] = [
     description: "Backlog → Sprint → In progress → Review → Done.",
     lists: [
       { title: "Backlog", statusKind: "todo" },
-      { title: "This sprint", statusKind: "todo" },
+      // "This sprint" is intentionally unmapped — its semantic ("queued
+      // for current sprint") is distinct from "in_progress" (which is
+      // already taken by the next list) and from "todo" (which Backlog
+      // owns). Leaving unmapped avoids colliding with the
+      // (board_id, status_kind) partial unique index from migration 0054.
+      { title: "This sprint" },
       { title: "In progress", statusKind: "in_progress" },
       { title: "Review", statusKind: "review" },
       { title: "Done", statusKind: "done" },

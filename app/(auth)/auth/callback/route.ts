@@ -23,6 +23,15 @@ export async function GET(req: Request) {
     }
     token = data.session?.access_token;
   } else {
+    // No PKCE code — auto-confirm path. Validate the freshly-set
+    // session cookies via getUser() (server roundtrip), THEN extract the
+    // token. Matches the pattern in lib/auth.ts:13-19 and avoids
+    // accepting forged/replayed cookies that getSession() would decode
+    // locally without auth-server validation.
+    const { data: userData } = await supa.auth.getUser();
+    if (!userData.user) {
+      return NextResponse.redirect(new URL("/login", url.origin));
+    }
     const { data: sessData } = await supa.auth.getSession();
     if (!sessData.session) {
       return NextResponse.redirect(new URL("/login", url.origin));
