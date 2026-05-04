@@ -86,3 +86,45 @@ export function findTargetListId<L extends ListLite>(
   }
   return null;
 }
+
+type FilterCardLite = {
+  id: string;
+  title: string;
+  priority: "p0" | "p1" | "p2" | "p3" | "p4" | null;
+  sprintId: string | null;
+  dueDate: Date | string | null;
+};
+
+export type AggregateScope = "mine" | "all";
+
+export type FilterInput = {
+  scope: AggregateScope;
+  viewerId: string;
+  members: ReadonlyArray<{ cardId: string; userId: string }>;
+  query: string;
+  priorities?: ReadonlyArray<"p0" | "p1" | "p2" | "p3" | "p4">;
+  sprintId?: string;
+};
+
+export function cardMatchesFilter<C extends FilterCardLite>(
+  card: C,
+  f: FilterInput,
+): boolean {
+  if (f.scope === "mine") {
+    const assigned = f.members.some(
+      (m) => m.cardId === card.id && m.userId === f.viewerId,
+    );
+    if (!assigned) return false;
+  }
+  if (f.query) {
+    if (!card.title.toLowerCase().includes(f.query.toLowerCase())) return false;
+  }
+  if (f.priorities && f.priorities.length > 0) {
+    if (!card.priority) return false;
+    if (!f.priorities.includes(card.priority)) return false;
+  }
+  if (f.sprintId) {
+    if (card.sprintId !== f.sprintId) return false;
+  }
+  return true;
+}

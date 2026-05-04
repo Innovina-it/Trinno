@@ -3,6 +3,7 @@ import {
   AGGREGATE_COLUMNS,
   groupByStatus,
   findTargetListId,
+  cardMatchesFilter,
   type AggregateColumnId,
 } from "@/lib/aggregate-kanban/group";
 
@@ -112,5 +113,134 @@ describe("findTargetListId", () => {
 
   it("returns null when target is 'unmapped' (no semantic target)", () => {
     expect(findTargetListId(lists, "b1", "unmapped")).toBeNull();
+  });
+});
+
+describe("cardMatchesFilter", () => {
+  type FilterCard = {
+    id: string;
+    title: string;
+    priority: "p0" | "p1" | "p2" | "p3" | "p4" | null;
+    sprintId: string | null;
+    dueDate: Date | null;
+  };
+  type Member = { cardId: string; userId: string };
+
+  const me = "user-1";
+  const c1: FilterCard = {
+    id: "c1",
+    title: "Implement feature",
+    priority: "p1",
+    sprintId: "s1",
+    dueDate: null,
+  };
+  const c2: FilterCard = {
+    id: "c2",
+    title: "Fix bug",
+    priority: null,
+    sprintId: null,
+    dueDate: null,
+  };
+  const members: Member[] = [
+    { cardId: "c1", userId: me },
+  ];
+
+  it("scope=mine includes assigned, excludes unassigned", () => {
+    expect(
+      cardMatchesFilter(c1, {
+        scope: "mine",
+        viewerId: me,
+        members,
+        query: "",
+      }),
+    ).toBe(true);
+    expect(
+      cardMatchesFilter(c2, {
+        scope: "mine",
+        viewerId: me,
+        members,
+        query: "",
+      }),
+    ).toBe(false);
+  });
+
+  it("scope=all includes both", () => {
+    expect(
+      cardMatchesFilter(c2, {
+        scope: "all",
+        viewerId: me,
+        members,
+        query: "",
+      }),
+    ).toBe(true);
+  });
+
+  it("query filters by title (case-insensitive substring)", () => {
+    expect(
+      cardMatchesFilter(c1, {
+        scope: "all",
+        viewerId: me,
+        members,
+        query: "feature",
+      }),
+    ).toBe(true);
+    expect(
+      cardMatchesFilter(c1, {
+        scope: "all",
+        viewerId: me,
+        members,
+        query: "FEATURE",
+      }),
+    ).toBe(true);
+    expect(
+      cardMatchesFilter(c1, {
+        scope: "all",
+        viewerId: me,
+        members,
+        query: "bug",
+      }),
+    ).toBe(false);
+  });
+
+  it("priority filter accepts subset", () => {
+    expect(
+      cardMatchesFilter(c1, {
+        scope: "all",
+        viewerId: me,
+        members,
+        query: "",
+        priorities: ["p0", "p1"],
+      }),
+    ).toBe(true);
+    expect(
+      cardMatchesFilter(c1, {
+        scope: "all",
+        viewerId: me,
+        members,
+        query: "",
+        priorities: ["p2"],
+      }),
+    ).toBe(false);
+  });
+
+  it("sprint filter matches single id", () => {
+    expect(
+      cardMatchesFilter(c1, {
+        scope: "all",
+        viewerId: me,
+        members,
+        query: "",
+        sprintId: "s1",
+      }),
+    ).toBe(true);
+    expect(
+      cardMatchesFilter(c1, {
+        scope: "all",
+        viewerId: me,
+        members,
+        query: "",
+        sprintId: "s2",
+      }),
+    ).toBe(false);
   });
 });
