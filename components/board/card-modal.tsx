@@ -36,7 +36,7 @@ import { ComponentCardSection } from "@/components/components/component-card-sec
 import { VersionCardSection } from "@/components/versions/version-card-section";
 import { cardCode } from "@/lib/format";
 import Link from "next/link";
-import { Archive, CalendarRange, Move } from "lucide-react";
+import { Archive, CalendarRange, Layers3, Move } from "lucide-react";
 import { MoveToBoardDialog } from "./card/move-to-board-dialog";
 
 export type CardModalCard = {
@@ -260,6 +260,16 @@ export function CardModal({
             >
               <CalendarRange className="size-3" />
               VIEW ON ROADMAP →
+            </Link>
+          )}
+          {card.type === "epic" && workspaceId && (
+            <Link
+              href={`/w/${workspaceId}/e/${card.id}`}
+              data-testid="card-modal-epic-cta"
+              className="chip mono-meta-sm inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
+            >
+              <Layers3 className="size-3" />
+              Open epic kanban
             </Link>
           )}
         </div>
