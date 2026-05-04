@@ -486,11 +486,20 @@ export function BoardStoreProvider({
   initial: BoardSnapshotInit;
   children: ReactNode;
 }) {
-  const ref = useRef<BoardStore | null>(null);
-  if (!ref.current) ref.current = createBoardStore(initial);
+  // Plan #workspace-routing — key the ref by boardId so navigating
+  // between boards (which share the [boardId] page component) builds
+  // a fresh store from the new snapshot instead of leaking the
+  // previous board's lists/cards/etc.
+  const ref = useRef<{ id: string; store: BoardStore } | null>(null);
+  if (!ref.current || ref.current.id !== initial.boardId) {
+    ref.current = {
+      id: initial.boardId,
+      store: createBoardStore(initial),
+    };
+  }
   return createElement(
     BoardStoreContext.Provider,
-    { value: ref.current },
+    { value: ref.current.store },
     children,
   );
 }

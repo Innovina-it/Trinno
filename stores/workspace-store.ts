@@ -210,11 +210,21 @@ export function WorkspaceStoreProvider({
   initial: WorkspaceSnapshot;
   children: ReactNode;
 }) {
-  const ref = useRef<WorkspaceStore | null>(null);
-  if (!ref.current) ref.current = createWorkspaceStore(initial);
+  // Plan #workspace-routing — keep a ref keyed by workspaceId so when
+  // the user navigates between workspaces (the same React tree slot
+  // is reused by Next.js because [workspaceId] route segments share
+  // the page component), we recreate the store with the fresh
+  // snapshot instead of leaking the previous workspace's data.
+  const ref = useRef<{ id: string; store: WorkspaceStore } | null>(null);
+  if (!ref.current || ref.current.id !== initial.workspaceId) {
+    ref.current = {
+      id: initial.workspaceId,
+      store: createWorkspaceStore(initial),
+    };
+  }
   return createElement(
     WorkspaceStoreContext.Provider,
-    { value: ref.current },
+    { value: ref.current.store },
     children,
   );
 }
