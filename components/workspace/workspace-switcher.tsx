@@ -26,7 +26,13 @@ export function WorkspaceSwitcher({
   const router = useRouter();
   const [openCreate, setOpenCreate] = useState(false);
   const [q, setQ] = useState("");
-  const active = workspaces.find(w => w.id === activeId) ?? workspaces[0];
+  // Plan #workspace-routing — when the URL doesn't pin a workspace
+  // (e.g. /inbox, /dashboards, personal-scope dashboard), don't fake
+  // "active = workspaces[0]"; the trigger label and the in-list
+  // checkmark would lie about which workspace the user is in. Leave
+  // `active` undefined so the trigger renders the neutral
+  // "Workspaces" label and no item is highlighted.
+  const active = activeId ? workspaces.find(w => w.id === activeId) : undefined;
 
   const showSearch = workspaces.length > SEARCH_THRESHOLD;
   const filtered = useMemo(() => {
