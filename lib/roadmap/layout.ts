@@ -128,7 +128,7 @@ export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
     ...epicLanes,
     {
       id: UNCATEGORIZED_LANE_ID,
-      title: "Uncategorized",
+      title: "Unassigned",
       kind: "uncategorized",
       headerCard: null,
       cards: orphans,

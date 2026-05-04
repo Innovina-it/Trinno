@@ -32,6 +32,7 @@ import {
   groupByComponent,
   groupByEpic,
   stackInLane,
+  UNCATEGORIZED_LANE_ID,
 } from "@/lib/roadmap/layout";
 import { getCardStatusKind, type StatusKind } from "@/lib/status";
 import { criticalPath, type Link as CritLink } from "@/lib/roadmap/critical-path";
@@ -934,6 +935,17 @@ export function RoadmapView({
           </div>
         </div>
       ) : (
+        <>
+          {lanes.length === 1 &&
+            lanes[0].id === UNCATEGORIZED_LANE_ID &&
+            lanes[0].cards.length === 0 && (
+              <div
+                className="mx-auto max-w-2xl py-8 text-center text-fg-faint"
+                data-testid="roadmap-empty-unassigned-banner"
+              >
+                Mark a card as <span className="chip mono-meta-sm">Epic</span> to organize work into kanbans.
+              </div>
+            )}
         <div
           className="flex border border-hairline rounded-xl overflow-hidden"
           data-testid="roadmap-grid"
@@ -987,9 +999,9 @@ export function RoadmapView({
                   )}
                   {epicHeader ? (
                     <Link
-                      href={`/b/${epicHeader.boardId}/c/${epicHeader.id}`}
+                      href={`/w/${workspaceId}/e/${epicHeader.id}`}
                       className="mono-meta text-fg truncate hover:underline focus:outline-none focus:underline"
-                      data-testid="roadmap-lane-title-link"
+                      data-testid="lane-epic-header-link"
                       data-card-id={epicHeader.id}
                     >
                       {ll.lane.title}
@@ -1464,6 +1476,7 @@ export function RoadmapView({
             </div>
           </div>
         </div>
+        </>
       )}
       <CascadeConfirmDialog
         open={cascadeState.open}
