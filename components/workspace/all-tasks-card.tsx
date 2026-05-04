@@ -1,10 +1,15 @@
 "use client";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useDraggable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { CalendarRange, CornerDownRight } from "lucide-react";
 import {
   PriorityChip,
   type CardPriority,
 } from "@/components/board/card/priority-picker";
+
+// No `useWorkspaceStore` import — board title and sprint name are passed
+// in by the view (computed once via Map lookup, not per-card subscription).
 
 function fmtShortDate(d: Date | string | null): string | null {
   if (!d) return null;
@@ -16,9 +21,12 @@ function fmtShortDate(d: Date | string | null): string | null {
   });
 }
 
-// Pure display — board title + sprint name come from the parent (precomputed
-// from the workspace store at view level so this component doesn't subscribe
-// to the store per render).
+// `DRAG_THRESHOLD` is documented for clarity; the real enforcement lives
+// on the dnd-kit PointerSensor `activationConstraint.distance` configured
+// at the view level.
+const DRAG_THRESHOLD = 4;
+void DRAG_THRESHOLD;
+
 export function AllTasksCard({
   cardId,
   boardId,
@@ -40,16 +48,37 @@ export function AllTasksCard({
   priority: CardPriority | null;
   dueDate: Date | string | null;
 }) {
+  const router = useRouter();
+  void sprintId;
   const due = fmtShortDate(dueDate);
-  void sprintId; // kept on the prop for symmetry; sprintName is the displayed value
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: `card:${cardId}`,
+      data: { type: "card", cardId, boardId, listId },
+    });
   return (
-    <Link
-      href={`/b/${boardId}/c/${cardId}`}
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
       data-testid="all-tasks-card"
       data-card-id={cardId}
       data-board-id={boardId}
       data-list-id={listId}
-      className="block rounded-md border border-hairline bg-[color:var(--surface)] hover:bg-[rgb(255_255_255/0.04)] transition-colors p-2.5 space-y-2"
+      role="button"
+      tabIndex={0}
+      onClick={(e) => {
+        // dnd-kit's PointerSensor fires drag only past activationConstraint.
+        // For a click (no drag), navigate to the card modal.
+        if (e.defaultPrevented) return;
+        router.push(`/b/${boardId}/c/${cardId}`);
+      }}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        opacity: isDragging ? 0.55 : 1,
+        cursor: "grab",
+      }}
+      className="block rounded-md border border-hairline bg-[color:var(--surface)] hover:bg-[rgb(255_255_255/0.04)] transition-colors p-2.5 space-y-2 select-none"
     >
       <div className="text-sm leading-snug text-fg">{title}</div>
       <div className="flex flex-wrap items-center gap-1.5 mono-meta-sm text-fg-muted">
@@ -76,6 +105,6 @@ export function AllTasksCard({
         )}
         {priority && <PriorityChip priority={priority} />}
       </div>
-    </Link>
+    </div>
   );
 }
