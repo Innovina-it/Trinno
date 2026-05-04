@@ -6,14 +6,28 @@ import { seedDemoWorkspaceImpl } from "@/actions/seed";
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
-  if (!code) return NextResponse.redirect(new URL("/login", url.origin));
 
+  // Plan #epic-as-kanban — auto-confirm signup path. supabase.auth.signUp
+  // returns a session directly when enable_confirmations=false; the form
+  // navigates here without a `code` query param solely to give us a
+  // server-side hook for draining the `tr_seed_demo` cookie + running the
+  // seed against the freshly-set session cookies.
   const supa = await createSupabaseServer();
-  const { data, error } = await supa.auth.exchangeCodeForSession(code);
-  if (error) {
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(error.message)}`, url.origin)
-    );
+  let token: string | undefined;
+  if (code) {
+    const { data, error } = await supa.auth.exchangeCodeForSession(code);
+    if (error) {
+      return NextResponse.redirect(
+        new URL(`/login?error=${encodeURIComponent(error.message)}`, url.origin)
+      );
+    }
+    token = data.session?.access_token;
+  } else {
+    const { data: sessData } = await supa.auth.getSession();
+    if (!sessData.session) {
+      return NextResponse.redirect(new URL("/login", url.origin));
+    }
+    token = sessData.session.access_token;
   }
 
   // Plan #16b-γ-B (#6) — if the signup form set `tr_seed_demo=1`, populate
@@ -26,7 +40,6 @@ export async function GET(req: Request) {
   let seededWsId: string | null = null;
   if (wantsSeed) {
     cookieStore.delete("tr_seed_demo");
-    const token = data.session?.access_token;
     if (token) {
       try {
         const r = await seedDemoWorkspaceImpl(token);

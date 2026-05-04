@@ -150,10 +150,33 @@ export async function createBoardFromTemplateImpl(
     });
     listIds.push(row.id);
     if (spec.statusKind) {
-      await setListStatusKindImpl(token, {
-        id: row.id,
-        statusKind: spec.statusKind,
-      });
+      // Plan #epic-as-kanban — migration 0054 enforces unique status per
+      // board, but some templates (notably okr_sprint) map two lists to
+      // the same conceptual status (e.g. "Backlog" + "This sprint" both
+      // todo). Leave the second list unmapped so the rest of the seed
+      // continues; the user can adjust mappings via board settings later.
+      try {
+        await setListStatusKindImpl(token, {
+          id: row.id,
+          statusKind: spec.statusKind,
+        });
+      } catch (e) {
+        // postgres unique-violation surfaces as code 23505. Drizzle wraps
+        // the underlying postgres-js error inside DrizzleQueryError, so
+        // the SQLSTATE code lives on `cause.code`. Match defensively on
+        // either path or the human message.
+        const root = (e as { cause?: { code?: string } } | null | undefined)?.cause;
+        const code =
+          (e as { code?: string } | null | undefined)?.code ??
+          root?.code;
+        const msg = e instanceof Error ? e.message : String(e);
+        const isDup =
+          code === "23505" ||
+          /duplicate key|unique constraint|lists_board_id_status_kind/i.test(
+            msg,
+          );
+        if (!isDup) throw e;
+      }
     }
   }
 

@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { ChevronRight, Loader2, MailCheck } from "lucide-react";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 export function SignupForm() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [seedDemo, setSeedDemo] = useState(true);
@@ -41,10 +39,14 @@ export function SignupForm() {
     // session is returned immediately, skip the "check your email" screen
     // and route the user straight in. If demo seed was requested, hit the
     // callback once to drain the cookie + run the seed.
+    //
+    // Use a hard navigation (window.location.replace) instead of
+    // router.replace — the latter triggers a Next 15 RSC prefetch + RSC
+    // resolution which both hit /auth/callback in parallel, racing the
+    // seed loop and leaving the workspace half-populated.
     if (data.session) {
       const target = seedDemo ? "/auth/callback" : "/";
-      router.replace(target);
-      router.refresh();
+      window.location.replace(target);
       return;
     }
     setSubmitting(false);
