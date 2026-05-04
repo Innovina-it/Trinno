@@ -407,6 +407,7 @@ export function BoardView({
       <div className="relative flex flex-1 items-start gap-4 p-4">
         <div className="flex-1 min-w-0">
           <DndContext
+            id={`dnd-board-${board.id}`}
             sensors={sensors}
             collisionDetection={closestCorners}
             onDragEnd={onDragEnd}
