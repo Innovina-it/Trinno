@@ -45,8 +45,7 @@ export function AccountMenu({
     const channel = supa
       .channel(`notifications:${userId}`)
       .on(
-        // @ts-expect-error postgres_changes literal type
-        "postgres_changes",
+        "postgres_changes" as never,
         {
           event: "INSERT",
           schema: "public",
