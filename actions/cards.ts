@@ -3,7 +3,9 @@ import { revalidatePath } from "next/cache";
 import { eq, desc, asc, and, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { dbAsUser } from "@/lib/db/client";
-import { cards, cardLinks, cardLabels, lists } from "@/lib/db/schema";
+import {
+  cards, cardLinks, cardLabels, lists, boards, workspaces, cardMembers,
+} from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { positionBetween } from "@/lib/ordering";
 import {
@@ -39,8 +41,14 @@ const MoveCardCrossBoardInput = z.object({
   toListId: Uuid,
 });
 
+function decodeSub(jwt: string): string {
+  const [, payload] = jwt.split(".");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
+}
+
 export async function createCardImpl(token: string, input: { listId: string; title: string }) {
   const parsed = CreateCardInput.parse(input);
+  const creatorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
     const [last] = await tx.select({ position: cards.position }).from(cards)
       .where(eq(cards.listId, parsed.listId))
@@ -54,6 +62,27 @@ export async function createCardImpl(token: string, input: { listId: string; tit
       boardId: "00000000-0000-0000-0000-000000000000", // overwritten by trigger
     }).returning();
     if (!row) throw new Error("Forbidden");
+
+    // Honor the workspace's "auto-assign creator" preference. Resolve
+    // workspace via list → board so we don't need it on the input. The
+    // insert is best-effort: a card_members write failure shouldn't roll
+    // back the card itself, so swallow the error after logging.
+    const [ws] = await tx
+      .select({ autoAssign: workspaces.autoAssignCreator })
+      .from(lists)
+      .innerJoin(boards, eq(boards.id, lists.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .where(eq(lists.id, parsed.listId))
+      .limit(1);
+    if (ws?.autoAssign) {
+      try {
+        await tx
+          .insert(cardMembers)
+          .values({ cardId: row.id, userId: creatorId, boardId: row.boardId });
+      } catch {
+        /* ignore — card already created; assignment is non-critical */
+      }
+    }
     return row;
   });
 }

@@ -42,6 +42,7 @@ export const workspaces = pgTable("workspaces", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  autoAssignCreator: boolean("auto_assign_creator").notNull().default(false),
 });
 
 export const workspaceMembers = pgTable(

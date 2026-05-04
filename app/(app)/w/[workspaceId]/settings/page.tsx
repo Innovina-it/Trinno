@@ -25,7 +25,13 @@ export default async function WorkspaceSettingsPage({
 
       <section className="space-y-4">
         <h2 className="font-medium">Workspace</h2>
-        <WorkspaceSettingsForm workspace={{ id: ws.id, name: ws.name }} />
+        <WorkspaceSettingsForm
+          workspace={{
+            id: ws.id,
+            name: ws.name,
+            autoAssignCreator: ws.autoAssignCreator,
+          }}
+        />
       </section>
 
       <Separator />

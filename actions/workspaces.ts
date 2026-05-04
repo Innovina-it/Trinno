@@ -8,6 +8,7 @@ import {
   CreateWorkspaceInput,
   DeleteWorkspaceInput,
   RenameWorkspaceInput,
+  SetWorkspaceAutoAssignCreatorInput,
 } from "@/lib/validation";
 
 function decodeSub(jwt: string): string {
@@ -85,4 +86,31 @@ export async function deleteWorkspace(input: { id: string }) {
   const token = (await getSessionToken())!;
   await deleteWorkspaceImpl(token, input);
   revalidatePath("/");
+}
+
+export async function setWorkspaceAutoAssignCreatorImpl(
+  token: string,
+  input: { id: string; autoAssignCreator: boolean },
+) {
+  const parsed = SetWorkspaceAutoAssignCreatorInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const [ws] = await tx
+      .update(workspaces)
+      .set({ autoAssignCreator: parsed.autoAssignCreator })
+      .where(eq(workspaces.id, parsed.id))
+      .returning();
+    if (!ws) throw new Error("Forbidden");
+    return ws;
+  });
+}
+
+export async function setWorkspaceAutoAssignCreator(input: {
+  id: string;
+  autoAssignCreator: boolean;
+}) {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  const ws = await setWorkspaceAutoAssignCreatorImpl(token, input);
+  revalidatePath(`/w/${ws.id}/settings`);
+  return ws;
 }

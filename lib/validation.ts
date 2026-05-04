@@ -7,6 +7,10 @@ export const Uuid = z.string().uuid();
 export const CreateWorkspaceInput = z.object({ name: Title });
 export const RenameWorkspaceInput = z.object({ id: Uuid, name: Title });
 export const DeleteWorkspaceInput = z.object({ id: Uuid });
+export const SetWorkspaceAutoAssignCreatorInput = z.object({
+  id: Uuid,
+  autoAssignCreator: z.boolean(),
+});
 
 export const InviteMemberInput = z.object({
   workspaceId: Uuid,
