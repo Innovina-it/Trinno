@@ -12,6 +12,7 @@ import {
   Sun,
   LogOut,
   ArrowRight,
+  ListChecks,
 } from "lucide-react";
 import {
   Dialog,
@@ -170,6 +171,20 @@ export function CommandPalette({
 
     // Actions — always shown but filtered by q if present.
     const actions: PaletteItem[] = [
+      // Plan #aggregate-kanban — "Open my tasks" routes to the workspace
+      // aggregate kanban view of the user's first workspace.
+      {
+        id: "act:open-my-tasks",
+        section: "Actions",
+        label: "Open my tasks",
+        sub: "Workspace-wide kanban grouped by status",
+        icon: <ListChecks className="size-3.5 text-fg-muted" />,
+        onSelect: () => {
+          const ws = workspaces[0];
+          if (ws) router.push(`/w/${ws.id}/all-tasks`);
+          setOpen(false);
+        },
+      },
       {
         id: "act:new-board",
         section: "Actions",

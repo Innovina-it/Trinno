@@ -10,7 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Calendar, Map, Tag, Menu } from "lucide-react";
+import { Calendar, Map, Tag, Menu, ListChecks } from "lucide-react";
 
 const linkCls =
   "mono-meta-sm tracking-[0.14em] text-fg-muted hover:text-fg transition-colors px-2.5 py-1.5 rounded hover:bg-[rgb(255_255_255/0.05)] inline-flex items-center gap-1.5";
@@ -28,6 +28,15 @@ export function TopNav({
   const wsForLinks = activeWorkspaceId ?? workspaces[0]?.id;
   const wsLinks = wsForLinks
     ? [
+        // Plan #aggregate-kanban — workspace-level "My tasks" entry; positioned
+        // first so it sits between the workspace switcher (left) and the rest
+        // of the workspace nav, matching the planned IA.
+        {
+          href: `/w/${wsForLinks}/all-tasks`,
+          label: "My tasks",
+          Icon: ListChecks,
+          testId: "nav-all-tasks",
+        },
         { href: `/w/${wsForLinks}/backlog`, label: "Backlog", Icon: Tag },
         { href: `/w/${wsForLinks}/roadmap`, label: "Roadmap", Icon: Map },
         { href: `/w/${wsForLinks}/versions`, label: "Versions", Icon: Calendar },
@@ -60,7 +69,12 @@ export function TopNav({
         {/* MIDDLE: workspace-scoped nav (lg+) */}
         <nav className="hidden lg:flex items-center gap-0.5 ml-auto mr-2">
           {wsLinks.map((l) => (
-            <Link key={l.href} href={l.href} className={linkCls}>
+            <Link
+              key={l.href}
+              href={l.href}
+              className={linkCls}
+              data-testid={"testId" in l ? l.testId : undefined}
+            >
               <l.Icon className="size-3.5" />
               <span>{l.label.toUpperCase()}</span>
             </Link>
@@ -79,7 +93,15 @@ export function TopNav({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 {wsLinks.map((l) => (
-                  <DropdownMenuItem key={l.href} render={<Link href={l.href} />}>
+                  <DropdownMenuItem
+                    key={l.href}
+                    render={
+                      <Link
+                        href={l.href}
+                        data-testid={"testId" in l ? l.testId : undefined}
+                      />
+                    }
+                  >
                     <l.Icon className="size-3.5" />
                     {l.label}
                   </DropdownMenuItem>
