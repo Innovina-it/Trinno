@@ -430,6 +430,11 @@ export const MoveGadgetInput = z.object({
   direction: z.enum(["up", "down"]),
 });
 
+export const ReorderGadgetsInput = z.object({
+  dashboardId: Uuid,
+  orderedIds: z.array(Uuid).min(1).max(100),
+});
+
 export const DeleteGadgetInput = z.object({ id: Uuid });
 
 // Plan #16b-γ-B (#7) — no input fields; the action stamps `now()` on the

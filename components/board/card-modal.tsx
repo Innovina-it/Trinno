@@ -1,5 +1,12 @@
 "use client";
-import { useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "zustand";
 import { toast } from "sonner";
@@ -11,8 +18,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { updateCard, archiveCard } from "@/actions/cards";
 import { undoBus } from "@/lib/undo-bus";
 import { LabelsSection } from "./card/labels-section";
@@ -36,8 +51,16 @@ import { ComponentCardSection } from "@/components/components/component-card-sec
 import { VersionCardSection } from "@/components/versions/version-card-section";
 import { cardCode } from "@/lib/format";
 import Link from "next/link";
-import { Archive, CalendarRange, Layers3, Move } from "lucide-react";
+import {
+  Archive,
+  CalendarRange,
+  ChevronRight,
+  Layers3,
+  MoreHorizontal,
+  Move,
+} from "lucide-react";
 import { MoveToBoardDialog } from "./card/move-to-board-dialog";
+import { MarkdownView } from "@/components/markdown";
 
 export type CardModalCard = {
   id: string;
@@ -58,6 +81,48 @@ export type CardModalCard = {
   coverValue?: string | null;
 };
 
+function fmtSavedAt(d: Date) {
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function AccordionGroup({
+  id,
+  title,
+  count,
+  defaultOpen = false,
+  children,
+}: {
+  id: string;
+  title: string;
+  count?: number;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details
+      open={defaultOpen}
+      data-testid={`card-modal-group-${id}`}
+      className="group/acc rounded-xl border border-hairline bg-[color:var(--surface)] open:bg-[color:var(--surface-strong)] transition-colors"
+    >
+      <summary className="flex items-center gap-2 px-3 py-3 cursor-pointer select-none list-none rounded-xl hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 [&::-webkit-details-marker]:hidden">
+        <ChevronRight
+          aria-hidden
+          className="size-3.5 text-fg-faint shrink-0 transition-transform group-open/acc:rotate-90"
+        />
+        <span className="font-sans text-sm font-medium text-fg flex-1">
+          {title}
+        </span>
+        {typeof count === "number" && count > 0 && (
+          <span className="mono-meta-sm text-fg-faint tabular-nums">
+            {count}
+          </span>
+        )}
+      </summary>
+      <div className="px-3 pb-3 pt-1 space-y-4">{children}</div>
+    </details>
+  );
+}
+
 export function CardModal({
   card,
   sprints = [],
@@ -76,6 +141,8 @@ export function CardModal({
   const [description, setDescription] = useState(card.description ?? "");
   const [pending, start] = useTransition();
   const [moveOpen, setMoveOpen] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [editingNotes, setEditingNotes] = useState(false);
   const descTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedDesc = useRef(card.description ?? "");
   const lastSavedTitle = useRef(card.title);
@@ -86,15 +153,7 @@ export function CardModal({
     };
   }, []);
 
-  // Plan #16b-γ-D (#7) — `[`/`]` navigate to prev/next sibling card in
-  // the same list, sorted by position. Skip when the user is typing in
-  // an input, textarea, or contentEditable so renaming the title doesn't
-  // teleport them to another card. We read sibling order from the board
-  // store (always available because both card routes nest under
-  // BoardLayout's BoardStoreProvider). Use `router.replace` so [/] doesn't
-  // pile up history entries. Select the raw cards array so the zustand
-  // selector returns a stable reference; derive the filtered+sorted
-  // sibling list inside useMemo to keep React 19 happy.
+  // Sibling navigation. Same as before.
   const boardStore = useContext(BoardStoreContext);
   const allCards = useStore(boardStore!, (s) => s.cards);
   const siblingNav = useMemo(() => {
@@ -125,10 +184,14 @@ export function CardModal({
       if (isTyping(e.target)) return;
       if (e.key === "[" && siblingNav.prev) {
         e.preventDefault();
-        router.replace(`/b/${card.boardId}/c/${siblingNav.prev}`, { scroll: false });
+        router.replace(`/b/${card.boardId}/c/${siblingNav.prev}`, {
+          scroll: false,
+        });
       } else if (e.key === "]" && siblingNav.next) {
         e.preventDefault();
-        router.replace(`/b/${card.boardId}/c/${siblingNav.next}`, { scroll: false });
+        router.replace(`/b/${card.boardId}/c/${siblingNav.next}`, {
+          scroll: false,
+        });
       }
     }
     window.addEventListener("keydown", onKey);
@@ -139,13 +202,10 @@ export function CardModal({
     router.back();
   }
 
-  // Plan #16b-γ-D (#10) — archive with undo. Closes the modal first
-  // (the card vanishes from the board snapshot via realtime/refresh).
   function onArchive() {
     start(async () => {
       try {
         await archiveCard({ id: card.id, archived: true });
-        // Push the undo banner; close the modal so the user sees it.
         undoBus.push({
           message: "Card archived",
           undo: async () => {
@@ -169,7 +229,13 @@ export function CardModal({
 
   function persistTitle() {
     const trimmed = title.trim();
-    if (!trimmed || trimmed === lastSavedTitle.current) return;
+    // Empty title rollback: restore last saved value, do not save empty.
+    if (!trimmed) {
+      setTitle(lastSavedTitle.current);
+      toast.error("Title can't be empty");
+      return;
+    }
+    if (trimmed === lastSavedTitle.current) return;
     lastSavedTitle.current = trimmed;
     const retry = async () => {
       await updateCard({ id: card.id, title: trimmed });
@@ -177,13 +243,11 @@ export function CardModal({
     start(async () => {
       try {
         await retry();
+        setLastSavedAt(new Date());
       } catch (err) {
         const msg = (err as Error).message;
         toast.error(msg);
-        errorBus.push({
-          message: `Title save failed: ${msg}`,
-          retry,
-        });
+        errorBus.push({ message: `Title save failed: ${msg}`, retry });
       }
     });
   }
@@ -203,6 +267,7 @@ export function CardModal({
       start(async () => {
         try {
           await retry();
+          setLastSavedAt(new Date());
         } catch (err) {
           const msg = (err as Error).message;
           toast.error(msg);
@@ -218,151 +283,235 @@ export function CardModal({
   const hasRoadmapDates = Boolean(card.startDate || card.targetDate);
   const showRoadmapLink = Boolean(workspaceId && hasRoadmapDates);
 
-  const body = (
-    <div className="space-y-7">
-      {/* Cover (color or image) — at the very top above the type row */}
-      <CoverPicker
-        cardId={card.id}
-        coverKind={card.coverKind ?? "none"}
-        coverValue={card.coverValue ?? null}
-      />
+  // Save indicator copy.
+  const saveIndicator = pending
+    ? "Saving…"
+    : lastSavedAt
+      ? `Saved · ${fmtSavedAt(lastSavedAt)}`
+      : null;
 
-      {/* Type + Priority + Parent + Sprint row — at the very top */}
-      {(card.type !== undefined || card.boardId) && (
-        <div className="flex flex-wrap items-center gap-2">
-          <TypePicker
-            cardId={card.id}
-            type={card.type ?? "task"}
-            parentCardId={card.parentCardId ?? null}
+  const body = (
+    <div className="space-y-5">
+      {/* Hero block: title + meta + save indicator + overflow actions. */}
+      <div className="space-y-3">
+        <div className="flex items-start gap-3">
+          <input
+            id="card-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={persistTitle}
+            required
+            minLength={1}
+            maxLength={120}
+            aria-label="Card title"
+            className="flex-1 min-w-0 bg-transparent font-sans text-2xl md:text-3xl font-bold tracking-tight text-fg leading-tight outline-none focus-visible:ring-1 focus-visible:ring-fg/40 rounded-md px-1 -mx-1 py-0.5"
           />
-          <PriorityPicker
-            cardId={card.id}
-            priority={card.priority ?? null}
-          />
-          {card.boardId && (
-            <ParentPicker
-              cardId={card.id}
-              parentCardId={card.parentCardId ?? null}
-              boardId={card.boardId}
-            />
-          )}
-          <SprintPicker
-            cardId={card.id}
-            sprintId={card.sprintId ?? null}
-            sprints={sprints}
-          />
-          <WatchToggle cardId={card.id} />
-          {showRoadmapLink && (
-            <Link
-              href={`/w/${workspaceId}/roadmap?focus=${card.id}`}
-              data-testid="card-modal-roadmap-link"
-              className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
-            >
-              <CalendarRange className="size-3" />
-              VIEW ON ROADMAP →
-            </Link>
-          )}
-          {card.type === "epic" && workspaceId && (
-            <Link
-              href={`/w/${workspaceId}/e/${card.id}`}
-              data-testid="card-modal-epic-cta"
-              className="chip mono-meta-sm inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
-            >
-              <Layers3 className="size-3" />
-              Open epic kanban
-            </Link>
+          <div className="flex items-center gap-2 shrink-0 pt-2">
+            {saveIndicator && (
+              <span
+                className="mono-meta-sm text-fg-faint tabular-nums"
+                data-testid="card-modal-save-indicator"
+              >
+                {saveIndicator}
+              </span>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="More card actions"
+                className="size-7 inline-flex items-center justify-center rounded-full border border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+              >
+                <MoreHorizontal className="size-3.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Card</DropdownMenuLabel>
+                  {card.boardId && (
+                    <DropdownMenuItem
+                      onSelect={() => setMoveOpen(true)}
+                      data-testid="card-modal-move-to-board"
+                    >
+                      <Move className="size-3.5" aria-hidden />
+                      Move to board…
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={onArchive}
+                    disabled={pending}
+                    data-testid="card-modal-archive"
+                    className="text-fg-muted"
+                  >
+                    <Archive className="size-3.5" aria-hidden />
+                    Archive
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* Meta row: attribute group + state group + nav group. */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {(card.type !== undefined || card.boardId) && (
+            <>
+              <TypePicker
+                cardId={card.id}
+                type={card.type ?? "task"}
+                parentCardId={card.parentCardId ?? null}
+              />
+              <PriorityPicker
+                cardId={card.id}
+                priority={card.priority ?? null}
+              />
+              {card.boardId && (
+                <ParentPicker
+                  cardId={card.id}
+                  parentCardId={card.parentCardId ?? null}
+                  boardId={card.boardId}
+                />
+              )}
+              <SprintPicker
+                cardId={card.id}
+                sprintId={card.sprintId ?? null}
+                sprints={sprints}
+              />
+              <span aria-hidden className="mx-1 h-4 w-px bg-hairline" />
+              <WatchToggle cardId={card.id} />
+              {(showRoadmapLink || (card.type === "epic" && workspaceId)) && (
+                <span aria-hidden className="mx-1 h-4 w-px bg-hairline" />
+              )}
+              {showRoadmapLink && (
+                <Link
+                  href={`/w/${workspaceId}/roadmap?focus=${card.id}`}
+                  data-testid="card-modal-roadmap-link"
+                  className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
+                >
+                  <CalendarRange className="size-3" aria-hidden />
+                  Roadmap →
+                </Link>
+              )}
+              {card.type === "epic" && workspaceId && (
+                <Link
+                  href={`/w/${workspaceId}/e/${card.id}`}
+                  data-testid="card-modal-epic-cta"
+                  className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
+                >
+                  <Layers3 className="size-3" aria-hidden />
+                  Epic kanban →
+                </Link>
+              )}
+            </>
           )}
         </div>
-      )}
-
-      {/* Title — editable, serif italic, large editorial display, gradient on focus */}
-      <div className="space-y-2">
-        <Label htmlFor="card-title">Title</Label>
-        <input
-          id="card-title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={persistTitle}
-          required
-          minLength={1}
-          maxLength={120}
-          className="w-full bg-transparent serif-display text-3xl md:text-4xl text-fg leading-tight border-b border-hairline pb-2 outline-none focus:border-[color:var(--accent-cyan)]/60 focus:gradient-text-static transition-colors"
-        />
       </div>
 
-      {/* Description — section heading + glass textarea */}
-      <section className="space-y-2">
-        <div className="flex items-baseline justify-between border-b border-hairline pb-1.5">
-          <div className="flex items-center gap-2">
-            <span aria-hidden className="block w-0.5 h-4 accent-bar-cyan rounded-full" />
-            <h3 className="mono-meta text-fg">Notes</h3>
-          </div>
-          <span className="mono-meta-sm text-fg-faint">DESCRIPTION</span>
-        </div>
-        <textarea
-          id="card-description"
-          value={description}
-          onChange={(e) => scheduleDescSave(e.target.value)}
-          rows={5}
-          className="w-full rounded-xl border border-hairline bg-[color:var(--surface)] p-3 text-sm font-sans text-fg outline-none transition-all duration-200 hover:border-[color:var(--hairline-hi)] focus-visible:border-[color:var(--accent-cyan)]/60 focus-visible:bg-[color:var(--surface-strong)] focus-visible:shadow-[0_0_0_3px_rgb(0_229_255/0.20)] placeholder:font-serif placeholder:italic placeholder:text-fg-faint"
-          placeholder="Notes…"
-        />
+      {/* Notes — markdown render in view mode, click to edit. Cmd/Ctrl+Enter
+          or blur saves. Empty state invites a click. */}
+      <section className="space-y-2" data-testid="card-modal-notes">
+        {editingNotes ? (
+          <textarea
+            id="card-description"
+            autoFocus
+            value={description}
+            onChange={(e) => scheduleDescSave(e.target.value)}
+            onBlur={() => setEditingNotes(false)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                e.preventDefault();
+                setEditingNotes(false);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setEditingNotes(false);
+              }
+            }}
+            rows={4}
+            aria-label="Notes"
+            placeholder="Notes. Supports # headings, **bold**, *italic*, `code`, [links](url), and `- ` bullets. Cmd/Ctrl+Enter to finish."
+            className="w-full rounded-xl border border-hairline bg-[color:var(--surface)] p-3 text-sm font-sans text-fg outline-none transition-colors hover:border-[color:var(--hairline-hi)] focus-visible:border-[color:var(--accent-cyan)]/60 focus-visible:bg-[color:var(--surface-strong)] focus-visible:shadow-[0_0_0_3px_rgb(0_229_255/0.20)] placeholder:italic placeholder:text-fg-faint resize-y min-h-24 max-h-[60vh]"
+            style={{ fieldSizing: "content" } as React.CSSProperties}
+          />
+        ) : description.trim() ? (
+          <button
+            type="button"
+            onClick={() => setEditingNotes(true)}
+            data-testid="card-modal-notes-view"
+            className="w-full text-left rounded-xl border border-hairline bg-[color:var(--surface)] p-3 hover:bg-[color:var(--surface-strong)] hover:border-[color:var(--hairline-hi)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+          >
+            <MarkdownView body={description} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditingNotes(true)}
+            data-testid="card-modal-notes-empty"
+            className="w-full rounded-xl border border-dashed border-hairline-hi bg-[color:var(--surface)] p-3 text-left text-sm text-fg-faint italic hover:bg-[color:var(--surface-strong)] hover:text-fg-muted transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+          >
+            Click to add notes. Markdown supported.
+          </button>
+        )}
       </section>
 
-      <LabelsSection cardId={card.id} />
-      <ComponentCardSection cardId={card.id} />
-      {workspaceId && (
-        <VersionCardSection cardId={card.id} workspaceId={workspaceId} />
-      )}
-      <DueSection cardId={card.id} />
-      <RoadmapDatesSection cardId={card.id} />
-      <StoryPointsPicker cardId={card.id} storyPoints={card.storyPoints ?? null} />
-      <TimeSection
-        cardId={card.id}
-        estimateMin={card.estimateMin ?? null}
-        spentMin={card.spentMin ?? 0}
-      />
-      <MembersSection cardId={card.id} />
-      <ChecklistsSection cardId={card.id} />
-      {card.listId && card.boardId && (
-        <SubtasksSection cardId={card.id} listId={card.listId} boardId={card.boardId} />
-      )}
-      {card.boardId && (
-        <CardLinksSection cardId={card.id} boardId={card.boardId} />
-      )}
-      <AttachmentsSection cardId={card.id} />
-      <CommentsSection cardId={card.id} />
+      {/* Planning */}
+      <AccordionGroup id="planning" title="Planning">
+        <DueSection cardId={card.id} />
+        <RoadmapDatesSection cardId={card.id} />
+        <StoryPointsPicker
+          cardId={card.id}
+          storyPoints={card.storyPoints ?? null}
+        />
+        <TimeSection
+          cardId={card.id}
+          estimateMin={card.estimateMin ?? null}
+          spentMin={card.spentMin ?? 0}
+        />
+        {workspaceId && (
+          <VersionCardSection cardId={card.id} workspaceId={workspaceId} />
+        )}
+      </AccordionGroup>
 
-      {children && <div className="border-t border-hairline pt-4">{children}</div>}
+      {/* Work */}
+      <AccordionGroup id="work" title="Work">
+        <LabelsSection cardId={card.id} />
+        <ComponentCardSection cardId={card.id} />
+        <MembersSection cardId={card.id} />
+        <ChecklistsSection cardId={card.id} />
+        {card.listId && card.boardId && (
+          <SubtasksSection
+            cardId={card.id}
+            listId={card.listId}
+            boardId={card.boardId}
+          />
+        )}
+      </AccordionGroup>
 
-      <div className="flex justify-between gap-2 border-t border-hairline pt-4">
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onArchive}
-            disabled={pending}
-            data-testid="card-modal-archive"
-          >
-            <Archive className="size-3.5 mr-1.5" />
-            Archive
-          </Button>
-          {card.boardId && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setMoveOpen(true)}
-              disabled={pending}
-              data-testid="card-modal-move-to-board"
-            >
-              <Move className="size-3.5 mr-1.5" />
-              Move to…
-            </Button>
-          )}
-        </div>
-        <Button type="button" variant="outline" onClick={close} disabled={pending}>
+      {/* Refs */}
+      <AccordionGroup id="refs" title="References">
+        <CoverPicker
+          cardId={card.id}
+          coverKind={card.coverKind ?? "none"}
+          coverValue={card.coverValue ?? null}
+        />
+        {card.boardId && (
+          <CardLinksSection cardId={card.id} boardId={card.boardId} />
+        )}
+        <AttachmentsSection cardId={card.id} />
+      </AccordionGroup>
+
+      {/* Talk (open by default) */}
+      <AccordionGroup id="talk" title="Talk" defaultOpen>
+        <CommentsSection cardId={card.id} />
+        {children && (
+          <div className="border-t border-hairline pt-4">{children}</div>
+        )}
+      </AccordionGroup>
+
+      <div className="flex justify-end gap-2 border-t border-hairline pt-4">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={close}
+          disabled={pending}
+        >
           Close
         </Button>
       </div>
@@ -382,12 +531,18 @@ export function CardModal({
   if (!asDialog) {
     return (
       <main className="mx-auto max-w-3xl p-6">
-        <div className="glass-strong rounded-3xl p-8">
-          <div className="mb-5 flex items-baseline justify-between border-b border-hairline pb-3">
-            <span className="chip">CARD</span>
-            <span className="mono-meta text-fg-muted">#{cardCode(card.id)}</span>
+        <div className="rounded-2xl border border-hairline-hi bg-[color:var(--popover)] p-6 shadow-xl">
+          <div className="mb-4 flex items-baseline justify-between">
+            <span className="mono-meta-sm text-fg-faint">
+              CARD · #{cardCode(card.id)}
+            </span>
+            <Link
+              href={card.boardId ? `/b/${card.boardId}` : "/"}
+              className="mono-meta-sm text-fg-muted hover:text-fg"
+            >
+              ← BOARD
+            </Link>
           </div>
-          <h1 className="serif-display gradient-text text-4xl mb-6">{card.title}</h1>
           {body}
         </div>
       </main>
@@ -402,17 +557,16 @@ export function CardModal({
       }}
     >
       <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-baseline justify-between gap-2">
-            <DialogTitle className="serif-display gradient-text text-3xl leading-none">
-              Card.
-            </DialogTitle>
-            <span className="chip">#{cardCode(card.id)}</span>
-          </div>
+        <DialogHeader className="sr-only">
+          <DialogTitle>Card #{cardCode(card.id)}</DialogTitle>
         </DialogHeader>
+        <div className="-mt-2 mb-1 flex items-baseline justify-between">
+          <span className="mono-meta-sm text-fg-faint">
+            CARD · #{cardCode(card.id)}
+          </span>
+        </div>
         {body}
       </DialogContent>
     </Dialog>
   );
 }
-

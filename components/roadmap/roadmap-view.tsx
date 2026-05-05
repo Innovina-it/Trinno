@@ -927,10 +927,11 @@ export function RoadmapView({
                 NO MATCHES FOR &quot;{queryParam}&quot;
               </p>
             )}
-            <p className="serif-display text-4xl">No scheduled work yet.</p>
+            <p className="serif-display text-4xl">Nothing scheduled.</p>
             <p className="text-sm text-fg-muted">
-              Open any epic or story and set a start + target date in the
-              Roadmap section of its card modal. Your bars will appear here.
+              Set a start and target date on any card. Or drag the
+              <span className="mono-meta-sm text-fg mx-1">+ NEW CARD</span>
+              chip onto the timeline.
             </p>
           </div>
         </div>
@@ -950,25 +951,23 @@ export function RoadmapView({
           className="flex border border-hairline rounded-xl overflow-hidden"
           data-testid="roadmap-grid"
         >
+          {/* Plan #16b-γ-G G4 — priority gutter as its own column to the
+              LEFT of the lane-label panel. Visible only when toggled on;
+              bars are tinted by priority regardless. The ref lets the
+              drag harness hit-test pointermove against gutter bounds. */}
+          {gutterOn && (
+            <PriorityGutter
+              ref={gutterRef}
+              height={HEADER_STRIP_HEIGHT + totalHeight}
+              hoveredBand={drag.hoveredGutterBand}
+            />
+          )}
           {/* Lane labels (sticky) */}
           <div
             ref={labelPanelRef}
             className="shrink-0 border-r border-hairline bg-[color:var(--surface)] relative"
             style={{ width: LANE_LABEL_WIDTH }}
           >
-            {/* Plan #16b-γ-G G4 — priority gutter. Sticky-positioned
-                inside the lane-label panel (which itself doesn't scroll
-                horizontally with canvas content). 64px overlay over the
-                leftmost slice of the panel. Visible only when toggled
-                on; bars are tinted by priority regardless. The ref lets
-                pointermove hit-test against gutter bounds. */}
-            {gutterOn && (
-              <PriorityGutter
-                ref={gutterRef}
-                height={HEADER_STRIP_HEIGHT + totalHeight}
-                hoveredBand={drag.hoveredGutterBand}
-              />
-            )}
             <div
               className="border-b border-hairline mono-meta-sm text-fg-faint flex items-end px-3 pb-1"
               style={{ height: HEADER_STRIP_HEIGHT }}
@@ -981,13 +980,20 @@ export function RoadmapView({
               const isDragging =
                 drag.rowDragGhost !== null &&
                 epicHeader?.id === drag.rowDragGhost.cardId;
+              const count = ll.placed.length;
+              const meta =
+                ll.lane.kind === "uncategorized"
+                  ? `${count} ${count === 1 ? "ORPHAN" : "ORPHANS"}`
+                  : ll.lane.kind === "assignee" || ll.lane.kind === "component"
+                    ? `${count} ${count === 1 ? "CARD" : "CARDS"}`
+                    : `${count} ${count === 1 ? "STORY" : "STORIES"}`;
               return (
                 <div
                   key={ll.lane.id}
                   className={`group relative border-b border-hairline pl-7 pr-3 flex flex-col justify-center ${
                     isDragging ? "opacity-40" : ""
                   }`}
-                  style={{ height: ll.height }}
+                  style={{ height: ll.height, minHeight: 64 }}
                   data-testid="roadmap-lane-row"
                   data-card-id={epicHeader?.id}
                 >
@@ -1012,13 +1018,7 @@ export function RoadmapView({
                     </span>
                   )}
                   <span className="mono-meta-sm text-fg-faint truncate">
-                    {ll.lane.kind === "uncategorized"
-                      ? `${ll.placed.length} ORPHANS`
-                      : ll.lane.kind === "assignee"
-                        ? `${ll.placed.length} CARDS`
-                        : ll.lane.kind === "component"
-                          ? `${ll.placed.length} CARDS`
-                          : `${ll.placed.length} STORIES`}
+                    {meta}
                   </span>
                 </div>
               );
@@ -1084,6 +1084,28 @@ export function RoadmapView({
                   style={{ left: t.x }}
                 />
               ))}
+              {/* Today marker — vertical 1px line at today's x. Rendered
+                  beneath bars (z-default) so a bar covering today still
+                  shows the line through hairline transparency. */}
+              {(() => {
+                const todayX = xForDate(startOfDay(now), gridStart, ppd);
+                if (todayX < 0 || todayX > width) return null;
+                return (
+                  <div
+                    aria-hidden
+                    data-testid="roadmap-today-marker"
+                    className="absolute top-0 bottom-0 w-px bg-fg/30 pointer-events-none"
+                    style={{ left: todayX }}
+                  >
+                    <span
+                      className="absolute -translate-x-1/2 mono-meta-sm text-fg-faint bg-[color:var(--popover)] px-1.5 py-0.5 rounded-md border border-hairline-hi"
+                      style={{ top: 4, left: 0 }}
+                    >
+                      TODAY
+                    </span>
+                  </div>
+                );
+              })()}
               {/* Lane horizontal separators */}
               {laneLayout.map((ll) => (
                 <div
@@ -1215,12 +1237,12 @@ export function RoadmapView({
                     </>
                   );
                 })()}
-              {/* Sprint overlay (under the bar layer) */}
+              {/* Sprint overlay — 4px stripe under date ticks. */}
               <SprintOverlay
                 zoom={zoom}
                 gridStart={gridStart}
                 gridEnd={gridEnd}
-                height={totalHeight}
+                headerHeight={HEADER_STRIP_HEIGHT}
               />
               {/* Bars per lane */}
               {laneLayout.map((ll) => {
@@ -1444,6 +1466,7 @@ export function RoadmapView({
               {showCriticalPath && (
                 <CriticalPathOverlay
                   critical={criticalSet}
+                  links={visibleLinks}
                   barCoords={barCoords}
                   width={width}
                   height={totalHeight}

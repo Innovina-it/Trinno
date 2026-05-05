@@ -1,0 +1,119 @@
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronRight, Eye, EyeOff, Loader2 } from "lucide-react";
+import { createSupabaseBrowser } from "@/lib/supabase/browser";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+function friendly(msg: string): string {
+  const lower = msg.toLowerCase();
+  if (lower.includes("password")) {
+    return "Password must be at least 8 characters and different from the old one.";
+  }
+  if (lower.includes("session") || lower.includes("token")) {
+    return "Reset link expired or already used. Request a new one.";
+  }
+  return msg;
+}
+
+export function ResetPasswordForm() {
+  const router = useRouter();
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Supabase recovery links land on this page with a session attached.
+  // If no session is present (link expired, copied wrongly), surface a
+  // friendly hint immediately.
+  useEffect(() => {
+    const supa = createSupabaseBrowser();
+    supa.auth.getSession().then(({ data }) => {
+      if (!data.session) {
+        setErr("Reset link expired or invalid. Request a new one.");
+      }
+    });
+  }, []);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setErr(null);
+    const supa = createSupabaseBrowser();
+    const { error } = await supa.auth.updateUser({ password });
+    setSubmitting(false);
+    if (error) {
+      setErr(friendly(error.message));
+      return;
+    }
+    router.replace("/");
+    router.refresh();
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-5 w-full" noValidate>
+      <div className="space-y-2">
+        <Label htmlFor="password">New password</Label>
+        <div className="relative">
+          <Input
+            id="password"
+            name="new-password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              if (err) setErr(null);
+            }}
+            aria-invalid={err ? "true" : undefined}
+            placeholder="At least 8 characters"
+            className="pr-10"
+            autoFocus
+          />
+          <button
+            type="button"
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            aria-pressed={showPassword}
+            onClick={() => setShowPassword((v) => !v)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center size-7 rounded-md text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+          >
+            {showPassword ? (
+              <EyeOff className="size-3.5" />
+            ) : (
+              <Eye className="size-3.5" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {err && (
+        <div
+          role="alert"
+          aria-live="polite"
+          className="rounded-md border border-[color:var(--status-blocked)]/40 bg-[color:var(--status-blocked)]/10 px-3 py-2 text-sm"
+          style={{ color: "var(--status-blocked)" }}
+        >
+          {err}
+        </div>
+      )}
+
+      <Button type="submit" size="lg" disabled={submitting} className="w-full">
+        {submitting ? (
+          <>
+            <Loader2 className="size-4 animate-spin" />
+            <span>Saving</span>
+          </>
+        ) : (
+          <>
+            <span>Set new password</span>
+            <ChevronRight className="size-4 transition-transform duration-150 group-hover/button:translate-x-0.5" />
+          </>
+        )}
+      </Button>
+    </form>
+  );
+}

@@ -1,0 +1,29 @@
+-- Adds `cards.completed_at` so sub-tasks (and any card) can track a real
+-- "closed/completed" state separate from `archived`. Today the UI labels
+-- the count "closed" because archived doubles as completion, which is a
+-- semantic stretch (`/components/board/card/subtasks-section.tsx`).
+--
+-- DISABLED template. Activate by:
+--   1. Renaming this file to drop `.disabled`.
+--   2. `supabase db push` against the cloud project.
+--   3. Update UI in subtasks-section + card-modal to toggle completed_at
+--      via a new `setCardCompleted({ id, completed })` server action,
+--      independently of `archiveCard`.
+--   4. Migrate any existing semantics: optionally backfill
+--      completed_at = archived_at where the card was archived as a
+--      "completed" sub-task. Leave normal archive behavior alone.
+
+alter table public.cards
+  add column if not exists completed_at timestamptz;
+
+create index if not exists cards_completed_at_idx
+  on public.cards (completed_at);
+
+-- Optional realtime publication update so client-side completion toggles
+-- echo cross-tab.
+-- alter publication supabase_realtime add table public.cards;  -- already added in 0008.
+
+-- Optional view to expose only open (un-completed, un-archived) cards.
+-- create view public.cards_open as
+--   select * from public.cards
+--   where archived = false and completed_at is null;

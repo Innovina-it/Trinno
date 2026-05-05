@@ -1,10 +1,10 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace, listMembers } from "@/lib/queries/workspaces";
 import { WorkspaceSettingsForm } from "@/components/workspace/workspace-settings-form";
 import { MemberList } from "@/components/workspace/member-list";
 import { InviteMemberForm } from "@/components/workspace/invite-member-form";
-import { Separator } from "@/components/ui/separator";
 import { VersionsPanel } from "@/components/versions/versions-panel";
 
 export default async function WorkspaceSettingsPage({
@@ -20,33 +20,46 @@ export default async function WorkspaceSettingsPage({
   const members = await listMembers(token, workspaceId);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 px-6 py-10">
-      <h1 className="text-2xl font-semibold">{ws.name} — Settings</h1>
+    <div className="mx-auto max-w-3xl space-y-6 px-6 py-8">
+      <header className="space-y-2 border-b border-hairline pb-4">
+        <div className="flex items-center gap-1.5 mono-meta-sm text-fg-faint">
+          <Link href={`/w/${workspaceId}`} className="hover:text-fg">
+            WORKSPACE
+          </Link>
+          <span>/</span>
+          <span className="text-fg">SETTINGS</span>
+        </div>
+        <h1 className="font-sans text-2xl font-bold tracking-tight text-fg truncate">
+          {ws.name}
+        </h1>
+      </header>
 
-      <section className="space-y-4">
-        <h2 className="font-medium">Workspace</h2>
-        <WorkspaceSettingsForm
-          workspace={{
-            id: ws.id,
-            name: ws.name,
-            autoAssignCreator: ws.autoAssignCreator,
-          }}
-        />
+      <section className="space-y-3">
+        <h2 className="mono-meta-sm text-fg-faint">WORKSPACE</h2>
+        <div className="rounded-xl border border-hairline bg-[color:var(--surface)] p-4">
+          <WorkspaceSettingsForm
+            workspace={{
+              id: ws.id,
+              name: ws.name,
+              autoAssignCreator: ws.autoAssignCreator,
+            }}
+          />
+        </div>
       </section>
 
-      <Separator />
-
-      <section className="space-y-4">
-        <h2 className="font-medium">Members</h2>
-        <InviteMemberForm workspaceId={workspaceId} />
-        <MemberList workspaceId={workspaceId} members={members} />
+      <section id="members" className="space-y-3 scroll-mt-20">
+        <h2 className="mono-meta-sm text-fg-faint">MEMBERS</h2>
+        <div className="rounded-xl border border-hairline bg-[color:var(--surface)] p-4 space-y-4">
+          <InviteMemberForm workspaceId={workspaceId} />
+          <MemberList workspaceId={workspaceId} members={members} />
+        </div>
       </section>
 
-      <Separator />
-
-      <section className="space-y-4">
-        <h2 className="font-medium">Versions</h2>
-        <VersionsPanel workspaceId={workspaceId} />
+      <section className="space-y-3">
+        <h2 className="mono-meta-sm text-fg-faint">VERSIONS</h2>
+        <div className="rounded-xl border border-hairline bg-[color:var(--surface)] p-4">
+          <VersionsPanel workspaceId={workspaceId} />
+        </div>
       </section>
     </div>
   );

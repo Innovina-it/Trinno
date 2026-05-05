@@ -8,7 +8,7 @@ export default async function InboxPage({
 }: {
   searchParams: Promise<{ filter?: string }>;
 }) {
-  const user = await requireUser();
+  await requireUser();
   const token = (await getSessionToken())!;
   const sp = await searchParams;
 
@@ -31,12 +31,13 @@ export default async function InboxPage({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10 space-y-6">
-      <header className="space-y-2">
-        <span className="chip">{user.email}</span>
-        <h1 className="serif-display text-5xl">Inbox</h1>
-        <p className="mono-meta text-fg-muted">
+      <header className="space-y-1 border-b border-hairline pb-4">
+        <span className="mono-meta-sm text-fg-faint">
           {unread} UNREAD · {items.length} SHOWN
-        </p>
+        </span>
+        <h1 className="font-sans text-2xl font-bold tracking-tight text-fg">
+          Inbox
+        </h1>
       </header>
       <InboxList items={items} activeFilter={sp.filter ?? "all"} />
       {items.length === 0 && (
@@ -44,23 +45,23 @@ export default async function InboxPage({
         // alongside the InboxList so the filter chips stay reachable
         // (the user might be on UNREAD with stale-but-empty results).
         <div
-          className="text-center py-16 space-y-4 max-w-md mx-auto"
+          className="rounded-2xl border border-hairline bg-[color:var(--surface)] px-6 py-12 text-center space-y-3 max-w-md mx-auto"
           data-testid="inbox-empty"
         >
-          <p className="serif-display text-3xl">All caught up.</p>
-          <p className="mono-meta-sm text-fg-muted">
-            You&rsquo;ll be notified when:
+          <p className="mono-meta-sm text-fg-faint">ALL CAUGHT UP</p>
+          <p className="text-sm text-fg-muted">
+            You will be notified when:
           </p>
           <ul className="text-sm text-fg-muted space-y-1">
-            <li>• someone @mentions you in a comment</li>
-            <li>• a card you watch is assigned, archived, or rescheduled</li>
-            <li>• a due date you own arrives</li>
+            <li>someone @mentions you in a comment</li>
+            <li>a card you watch is assigned, archived, or rescheduled</li>
+            <li>a due date you own arrives</li>
           </ul>
           <Link
             href="/settings/notifications"
-            className="mono-meta-sm underline text-fg-muted hover:text-fg"
+            className="mono-meta-sm text-fg-muted hover:text-fg inline-block pt-1"
           >
-            Manage notification settings &rarr;
+            MANAGE SETTINGS →
           </Link>
         </div>
       )}

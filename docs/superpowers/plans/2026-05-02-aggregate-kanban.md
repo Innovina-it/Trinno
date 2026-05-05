@@ -1587,7 +1587,7 @@ And under "Out-of-scope for current epic":
 - [ ] **Step 2: Commit on main**
 
 ```bash
-cd /home/innovina/Documents/Trinnovina  # or wherever main is checked out
+cd /home/innovina/Documents/Trinno  # or wherever main is checked out
 git add docs/superpowers/concerns.md
 git commit -m "docs(concerns): aggregate kanban shipped, cross-board drag deferred"
 ```

@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq, asc, sql } from "drizzle-orm";
+import { and, eq, asc, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { gadgets } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
@@ -9,6 +9,7 @@ import {
   UpdateGadgetInput,
   DeleteGadgetInput,
   MoveGadgetInput,
+  ReorderGadgetsInput,
 } from "@/lib/validation";
 
 export async function createGadgetImpl(
@@ -173,6 +174,61 @@ export async function moveGadget(
   await requireUser();
   const t = (await getSessionToken())!;
   const r = await moveGadgetImpl(t, input);
+  revalidatePath(`/dashboards/${r.dashboardId}`);
+  return r;
+}
+
+export async function reorderGadgetsImpl(
+  token: string,
+  input: { dashboardId: string; orderedIds: string[] },
+) {
+  const p = ReorderGadgetsInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const all = await tx
+      .select({ id: gadgets.id })
+      .from(gadgets)
+      .where(eq(gadgets.dashboardId, p.dashboardId));
+    const existing = new Set(all.map((g) => g.id));
+    if (existing.size !== p.orderedIds.length) {
+      throw new Error("Reorder set mismatch");
+    }
+    for (const id of p.orderedIds) {
+      if (!existing.has(id)) throw new Error("Reorder set mismatch");
+    }
+    // Two-phase update to avoid intermediate position collisions if a unique
+    // index is later added on (dashboard_id, position).
+    for (let i = 0; i < p.orderedIds.length; i++) {
+      await tx
+        .update(gadgets)
+        .set({ position: -1000 - i })
+        .where(
+          and(
+            eq(gadgets.id, p.orderedIds[i]),
+            eq(gadgets.dashboardId, p.dashboardId),
+          ),
+        );
+    }
+    for (let i = 0; i < p.orderedIds.length; i++) {
+      await tx
+        .update(gadgets)
+        .set({ position: i })
+        .where(
+          and(
+            eq(gadgets.id, p.orderedIds[i]),
+            eq(gadgets.dashboardId, p.dashboardId),
+          ),
+        );
+    }
+    return { dashboardId: p.dashboardId };
+  });
+}
+
+export async function reorderGadgets(
+  input: Parameters<typeof reorderGadgetsImpl>[1],
+) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const r = await reorderGadgetsImpl(t, input);
   revalidatePath(`/dashboards/${r.dashboardId}`);
   return r;
 }

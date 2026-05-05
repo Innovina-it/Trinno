@@ -4,16 +4,25 @@ import { useMemo, useTransition } from "react";
 import {
   CalendarClock,
   ChevronDown,
-  CircleSlash,
+  Filter,
   Tag,
+  User,
   X,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuTrigger,
+  DropdownMenuGroup,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   isFilterActive,
@@ -23,6 +32,7 @@ import {
 import { useWorkspaceStore } from "@/stores/workspace-store";
 
 const TYPE_OPTIONS = ["epic", "story", "task", "subtask", "bug"] as const;
+type Type = (typeof TYPE_OPTIONS)[number];
 
 export function RoadmapFilterBar() {
   const router = useRouter();
@@ -46,7 +56,6 @@ export function RoadmapFilterBar() {
 
   function update(next: typeof filters, sprintNext: string = sprintParam) {
     const params = serializeFilters(next);
-    // Preserve non-filter params (zoom, q, focus).
     for (const k of ["zoom", "q", "focus"]) {
       const v = sp.get(k);
       if (v) params.set(k, v);
@@ -55,26 +64,22 @@ export function RoadmapFilterBar() {
     pushParams(params);
   }
 
-  function toggleType(t: string) {
+  function toggleType(t: Type) {
     const has = filters.types.includes(t);
     update({
       ...filters,
       types: has ? filters.types.filter((x) => x !== t) : [...filters.types, t],
     });
   }
-
   function setOverdue(on: boolean) {
     update({ ...filters, due: on ? "overdue" : null });
   }
-
   function setSprint(id: string) {
     update(filters, id);
   }
-
   function toggleMe() {
     update({ ...filters, assignedToMe: !filters.assignedToMe });
   }
-
   function clearAll() {
     update(
       {
@@ -90,113 +95,122 @@ export function RoadmapFilterBar() {
 
   const sprintLabel =
     sprintParam === ""
-      ? "ANY SPRINT"
-      : sprints.find((s) => s.id === sprintParam)?.name?.toUpperCase() ??
-        "SPRINT";
+      ? "Any sprint"
+      : sprints.find((s) => s.id === sprintParam)?.name ?? "Sprint";
 
   const active = isFilterActive(filters) || sprintParam !== "";
+  const activeCount =
+    filters.types.length +
+    (filters.due === "overdue" ? 1 : 0) +
+    (filters.assignedToMe ? 1 : 0) +
+    (sprintParam ? 1 : 0);
 
   return (
-    <div
-      className="flex flex-wrap items-center gap-2 px-3 py-1.5 border border-hairline rounded-lg bg-[rgb(255_255_255/0.02)]"
-      data-testid="roadmap-filter-bar"
-    >
-      <span className="mono-meta-sm text-fg-faint">FILTERS</span>
-      {/* Type chips */}
-      <div className="flex items-center gap-1">
-        {TYPE_OPTIONS.map((t) => {
-          const on = filters.types.includes(t);
-          return (
-            <button
-              key={t}
-              type="button"
-              onClick={() => toggleType(t)}
-              data-testid={`roadmap-filter-type-${t}`}
-              data-active={on}
-              className={`chip mono-meta-sm hover:bg-[rgb(255_255_255/0.08)] ${
-                on ? "ring-1 ring-fg/40 bg-fg/10 text-fg" : ""
-              }`}
-            >
-              {t.toUpperCase()}
-            </button>
-          );
-        })}
-      </div>
-
-      <span className="mx-1 h-4 w-px bg-hairline" />
-
-      {/* Sprint dropdown */}
+    <div className="flex items-center gap-1.5" data-testid="roadmap-filter-bar">
       <DropdownMenu>
         <DropdownMenuTrigger
-          data-testid="roadmap-filter-sprint"
-          className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
-            sprintParam ? "ring-1 ring-fg/40 bg-fg/10 text-fg" : ""
+          data-testid="roadmap-filter-trigger"
+          data-active={active ? "true" : "false"}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] ${
+            active
+              ? "border-fg/40 bg-fg/10 text-fg"
+              : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
           }`}
         >
-          <Tag className="size-3" />
-          {sprintLabel}
-          <ChevronDown className="size-3" />
+          <Filter className="size-3.5" aria-hidden />
+          <span className="text-fg">Filters</span>
+          {activeCount > 0 && (
+            <span
+              aria-label={`${activeCount} active filters`}
+              className="inline-flex items-center justify-center rounded-full bg-fg text-bg-deep size-4 text-[10px] font-semibold tabular-nums"
+            >
+              {activeCount}
+            </span>
+          )}
+          <ChevronDown className="size-3 text-fg-faint" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          <DropdownMenuRadioGroup
-            value={sprintParam}
-            onValueChange={setSprint}
-          >
-            <DropdownMenuRadioItem value="">Any sprint</DropdownMenuRadioItem>
-            {sprints.map((s) => (
-              <DropdownMenuRadioItem key={s.id} value={s.id}>
-                {s.name}
-              </DropdownMenuRadioItem>
+        <DropdownMenuContent align="start" className="w-64">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Type</DropdownMenuLabel>
+            {TYPE_OPTIONS.map((t) => (
+              <DropdownMenuCheckboxItem
+                key={t}
+                checked={filters.types.includes(t)}
+                onCheckedChange={() => toggleType(t)}
+                data-testid={`roadmap-filter-type-${t}`}
+              >
+                {t[0].toUpperCase() + t.slice(1)}
+              </DropdownMenuCheckboxItem>
             ))}
-          </DropdownMenuRadioGroup>
+          </DropdownMenuGroup>
+
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Tag className="size-3.5" aria-hidden />
+              <span className="flex-1">Sprint</span>
+              <span className="text-fg-faint truncate max-w-[8rem]">
+                {sprintLabel}
+              </span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-48">
+              <DropdownMenuRadioGroup
+                value={sprintParam}
+                onValueChange={setSprint}
+              >
+                <DropdownMenuRadioItem value="">
+                  Any sprint
+                </DropdownMenuRadioItem>
+                {sprints.map((s) => (
+                  <DropdownMenuRadioItem key={s.id} value={s.id}>
+                    {s.name}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+
+          <DropdownMenuSeparator />
+          <DropdownMenuCheckboxItem
+            checked={filters.due === "overdue"}
+            onCheckedChange={(v) => setOverdue(Boolean(v))}
+            data-testid="roadmap-filter-overdue"
+          >
+            <CalendarClock className="size-3.5" aria-hidden />
+            Overdue
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            checked={filters.assignedToMe}
+            onCheckedChange={toggleMe}
+            data-testid="roadmap-filter-mine"
+          >
+            <User className="size-3.5" aria-hidden />
+            Assigned to me
+          </DropdownMenuCheckboxItem>
+
+          {active && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={clearAll}
+                data-testid="roadmap-filter-clear"
+                className="text-fg-muted"
+              >
+                <X className="size-3.5" aria-hidden />
+                Clear all
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Overdue */}
-      <button
-        type="button"
-        onClick={() => setOverdue(filters.due !== "overdue")}
-        data-testid="roadmap-filter-overdue"
-        data-active={filters.due === "overdue"}
-        className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
-          filters.due === "overdue" ? "ring-1 ring-fg/40 bg-fg/10 text-fg" : ""
-        }`}
-      >
-        <CalendarClock className="size-3" />
-        OVERDUE
-      </button>
-
-      {/* Mine — relies on board page's cardMembers, currently not in
-          workspace snapshot, so the chip toggles the URL param for
-          forward-compat but does not yet narrow the bars (see B-batch). */}
-      <button
-        type="button"
-        onClick={toggleMe}
-        data-testid="roadmap-filter-mine"
-        data-active={filters.assignedToMe}
-        title="Filter to cards assigned to me (requires workspace member data)"
-        className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
-          filters.assignedToMe ? "ring-1 ring-fg/40 bg-fg/10 text-fg" : ""
-        }`}
-      >
-        MINE
-      </button>
-
-      {active && (
-        <button
-          type="button"
-          onClick={clearAll}
-          data-testid="roadmap-filter-clear"
-          className="ml-auto chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted"
+      {/* Inline summary of the most useful active filter, when small. */}
+      {filters.types.length > 0 && filters.types.length <= 2 && (
+        <span
+          className="hidden md:inline-flex items-center gap-1 mono-meta-sm text-fg-faint"
+          aria-hidden
         >
-          <X className="size-3" />
-          CLEAR
-        </button>
-      )}
-      {!active && (
-        <span className="ml-auto inline-flex items-center gap-1 mono-meta-sm text-fg-faint">
-          <CircleSlash className="size-3" />
-          NONE
+          {filters.types.map((t) => t.toUpperCase()).join(" · ")}
         </span>
       )}
     </div>

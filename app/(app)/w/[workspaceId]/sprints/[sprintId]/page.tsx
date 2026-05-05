@@ -42,19 +42,25 @@ export default async function SprintDetailPage({
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10 space-y-8">
-      <header className="space-y-2">
-        <Link
-          href={`/w/${workspaceId}/backlog`}
-          className="mono-meta-sm text-fg-muted hover:text-fg"
-        >
-          ← Back to backlog
-        </Link>
-        <div className="flex items-baseline justify-between gap-3">
-          <h1 className="serif-display text-4xl">{sprint.name}</h1>
-          <span className="chip">{sprint.state.toUpperCase()}</span>
+      <header className="space-y-2 border-b border-hairline pb-4">
+        <div className="flex items-center gap-1.5 mono-meta-sm text-fg-faint">
+          <Link
+            href={`/w/${workspaceId}/backlog`}
+            className="hover:text-fg"
+          >
+            SPRINTS
+          </Link>
+          <span>/</span>
+          <span className="text-fg">{sprint.state.toUpperCase()}</span>
+        </div>
+        <div className="flex items-end justify-between gap-3">
+          <h1 className="font-sans text-2xl font-bold tracking-tight text-fg truncate">
+            {sprint.name}
+          </h1>
+          <span className="chip mono-meta-sm">{sprint.state.toUpperCase()}</span>
         </div>
         {sprint.goal && (
-          <p className="text-fg-muted italic">&ldquo;{sprint.goal}&rdquo;</p>
+          <p className="text-sm text-fg-muted">{sprint.goal}</p>
         )}
       </header>
 
@@ -83,7 +89,7 @@ export default async function SprintDetailPage({
               </li>
             ))}
             {remaining.length === 0 && (
-              <li className="px-4 py-4 text-fg-faint italic text-sm">
+              <li className="px-4 py-4 text-fg-faint text-sm">
                 All done.
               </li>
             )}
@@ -111,7 +117,7 @@ export default async function SprintDetailPage({
               </li>
             ))}
             {completed.length === 0 && (
-              <li className="px-4 py-4 text-fg-faint italic text-sm">
+              <li className="px-4 py-4 text-fg-faint text-sm">
                 Nothing completed yet.
               </li>
             )}

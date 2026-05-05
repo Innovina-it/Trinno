@@ -47,9 +47,8 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
 
   return (
     <section className="space-y-3" data-testid="checklists-section">
-      <div className="flex items-baseline justify-between border-b border-rule pb-1">
-        <h3 className="mono-meta text-ink/70">Checklists</h3>
-        <span className="mono-meta-sm text-ink/35">CL</span>
+      <div className="flex items-baseline justify-between border-b border-hairline pb-1">
+        <h3 className="mono-meta text-fg-muted">Checklists</h3>
       </div>
 
       {checklists.map((cl) => {
@@ -58,12 +57,12 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
         return (
           <div
             key={cl.id}
-            className="space-y-2 border border-rule bg-paper-shadow/40 p-3"
+            className="space-y-2 border border-hairline bg-[color:var(--surface)]/40 p-3"
             data-checklist-id={cl.id}
           >
-            <div className="flex items-center justify-between gap-2 border-b border-rule pb-2">
-              <h4 className="serif-display text-lg text-ink leading-none">{cl.title}</h4>
-              <span className="mono-meta-sm text-ink/55 tabular-nums">
+            <div className="flex items-center justify-between gap-2 border-b border-hairline pb-2">
+              <h4 className="serif-display text-lg text-fg leading-none">{cl.title}</h4>
+              <span className="mono-meta-sm text-fg-muted tabular-nums">
                 {done} / {items.length}
               </span>
               <Button
@@ -114,8 +113,8 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
                   <span
                     className={
                       it.completed
-                        ? "text-moss line-through decoration-moss/60"
-                        : "text-ink"
+                        ? "text-[color:var(--status-done)] line-through decoration-current/60"
+                        : "text-fg"
                     }
                   >
                     {it.text}

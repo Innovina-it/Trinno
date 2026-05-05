@@ -74,7 +74,7 @@
 - [ ] **Step 1: Run create-next-app non-interactively**
 
 ```bash
-cd /home/innovina/Documents/Trinnovina
+cd /home/innovina/Documents/Trinno
 npx --yes create-next-app@15 . --ts --tailwind --eslint --app --src-dir=false \
   --import-alias="@/*" --no-turbopack --use-npm
 ```

@@ -24,11 +24,16 @@ export function SubtasksSection({
     () => cards.filter((c) => (c as { parentCardId?: string | null }).parentCardId === cardId && !c.archived),
     [cards, cardId],
   );
-  const done = children.filter((c) => (c as { type?: string }).type === "subtask"
-    && c.archived).length;
-  // We don't have a 'completed' field for cards beyond archive — treat archived as done for subtasks.
+  // Sub-tasks reuse `archived` as the closed state because cards have no
+  // dedicated `completed_at` column yet (see migration template
+  // 0058_card_completed_at.sql.disabled). We label the count "closed" so
+  // the UI does not promise a semantic the schema cannot back.
+  const closed = children.filter(
+    (c) =>
+      (c as { type?: string }).type === "subtask" && c.archived,
+  ).length;
   const total = children.length;
-  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  const pct = total === 0 ? 0 : Math.round((closed / total) * 100);
 
   function create(e: React.FormEvent) {
     e.preventDefault();
@@ -62,13 +67,21 @@ export function SubtasksSection({
       <div className="flex items-center justify-between">
         <h3 className="mono-meta text-fg">Sub-tasks</h3>
         {total > 0 && (
-          <span className="mono-meta-sm text-fg-muted tabular-nums">{done}/{total} ({pct}%)</span>
+          <span className="mono-meta-sm text-fg-muted tabular-nums">
+            {closed} OF {total} CLOSED
+          </span>
         )}
       </div>
       {total > 0 && (
-        <div className="h-1 w-full bg-[rgb(255_255_255/0.06)] rounded">
+        <div
+          className="h-1 w-full bg-[color:var(--surface-strong)] rounded overflow-hidden"
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
           <div
-            className="h-full bg-fg/70 rounded transition-all duration-300"
+            className="h-full bg-fg/70 rounded transition-[width] duration-300"
             style={{ width: `${pct}%` }}
           />
         </div>

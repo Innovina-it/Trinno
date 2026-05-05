@@ -1,7 +1,19 @@
 "use client";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  Calendar,
+  CalendarRange,
+  FileText,
+  Hash,
+  LineChart,
+  Map,
+  Plus,
+  PieChart,
+  User,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,71 +46,29 @@ const GADGET_TYPES: Array<{
   description: string;
   needsWorkspace: boolean;
   defaultSize: GadgetSize;
+  Icon: typeof Hash;
 }> = [
-  {
-    type: "count",
-    label: "Count",
-    description: "A single big number — open cards, overdue, my assignments.",
-    needsWorkspace: false,
-    defaultSize: "1x1",
-  },
-  {
-    type: "recent_activity",
-    label: "Recent activity",
-    description: "List of the last N activity rows.",
-    needsWorkspace: false,
-    defaultSize: "2x2",
-  },
-  {
-    type: "assigned_to_me",
-    label: "Assigned to me",
-    description: "Cards currently assigned to you.",
-    needsWorkspace: false,
-    defaultSize: "2x2",
-  },
-  {
-    type: "due_this_week",
-    label: "Due this week",
-    description: "Cards due in the next 7 days.",
-    needsWorkspace: false,
-    defaultSize: "2x2",
-  },
-  {
-    type: "velocity",
-    label: "Velocity",
-    description: "Bar chart of last N completed sprints (story points).",
-    needsWorkspace: true,
-    defaultSize: "2x1",
-  },
-  {
-    type: "burndown",
-    label: "Burndown",
-    description: "Burndown chart of the workspace's active sprint.",
-    needsWorkspace: true,
-    defaultSize: "3x2",
-  },
-  {
-    type: "cards_by_type",
-    label: "Cards by type",
-    description: "Counts of epic / story / task / subtask / bug.",
-    needsWorkspace: false,
-    defaultSize: "2x1",
-  },
-  {
-    type: "markdown_note",
-    label: "Markdown note",
-    description: "Static markdown text you write yourself.",
-    needsWorkspace: false,
-    defaultSize: "2x1",
-  },
-  {
-    type: "on_roadmap",
-    label: "On roadmap",
-    description: "Counts of total / scheduled / unscheduled / overdue cards.",
-    needsWorkspace: true,
-    defaultSize: "2x1",
-  },
+  { type: "count", label: "Count", description: "A single big number.", needsWorkspace: false, defaultSize: "1x1", Icon: Hash },
+  { type: "recent_activity", label: "Recent activity", description: "Last N activity rows.", needsWorkspace: false, defaultSize: "2x2", Icon: Activity },
+  { type: "assigned_to_me", label: "Assigned to me", description: "Cards assigned to you.", needsWorkspace: false, defaultSize: "2x2", Icon: User },
+  { type: "due_this_week", label: "Due this week", description: "Cards due in 7 days.", needsWorkspace: false, defaultSize: "2x2", Icon: Calendar },
+  { type: "velocity", label: "Velocity", description: "Last N completed sprints.", needsWorkspace: true, defaultSize: "2x1", Icon: BarChart3 },
+  { type: "burndown", label: "Burndown", description: "Active sprint burndown.", needsWorkspace: true, defaultSize: "3x2", Icon: LineChart },
+  { type: "cards_by_type", label: "Cards by type", description: "Counts per type.", needsWorkspace: false, defaultSize: "2x1", Icon: PieChart },
+  { type: "on_roadmap", label: "On roadmap", description: "Total / scheduled / overdue.", needsWorkspace: true, defaultSize: "2x1", Icon: Map },
+  { type: "markdown_note", label: "Note", description: "Static markdown.", needsWorkspace: false, defaultSize: "2x1", Icon: FileText },
 ];
+
+const SIZES: Array<{ id: GadgetSize; cols: number; rows: number }> = [
+  { id: "1x1", cols: 1, rows: 1 },
+  { id: "2x1", cols: 2, rows: 1 },
+  { id: "2x2", cols: 2, rows: 2 },
+  { id: "3x1", cols: 3, rows: 1 },
+  { id: "3x2", cols: 3, rows: 2 },
+];
+
+const SELECT_CLS =
+  "w-full h-10 rounded-md border border-hairline bg-[color:var(--surface)] px-3 text-sm text-fg outline-none hover:border-hairline-hi focus-visible:border-[color:var(--accent-cyan)]/60";
 
 export function AddGadgetButton({
   dashboardId,
@@ -145,10 +115,7 @@ export function AddGadgetButton({
   function buildConfig(): Record<string, unknown> {
     switch (type) {
       case "count":
-        return {
-          what,
-          workspaceId: workspaceId || null,
-        };
+        return { what, workspaceId: workspaceId || null };
       case "recent_activity":
         return { workspaceId: workspaceId || null, limit };
       case "assigned_to_me":
@@ -158,7 +125,6 @@ export function AddGadgetButton({
       case "velocity":
         return { workspaceId, n };
       case "burndown":
-        return { workspaceId };
       case "on_roadmap":
         return { workspaceId };
       case "markdown_note":
@@ -206,42 +172,94 @@ export function AddGadgetButton({
         <Plus className="size-3.5 mr-0.5" /> Add gadget
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Add gadget</DialogTitle>
           </DialogHeader>
-          <form onSubmit={submit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="gad-type">Type</Label>
-              <select
-                id="gad-type"
-                value={type}
-                onChange={(e) => selectType(e.target.value as GadgetType)}
-                className="w-full rounded-lg border border-hairline bg-transparent px-3 py-2 text-sm"
+          <form onSubmit={submit} className="space-y-5">
+            {/* Type — visual tile picker. */}
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <div
+                role="radiogroup"
+                aria-label="Gadget type"
+                className="grid grid-cols-3 gap-1.5"
               >
-                {GADGET_TYPES.map((g) => (
-                  <option key={g.type} value={g.type}>
-                    {g.label}
-                  </option>
-                ))}
-              </select>
-              <p className="mono-meta-sm text-fg-faint">{meta.description}</p>
+                {GADGET_TYPES.map((g) => {
+                  const selected = type === g.type;
+                  return (
+                    <button
+                      key={g.type}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => selectType(g.type)}
+                      className={`flex flex-col items-start gap-1 rounded-md border p-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
+                        selected
+                          ? "border-fg/40 bg-fg/10 text-fg"
+                          : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg hover:border-hairline-hi"
+                      }`}
+                    >
+                      <g.Icon className="size-3.5" aria-hidden />
+                      <span className="text-sm font-medium text-fg">
+                        {g.label}
+                      </span>
+                      <span className="mono-meta-sm text-fg-faint leading-tight">
+                        {g.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="gad-size">Size</Label>
-              <select
-                id="gad-size"
-                value={size}
-                onChange={(e) => setSize(e.target.value as GadgetSize)}
-                className="w-full rounded-lg border border-hairline bg-transparent px-3 py-2 text-sm"
+            {/* Size — visual ratio picker. */}
+            <div className="space-y-2">
+              <Label>Size</Label>
+              <div
+                role="radiogroup"
+                aria-label="Gadget size"
+                className="flex items-end gap-2"
               >
-                <option value="1x1">1×1</option>
-                <option value="2x1">2×1</option>
-                <option value="2x2">2×2</option>
-                <option value="3x1">3×1</option>
-                <option value="3x2">3×2</option>
-              </select>
+                {SIZES.map((s) => {
+                  const selected = size === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      title={s.id}
+                      onClick={() => setSize(s.id)}
+                      className={`inline-flex flex-col items-center gap-1.5 p-2 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
+                        selected
+                          ? "bg-fg/10"
+                          : "hover:bg-[color:var(--surface)]"
+                      }`}
+                    >
+                      <span
+                        aria-hidden
+                        className={`block rounded-sm border ${
+                          selected
+                            ? "border-fg/60 bg-fg/30"
+                            : "border-hairline-hi bg-[color:var(--surface-strong)]"
+                        }`}
+                        style={{
+                          width: `${s.cols * 14}px`,
+                          height: `${s.rows * 14}px`,
+                        }}
+                      />
+                      <span
+                        className={`mono-meta-sm tabular-nums ${
+                          selected ? "text-fg" : "text-fg-faint"
+                        }`}
+                      >
+                        {s.id}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {meta.needsWorkspace && (
@@ -251,7 +269,7 @@ export function AddGadgetButton({
                   id="gad-ws"
                   value={workspaceId}
                   onChange={(e) => setWorkspaceId(e.target.value)}
-                  className="w-full rounded-lg border border-hairline bg-transparent px-3 py-2 text-sm"
+                  className={SELECT_CLS}
                   required
                 >
                   {workspaces.length === 0 && <option value="">—</option>}
@@ -271,7 +289,7 @@ export function AddGadgetButton({
                   id="gad-ws-opt"
                   value={workspaceId}
                   onChange={(e) => setWorkspaceId(e.target.value)}
-                  className="w-full rounded-lg border border-hairline bg-transparent px-3 py-2 text-sm"
+                  className={SELECT_CLS}
                 >
                   <option value="">All my workspaces</option>
                   {workspaces.map((w) => (
@@ -298,7 +316,7 @@ export function AddGadgetButton({
                         | "completed_this_week",
                     )
                   }
-                  className="w-full rounded-lg border border-hairline bg-transparent px-3 py-2 text-sm"
+                  className={SELECT_CLS}
                 >
                   <option value="open_cards">Open cards</option>
                   <option value="overdue">Overdue</option>
@@ -350,7 +368,7 @@ export function AddGadgetButton({
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   rows={6}
-                  className="w-full rounded-lg border border-hairline bg-transparent px-3 py-2 text-sm font-mono"
+                  className="w-full rounded-md border border-hairline bg-[color:var(--surface)] px-3 py-2 text-sm font-mono text-fg outline-none hover:border-hairline-hi focus-visible:border-[color:var(--accent-cyan)]/60"
                   placeholder="# Heading&#10;**bold**, *italic*, [links](https://example.com)"
                 />
               </div>

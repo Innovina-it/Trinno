@@ -51,22 +51,21 @@ export async function CardActivity({
   const rows = await listActivityForCard(token, cardId, 30);
   return (
     <div className="space-y-3" data-testid="card-activity">
-      <div className="flex items-baseline justify-between border-b border-rule pb-1">
-        <h3 className="mono-meta text-ink/70">Activity</h3>
-        <span className="mono-meta-sm text-ink/35">LOG</span>
+      <div className="flex items-baseline justify-between border-b border-hairline pb-1">
+        <h3 className="mono-meta text-fg-muted">Activity</h3>
       </div>
       {rows.length === 0 && (
-        <p className="font-serif italic text-sm text-ink/50">No activity yet.</p>
+        <p className="italic text-sm text-fg-faint">No activity yet.</p>
       )}
       <ul className="divide-y divide-[color:var(--rule)]">
         {rows.map((r) => {
           const isRoadmapDates = r.type === "card.dates" && workspaceId;
           const body = (
             <>
-              <div className="mono-meta-sm text-ink/55">{humanType(r.type)}</div>
-              <div className="text-xs text-ink leading-snug mt-0.5">
+              <div className="mono-meta-sm text-fg-muted">{humanType(r.type)}</div>
+              <div className="text-xs text-fg leading-snug mt-0.5">
                 <span className="font-medium">{r.actorName ?? "Someone"}</span>
-                <span className="ml-2 mono-meta-sm text-ink/45">
+                <span className="ml-2 mono-meta-sm text-fg-faint">
                   {rel(r.createdAt as unknown as string)}
                 </span>
               </div>

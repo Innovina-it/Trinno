@@ -1,0 +1,55 @@
+-- Auth domain allowlist (DISABLED template).
+--
+-- Optional gate for internal-team deployments: reject signups whose email
+-- does NOT match an approved domain. This file is intentionally suffixed
+-- `.disabled` so `supabase db push` skips it. Activate by:
+--   1. Renaming to `0056_auth_domain_allowlist.sql`.
+--   2. Updating ALLOWED_DOMAINS below to your real domain(s).
+--   3. Running `supabase db push` against the cloud project.
+--   4. In Supabase Studio → Authentication → Hooks → Send-Email or
+--      Before-User-Created hook, point at this function.
+--
+-- Reference:
+-- https://supabase.com/docs/guides/auth/auth-hooks/send-email-hook
+-- https://supabase.com/docs/guides/auth/auth-hooks/before-user-created-hook
+--
+-- The simpler path is the BEFORE_USER_CREATED hook (Postgres function that
+-- raises on disallowed domain). Below is that function.
+
+create or replace function public.auth_block_external_domains()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  -- One or more allowed domains. Lowercase. Comma-separated.
+  allowed_domains text[] := array['innovina.it'];
+  email_domain text;
+begin
+  -- new record is the auth.users row about to be inserted.
+  email_domain := lower(split_part(new.email, '@', 2));
+
+  if email_domain is null or email_domain = '' then
+    raise exception 'Email is required';
+  end if;
+
+  if not (email_domain = any (allowed_domains)) then
+    raise exception 'Signup is restricted to internal addresses (% not allowed)',
+      email_domain
+      using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+-- Trigger on auth.users insert. Note: requires the postgres role to have
+-- TRIGGER on auth.users. On Supabase Cloud you may need to use the
+-- documented Auth Hooks UI instead of a raw trigger; this is shown here
+-- as the template you would adapt for self-hosted Supabase.
+
+-- drop trigger if exists block_external_domains on auth.users;
+-- create trigger block_external_domains
+--   before insert on auth.users
+--   for each row execute function public.auth_block_external_domains();

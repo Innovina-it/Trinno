@@ -76,7 +76,18 @@ export function SprintDropStrip() {
     () => allSprints.filter((sp) => sp.state !== "completed"),
     [allSprints],
   );
-  if (sprints.length === 0) return null;
+  if (sprints.length === 0) {
+    return (
+      <div
+        data-testid="sprint-drop-strip"
+        className="px-2 pb-3"
+      >
+        <div className="rounded-xl border border-hairline bg-[color:var(--surface)] px-3 py-2 text-center mono-meta-sm text-fg-faint">
+          NO SPRINTS · Create one in the roadmap
+        </div>
+      </div>
+    );
+  }
   return (
     <div
       data-testid="sprint-drop-strip"

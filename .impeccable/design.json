@@ -1,0 +1,280 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-05T00:00:00Z",
+  "title": "Design System: Trello Foundation",
+  "extensions": {
+    "colorMeta": {
+      "bg-deep": {
+        "role": "neutral",
+        "displayName": "Studio Floor",
+        "canonical": "oklch(8% 0 0)",
+        "tonalRamp": ["#050505", "#0a0a0a", "#141414", "#1a1a1a", "#202020", "#2c2c2c", "#3a3a3a", "#4a4a4a"]
+      },
+      "bg-1": {
+        "role": "neutral",
+        "displayName": "Layer 1",
+        "canonical": "oklch(13% 0 0)",
+        "tonalRamp": ["#0a0a0a", "#111111", "#141414", "#181818", "#1c1c1c", "#222222", "#2a2a2a", "#333333"]
+      },
+      "bg-2": {
+        "role": "neutral",
+        "displayName": "Layer 2",
+        "canonical": "oklch(15% 0 0)",
+        "tonalRamp": ["#0e0e0e", "#141414", "#1a1a1a", "#1f1f1f", "#252525", "#2c2c2c", "#363636", "#444444"]
+      },
+      "bg-3": {
+        "role": "neutral",
+        "displayName": "Layer 3",
+        "canonical": "oklch(17% 0 0)",
+        "tonalRamp": ["#121212", "#181818", "#202020", "#262626", "#2c2c2c", "#363636", "#424242", "#525252"]
+      },
+      "popover": {
+        "role": "neutral",
+        "displayName": "Popover Lift",
+        "canonical": "oklch(17.5% 0 0)",
+        "tonalRamp": ["#101010", "#161616", "#1a1a1a", "#1f1f1f", "#252525", "#2c2c2c", "#363636", "#444444"]
+      },
+      "fg": {
+        "role": "neutral",
+        "displayName": "Studio Ink",
+        "canonical": "oklch(98.5% 0 0)",
+        "tonalRamp": ["#1f1f1f", "#3a3a3a", "#5a5a5a", "#7a7a7a", "#9a9a9a", "#c0c0c0", "#e0e0e0", "#fafafa"]
+      },
+      "fg-muted": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "canonical": "oklch(98.5% 0 0 / 0.6)",
+        "tonalRamp": []
+      },
+      "fg-faint": {
+        "role": "neutral",
+        "displayName": "Faint Ink",
+        "canonical": "oklch(98.5% 0 0 / 0.35)",
+        "tonalRamp": []
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface Tint 5%",
+        "canonical": "oklch(100% 0 0 / 0.05)",
+        "tonalRamp": []
+      },
+      "surface-strong": {
+        "role": "neutral",
+        "displayName": "Surface Tint 8.5%",
+        "canonical": "oklch(100% 0 0 / 0.085)",
+        "tonalRamp": []
+      },
+      "surface-hi": {
+        "role": "neutral",
+        "displayName": "Surface Tint 10%",
+        "canonical": "oklch(100% 0 0 / 0.10)",
+        "tonalRamp": []
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline Default",
+        "canonical": "oklch(100% 0 0 / 0.12)",
+        "tonalRamp": []
+      },
+      "hairline-hi": {
+        "role": "neutral",
+        "displayName": "Hairline Emphasis",
+        "canonical": "oklch(100% 0 0 / 0.22)",
+        "tonalRamp": []
+      },
+      "status-todo": {
+        "role": "tertiary",
+        "displayName": "Status Todo",
+        "canonical": "oklch(72% 0.04 250)",
+        "tonalRamp": ["#3a4453", "#4a5566", "#5a6678", "#6a778a", "#7a889c", "#94a3b8", "#b1bdcd", "#cdd5df"]
+      },
+      "status-in-progress": {
+        "role": "tertiary",
+        "displayName": "Status In Progress",
+        "canonical": "oklch(78% 0.16 70)",
+        "tonalRamp": ["#5a3a06", "#7a4f08", "#9c640a", "#bd790c", "#dc8e0e", "#f59e0b", "#ffb13a", "#ffc870"]
+      },
+      "status-review": {
+        "role": "tertiary",
+        "displayName": "Status Review",
+        "canonical": "oklch(82% 0.14 230)",
+        "tonalRamp": ["#0a4a6c", "#0c5e85", "#0f739f", "#1287b9", "#159bd2", "#38bdf8", "#65cff9", "#9ce0fb"]
+      },
+      "status-done": {
+        "role": "tertiary",
+        "displayName": "Status Done",
+        "canonical": "oklch(78% 0.20 145)",
+        "tonalRamp": ["#0c5226", "#0e6730", "#107d3a", "#129244", "#15a84e", "#22c55e", "#5fd382", "#9ae3ad"]
+      },
+      "status-blocked": {
+        "role": "tertiary",
+        "displayName": "Status Blocked",
+        "canonical": "oklch(72% 0.18 15)",
+        "tonalRamp": ["#5e1c2a", "#742436", "#8a2c43", "#a13550", "#b83e5d", "#fb7185", "#fc94a4", "#fdb8c2"]
+      },
+      "signal-cyan": {
+        "role": "secondary",
+        "displayName": "Signal Cyan",
+        "canonical": "oklch(85% 0.18 200)",
+        "tonalRamp": ["#003640", "#004a5e", "#005f7a", "#007595", "#008cb0", "#00a8d0", "#00c5e8", "#00e5ff"]
+      },
+      "signal-magenta": {
+        "role": "secondary",
+        "displayName": "Signal Magenta",
+        "canonical": "oklch(70% 0.30 340)",
+        "tonalRamp": ["#5a0046", "#74005a", "#8e0070", "#a80086", "#c2009d", "#dc00b4", "#f000c8", "#ff2bd6"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Hero headlines, modal titles, empty-state pull-quotes." },
+      "headline": { "displayName": "Headline", "purpose": "Section headers, board titles, sprint titles." },
+      "title": { "displayName": "Title", "purpose": "Card titles, list column titles, dialog headings." },
+      "body": { "displayName": "Body", "purpose": "Card descriptions, comments, paragraph text." },
+      "label": { "displayName": "Mono Meta", "purpose": "IDs, dates, ordinals, status pills, all machine-generated labels." },
+      "serif-italic": { "displayName": "Serif Italic Placeholder", "purpose": "Italic placeholder inside Input and search fields. Editorial wink." }
+    },
+    "shadows": [
+      { "name": "card-inset-highlight", "value": "0 1px 0 0 rgb(255 255 255 / 0.06) inset", "purpose": "Top-edge lit lip on every glass surface." },
+      { "name": "card-ambient", "value": "0 12px 30px -16px rgb(0 0 0 / 0.5)", "purpose": "Default glass card resting drop." },
+      { "name": "glass-strong-drop", "value": "0 40px 100px -32px rgb(0 0 0 / 0.6)", "purpose": "Dialogs and modals." },
+      { "name": "drag-halo", "value": "0 0 0 1px rgb(255 255 255 / 0.55), 0 24px 50px -12px rgb(0 0 0 / 0.7), 0 0 0 4px rgb(255 255 255 / 0.10)", "purpose": "Active drag preview, replaces card-ambient." },
+      { "name": "focus-ring-cyan", "value": "0 0 0 3px rgb(0 229 255 / 0.20), inset 0 1px 0 0 rgb(255 255 255 / 0.08)", "purpose": "Input focus, the only chromatic ring in idle UI." },
+      { "name": "focus-ring-magenta", "value": "0 0 0 3px rgb(255 43 214 / 0.25)", "purpose": "Input aria-invalid state." }
+    ],
+    "motion": [
+      { "name": "ease-out-quart", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Default for state transitions, hover, focus, dialog open." },
+      { "name": "duration-fast", "value": "120ms", "purpose": "Active-press translation, snappy presses." },
+      { "name": "duration-default", "value": "200ms", "purpose": "Hover, focus, color transitions." },
+      { "name": "duration-slow", "value": "300ms", "purpose": "List column reorder, dialog open/close." },
+      { "name": "mesh-drift", "value": "18s ease-in-out infinite alternate", "purpose": "Body-level drift on the white wash. Disabled on prefers-reduced-motion." },
+      { "name": "pulse-ring", "value": "2.4s ease-out infinite", "purpose": "Live indicator on subscribed presence dot. Disabled on prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Filled white-on-black pill. Single primary CTA per surface.",
+      "html": "<button class=\"ds-btn-primary\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 5v14M5 12h14\"/></svg>New card</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 0; border-radius: 9999px; background-color: #fafafa; color: #0a0a0a; font: 600 0.875rem/1.4 Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.005em; box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.25) inset, 0 8px 24px -8px rgb(0 0 0 / 0.6); transition: background-color 200ms cubic-bezier(0.16,1,0.3,1), box-shadow 200ms cubic-bezier(0.16,1,0.3,1), transform 120ms ease-out; cursor: pointer; } .ds-btn-primary:hover { background-color: rgb(250 250 250 / 0.92); box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.35) inset, 0 12px 32px -8px rgb(0 0 0 / 0.75); } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { outline: 1px solid rgb(250 250 250 / 0.4); outline-offset: 2px; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Translucent glass pill. Default secondary action, toolbar selectors.",
+      "html": "<button class=\"ds-btn-outline\">Cancel</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; border-radius: 9999px; border: 1px solid rgb(255 255 255 / 0.12); background-color: rgb(255 255 255 / 0.05); color: #fafafa; font: 500 0.875rem/1.4 Geist, sans-serif; backdrop-filter: blur(24px) saturate(140%); transition: background-color 200ms ease-out, border-color 200ms ease-out; cursor: pointer; } .ds-btn-outline:hover { background-color: rgb(255 255 255 / 0.085); border-color: rgb(255 255 255 / 0.22); } .ds-btn-outline:focus-visible { outline: 1px solid rgb(250 250 250 / 0.4); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "No background at rest, faint text. For toolbar verbs and tertiary actions.",
+      "html": "<button class=\"ds-btn-ghost\">Today</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; border: 0; border-radius: 9999px; background-color: transparent; color: rgb(250 250 250 / 0.6); font: 500 0.875rem/1.4 Geist, sans-serif; transition: background-color 200ms ease-out, color 200ms ease-out; cursor: pointer; } .ds-btn-ghost:hover { background-color: rgb(255 255 255 / 0.05); color: #fafafa; } .ds-btn-ghost:focus-visible { outline: 1px solid rgb(250 250 250 / 0.4); outline-offset: 2px; }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Glass input with hairline border, cyan focus glow on user gesture.",
+      "html": "<input class=\"ds-input\" placeholder=\"Search bars…\" />",
+      "css": ".ds-input { display: inline-flex; height: 40px; width: 280px; padding: 4px 14px; border-radius: 16px; border: 1px solid rgb(255 255 255 / 0.12); background-color: rgb(255 255 255 / 0.05); color: #fafafa; font: 400 0.875rem/1.5 Geist, sans-serif; outline: none; transition: background-color 200ms cubic-bezier(0.16,1,0.3,1), border-color 200ms cubic-bezier(0.16,1,0.3,1), box-shadow 200ms cubic-bezier(0.16,1,0.3,1); } .ds-input::placeholder { color: rgb(250 250 250 / 0.35); font-style: italic; font-family: 'Instrument Serif', Georgia, serif; } .ds-input:hover { border-color: rgb(255 255 255 / 0.22); } .ds-input:focus-visible { border-color: rgb(0 229 255 / 0.6); background-color: rgb(255 255 255 / 0.085); box-shadow: 0 0 0 3px rgb(0 229 255 / 0.20), inset 0 1px 0 0 rgb(255 255 255 / 0.08); }"
+    },
+    {
+      "name": "Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Mono uppercase label pill. Filters, IDs, status, ordinals.",
+      "html": "<span class=\"ds-chip\">EPIC</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 9999px; border: 1px solid rgb(255 255 255 / 0.12); background-color: rgb(255 255 255 / 0.085); color: rgb(250 250 250 / 0.6); font: 500 0.625rem/1 'Geist Mono', ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.1em; } .ds-chip[data-active=\"true\"] { background-color: rgb(250 250 250 / 0.10); border-color: rgb(250 250 250 / 0.4); color: #fafafa; }"
+    },
+    {
+      "name": "Glass Card",
+      "kind": "card",
+      "refersTo": "card-glass",
+      "description": "Default card surface. Lifts on hover with deeper shadow.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-meta\">#WP1.1</div><div class=\"ds-card-title\">Define epic scope</div><div class=\"ds-card-desc\">Three stories, two weeks, target end of sprint 4.</div></div>",
+      "css": ".ds-card { display: block; padding: 12px; border-radius: 16px; border: 1px solid rgb(255 255 255 / 0.12); background-color: rgb(255 255 255 / 0.085); backdrop-filter: blur(24px) saturate(140%); color: #fafafa; box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.06) inset, 0 8px 20px -12px rgb(0 0 0 / 0.5); transition: background-color 200ms cubic-bezier(0.16,1,0.3,1), border-color 200ms ease-out, transform 200ms cubic-bezier(0.16,1,0.3,1), box-shadow 200ms cubic-bezier(0.16,1,0.3,1); cursor: grab; } .ds-card:hover { background-color: rgb(255 255 255 / 0.10); border-color: rgb(255 255 255 / 0.22); transform: translateY(-2px); box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.10) inset, 0 12px 28px -12px rgb(0 0 0 / 0.6); } .ds-card-meta { font: 500 0.625rem/1 'Geist Mono', monospace; text-transform: uppercase; letter-spacing: 0.1em; color: rgb(250 250 250 / 0.35); margin-bottom: 8px; } .ds-card-title { font: 600 0.95rem/1.3 Geist, sans-serif; letter-spacing: -0.005em; } .ds-card-desc { margin-top: 6px; font: 400 0.8125rem/1.5 Geist, sans-serif; color: rgb(250 250 250 / 0.6); }"
+    },
+    {
+      "name": "Popover Surface",
+      "kind": "custom",
+      "refersTo": "popover-surface",
+      "description": "Solid opaque popover for dropdowns, menus, banners, tooltips.",
+      "html": "<div class=\"ds-popover\"><div class=\"ds-popover-item\">Open card</div><div class=\"ds-popover-item\">Set priority</div><div class=\"ds-popover-item\">Move to board</div></div>",
+      "css": ".ds-popover { padding: 6px; border-radius: 16px; background-color: #1f1f1f; border: 1px solid rgb(255 255 255 / 0.22); box-shadow: 0 40px 100px -32px rgb(0 0 0 / 0.6), 0 1px 0 0 rgb(255 255 255 / 0.10) inset; color: #fafafa; min-width: 200px; } .ds-popover-item { padding: 8px 10px; border-radius: 10px; font: 400 0.875rem/1.4 Geist, sans-serif; color: rgb(250 250 250 / 0.6); cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; } .ds-popover-item:hover { background-color: rgb(255 255 255 / 0.10); color: #fafafa; }"
+    },
+    {
+      "name": "Status Pill",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Workflow state indicator. The only fully saturated chroma in idle UI.",
+      "html": "<span class=\"ds-status-pill\" data-status=\"in-progress\"><span class=\"ds-status-dot\"></span>IN PROGRESS</span>",
+      "css": ".ds-status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 9999px; background-color: rgb(255 255 255 / 0.085); border: 1px solid rgb(255 255 255 / 0.12); font: 500 0.625rem/1 'Geist Mono', monospace; text-transform: uppercase; letter-spacing: 0.1em; color: #fafafa; } .ds-status-pill[data-status=\"todo\"] .ds-status-dot { background-color: #94a3b8; } .ds-status-pill[data-status=\"in-progress\"] .ds-status-dot { background-color: #f59e0b; } .ds-status-pill[data-status=\"review\"] .ds-status-dot { background-color: #38bdf8; } .ds-status-pill[data-status=\"done\"] .ds-status-dot { background-color: #22c55e; } .ds-status-pill[data-status=\"blocked\"] .ds-status-dot { background-color: #fb7185; } .ds-status-dot { width: 6px; height: 6px; border-radius: 9999px; }"
+    },
+    {
+      "name": "Roadmap Bar",
+      "kind": "custom",
+      "refersTo": "card-glass",
+      "description": "Signature gantt bar. 28px tall pill with priority left-stripe, fills the timeline.",
+      "html": "<div class=\"ds-bar\" data-status=\"in-progress\" data-priority=\"p1\"><span class=\"ds-bar-stripe\"></span><span class=\"ds-bar-dot\"></span><span class=\"ds-bar-title\">WP1.2 Define epic scope</span></div>",
+      "css": ".ds-bar { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 10px; border: 1px solid rgb(250 250 250 / 0.3); background-color: rgb(255 255 255 / 0.05); backdrop-filter: blur(8px); color: #fafafa; font: 500 0.75rem/1 Geist, sans-serif; cursor: grab; transition: border-color 200ms ease-out, transform 200ms cubic-bezier(0.16,1,0.3,1); user-select: none; } .ds-bar:hover { border-color: rgb(250 250 250 / 0.6); } .ds-bar-stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-top-left-radius: 10px; border-bottom-left-radius: 10px; background-color: #fb923c; pointer-events: none; } .ds-bar[data-priority=\"p0\"] .ds-bar-stripe { background-color: #f87171; } .ds-bar[data-priority=\"p1\"] .ds-bar-stripe { background-color: #fb923c; } .ds-bar[data-priority=\"p2\"] .ds-bar-stripe { background-color: #fde047; } .ds-bar[data-priority=\"p3\"] .ds-bar-stripe { background-color: rgb(250 250 250 / 0.5); } .ds-bar-dot { width: 6px; height: 6px; border-radius: 9999px; background-color: #f59e0b; margin-left: 6px; } .ds-bar-title { padding-left: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Studio Console",
+    "overview": "A dimly lit studio console for an internal team. Black surfaces, white ink, no decoration that does not earn its keep. The tool fades into the background of the work; what remains visible is the work itself. Color is reserved for status (the workflow needs a signal) and for the result of a deliberate gesture (a save lands, a drag commits, an error fires). Everything else is grayscale by doctrine.\n\nThe system is monochrome by default, not by accident. Card titles, labels, lists, columns, sidebars, headers: all white-on-near-black. The five accent colors that historically existed in the codebase (cyan, magenta, violet, lime, amber) are flattened to white in idle UI. They are kept as named tokens so they can be summoned for specific high-information surfaces (focus glow rings, charts, drag-source previews) without polluting the everyday palette. The palette is exactly two ideas: ink and surface.",
+    "keyCharacteristics": [
+      "Black-and-white discipline: any color in idle UI is a bug, not a feature.",
+      "Glass is structural, not decorative: surfaces are translucent only when they overlay other content.",
+      "Density tolerated: row heights tight, label text 11px mono, monospaced metadata everywhere.",
+      "Status colors are the only sanctioned chroma: five workflow tokens plus five priority dots.",
+      "Hierarchy is structural: filled white pill = primary, glass pill = secondary, ghost = tertiary."
+    ],
+    "rules": [
+      { "name": "The Idle Mute Rule", "body": "Idle UI is grayscale. If a screen is at rest and it carries a saturated color anywhere outside a status pill or a priority dot, that color is wrong. Color is feedback, not decoration.", "section": "colors" },
+      { "name": "The Hairline Rule", "body": "Borders and dividers default to --hairline (#ffffff1f, 3.05:1). Never below; that fails WCAG 1.4.11 for non-text UI.", "section": "colors" },
+      { "name": "The Solid Popover Rule", "body": "Floating panels (dropdown menus, popovers, banners, tooltips, bulk action bar) are opaque (--popover, #1f1f1f). Translucent glass on a floating panel masks the content beneath; we forbid it.", "section": "colors" },
+      { "name": "The Mono-Meta Rule", "body": "Every machine-generated label (IDs, ISO dates, ordinals, ENUM values) is mono, 11px or 10px, uppercase, 0.08em+ tracking. Human content is sans, sentence case.", "section": "typography" },
+      { "name": "The One-Family Rule", "body": "Display, headline, title, body all share Geist. Hierarchy is weight + size + tracking, not a different face. Geist Mono and Instrument Serif carry strict roles; do not introduce a fourth family.", "section": "typography" },
+      { "name": "The Flat-At-Rest Rule", "body": "Surfaces are flat at rest. Shadows appear only on lifted elements (glass cards, dialogs) and on response-to-state (drag, focus). Never as decoration.", "section": "elevation" },
+      { "name": "The Glass-Is-Structural Rule", "body": "glass, glass-strong, glass-hi are reserved for surfaces that overlay content underneath. Forbidden as decorative atmosphere on full-bleed sections, hero panels, or anything that does not literally float above other content.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep idle UI grayscale.",
+      "Do use --popover (#1f1f1f) opaque for every floating panel.",
+      "Do lift glass cards with glass utilities only when they literally float above other content.",
+      "Do carry every machine-fact in mono 10-11px uppercase with 0.08em+ tracking.",
+      "Do use status colors only inside status pills, list status_kind swatches, and Gantt cell fills.",
+      "Do carry priority as a 4px left-edge stripe (gutter band) or a 2px dot inside a chip.",
+      "Do pair every status / priority signal with a non-color cue.",
+      "Do honor prefers-reduced-motion.",
+      "Do keep border thickness at 1px.",
+      "Do keep hit targets at >= 32px on primary controls and >= 24px on dense affordances."
+    ],
+    "donts": [
+      "Don't use Trello card-on-blue, Asana rainbow status pills, Monday candy blocks, Jira enterprise blue, Notion soft gray-on-gray, or the Linear purple-magenta gradient.",
+      "Don't use side-stripe borders >1px as a colored accent on cards, alerts, callouts, or list items.",
+      "Don't use gradient text.",
+      "Don't use glassmorphism as decoration.",
+      "Don't ship a hero-metric dashboard.",
+      "Don't use the same chip class for both buttons and state pills.",
+      "Don't introduce a fourth typeface.",
+      "Don't colorize a row, lane, or column to indicate priority.",
+      "Don't use border radius below --radius-sm (8px) on any container surface.",
+      "Don't animate CSS layout properties.",
+      "Don't use em dashes anywhere in UI copy.",
+      "Don't wrap floating action chrome in glass."
+    ]
+  }
+}

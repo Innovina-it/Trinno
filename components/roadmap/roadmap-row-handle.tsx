@@ -37,7 +37,7 @@ export function RoadmapRowHandle({
       // Stop click bubbling so the canvas empty-area click doesn't open
       // the new-card dialog when releasing a no-op drag on the handle.
       onClick={(e) => e.stopPropagation()}
-      className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity absolute left-1 top-1.5 z-10 size-5 rounded-md border border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg flex items-center justify-center cursor-grab active:cursor-grabbing"
+      className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity absolute left-1 top-1.5 z-10 size-5 rounded-md border border-hairline bg-[color:var(--surface-strong)] text-fg-muted hover:text-fg flex items-center justify-center cursor-grab active:cursor-grabbing"
     >
       <GripVertical className="size-3" />
     </button>

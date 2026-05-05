@@ -3,36 +3,56 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useTransition, useMemo } from "react";
 import { useBoardStore } from "@/stores/board-store";
 import {
-  parseFilters, serializeFilters, isFilterActive,
+  parseFilters,
+  serializeFilters,
+  isFilterActive,
   type LaneMode,
 } from "@/lib/board-filters";
 import {
-  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
-  DropdownMenuRadioGroup, DropdownMenuRadioItem,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+  DropdownMenuItem,
+  DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import {
-  CalendarClock, CalendarRange, User, Tag, X, Layers, ChevronDown,
+  CalendarClock,
+  CalendarRange,
+  ChevronDown,
+  Filter,
+  Layers,
+  Tag,
+  User,
+  X,
 } from "lucide-react";
 
 const LANE_OPTIONS: { id: LaneMode; label: string }[] = [
-  { id: "none",     label: "No swimlanes" },
+  { id: "none", label: "No swimlanes" },
   { id: "assignee", label: "By assignee" },
-  { id: "parent",   label: "By parent" },
-  { id: "label",    label: "By label" },
-  { id: "sprint",   label: "By sprint" },
-  { id: "type",     label: "By type" },
+  { id: "parent", label: "By parent" },
+  { id: "label", label: "By label" },
+  { id: "sprint", label: "By sprint" },
+  { id: "type", label: "By type" },
 ];
-
-const TYPE_OPTIONS = ["epic", "story", "task", "subtask", "bug"];
+const TYPE_OPTIONS = ["epic", "story", "task", "subtask", "bug"] as const;
 
 export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
   const labels = useBoardStore((s) => s.labels);
-  const filters = useMemo(() => parseFilters(new URLSearchParams(sp.toString())), [sp]);
+  const filters = useMemo(
+    () => parseFilters(new URLSearchParams(sp.toString())),
+    [sp],
+  );
   const lanes = (sp.get("lanes") as LaneMode | null) ?? "none";
-  const [pending, start] = useTransition();
+  const [, start] = useTransition();
+  void currentUserId;
 
   function update(next: typeof filters, nextLanes: LaneMode = lanes) {
     const params = serializeFilters(next);
@@ -40,14 +60,21 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
     const qs = params.toString();
     start(() => router.replace(qs ? `${pathname}?${qs}` : pathname));
   }
-
   function toggleType(t: string) {
     const has = filters.types.includes(t);
-    update({ ...filters, types: has ? filters.types.filter((x) => x !== t) : [...filters.types, t] });
+    update({
+      ...filters,
+      types: has ? filters.types.filter((x) => x !== t) : [...filters.types, t],
+    });
   }
   function toggleLabel(id: string) {
     const has = filters.labelIds.includes(id);
-    update({ ...filters, labelIds: has ? filters.labelIds.filter((x) => x !== id) : [...filters.labelIds, id] });
+    update({
+      ...filters,
+      labelIds: has
+        ? filters.labelIds.filter((x) => x !== id)
+        : [...filters.labelIds, id],
+    });
   }
   function setDue(d: typeof filters.due) {
     update({ ...filters, due: filters.due === d ? null : d });
@@ -55,123 +82,167 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
   function toggleMe() {
     update({ ...filters, assignedToMe: !filters.assignedToMe });
   }
-  function clear() {
-    update(
-      { types: [], labelIds: [], due: null, assignedToMe: false, scheduled: false },
-      "none",
-    );
-  }
   function toggleScheduled() {
     update({ ...filters, scheduled: !filters.scheduled });
   }
+  function clear() {
+    update(
+      {
+        types: [],
+        labelIds: [],
+        due: null,
+        assignedToMe: false,
+        scheduled: false,
+      },
+      "none",
+    );
+  }
 
   const active = isFilterActive(filters) || lanes !== "none";
-  void currentUserId; void pending;
+  const filterCount =
+    (filters.assignedToMe ? 1 : 0) +
+    (filters.due ? 1 : 0) +
+    (filters.scheduled ? 1 : 0) +
+    filters.types.length +
+    filters.labelIds.length;
+  const laneLabel =
+    (LANE_OPTIONS.find((l) => l.id === lanes) ?? LANE_OPTIONS[0]).label;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-hairline bg-[rgb(255_255_255/0.02)]">
-      {/* Swimlane mode */}
+    <div className="inline-flex items-center gap-1.5">
+      {/* Lane mode */}
       <DropdownMenu>
-        <DropdownMenuTrigger className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]">
-          <Layers className="size-3" />
-          {(LANE_OPTIONS.find((l) => l.id === lanes) ?? LANE_OPTIONS[0]).label.toUpperCase()}
-          <ChevronDown className="size-3" />
+        <DropdownMenuTrigger className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40">
+          <Layers className="size-3.5" aria-hidden />
+          <span className="text-fg">{laneLabel}</span>
+          <ChevronDown className="size-3 text-fg-faint" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuRadioGroup value={lanes} onValueChange={(v) => update(filters, v as LaneMode)}>
-            {LANE_OPTIONS.map((o) => (
-              <DropdownMenuRadioItem key={o.id} value={o.id}>{o.label}</DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
+        <DropdownMenuContent align="start">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Swimlanes</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={lanes}
+              onValueChange={(v) => update(filters, v as LaneMode)}
+            >
+              {LANE_OPTIONS.map((o) => (
+                <DropdownMenuRadioItem key={o.id} value={o.id}>
+                  {o.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <span className="mx-1 h-4 w-px bg-hairline" />
-
-      {/* Assignee = me */}
-      <button
-        type="button"
-        onClick={toggleMe}
-        className={`chip inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] ${
-          filters.assignedToMe ? "bg-fg/10 text-fg ring-1 ring-fg/40" : ""
-        }`}
-      >
-        <User className="size-3" /> ME
-      </button>
-
-      {/* Due */}
-      <button
-        type="button"
-        onClick={() => setDue("overdue")}
-        className={`chip inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] ${
-          filters.due === "overdue" ? "bg-fg/10 text-fg ring-1 ring-fg/40" : ""
-        }`}
-      >
-        <CalendarClock className="size-3" /> OVERDUE
-      </button>
-      <button
-        type="button"
-        onClick={() => setDue("this-week")}
-        className={`chip inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] ${
-          filters.due === "this-week" ? "bg-fg/10 text-fg ring-1 ring-fg/40" : ""
-        }`}
-      >
-        <CalendarClock className="size-3" /> THIS WEEK
-      </button>
-
-      {/* Scheduled — cards with start or target date set */}
-      <button
-        type="button"
-        onClick={toggleScheduled}
-        data-testid="filter-scheduled"
-        className={`chip inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] ${
-          filters.scheduled ? "bg-fg/10 text-fg ring-1 ring-fg/40" : ""
-        }`}
-      >
-        <CalendarRange className="size-3" /> SCHEDULED
-      </button>
-
-      <span className="mx-1 h-4 w-px bg-hairline" />
-
-      {/* Types */}
-      {TYPE_OPTIONS.map((t) => (
-        <button
-          key={t}
-          type="button"
-          onClick={() => toggleType(t)}
-          className={`chip uppercase hover:bg-[rgb(255_255_255/0.08)] ${
-            filters.types.includes(t) ? "bg-fg/10 text-fg ring-1 ring-fg/40" : ""
+      {/* Filters */}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          data-testid="board-filter-trigger"
+          data-active={filterCount > 0 ? "true" : "false"}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] ${
+            filterCount > 0
+              ? "border-fg/40 bg-fg/10 text-fg"
+              : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
           }`}
         >
-          {t}
-        </button>
-      ))}
+          <Filter className="size-3.5" aria-hidden />
+          <span className="text-fg">Filters</span>
+          {filterCount > 0 && (
+            <span
+              aria-label={`${filterCount} active filters`}
+              className="inline-flex items-center justify-center rounded-full bg-fg text-bg-deep size-4 text-[10px] font-semibold tabular-nums"
+            >
+              {filterCount}
+            </span>
+          )}
+          <ChevronDown className="size-3 text-fg-faint" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-64">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Scope</DropdownMenuLabel>
+            <DropdownMenuCheckboxItem
+              checked={filters.assignedToMe}
+              onCheckedChange={toggleMe}
+            >
+              <User className="size-3.5" aria-hidden />
+              Assigned to me
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={filters.due === "overdue"}
+              onCheckedChange={() => setDue("overdue")}
+            >
+              <CalendarClock className="size-3.5" aria-hidden />
+              Overdue
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={filters.due === "this-week"}
+              onCheckedChange={() => setDue("this-week")}
+            >
+              <CalendarClock className="size-3.5" aria-hidden />
+              This week
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={filters.scheduled}
+              onCheckedChange={toggleScheduled}
+            >
+              <CalendarRange className="size-3.5" aria-hidden />
+              Scheduled
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuGroup>
 
-      {/* Labels */}
-      {labels.length > 0 && <span className="mx-1 h-4 w-px bg-hairline" />}
-      {labels.slice(0, 8).map((l) => (
-        <button
-          key={l.id}
-          type="button"
-          onClick={() => toggleLabel(l.id)}
-          className={`chip inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] ${
-            filters.labelIds.includes(l.id) ? "bg-fg/10 text-fg ring-1 ring-fg/40" : ""
-          }`}
-          title={l.name || l.color}
-        >
-          <Tag className="size-3" />
-          {l.name || l.color}
-        </button>
-      ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Type</DropdownMenuLabel>
+            {TYPE_OPTIONS.map((t) => (
+              <DropdownMenuCheckboxItem
+                key={t}
+                checked={filters.types.includes(t)}
+                onCheckedChange={() => toggleType(t)}
+              >
+                {t[0].toUpperCase() + t.slice(1)}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuGroup>
 
-      {active && (
-        <button
-          type="button"
-          onClick={clear}
-          className="chip inline-flex items-center gap-1 ml-auto text-fg-muted hover:text-fg"
+          {labels.length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Labels</DropdownMenuLabel>
+                {labels.slice(0, 8).map((l) => (
+                  <DropdownMenuCheckboxItem
+                    key={l.id}
+                    checked={filters.labelIds.includes(l.id)}
+                    onCheckedChange={() => toggleLabel(l.id)}
+                  >
+                    <Tag className="size-3.5" aria-hidden />
+                    {l.name || l.color}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuGroup>
+            </>
+          )}
+
+          {active && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={clear} className="text-fg-muted">
+                <X className="size-3.5" aria-hidden />
+                Clear all
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Inline summary of active type filters when small. */}
+      {filters.types.length > 0 && filters.types.length <= 3 && (
+        <span
+          className="hidden md:inline-flex items-center gap-1 mono-meta-sm text-fg-faint"
+          aria-hidden
         >
-          <X className="size-3" /> CLEAR
-        </button>
+          {filters.types.map((t) => t.toUpperCase()).join(" · ")}
+        </span>
       )}
     </div>
   );

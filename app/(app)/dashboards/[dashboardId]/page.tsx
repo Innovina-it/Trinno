@@ -31,26 +31,31 @@ export default async function DashboardPage({
       data-testid="dashboard-detail"
       data-dashboard-id={dash.id}
     >
-      <header className="flex items-baseline justify-between gap-3">
-        <div>
-          <Link
-            href="/dashboards"
-            className="mono-meta-sm text-fg-muted hover:text-fg"
-          >
-            ← All dashboards
-          </Link>
-          <div className="mono-meta-sm text-fg-faint mt-2">
-            {dash.scope.toUpperCase()} DASHBOARD
+      <header className="space-y-2 border-b border-hairline pb-4">
+        <Link
+          href="/dashboards"
+          className="mono-meta-sm text-fg-muted hover:text-fg inline-flex items-center gap-1.5"
+        >
+          ← All dashboards
+        </Link>
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <span className="mono-meta-sm text-fg-faint">
+              {dash.scope.toUpperCase()} DASHBOARD
+              {!isOwner && " · READ ONLY"}
+            </span>
+            <h1 className="font-sans text-2xl font-bold tracking-tight text-fg truncate">
+              {dash.name}
+            </h1>
           </div>
-          <h1 className="serif-display text-3xl mt-1">{dash.name}</h1>
+          {isOwner && (
+            <AddGadgetButton
+              dashboardId={dashboardId}
+              dashboardWorkspaceId={dash.workspaceId}
+              workspaces={workspaces.map((w) => ({ id: w.id, name: w.name }))}
+            />
+          )}
         </div>
-        {isOwner && (
-          <AddGadgetButton
-            dashboardId={dashboardId}
-            dashboardWorkspaceId={dash.workspaceId}
-            workspaces={workspaces.map((w) => ({ id: w.id, name: w.name }))}
-          />
-        )}
       </header>
       <DashboardGrid
         dashboardId={dashboardId}

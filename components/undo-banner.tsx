@@ -33,7 +33,7 @@ export function UndoBanner() {
       aria-live="polite"
       data-testid="undo-banner"
     >
-      <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-[color:var(--hairline-hi)] bg-[color:var(--surface-strong)] backdrop-blur-md px-4 py-2 text-sm text-fg shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-[color:var(--hairline-hi)] bg-[color:var(--popover)] px-4 py-2 text-sm text-fg shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200">
         <span className="truncate max-w-[18rem]">{entry.message}</span>
         <button
           type="button"

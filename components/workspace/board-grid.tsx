@@ -22,13 +22,10 @@ export function BoardGrid({
 
   if (visible.length === 0) {
     return (
-      <div className="glass-strong rounded-3xl px-6 py-24 text-center">
-        <p className="serif-display text-5xl md:text-6xl text-fg">
-          No boards yet.
-        </p>
-        <p className="mono-meta mt-6 text-fg-muted max-w-sm mx-auto">
-          Boards keep projects, lists, and cards in one place. Draft your first
-          one with the New board button up top.
+      <div className="rounded-2xl border border-hairline bg-[color:var(--surface)] px-6 py-12 text-center space-y-2">
+        <p className="mono-meta-sm text-fg-faint">NO BOARDS</p>
+        <p className="text-sm text-fg-muted max-w-sm mx-auto">
+          Use the New board button at the top to create one.
         </p>
       </div>
     );
@@ -59,7 +56,7 @@ export function BoardGrid({
             </div>
 
             {/* Center: bold sans board title */}
-            <h2 className="serif-display text-3xl md:text-4xl text-fg leading-tight">
+            <h2 className="font-sans text-xl font-semibold tracking-tight text-fg leading-tight">
               <span className="relative inline-block">
                 {b.title}
                 <span

@@ -51,7 +51,7 @@ export function ErrorPane() {
       aria-live="polite"
       data-testid="error-pane"
     >
-      <div className="rounded-xl border border-red-500/40 bg-red-950/80 backdrop-blur-md text-red-50 shadow-xl">
+      <div className="rounded-xl border border-red-500/40 bg-red-950/95 text-red-50 shadow-xl">
         <div className="flex items-center gap-2 px-3 py-2">
           <AlertTriangle className="size-4 shrink-0 text-red-300" />
           <span className="flex-1 truncate text-sm">{headline}</span>

@@ -6,8 +6,22 @@ import {
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, GripVertical, Plus } from "lucide-react";
+import {
+  CalendarClock,
+  CalendarDays,
+  ChevronDown,
+  GripVertical,
+  HelpCircle,
+  Layers,
+  Plus,
+  Search,
+  Settings2,
+  ZoomIn,
+} from "lucide-react";
 import type { Zoom } from "@/lib/roadmap/dates";
 
 export const ZOOMS: Zoom[] = ["week", "month", "quarter"];
@@ -18,6 +32,15 @@ export const LANE_MODE_LABEL: Record<LaneMode, string> = {
   assignee: "By assignee",
   component: "By component",
 };
+const ZOOM_LABEL: Record<Zoom, string> = {
+  week: "Week",
+  month: "Month",
+  quarter: "Quarter",
+};
+
+function fmtDate(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
 
 export function RoadmapHeader({
   zoom,
@@ -54,10 +77,6 @@ export function RoadmapHeader({
   onToggleGutter: () => void;
   onJumpToDate: (d: Date) => void;
   onOpenNewCard: () => void;
-  // Plan #16b-γ-G G7 — pointerdown on the NEW CARD chip starts a potential
-  // drag. The view decides whether the gesture was a click (delta < 4px)
-  // or a drag (open dialog with prefilled start/target/parent/board) on
-  // pointerup. When omitted, the chip behaves as a plain button.
   onChipDragStart?: (clientX: number, clientY: number) => void;
   queryDraft: string;
   onQueryDraftChange: (s: string) => void;
@@ -66,39 +85,52 @@ export function RoadmapHeader({
   gridStart: Date;
   gridEnd: Date;
 }) {
+  const viewOptionsCount =
+    (showCriticalPath ? 1 : 0) + (autoCascade ? 1 : 0) + (gutter ? 1 : 0);
+
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-wrap">
+      {/* LEFT — view controls */}
+      <div className="flex items-center gap-1.5">
         <DropdownMenu>
           <DropdownMenuTrigger
             data-testid="roadmap-zoom"
-            className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
+            className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
           >
-            ZOOM: {zoom.toUpperCase()}
-            <ChevronDown className="size-3" />
+            <ZoomIn className="size-3.5" aria-hidden />
+            <span className="text-fg">{ZOOM_LABEL[zoom]}</span>
+            <ChevronDown className="size-3 text-fg-faint" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Zoom</DropdownMenuLabel>
+            </DropdownMenuGroup>
             <DropdownMenuRadioGroup
               value={zoom}
               onValueChange={(v) => onSetZoom(v as Zoom)}
             >
               {ZOOMS.map((z) => (
                 <DropdownMenuRadioItem key={z} value={z}>
-                  {z[0].toUpperCase() + z.slice(1)}
+                  {ZOOM_LABEL[z]}
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+
         <DropdownMenu>
           <DropdownMenuTrigger
             data-testid="roadmap-lanes"
-            className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
+            className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
           >
-            LANES: {LANE_MODE_LABEL[laneMode].toUpperCase()}
-            <ChevronDown className="size-3" />
+            <Layers className="size-3.5" aria-hidden />
+            <span className="text-fg">{LANE_MODE_LABEL[laneMode]}</span>
+            <ChevronDown className="size-3 text-fg-faint" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Group lanes</DropdownMenuLabel>
+            </DropdownMenuGroup>
             <DropdownMenuRadioGroup
               value={laneMode}
               onValueChange={(v) => onSetLaneMode(v as LaneMode)}
@@ -111,94 +143,112 @@ export function RoadmapHeader({
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-        {/* + New epic dialog removed — the "+ NEW CARD" chip's dialog
-         * now exposes a TYPE picker (Task / Story / Bug / Epic), so
-         * epics are created through the same path as everything else. */}
-        <span
-          className="inline-flex items-center gap-1.5 mono-meta-sm text-fg-faint"
-          data-testid="roadmap-live"
-          data-live={subscribed ? "true" : "false"}
-          title={subscribed ? "Realtime sync active" : "Realtime sync offline"}
-        >
-          <span
-            aria-hidden
-            className={`inline-block size-1.5 rounded-full ${
-              subscribed
-                ? "bg-emerald-400 animate-pulse"
-                : "bg-fg/20"
+
+        {/* View options — collapses critical path / auto-reschedule / gutter. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            data-testid="roadmap-view-options"
+            data-active={viewOptionsCount > 0 ? "true" : "false"}
+            title="Critical path, auto-reschedule, priority gutter"
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] ${
+              viewOptionsCount > 0
+                ? "border-fg/40 bg-fg/10 text-fg"
+                : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
             }`}
-          />
-          {subscribed ? "LIVE" : "OFFLINE"}
-        </span>
-        <button
-          type="button"
-          onClick={onToggleCriticalPath}
-          data-testid="roadmap-critical-toggle"
-          data-active={showCriticalPath ? "true" : "false"}
-          aria-pressed={showCriticalPath}
-          title="Highlights the longest chain of blocking dependencies — a delay on any of these pushes the project end date."
-          className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
-            showCriticalPath ? "ring-1 ring-fg/40" : ""
-          }`}
-        >
-          CRITICAL PATH: {showCriticalPath ? "ON" : "OFF"}
-        </button>
-        <button
-          type="button"
-          onClick={onToggleAutoCascade}
-          data-testid="roadmap-auto-cascade-toggle"
-          data-active={autoCascade ? "true" : "false"}
-          aria-pressed={autoCascade}
-          title="Reschedule blocked dependents after a forward target_date drag"
-          className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
-            autoCascade ? "ring-1 ring-fg/40" : ""
-          }`}
-        >
-          AUTO-RESCHEDULE: {autoCascade ? "ON" : "OFF"}
-        </button>
-        <button
-          type="button"
-          onClick={onToggleGutter}
-          data-testid="roadmap-priority-gutter-toggle"
-          data-active={gutter ? "true" : "false"}
-          aria-pressed={gutter}
-          title="Drag a bar leftward into the gutter to set its priority (P0-P4)"
-          className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
-            gutter ? "ring-1 ring-fg/40" : ""
-          }`}
-        >
-          PRIORITY GUTTER: {gutter ? "ON" : "OFF"}
-        </button>
-        <button
-          type="button"
-          onClick={() => onJumpToDate(new Date())}
-          data-testid="roadmap-jump-today"
-          className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
-          title="Scroll to today"
-        >
-          TODAY
-        </button>
-        <input
-          type="date"
-          data-testid="roadmap-jump-date"
-          onChange={(e) => {
-            if (e.target.value) onJumpToDate(new Date(e.target.value));
-          }}
-          className="chip inline-flex items-center mono-meta-sm bg-[color:var(--surface)] hover:bg-[rgb(255_255_255/0.08)] border-0 outline-none focus:ring-1 focus:ring-fg/40"
-          title="Jump to date"
-        />
+          >
+            <Settings2 className="size-3.5" aria-hidden />
+            <span className="text-fg">View</span>
+            {viewOptionsCount > 0 && (
+              <span
+                aria-label={`${viewOptionsCount} options enabled`}
+                className="inline-flex items-center justify-center rounded-full bg-fg text-bg-deep size-4 text-[10px] font-semibold tabular-nums"
+              >
+                {viewOptionsCount}
+              </span>
+            )}
+            <ChevronDown className="size-3 text-fg-faint" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>View options</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={showCriticalPath}
+                onCheckedChange={onToggleCriticalPath}
+                data-testid="roadmap-critical-toggle"
+              >
+                Critical path
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={autoCascade}
+                onCheckedChange={onToggleAutoCascade}
+                data-testid="roadmap-auto-cascade-toggle"
+              >
+                Auto-reschedule
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={gutter}
+                onCheckedChange={onToggleGutter}
+                data-testid="roadmap-priority-gutter-toggle"
+              >
+                Priority gutter
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-      <div className="flex items-center gap-3">
+
+      {/* CENTER — search */}
+      <div className="flex-1 flex justify-center min-w-[10rem]">
+        <div className="relative w-full max-w-sm">
+          <Search
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-fg-faint pointer-events-none"
+            aria-hidden
+          />
+          <input
+            ref={searchInputRef}
+            type="search"
+            value={queryDraft}
+            onChange={(e) => onQueryDraftChange(e.target.value)}
+            placeholder="Search bars…"
+            aria-label="Search roadmap"
+            data-testid="roadmap-search"
+            className="w-full rounded-full border border-hairline bg-[color:var(--surface)] pl-8 pr-3 py-1.5 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:border-fg/40"
+          />
+        </div>
+      </div>
+
+      {/* RIGHT — date jump + primary action + help */}
+      <div className="flex items-center gap-1.5">
+        {/* Date jump compound control. */}
+        <div className="inline-flex items-stretch rounded-full border border-hairline bg-[color:var(--surface)] divide-x divide-hairline overflow-hidden text-xs">
+          <button
+            type="button"
+            onClick={() => onJumpToDate(new Date())}
+            data-testid="roadmap-jump-today"
+            className="px-3 py-1.5 hover:bg-[rgb(255_255_255/0.08)] text-fg"
+            title="Scroll to today"
+          >
+            Today
+          </button>
+          <label
+            className="inline-flex items-center pl-2 pr-2 hover:bg-[rgb(255_255_255/0.08)] cursor-pointer"
+            title="Jump to date"
+          >
+            <CalendarDays className="size-3.5 text-fg-faint" aria-hidden />
+            <input
+              type="date"
+              data-testid="roadmap-jump-date"
+              onChange={(e) => {
+                if (e.target.value) onJumpToDate(new Date(e.target.value));
+              }}
+              className="ml-1 w-[7rem] bg-transparent border-0 outline-none text-fg text-xs"
+            />
+          </label>
+        </div>
+
+        {/* Primary action. */}
         <button
           type="button"
-          // Plan #16b-γ-G G7 — chip is now a drag source. On pointerdown
-          // we hand off to the view, which sets up window listeners and
-          // decides at pointerup whether to treat the gesture as a click
-          // (delta < 4px → empty dialog, existing behavior) or a drag
-          // (drop on canvas → dialog with prefilled start/target/parent).
-          // When `onChipDragStart` is omitted we fall back to the
-          // pre-G7 onClick → onOpenNewCard behavior so consumers that
-          // don't pass the drag handler still work.
           onPointerDown={
             onChipDragStart
               ? (e) => {
@@ -210,34 +260,47 @@ export function RoadmapHeader({
           onClick={onChipDragStart ? undefined : onOpenNewCard}
           data-testid="roadmap-new-card-trigger"
           title="Click or drag onto roadmap to create"
-          className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] cursor-grab active:cursor-grabbing select-none"
+          className="shimmer-cta inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs cursor-grab active:cursor-grabbing select-none"
         >
-          <GripVertical className="size-3 text-fg-faint" aria-hidden />
-          <Plus className="size-3" />
-          NEW CARD
+          <GripVertical
+            className="size-3 text-bg-deep/50"
+            aria-hidden
+          />
+          <Plus className="size-3.5" />
+          <span>New card</span>
         </button>
-        <input
-          ref={searchInputRef}
-          type="search"
-          value={queryDraft}
-          onChange={(e) => onQueryDraftChange(e.target.value)}
-          placeholder="Search bars…"
-          aria-label="Search roadmap"
-          data-testid="roadmap-search"
-          className="rounded-md border border-hairline bg-transparent px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:border-fg/40 w-44"
-        />
+
         <button
           type="button"
           onClick={onOpenShortcuts}
           data-testid="roadmap-shortcuts-trigger"
           aria-label="Keyboard shortcuts"
-          className="chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)]"
+          title="Keyboard shortcuts"
+          className="inline-flex items-center justify-center rounded-full size-8 border border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
         >
-          ?
+          <HelpCircle className="size-3.5" />
         </button>
-        <span className="mono-meta-sm text-fg-faint">
-          {gridStart.toISOString().slice(0, 10)} →{" "}
-          {gridEnd.toISOString().slice(0, 10)}
+      </div>
+
+      {/* Ambient status — separate row, lighter weight than the action toolbar. */}
+      <div className="basis-full flex items-center justify-between gap-3 px-1 text-fg-faint">
+        <span
+          className="inline-flex items-center gap-1.5 mono-meta-sm"
+          data-testid="roadmap-live"
+          data-live={subscribed ? "true" : "false"}
+          title={subscribed ? "Realtime sync active" : "Realtime sync offline"}
+        >
+          <span
+            aria-hidden
+            className={`inline-block size-1.5 rounded-full ${
+              subscribed ? "bg-emerald-400 animate-pulse" : "bg-fg/30"
+            }`}
+          />
+          {subscribed ? "Live" : "Offline"}
+        </span>
+        <span className="inline-flex items-center gap-1.5 mono-meta-sm tabular-nums">
+          <CalendarClock className="size-3" aria-hidden />
+          {fmtDate(gridStart)} → {fmtDate(gridEnd)}
         </span>
       </div>
     </div>

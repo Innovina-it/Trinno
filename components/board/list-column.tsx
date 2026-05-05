@@ -23,7 +23,6 @@ import { undoBus } from "@/lib/undo-bus";
 import { errorBus } from "@/lib/errors/error-bus";
 import { CardTile } from "./card-tile";
 import { AddCardForm } from "./add-card-form";
-import { roman } from "@/lib/format";
 
 // Plan #16b-γ-C (#3) — opt-in virtualization. We render at most this
 // many tiles up front; cards beyond fold behind a "Show all (+N)" chip
@@ -31,19 +30,11 @@ import { roman } from "@/lib/format";
 // to a later pass.
 const VIRTUALIZE_THRESHOLD = 100;
 
-// Per-list accent — deterministic from list id, monochrome shades.
-const ACCENT_PALETTE = [
-  "rgb(250 250 250 / 0.85)",
-  "rgb(250 250 250 / 0.55)",
-  "rgb(250 250 250 / 0.35)",
-  "rgb(250 250 250 / 0.70)",
-  "rgb(250 250 250 / 0.45)",
-];
-
-// Semantic status colors — the only chromatic exception in the
-// monochrome theme. When a list has a status_kind set in Settings, its
-// accent strip and WIP chip pick up the workflow color so state is
-// visible without opening the card.
+// Status colors: the only chromatic exception in the monochrome theme.
+// When a list maps to a workflow state, its strip + WIP chip take that
+// state's color. Lists without a state get a single neutral hairline
+// strip; we no longer randomize per-list shades, which gave the false
+// impression of meaning where there was none.
 const STATUS_ACCENT: Record<string, string> = {
   todo:        "var(--status-todo)",
   in_progress: "var(--status-in-progress)",
@@ -51,14 +42,7 @@ const STATUS_ACCENT: Record<string, string> = {
   done:        "var(--status-done)",
   blocked:     "var(--status-blocked)",
 };
-
-function hashId(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) {
-    h = (h * 31 + id.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h);
-}
+const NEUTRAL_ACCENT = "var(--hairline-hi)";
 
 export function ListColumn({
   list,
@@ -104,8 +88,7 @@ export function ListColumn({
   });
 
   const statusAccent = list.statusKind ? STATUS_ACCENT[list.statusKind] : undefined;
-  const accent =
-    statusAccent ?? ACCENT_PALETTE[hashId(list.id) % ACCENT_PALETTE.length];
+  const accent = statusAccent ?? NEUTRAL_ACCENT;
 
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),
@@ -118,9 +101,6 @@ export function ListColumn({
     [visibleCards],
   );
 
-  const numeral = ordinal ? roman(ordinal) : "—";
-  const cardLabel = `${filtered.length} CARD${filtered.length === 1 ? "" : "S"}`;
-  const listMeta = `${numeral} · ${cardLabel}`;
   const overLimit = list.wipLimit != null && filtered.length > list.wipLimit;
 
   // Plan #16b-γ-D (#10) — archive list with undo. The store removes the
@@ -197,46 +177,49 @@ export function ListColumn({
         style={{
           width: statusAccent ? "3px" : "2px",
           background: `linear-gradient(180deg, ${accent} 0%, transparent 100%)`,
-          boxShadow: statusAccent
-            ? `0 0 12px ${statusAccent}, 0 0 4px ${statusAccent}`
-            : undefined,
         }}
       />
 
-      {/* Column heading: ordinal+count meta in chip, serif italic title */}
+      {/* Column heading: title row, then a quiet meta line (count + WIP). */}
       <div className="relative border-b border-hairline px-4 py-3">
         <div
           {...attributes}
           {...listeners}
           className="cursor-grab select-none active:cursor-grabbing"
         >
-          <div className="flex items-baseline gap-2">
-            <span
-              aria-hidden
-              className="list-ordinal-stamp block leading-none"
-              data-list-ordinal={listMeta}
-            />
-            <span
-              data-testid="list-wip-chip"
-              className={`chip tabular-nums ${overLimit ? "bg-red-900/40 text-red-200 ring-1 ring-red-500/30" : ""}`}
-              style={
-                statusAccent && !overLimit
-                  ? {
-                      boxShadow: `inset 0 0 0 1px ${statusAccent}`,
-                      color: statusAccent,
-                    }
-                  : undefined
-              }
-            >
-              {filtered.length}{list.wipLimit != null ? `/${list.wipLimit}` : ""}
-            </span>
-          </div>
           <h3
-            className="serif-display text-2xl text-fg mt-1.5 leading-tight transition-all duration-200 group-hover/list:gradient-text-static"
+            className="font-sans text-base font-semibold tracking-tight text-fg leading-tight pr-8 truncate"
             style={{ ['--accent' as string]: accent } as React.CSSProperties}
           >
             {list.title}
           </h3>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span
+              data-testid="list-wip-chip"
+              className="chip tabular-nums"
+              style={
+                overLimit
+                  ? {
+                      color: "var(--status-blocked)",
+                      boxShadow:
+                        "inset 0 0 0 1px color-mix(in oklab, var(--status-blocked) 50%, transparent)",
+                    }
+                  : statusAccent
+                    ? {
+                        boxShadow: `inset 0 0 0 1px ${statusAccent}`,
+                        color: statusAccent,
+                      }
+                    : undefined
+              }
+            >
+              {filtered.length}{list.wipLimit != null ? `/${list.wipLimit}` : ""}
+            </span>
+            {overLimit && (
+              <span className="mono-meta-sm" style={{ color: "var(--status-blocked)" }}>
+                OVER
+              </span>
+            )}
+          </div>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -286,6 +269,14 @@ export function ListColumn({
             />
           ))}
         </SortableContext>
+        {visibleCards.length === 0 && filtered.length === 0 && (
+          <div
+            className="self-stretch text-center py-3 mono-meta-sm text-fg-faint select-none"
+            data-testid="list-empty"
+          >
+            NO CARDS
+          </div>
+        )}
         {hiddenCount > 0 && (
           <button
             type="button"

@@ -14,13 +14,7 @@ export function GadgetBurndown({
   } | null;
 }) {
   if (!data || data.points.length === 0) {
-    return (
-      <div className="text-fg-muted text-sm italic">No active sprint.</div>
-    );
+    return <div className="text-sm text-fg-faint">No active sprint.</div>;
   }
-  return (
-    <div className="-m-4">
-      <BurndownChart total={data.total} points={data.points} />
-    </div>
-  );
+  return <BurndownChart total={data.total} points={data.points} />;
 }

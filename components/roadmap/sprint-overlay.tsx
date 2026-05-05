@@ -3,25 +3,24 @@ import { useMemo } from "react";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { dayDiff, pixelsPerDay, startOfDay, type Zoom } from "@/lib/roadmap/dates";
 
-// Plan #16b-β — translucent vertical bands behind the bar layer that mark
-// `planned` and `active` sprints on the timeline. Completed sprints are
-// hidden so the forward-planning view stays uncluttered.
+// Sprint axis: a 4px stripe sitting flush under the header date ticks.
+// `planned` sprints render at fg/25, `active` at fg/60. Completed sprints
+// are hidden. Labels appear inline when the band is wider than 56px so
+// short bands stay clean. The full-canvas vertical bands were retired:
+// they competed with bars for visual weight and broke the *Information
+// First* rule.
 
 export function SprintOverlay({
   zoom,
   gridStart,
   gridEnd,
-  height,
+  headerHeight,
 }: {
   zoom: Zoom;
   gridStart: Date;
   gridEnd: Date;
-  height: number;
+  headerHeight: number;
 }) {
-  // Select the unfiltered slice — zustand's `useStore` re-renders on
-  // identity change. Filtering inside the selector creates a fresh array
-  // every render and triggers React's "getSnapshot must be cached"
-  // infinite-loop guard. Memoize the projection downstream instead.
   const allSprints = useWorkspaceStore((s) => s.sprints);
   const sprints = useMemo(
     () => allSprints.filter((sp) => sp.state !== "completed"),
@@ -32,9 +31,10 @@ export function SprintOverlay({
 
   return (
     <div
-      className="absolute inset-0 pointer-events-none"
+      className="absolute left-0 right-0 pointer-events-none"
       aria-hidden
       data-testid="sprint-overlay"
+      style={{ top: headerHeight - 4, height: 4 }}
     >
       {sprints.map((sp) => {
         if (!sp.startDate || !sp.endDate) return null;
@@ -46,29 +46,27 @@ export function SprintOverlay({
         const w = Math.max(0, (endDays - startDays) * ppd);
         if (w <= 0) return null;
         const isActive = sp.state === "active";
-        const tone = isActive
-          ? "rgb(255 255 255 / 0.06)"
-          : "rgb(255 255 255 / 0.03)";
         return (
           <div
             key={sp.id}
-            className="absolute top-0"
             data-testid="sprint-overlay-band"
             data-sprint-id={sp.id}
             data-sprint-state={sp.state}
-            style={{
-              left: x,
-              width: w,
-              height,
-              background: tone,
-              borderLeft: "1px dashed rgb(255 255 255 / 0.18)",
-              borderRight: "1px dashed rgb(255 255 255 / 0.18)",
-            }}
+            title={`${sp.name}${isActive ? " (active)" : ""}`}
+            className={`absolute top-0 h-full rounded-sm ${
+              isActive ? "bg-fg/60" : "bg-fg/25"
+            }`}
+            style={{ left: x, width: w }}
           >
-            <span className="absolute top-1 left-2 mono-meta-sm text-fg-faint">
-              {sp.name.toUpperCase()}
-              {isActive ? " · ACTIVE" : ""}
-            </span>
+            {w >= 56 && (
+              <span
+                className="absolute mono-meta-sm whitespace-nowrap text-fg-faint"
+                style={{ top: -14, left: 4 }}
+              >
+                {sp.name.toUpperCase()}
+                {isActive ? " · ACTIVE" : ""}
+              </span>
+            )}
           </div>
         );
       })}

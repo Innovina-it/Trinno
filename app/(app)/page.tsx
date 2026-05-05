@@ -8,25 +8,21 @@ export default async function Home() {
   const ws = await listWorkspaces(token);
   if (ws.length === 0) {
     return (
-      <div className="mx-auto max-w-7xl space-y-12 px-6 py-12">
-        <header className="space-y-3">
-          <span className="chip">No. 00 — Onboarding</span>
-          <h1 className="serif-display text-7xl">
-            <span className="text-fg/90">Welcome</span>
-            <span className="gradient-text">.</span>
+      <div className="mx-auto max-w-3xl space-y-8 px-6 py-12">
+        <header className="space-y-2">
+          <span className="mono-meta-sm text-fg-faint">ONBOARDING</span>
+          <h1 className="font-sans text-3xl font-bold tracking-tight text-fg">
+            Welcome
           </h1>
-          <p className="text-fg-muted text-lg max-w-md">
-            Get started by creating your first studio workspace.
+          <p className="text-sm text-fg-muted max-w-md">
+            Create a workspace to start. It groups boards by team or project.
           </p>
         </header>
 
-        <div className="glass-strong noise-overlay rounded-3xl px-8 py-24 text-center">
-          <p className="serif-display text-5xl md:text-6xl gradient-text italic">
-            &ldquo;Nothing in your studio yet.&rdquo;
-          </p>
-          <p className="mono-meta mt-8 text-fg-muted max-w-md mx-auto">
-            Workspaces group boards by team or project. Use the switcher in the
-            top strip to draft your first one.
+        <div className="rounded-2xl border border-hairline bg-[color:var(--surface)] px-6 py-12 text-center space-y-2">
+          <p className="mono-meta-sm text-fg-faint">NO WORKSPACES</p>
+          <p className="text-sm text-fg-muted">
+            Use the switcher in the top strip to create your first one.
           </p>
         </div>
       </div>

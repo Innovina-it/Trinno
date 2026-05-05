@@ -67,9 +67,8 @@ export function DueSection({ cardId }: { cardId: string }) {
 
   return (
     <section className="space-y-3" data-testid="due-section">
-      <div className="flex items-baseline justify-between border-b border-rule pb-1">
-        <h3 className="mono-meta text-ink/70">Due date</h3>
-        <span className="mono-meta-sm text-ink/35">DT</span>
+      <div className="flex items-baseline justify-between border-b border-hairline pb-1">
+        <h3 className="mono-meta text-fg-muted">Due date</h3>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <input
@@ -78,11 +77,11 @@ export function DueSection({ cardId }: { cardId: string }) {
           value={value}
           onChange={(e) => persistDate(e.target.value)}
           disabled={pending}
-          className="h-9 rounded-none border border-ink/70 bg-paper-shadow px-2.5 py-1 text-sm font-mono text-ink transition-colors focus:border-ink focus:bg-paper outline-none"
+          className="h-9 rounded-none border border-hairline-hi bg-[color:var(--surface)] px-2.5 py-1 text-sm font-mono text-fg transition-colors focus:border-hairline-hi focus:bg-[color:var(--popover)] outline-none"
         />
         {card.dueDate && (
           <>
-            <label className="flex items-center gap-1.5 mono-meta text-ink/75">
+            <label className="flex items-center gap-1.5 mono-meta text-fg/75">
               <input
                 type="checkbox"
                 checked={card.dueComplete}

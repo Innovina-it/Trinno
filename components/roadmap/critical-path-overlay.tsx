@@ -1,25 +1,26 @@
 "use client";
 import type { BarBox } from "./dependency-arrows";
+import type { RoadmapLink } from "@/lib/queries/roadmap";
 
-// Plan #16b-γ-A (#3) — overlay layer that draws an outline on every
-// roadmap bar that lies on a longest path. The bar geometry is provided
-// by the parent (`barCoords` matches the same map dependency-arrows
-// uses) so we don't re-do layout. Pure SVG — pointer events disabled so
-// drag interactions still hit the underlying bars.
-//
-// Each critical bar gets a 2-px outline rectangle and a small dot at
-// its right edge (a visual anchor for "this is on the longest path").
+// Highlights every bar on a longest-path with a 2px outline + right-edge
+// dot, AND draws thicker connector curves between consecutive critical
+// bars so the path reads as a single chain at a glance. The connectors
+// use the same cubic-bezier shape DependencyArrows draws but at higher
+// opacity and weight so the chain visually beats out the surrounding
+// dependency graph.
 
 const BAR_HEIGHT = 28;
 const HALF_BAR = BAR_HEIGHT / 2;
 
 export function CriticalPathOverlay({
   critical,
+  links,
   barCoords,
   width,
   height,
 }: {
   critical: Set<string>;
+  links: RoadmapLink[];
   barCoords: Map<string, BarBox>;
   width: number;
   height: number;
@@ -34,11 +35,23 @@ export function CriticalPathOverlay({
       />
     );
   }
-  const items: { id: string; box: BarBox }[] = [];
+
+  const bars: { id: string; box: BarBox }[] = [];
   for (const id of critical) {
     const box = barCoords.get(id);
-    if (box) items.push({ id, box });
+    if (box) bars.push({ id, box });
   }
+
+  // Connector edges: a `is_blocked_by` link is critical only when both
+  // endpoints lie on the longest path AND both bars are visible.
+  const connectors = links.filter(
+    (l) =>
+      critical.has(l.fromId) &&
+      critical.has(l.toId) &&
+      barCoords.has(l.fromId) &&
+      barCoords.has(l.toId),
+  );
+
   return (
     <svg
       className="pointer-events-none absolute left-0 top-0 text-fg"
@@ -47,9 +60,46 @@ export function CriticalPathOverlay({
       aria-hidden
       data-testid="roadmap-critical-overlay"
     >
-      {items.map(({ id, box }) => {
-        // box.y is the vertical center of the bar (matches dependency-
-        // arrows). Map back to the top-left corner.
+      <defs>
+        <marker
+          id="roadmap-critical-arrowhead"
+          viewBox="0 0 10 10"
+          refX="8"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto-start-reverse"
+        >
+          <path d="M0,0 L10,5 L0,10 Z" fill="currentColor" opacity="0.95" />
+        </marker>
+      </defs>
+
+      {/* Connector chain — drawn first so the bar outlines paint on top. */}
+      {connectors.map((l, i) => {
+        const blocker = barCoords.get(l.toId)!;
+        const blocked = barCoords.get(l.fromId)!;
+        const sx = blocker.x + blocker.w;
+        const sy = blocker.y;
+        const ex = blocked.x;
+        const ey = blocked.y;
+        const dx = Math.max(20, Math.abs(ex - sx) / 2);
+        const path = `M ${sx},${sy} C ${sx + dx},${sy} ${ex - dx},${ey} ${ex},${ey}`;
+        return (
+          <path
+            key={`crit-link-${l.fromId}-${l.toId}-${i}`}
+            data-testid="roadmap-critical-connector"
+            d={path}
+            stroke="currentColor"
+            strokeOpacity="0.95"
+            strokeWidth="2"
+            fill="none"
+            markerEnd="url(#roadmap-critical-arrowhead)"
+          />
+        );
+      })}
+
+      {/* Bar outlines + right-edge anchor dots. */}
+      {bars.map(({ id, box }) => {
         const top = box.y - HALF_BAR;
         return (
           <g key={`crit-${id}`} data-card-id={id}>
@@ -61,7 +111,7 @@ export function CriticalPathOverlay({
               rx={6}
               fill="none"
               stroke="currentColor"
-              strokeOpacity="0.75"
+              strokeOpacity="0.8"
               strokeWidth="2"
             />
             <circle
@@ -69,7 +119,7 @@ export function CriticalPathOverlay({
               cy={top + HALF_BAR}
               r={3}
               fill="currentColor"
-              fillOpacity="0.85"
+              fillOpacity="0.9"
             />
           </g>
         );

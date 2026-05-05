@@ -74,31 +74,31 @@ export function RoadmapDatesSection({ cardId }: { cardId: string }) {
 
   return (
     <section className="space-y-3" data-testid="roadmap-dates-section">
-      <div className="flex items-baseline justify-between border-b border-rule pb-1">
-        <h3 className="mono-meta text-ink/70">Roadmap dates</h3>
-        <span className="mono-meta-sm text-ink/35">PLAN</span>
+      <div className="flex items-baseline justify-between border-b border-hairline pb-1">
+        <h3 className="mono-meta text-fg-muted">Roadmap dates</h3>
+        <span className="mono-meta-sm text-fg-faint">PLAN</span>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex flex-col gap-1">
-          <span className="mono-meta-sm text-ink/55">Start</span>
+          <span className="mono-meta-sm text-fg-muted">Start</span>
           <input
             type="date"
             aria-label="Roadmap start date"
             value={startVal}
             onChange={(e) => persist("start", e.target.value)}
             disabled={pending}
-            className="h-9 rounded-none border border-ink/70 bg-paper-shadow px-2.5 py-1 text-sm font-mono text-ink transition-colors focus:border-ink focus:bg-paper outline-none"
+            className="h-9 rounded-none border border-hairline-hi bg-[color:var(--surface)] px-2.5 py-1 text-sm font-mono text-fg transition-colors focus:border-hairline-hi focus:bg-[color:var(--popover)] outline-none"
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="mono-meta-sm text-ink/55">Target</span>
+          <span className="mono-meta-sm text-fg-muted">Target</span>
           <input
             type="date"
             aria-label="Roadmap target date"
             value={targetVal}
             onChange={(e) => persist("target", e.target.value)}
             disabled={pending}
-            className="h-9 rounded-none border border-ink/70 bg-paper-shadow px-2.5 py-1 text-sm font-mono text-ink transition-colors focus:border-ink focus:bg-paper outline-none"
+            className="h-9 rounded-none border border-hairline-hi bg-[color:var(--surface)] px-2.5 py-1 text-sm font-mono text-fg transition-colors focus:border-hairline-hi focus:bg-[color:var(--popover)] outline-none"
           />
         </label>
         {(startVal || targetVal) && (

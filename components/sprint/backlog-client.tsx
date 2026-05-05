@@ -93,16 +93,21 @@ export function BacklogClient({
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10 space-y-10">
-      <header className="space-y-3 border-b border-hairline pb-6">
-        <span className="chip">{workspaceName.toUpperCase()} / BACKLOG</span>
-        <h1 className="serif-display text-5xl">Sprints &amp; backlog</h1>
-        <div className="flex justify-between items-center gap-3">
+      <header className="space-y-2 border-b border-hairline pb-4">
+        <div className="flex items-center gap-1.5 mono-meta-sm text-fg-faint">
           <Link
             href={`/w/${workspaceId}`}
-            className="mono-meta-sm text-fg-muted hover:text-fg"
+            className="hover:text-fg"
           >
-            ← Back to workspace
+            {workspaceName.toUpperCase()}
           </Link>
+          <span>/</span>
+          <span className="text-fg">SPRINTS</span>
+        </div>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h1 className="font-sans text-2xl font-bold tracking-tight text-fg">
+            Sprints
+          </h1>
           <div className="flex items-center gap-3">
             <span
               className="inline-flex items-center gap-1.5 mono-meta-sm text-fg-faint"
@@ -113,10 +118,10 @@ export function BacklogClient({
               <span
                 aria-hidden
                 className={`inline-block size-1.5 rounded-full ${
-                  subscribed ? "bg-emerald-400 animate-pulse" : "bg-fg/20"
+                  subscribed ? "bg-emerald-400" : "bg-fg/20"
                 }`}
               />
-              {subscribed ? "LIVE" : "OFFLINE"}
+              {subscribed ? "Live" : "Offline"}
             </span>
             <CreateSprintDialog workspaceId={workspaceId} />
           </div>
@@ -133,9 +138,12 @@ export function BacklogClient({
             workspaceId={workspaceId}
           />
         ) : (
-          <p className="text-sm text-fg-faint italic">
-            No active sprint. Start one from the planned list.
-          </p>
+          <div className="rounded-xl border border-hairline bg-[color:var(--surface)] px-4 py-6 text-center space-y-1">
+            <p className="mono-meta-sm text-fg-faint">NO ACTIVE SPRINT</p>
+            <p className="text-sm text-fg-muted">
+              Start one from the planned list below.
+            </p>
+          </div>
         )}
       </section>
 
@@ -153,7 +161,7 @@ export function BacklogClient({
             />
           ))}
           {planned.length === 0 && (
-            <p className="text-sm text-fg-faint italic">No planned sprints.</p>
+            <p className="text-sm text-fg-faint">No planned sprints.</p>
           )}
         </div>
       </section>

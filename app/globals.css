@@ -95,15 +95,15 @@
 :root {
   /* Monochrome dark — pure greyscale, no chroma */
   --bg-deep:        #0a0a0a;
-  --bg-1:           #111111;
-  --bg-2:           #161616;
-  --bg-3:           #1c1c1c;
+  --bg-1:           #141414;
+  --bg-2:           #1a1a1a;
+  --bg-3:           #202020;
 
-  --surface:        rgb(255 255 255 / 0.03);
-  --surface-strong: rgb(255 255 255 / 0.06);
+  --surface:        rgb(255 255 255 / 0.05);
+  --surface-strong: rgb(255 255 255 / 0.085);
   --surface-hi:     rgb(255 255 255 / 0.10);
-  --hairline:       rgb(255 255 255 / 0.08);
-  --hairline-hi:    rgb(255 255 255 / 0.18);
+  --hairline:       rgb(255 255 255 / 0.12);
+  --hairline-hi:    rgb(255 255 255 / 0.22);
 
   --fg:             #fafafa;
   --fg-muted:       rgb(250 250 250 / 0.60);
@@ -124,7 +124,7 @@
   --status-in-progress: rgb(245 158 11);
   --status-review:      rgb(56 189 248);
   --status-done:        rgb(34 197 94);
-  --status-blocked:     rgb(244 63 94);
+  --status-blocked:     rgb(251 113 133);
 
   /* Legacy editorial tokens — remapped onto studio palette */
   --paper:          var(--bg-deep);
@@ -139,7 +139,7 @@
   --foreground: var(--fg);
   --card: var(--surface);
   --card-foreground: var(--fg);
-  --popover: var(--bg-1);
+  --popover: #1f1f1f;
   --popover-foreground: var(--fg);
   --primary: var(--fg);
   --primary-foreground: var(--bg-deep);
@@ -239,9 +239,9 @@
     background-color: var(--bg-deep);
     /* Subtle monochrome wash — three soft white-glow vignettes */
     background-image:
-      radial-gradient(70rem 50rem at 10% 0%,  rgb(255 255 255 / 0.04), transparent 60%),
-      radial-gradient(60rem 40rem at 90% 100%, rgb(255 255 255 / 0.03), transparent 60%),
-      radial-gradient(40rem 30rem at 50% 50%, rgb(255 255 255 / 0.02), transparent 70%);
+      radial-gradient(70rem 50rem at 10% 0%,  rgb(255 255 255 / 0.025), transparent 60%),
+      radial-gradient(60rem 40rem at 90% 100%, rgb(255 255 255 / 0.02), transparent 60%),
+      radial-gradient(40rem 30rem at 50% 50%, rgb(255 255 255 / 0.015), transparent 70%);
     background-attachment: fixed;
     background-repeat: no-repeat;
     min-height: 100vh;
@@ -256,8 +256,8 @@
     pointer-events: none;
     z-index: -1;
     background-image:
-      radial-gradient(35rem 28rem at 75% 25%, rgb(255 255 255 / 0.025), transparent 60%),
-      radial-gradient(30rem 24rem at 25% 75%, rgb(255 255 255 / 0.02), transparent 60%);
+      radial-gradient(35rem 28rem at 75% 25%, rgb(255 255 255 / 0.018), transparent 60%),
+      radial-gradient(30rem 24rem at 25% 75%, rgb(255 255 255 / 0.014), transparent 60%);
     animation: mesh-drift 18s ease-in-out infinite alternate;
   }
 
@@ -297,6 +297,22 @@
       box-shadow 180ms ease-out,
       border-color 180ms ease-out,
       outline-color 180ms ease-out;
+  }
+
+  /* Honor prefers-reduced-motion: kill ambient drift, pulse, float, and
+     trim transition durations so motion is feedback only, not atmosphere. */
+  @media (prefers-reduced-motion: reduce) {
+    body::before {
+      animation: none !important;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 
   /* Studio-plastic scrollbars: thin, faint white, glowy on hover */
@@ -364,7 +380,7 @@
 
 /* Mono opaque popover surface — readable over any background. */
 @utility glass-hi {
-  background: rgb(15 15 15 / 0.94);
+  background: rgb(31 31 31 / 0.96);
   backdrop-filter: blur(24px) saturate(140%);
   -webkit-backdrop-filter: blur(24px) saturate(140%);
   border: 1px solid var(--hairline-hi);
@@ -373,29 +389,16 @@
     0 24px 60px -16px rgb(0 0 0 / 0.7);
 }
 
-/* Mono fade — replaces the rainbow gradient. White → translucent. */
+/* Legacy aliases. DESIGN.md bans gradient text; both utilities resolve to
+   solid foreground ink. New code must not call them. */
 @utility gradient-text {
-  background-image: linear-gradient(
-    180deg,
-    rgb(250 250 250 / 1) 0%,
-    rgb(250 250 250 / 0.55) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
+  color: var(--fg);
+  background-image: none;
 }
 
 @utility gradient-text-static {
-  background-image: linear-gradient(
-    180deg,
-    rgb(250 250 250 / 1) 0%,
-    rgb(250 250 250 / 0.55) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
+  color: var(--fg);
+  background-image: none;
 }
 
 /* Primary button — solid white on dark, inverts on hover */
@@ -422,13 +425,12 @@
 }
 .shimmer-cta:active { transform: translateY(1px); }
 
-/* Mesh background utility — apply to a section to inherit the body mesh feel. */
+/* Legacy mesh background — neutralized to a quiet white wash. */
 @utility mesh-bg {
   background-color: var(--bg-deep);
   background-image:
-    radial-gradient(60rem 40rem at 8% 12%,  rgb(139 92 246 / 0.55), transparent 60%),
-    radial-gradient(50rem 36rem at 92% 88%, rgb(255 43 214 / 0.35), transparent 60%),
-    radial-gradient(40rem 30rem at 50% 50%, rgb(0 229 255 / 0.18), transparent 60%);
+    radial-gradient(60rem 40rem at 8% 12%,  rgb(255 255 255 / 0.025), transparent 60%),
+    radial-gradient(50rem 36rem at 92% 88%, rgb(255 255 255 / 0.02), transparent 60%);
 }
 
 /* Subtle SVG noise overlay — break banding on large flat color washes. */
@@ -471,13 +473,11 @@
   background-image: linear-gradient(180deg, var(--accent-violet), transparent);
 }
 
-/* True gradient border via padding-box trick — used on focus modals. */
+/* Legacy alias. DESIGN.md no longer permits chromatic gradient borders;
+   resolves to a hairline-hi border on the popover surface. */
 @utility gradient-border {
-  position: relative;
-  background:
-    linear-gradient(var(--bg-1), var(--bg-1)) padding-box,
-    linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta), var(--accent-violet)) border-box;
-  border: 1px solid transparent;
+  background-color: var(--popover);
+  border: 1px solid var(--hairline-hi);
 }
 
 /* Mono uppercase metadata stamp — IDs, dates, route crumbs, section heads */
@@ -542,13 +542,12 @@
   border-bottom: 1px solid var(--hairline);
 }
 
-/* Auth backdrop: legacy alias, now resolves to mesh. */
+/* Auth backdrop: legacy alias. Quiet neutral wash, no chromatic blobs. */
 @utility bg-auth-paper {
   background-color: var(--bg-deep);
   background-image:
-    radial-gradient(60rem 40rem at 8% 12%,  rgb(139 92 246 / 0.55), transparent 60%),
-    radial-gradient(50rem 36rem at 92% 88%, rgb(255 43 214 / 0.35), transparent 60%),
-    radial-gradient(40rem 30rem at 50% 50%, rgb(0 229 255 / 0.18), transparent 60%);
+    radial-gradient(60rem 40rem at 8% 12%, rgb(255 255 255 / 0.025), transparent 60%),
+    radial-gradient(50rem 36rem at 92% 88%, rgb(255 255 255 / 0.02), transparent 60%);
 }
 
 /* Legacy paper-grid utility — quietly resolves to a soft glass section. */
@@ -558,14 +557,9 @@
   -webkit-backdrop-filter: blur(20px) saturate(140%);
 }
 
-/* Card hover: gradient underline appears under card title (replaces signal underline) */
+/* Card hover: a quiet 1.5px white underline animates in. */
 @utility hover-underline-signal {
-  background-image: linear-gradient(
-    to right,
-    var(--accent-cyan),
-    var(--accent-magenta),
-    var(--accent-violet)
-  );
+  background-image: linear-gradient(to right, var(--fg), var(--fg));
   background-position: 0 100%;
   background-repeat: no-repeat;
   background-size: 0% 1.5px;

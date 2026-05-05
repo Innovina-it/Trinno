@@ -1,6 +1,5 @@
 "use client";
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +29,6 @@ export function WorkspaceSettingsForm({
   const [name, setName] = useState(workspace.name);
   const [autoAssign, setAutoAssign] = useState(workspace.autoAssignCreator);
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   function rename(e: React.FormEvent) {
     e.preventDefault();
@@ -47,7 +45,13 @@ export function WorkspaceSettingsForm({
     start(async () => {
       try {
         await deleteWorkspace({ id: workspace.id });
-        router.push("/");
+        toast.success(`Deleted workspace "${workspace.name}"`);
+        // Hard navigation. Soft router.push keeps RSC cache and the
+        // workspace switcher in the layout still shows the deleted
+        // workspace until the next refresh; replace() reloads the
+        // shell so listWorkspaces() runs again and `/` redirects to
+        // the next remaining workspace (or empty state if none).
+        window.location.replace("/");
       } catch (err) {
         toast.error((err as Error).message);
       }

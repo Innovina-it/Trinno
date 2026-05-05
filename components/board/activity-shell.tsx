@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
 
-const STORAGE_KEY = "trinnovina:activity-open";
+const STORAGE_KEY = "trinno:activity-open";
 
 export function ActivityShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);

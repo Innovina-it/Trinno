@@ -367,7 +367,7 @@ export function QuickAddFab() {
         onClick={() => setOpen(true)}
         aria-label="Quick add card"
         data-testid="quick-add-fab"
-        className="fixed bottom-6 right-6 z-40 inline-flex size-12 items-center justify-center rounded-full bg-gradient-to-br from-accent-cyan to-accent-magenta text-white shadow-lg transition-transform duration-200 hover:scale-110 active:scale-95"
+        className="shimmer-cta fixed bottom-6 right-6 z-40 inline-flex size-12 items-center justify-center rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
       >
         <Plus className="size-5" />
       </button>

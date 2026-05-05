@@ -76,12 +76,11 @@ export function LabelsSection({ cardId }: { cardId: string }) {
 
   return (
     <section className="space-y-3" data-testid="labels-section">
-      <div className="flex items-baseline justify-between border-b border-rule pb-1">
-        <h3 className="mono-meta text-ink/70">Labels</h3>
-        <span className="mono-meta-sm text-ink/35">L</span>
+      <div className="flex items-baseline justify-between border-b border-hairline pb-1">
+        <h3 className="mono-meta text-fg-muted">Labels</h3>
       </div>
       {labels.length === 0 ? (
-        <p className="font-serif italic text-sm text-ink/50">No labels yet.</p>
+        <p className="italic text-sm text-fg-faint">No labels yet.</p>
       ) : (
         <ul className="flex flex-wrap gap-1.5">
           {labels.map((l) => {
@@ -126,7 +125,7 @@ export function LabelsSection({ cardId }: { cardId: string }) {
             value={color}
             onChange={(e) => setColor(e.target.value)}
             aria-label="Label color"
-            className="h-9 rounded-none border border-ink/70 bg-paper-shadow px-2 text-sm font-mono"
+            className="h-9 rounded-none border border-hairline-hi bg-[color:var(--surface)] px-2 text-sm font-mono"
           >
             {PALETTE.map((c) => (
               <option key={c} value={c} style={{ backgroundColor: c }}>

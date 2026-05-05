@@ -6,6 +6,7 @@ import {
   Archive,
   ArrowRight,
   Layers3,
+  MoreHorizontal,
   Tag,
   Users,
   X,
@@ -18,6 +19,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuGroup,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import { useBoardStore } from "@/stores/board-store";
 import { positionBetween } from "@/lib/ordering";
@@ -255,7 +261,7 @@ export function BulkActionBar({
       className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-3xl px-3 pb-3 pointer-events-none"
       data-testid="bulk-action-bar"
     >
-      <div className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-[color:var(--hairline-hi)] bg-[color:var(--surface-strong)] backdrop-blur-md px-3 py-2 text-sm text-fg shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <div className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-[color:var(--hairline-hi)] bg-[color:var(--popover)] px-3 py-2 text-sm text-fg shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200">
         <span
           className="chip mono-meta-sm"
           data-testid="bulk-action-bar-count"
@@ -332,50 +338,61 @@ export function BulkActionBar({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Sprint */}
+        {/* More: Sprint + Component (rare actions) */}
         <DropdownMenu>
           <DropdownMenuTrigger
             disabled={buttonsDisabled}
+            data-testid="bulk-action-more"
             className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] disabled:opacity-50"
           >
-            <Layers3 className="size-3" />
-            SPRINT
+            <MoreHorizontal className="size-3" />
+            MORE
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuLabel>Set sprint</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => onSetSprint(null)}>
-              Backlog (clear)
-            </DropdownMenuItem>
-            {sprints.map((s) => (
-              <DropdownMenuItem key={s.id} onClick={() => onSetSprint(s.id)}>
-                {s.name}{" "}
-                <span className="ml-auto mono-meta-sm text-fg-faint">
-                  {s.state}
-                </span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Component */}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={buttonsDisabled || components.length === 0}
-            className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] disabled:opacity-50"
-          >
-            <ComponentIcon className="size-3" />
-            COMPONENT
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuLabel>Toggle component</DropdownMenuLabel>
-            {components.map((c) => (
-              <DropdownMenuItem
-                key={c.id}
-                onClick={() => onAddComponent(c.id)}
-              >
-                {c.name}
-              </DropdownMenuItem>
-            ))}
+          <DropdownMenuContent className="w-56">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>More actions</DropdownMenuLabel>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Layers3 className="size-3.5" aria-hidden />
+                  Set sprint
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => onSetSprint(null)}>
+                    Backlog (clear)
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {sprints.map((s) => (
+                    <DropdownMenuItem
+                      key={s.id}
+                      onClick={() => onSetSprint(s.id)}
+                    >
+                      {s.name}
+                      <span className="ml-auto mono-meta-sm text-fg-faint">
+                        {s.state}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              {components.length > 0 && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <ComponentIcon className="size-3.5" aria-hidden />
+                    Toggle component
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {components.map((c) => (
+                      <DropdownMenuItem
+                        key={c.id}
+                        onClick={() => onAddComponent(c.id)}
+                      >
+                        {c.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
 

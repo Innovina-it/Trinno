@@ -1,9 +1,9 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CornerLeftUp, CalendarRange, CircleDot, Layers3 } from "lucide-react";
+import { CalendarRange, Check, CircleDot, CornerLeftUp, Layers3 } from "lucide-react";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
@@ -38,31 +38,30 @@ export function CardTile({
   workspaceId?: string;
 }) {
   const router = useRouter();
+  const sp = useSearchParams();
+  // Status chip duplicates the list strip's color when the column itself is
+  // mapped to a status. Only meaningful when swimlanes detach the card from
+  // its column visual context (any laneMode != "none").
+  const laneMode = sp.get("lanes") ?? "none";
+  const showStatus = laneMode !== "none";
+
   const sortableId = `card:${card.id}`;
   const parentCard = useBoardStore((s) =>
     card.parentCardId ? s.cards.find((c) => c.id === card.parentCardId) : null,
   );
-  // Plan #16b-γ-Gantt-B (B2) — pull sprint name from workspace store so the
-  // tile shows the human-readable sprint name instead of a literal "IN SPRINT"
-  // tag. Selector returns a primitive (string | null) to keep zustand
-  // referential stability and avoid re-render thrash.
   const sprintName = useWorkspaceStore((s) =>
     card.sprintId
       ? (s.sprints.find((sp) => sp.id === card.sprintId)?.name ?? null)
       : null,
   );
-  // Plan #16b-γ-Gantt-B (B3) — derive the card's status from the workspace
-  // store's `lists`. Selector returns a primitive (StatusKind | null) so
-  // zustand referential stability holds. When null (list unmapped or absent
-  // during a CDC race) the badge isn't rendered.
   const statusKind = useWorkspaceStore((s) =>
     getCardStatusKind({ listId: card.listId }, s.lists),
   );
-  // Plan #16b-γ-D (#8) — multi-select state.
   const isSelected = useBoardStore((s) => s.selectedCardIds.has(card.id));
   const anySelected = useBoardStore((s) => s.selectedCardIds.size > 0);
   const toggleSelected = useBoardStore((s) => s.toggleSelected);
   const selectRangeTo = useBoardStore((s) => s.selectRangeTo);
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
       id: sortableId,
@@ -75,17 +74,9 @@ export function CardTile({
     boxShadow: isDragging
       ? "0 0 0 1px rgb(255 255 255 / 0.55), 0 24px 50px -12px rgb(0 0 0 / 0.7), 0 0 0 4px rgb(255 255 255 / 0.10)"
       : undefined,
-    // Lift dragged tile above siblings so it's never visually buried.
     zIndex: isDragging ? 50 : undefined,
   };
 
-  // Suppress Link navigation if a drag actually occurred (browser still fires
-  // click after a tiny move below the activation threshold otherwise).
-  // Plan #16b-γ-D (#8) — also intercept shift/cmd/ctrl-click for
-  // multi-select. While any card is selected, plain click also goes to
-  // toggle so the user doesn't need to drag the cursor to the modifier
-  // key just to grow the selection. Hitting Esc or clicking the bulk
-  // bar's Cancel button clears the selection.
   const handleClick = (e: React.MouseEvent) => {
     if (isDragging) {
       e.preventDefault();
@@ -105,12 +96,17 @@ export function CardTile({
       return;
     }
     if (anySelected) {
-      // Toggle this tile into/out of the selection rather than navigate.
       e.preventDefault();
       e.stopPropagation();
       toggleSelected(card.id);
       return;
     }
+  };
+
+  const handleSelectClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleSelected(card.id);
   };
 
   return (
@@ -127,118 +123,161 @@ export function CardTile({
       data-selected={isSelected ? "true" : undefined}
       className="group/card relative block rounded-xl bg-[color:var(--surface-strong)] backdrop-blur-md border border-[color:var(--hairline)] text-fg cursor-grab transition-all duration-200 ease-out shadow-[0_1px_0_0_rgb(255_255_255/0.06)_inset,0_8px_20px_-12px_rgb(0_0_0_/_0.5)] hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[color:var(--surface-hi)] hover:shadow-[0_1px_0_0_rgb(255_255_255/0.10)_inset,0_12px_28px_-12px_rgb(0_0_0/0.6)] active:cursor-grabbing data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02] data-[dragging=true]:cursor-grabbing data-[selected=true]:ring-2 data-[selected=true]:ring-[color:var(--accent-cyan)] data-[selected=true]:bg-[color:var(--surface-hi)]"
     >
-      {/* Cover (color stripe or image header) — sits above label stripes */}
       <CardCover
         coverKind={(card.coverKind ?? "none") as "none" | "color" | "image"}
         coverValue={card.coverValue ?? null}
       />
-
-      {/* Label stripes — top */}
       <LabelStripes cardId={card.id} />
 
-      {/* Top metadata row: type icon + card ID via pseudo-element */}
-      <div className="flex items-center justify-between px-3 pt-2">
-        <div className="flex items-center gap-1.5">
-          <TypeIcon type={card.type ?? "task"} className="size-3 text-fg-faint" />
-          <BlockedBadge cardId={card.id} />
-          {card.priority && (
-            <PriorityChip priority={card.priority as CardPriority} />
+      {/* Header: type + (optional) parent breadcrumb on left, cardCode + select-handle on right. */}
+      <div className="flex items-center justify-between gap-2 px-3 pt-2 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <TypeIcon
+            type={card.type ?? "task"}
+            className="size-3 shrink-0 text-fg-faint"
+          />
+          {card.parentCardId && (
+            <span
+              data-testid="tile-parent-breadcrumb"
+              title={parentCard?.title ?? `#${cardCode(card.parentCardId)}`}
+              className="inline-flex items-center gap-1 mono-meta-sm text-fg-faint min-w-0"
+            >
+              <CornerLeftUp className="size-3 shrink-0" aria-hidden />
+              <span className="truncate max-w-[7rem]">
+                {parentCard?.title ?? `#${cardCode(card.parentCardId)}`}
+              </span>
+            </span>
           )}
-          <StoryPointsChip cardId={card.id} />
-          <TimeChip cardId={card.id} />
         </div>
-        <span
-          aria-hidden
-          className="card-code-stamp leading-none"
-          data-card-code={cardCode(card.id)}
-        />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span
+            aria-hidden
+            className="card-code-stamp leading-none"
+            data-card-code={cardCode(card.id)}
+          />
+          <button
+            type="button"
+            onClick={handleSelectClick}
+            data-testid="tile-select-handle"
+            aria-label={isSelected ? "Deselect card" : "Select card"}
+            aria-pressed={isSelected}
+            className={`size-5 rounded-md border flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
+              isSelected
+                ? "bg-fg border-fg text-bg-deep"
+                : anySelected
+                  ? "border-hairline-hi text-fg-muted hover:border-fg/60"
+                  : "border-hairline text-transparent opacity-0 group-hover/card:opacity-100 hover:border-hairline-hi"
+            }`}
+          >
+            {isSelected && <Check className="size-3.5" strokeWidth={3} />}
+          </button>
+        </div>
       </div>
 
-      {/* Title — Geist sans, gradient underline grows on hover */}
-      <div className="px-3 pb-2.5 pt-1">
-        <span className="block text-sm leading-snug">
+      {/* Title row: sentence-cased ink, sans, the dominant element. */}
+      <div className="px-3 pb-1 pt-1.5">
+        <span className="block text-sm leading-snug font-medium">
           <span className="hover-underline-signal group-hover/card:hover-underline-signal-active inline">
             {card.title}
           </span>
         </span>
-        {card.parentCardId && (
-          <span
-            className="mt-1 inline-flex items-center gap-1 mono-meta-sm text-fg-faint max-w-full"
-            data-testid="tile-parent-breadcrumb"
-            title={parentCard?.title ?? `#${cardCode(card.parentCardId)}`}
-          >
-            <CornerLeftUp className="size-3 shrink-0" />
-            <span className="truncate max-w-[8rem]">
-              {parentCard?.title ?? `#${cardCode(card.parentCardId)}`}
-            </span>
-          </span>
-        )}
       </div>
 
-      {card.dueDate && (
-        <div className="px-3 pb-2.5">
-          <DuePill card={card} />
-        </div>
-      )}
-
-      {(card.startDate || card.targetDate) && workspaceId && (
-        <div className="px-3 pb-2.5">
-          <button
-            type="button"
-            data-testid="tile-schedule"
-            onClick={(e) => {
-              // Don't open the card route — go to roadmap instead.
-              e.preventDefault();
-              e.stopPropagation();
-              router.push(`/w/${workspaceId}/roadmap?focus=${card.id}`);
-            }}
-            className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
-            title="View on roadmap"
-          >
-            <CalendarRange className="size-3" />
-            {card.startDate ? fmtShortDate(card.startDate) : "?"}
-            {" → "}
-            {card.targetDate ? fmtShortDate(card.targetDate) : "?"}
-          </button>
-        </div>
-      )}
-
-      {(card.sprintId || statusKind) && (
-        <div className="px-3 pb-2.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            {card.sprintId && (
-              <span
-                data-testid="tile-sprint"
-                data-sprint-id={card.sprintId}
-                title={sprintName ? `Sprint: ${sprintName}` : `Sprint ${card.sprintId}`}
-                className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted"
-              >
-                <Layers3 className="size-3" />
-                {sprintName ?? "IN SPRINT"}
-              </span>
-            )}
-            {statusKind && (
-              <span
-                data-testid="tile-status"
-                data-status-kind={statusKind}
-                title={`Status: ${STATUS_LABEL[statusKind]}`}
-                className="chip mono-meta-sm inline-flex items-center gap-1"
-                style={{
-                  color: `var(--status-${statusKind.replace("_", "-")})`,
-                  boxShadow: `inset 0 0 0 1px color-mix(in oklab, var(--status-${statusKind.replace("_", "-")}) 50%, transparent)`,
-                }}
-              >
-                <CircleDot className="size-3" />
-                {STATUS_LABEL[statusKind].toUpperCase()}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div className="px-3 pb-2.5">
-        <TileIndicators cardId={card.id} />
-      </div>
+      {/* Single meta row. Wraps when needed. */}
+      <CardMetaRow
+        card={card}
+        statusKind={statusKind}
+        sprintName={sprintName}
+        showStatus={showStatus}
+        workspaceId={workspaceId}
+        onSchedClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (workspaceId) {
+            router.push(`/w/${workspaceId}/roadmap?focus=${card.id}`);
+          }
+        }}
+        fmtShortDate={fmtShortDate}
+      />
     </Link>
+  );
+}
+
+function CardMetaRow({
+  card,
+  statusKind,
+  sprintName,
+  showStatus,
+  workspaceId,
+  onSchedClick,
+  fmtShortDate,
+}: {
+  card: CardRow;
+  statusKind: ReturnType<typeof getCardStatusKind>;
+  sprintName: string | null;
+  showStatus: boolean;
+  workspaceId?: string;
+  onSchedClick: (e: React.MouseEvent) => void;
+  fmtShortDate: (d: Date | string) => string;
+}) {
+  const hasSched = (card.startDate || card.targetDate) && workspaceId;
+  const hasSprint = !!card.sprintId;
+  const hasStatus = showStatus && !!statusKind;
+  const hasDue = !!card.dueDate;
+  const hasPriority = !!card.priority;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2.5 pt-1">
+      <BlockedBadge cardId={card.id} />
+      {hasPriority && (
+        <PriorityChip priority={card.priority as CardPriority} />
+      )}
+      {hasDue && <DuePill card={card} />}
+      {hasSched && (
+        <button
+          type="button"
+          data-testid="tile-schedule"
+          onClick={onSchedClick}
+          className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
+          title="View on roadmap"
+        >
+          <CalendarRange className="size-3" aria-hidden />
+          {card.startDate ? fmtShortDate(card.startDate) : "?"}
+          {" → "}
+          {card.targetDate ? fmtShortDate(card.targetDate) : "?"}
+        </button>
+      )}
+      {hasSprint && (
+        <span
+          data-testid="tile-sprint"
+          data-sprint-id={card.sprintId}
+          title={sprintName ? `Sprint: ${sprintName}` : `Sprint ${card.sprintId}`}
+          className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted"
+        >
+          <Layers3 className="size-3" aria-hidden />
+          <span className="truncate max-w-[6rem]">
+            {sprintName ?? "IN SPRINT"}
+          </span>
+        </span>
+      )}
+      {hasStatus && (
+        <span
+          data-testid="tile-status"
+          data-status-kind={statusKind}
+          title={`Status: ${STATUS_LABEL[statusKind!]}`}
+          className="chip mono-meta-sm inline-flex items-center gap-1"
+          style={{
+            color: `var(--status-${statusKind!.replace("_", "-")})`,
+            boxShadow: `inset 0 0 0 1px color-mix(in oklab, var(--status-${statusKind!.replace("_", "-")}) 50%, transparent)`,
+          }}
+        >
+          <CircleDot className="size-3" aria-hidden />
+          {STATUS_LABEL[statusKind!].toUpperCase()}
+        </span>
+      )}
+      <StoryPointsChip cardId={card.id} />
+      <TimeChip cardId={card.id} />
+      <TileIndicators cardId={card.id} />
+    </div>
   );
 }

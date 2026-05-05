@@ -29,7 +29,10 @@ const instrumentSerif = Instrument_Serif({
   display: "swap",
 });
 
-export const metadata: Metadata = { title: "Trello Clone" };
+export const metadata: Metadata = {
+  title: "Trinno",
+  description: "Internal workspace for boards, roadmap, and dashboards.",
+};
 
 export default function RootLayout({
   children,

@@ -5,6 +5,7 @@ import { TopNav } from "@/components/nav/top-nav";
 import { TourOverlay } from "@/components/onboarding/tour-overlay";
 import { ErrorPane } from "@/components/error-pane";
 import { UndoBanner } from "@/components/undo-banner";
+import { ShortcutsOverlay } from "@/components/shortcuts-overlay";
 import { QuickAddCardMount } from "@/components/quick-add-card-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import { listWorkspaces } from "@/lib/queries/workspaces";
@@ -108,10 +109,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         favorites={favorites}
         recents={recents}
       />
-      <main className="min-h-[calc(100vh-3.5rem)]">{children}</main>
+      <main id="main" className="min-h-[calc(100vh-3.5rem)]">{children}</main>
       {showTour && <TourOverlay />}
       <ErrorPane />
       <UndoBanner />
+      <ShortcutsOverlay />
       <QuickAddCardMount hasWorkspaces={ws.length > 0} />
       <CommandPalette
         workspaces={ws.map((w) => ({ id: w.id, name: w.name }))}

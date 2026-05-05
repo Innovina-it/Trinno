@@ -25,40 +25,43 @@ export default async function WorkspacePage({
   const favoritedIds = await listFavoriteBoardIds(token);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-10 px-6 py-10">
-      {/* Hero header — oversized italic serif workspace name with gradient noun */}
-      <header className="space-y-4">
-        <div className="flex items-baseline gap-3">
-          <span className="chip">No. 01</span>
-          <span className="mono-meta-sm text-fg-faint">{today}</span>
+    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-hairline pb-4">
+        <div className="space-y-1 min-w-0">
+          <span className="mono-meta-sm text-fg-faint">
+            {visibleCount === 0
+              ? "NO BOARDS YET"
+              : `${visibleCount} ${visibleCount === 1 ? "BOARD" : "BOARDS"} · ${today}`}
+          </span>
+          <h1 className="font-sans text-2xl font-bold tracking-tight text-fg truncate">
+            {ws.name}
+          </h1>
         </div>
-        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-hairline pb-8">
-          <div className="space-y-3 min-w-0">
-            <h1 className="serif-display gradient-text text-[clamp(3rem,8vw,5.5rem)] leading-[0.95] truncate">
-              {ws.name}
-              <span aria-hidden className="text-fg/80">.</span>
-            </h1>
-            <div className="flex items-center gap-3">
-              <span className="block h-px w-10 bg-gradient-to-r from-accent-cyan to-accent-magenta" />
-              <p className="mono-meta text-fg-muted">
-                {visibleCount === 0
-                  ? "AWAITING FIRST BOARD"
-                  : `${visibleCount} BOARD${visibleCount === 1 ? "" : "S"} ON FILE`}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button render={<Link href={`/w/${workspaceId}/settings`} />} nativeButton={false} variant="ghost" size="sm">
-              Settings
-            </Button>
-            <CreateBoardButton workspaceId={workspaceId} />
-          </div>
+        <div className="flex items-center gap-2">
+          <Button
+            render={<Link href={`/w/${workspaceId}/settings`} />}
+            nativeButton={false}
+            variant="ghost"
+            size="sm"
+          >
+            Settings
+          </Button>
+          <CreateBoardButton workspaceId={workspaceId} />
         </div>
       </header>
 
-      <VelocityStrip data={velocity} />
-
       <BoardGrid boards={boards} favoritedIds={favoritedIds} />
+
+      {visibleCount > 0 && (
+        <details className="rounded-xl border border-hairline bg-[color:var(--surface)] p-4">
+          <summary className="cursor-pointer mono-meta-sm text-fg-muted hover:text-fg">
+            Velocity (last 6 sprints)
+          </summary>
+          <div className="mt-3">
+            <VelocityStrip data={velocity} />
+          </div>
+        </details>
+      )}
     </div>
   );
 }

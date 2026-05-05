@@ -1,12 +1,12 @@
 "use client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Plus, Check, Search } from "lucide-react";
+import { ChevronDown, Plus, Check, Search, Settings, Users } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
 import { CreateWorkspaceDialog } from "@/components/workspace/create-workspace-dialog";
 import { useMemo, useState } from "react";
 
@@ -49,18 +49,12 @@ export function WorkspaceSwitcher({
         }}
       >
         <DropdownMenuTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 max-w-[220px] px-2.5 normal-case tracking-normal text-base"
-            />
-          }
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 max-w-[220px] rounded-md text-sm font-semibold tracking-tight text-fg hover:bg-[rgb(255_255_255/0.06)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
         >
-          <span className="serif-display text-lg italic gradient-text-static truncate normal-case tracking-normal">
+          <span className="truncate">
             {active?.name ?? "Workspaces"}
           </span>
-          <ChevronDown className="size-3.5 text-fg-muted transition-transform duration-200 group-aria-expanded/button:rotate-180" />
+          <ChevronDown className="size-3.5 text-fg-muted shrink-0" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64">
           <DropdownMenuGroup>
@@ -79,6 +73,17 @@ export function WorkspaceSwitcher({
                     onKeyDown={(e) => {
                       // Don't let parent dropdown intercept space/letters.
                       e.stopPropagation();
+                      // Enter selects the first filtered workspace.
+                      if (e.key === "Enter") {
+                        const first = filtered.find(
+                          (w) => w.id !== active?.id,
+                        );
+                        if (first) {
+                          e.preventDefault();
+                          router.push(`/w/${first.id}`);
+                          router.refresh();
+                        }
+                      }
                     }}
                     placeholder="Search workspaces…"
                     data-testid="workspace-switcher-search"
@@ -106,15 +111,33 @@ export function WorkspaceSwitcher({
                   className={isActive ? "bg-[color:var(--surface-hi)] text-fg" : undefined}
                 >
                   <span className="flex-1 truncate text-sm">{w.name}</span>
-                  {isActive && <Check className="size-3.5 text-[color:var(--accent-cyan)]" />}
+                  {isActive && <Check className="size-3.5 text-fg" />}
                 </DropdownMenuItem>
               );
             })}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
+          {active && (
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                render={<Link href={`/w/${active.id}/settings`} />}
+                data-testid="workspace-switcher-manage"
+              >
+                <Settings className="size-3.5 mr-2 text-fg-muted" />
+                <span className="text-sm">Manage workspace</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                render={<Link href={`/w/${active.id}/settings#members`} />}
+              >
+                <Users className="size-3.5 mr-2 text-fg-muted" />
+                <span className="text-sm">Members</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </DropdownMenuGroup>
+          )}
           <DropdownMenuItem onClick={() => setOpenCreate(true)}>
-            <Plus className="size-3.5 mr-2 text-[color:var(--accent-magenta)]" />
-            <span className="mono-meta">New workspace</span>
+            <Plus className="size-3.5 mr-2 text-fg-muted" />
+            <span className="text-sm">New workspace</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

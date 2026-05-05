@@ -182,6 +182,13 @@ export function RoadmapMiniMap({
   const viewportLeft = scrollState.left * ratio;
   const viewportWidthPx = Math.max(8, scrollState.width * ratio);
 
+  // Auto-hide when canvas fits the viewport. Mini-map adds nothing when
+  // there is nothing to scroll. 4px tolerance for sub-pixel rounding.
+  const fits =
+    scrollState.scrollWidth > 0 &&
+    scrollState.scrollWidth <= scrollState.width + 4;
+  if (fits) return null;
+
   return (
     <div
       ref={mapRef}

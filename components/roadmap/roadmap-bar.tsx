@@ -285,7 +285,8 @@ export function RoadmapBar({
                    hover:border-fg/60 transition-colors cursor-grab active:cursor-grabbing
                    flex items-center px-2 select-none group/bar
                    ${fill.className}
-                   ${focused ? "ring-2 ring-fg/50" : ""}`}
+                   ${focused ? "ring-2 ring-fg/50" : ""}
+                   ${tooltipOpen || menu ? "z-30" : ""}`}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
           cancelTooltip();
@@ -367,7 +368,7 @@ export function RoadmapBar({
           <div
             role="tooltip"
             data-testid="roadmap-bar-tooltip"
-            className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-20 w-64 rounded-md border border-hairline bg-[color:var(--surface-strong)] shadow-lg backdrop-blur-md p-3 text-xs text-fg pointer-events-none"
+            className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-20 w-64 rounded-md border border-hairline-hi bg-[color:var(--popover)] shadow-xl p-3 text-xs text-fg pointer-events-none"
           >
             <div className="serif-display text-base leading-tight">
               {card.title}
@@ -411,7 +412,7 @@ export function RoadmapBar({
           // (often the user clicking "Save" in a follow-on dialog) and
           // pops open the new-card dialog over the user's actual save.
           onPointerDown={(e) => e.stopPropagation()}
-          className="min-w-48 rounded-md border border-hairline bg-[color:var(--surface-strong)] shadow-lg backdrop-blur-md py-1 text-sm"
+          className="min-w-48 rounded-md border border-hairline-hi bg-[color:var(--popover)] shadow-xl py-1 text-sm"
         >
           <button
             type="button"

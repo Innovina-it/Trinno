@@ -12,6 +12,7 @@ import {
   resolveOnRoadmap,
 } from "@/lib/dashboards/resolvers";
 import { GadgetShell } from "@/components/dashboard/gadgets/gadget-shell";
+import { SortableGadgetGrid } from "@/components/dashboard/sortable-gadget-grid";
 import { GadgetCount } from "@/components/dashboard/gadgets/gadget-count";
 import { GadgetRecentActivity } from "@/components/dashboard/gadgets/gadget-recent-activity";
 import { GadgetAssignedToMe } from "@/components/dashboard/gadgets/gadget-assigned-to-me";
@@ -162,11 +163,11 @@ export async function DashboardGrid({
   if (resolved.length === 0) {
     return (
       <div
-        className="text-center text-fg-muted py-20"
+        className="rounded-2xl border border-hairline bg-[color:var(--surface)] px-6 py-12 text-center space-y-2"
         data-testid="dashboard-empty"
       >
-        <p className="pull-quote text-3xl">No gadgets yet.</p>
-        <p className="mono-meta-sm mt-3">
+        <p className="mono-meta-sm text-fg-faint">EMPTY DASHBOARD</p>
+        <p className="text-sm text-fg-muted max-w-sm mx-auto">
           {isOwner
             ? "Use Add gadget to start composing your dashboard."
             : "Owner has not added any gadgets yet."}
@@ -175,35 +176,29 @@ export async function DashboardGrid({
     );
   }
 
+  const items = resolved.map(({ gadget, type, data }) => ({
+    id: gadget.id,
+    sizeClass: SIZE_TO_CLASS[gadget.size] ?? SIZE_TO_CLASS["1x1"],
+    child: (
+      <GadgetShell
+        id={gadget.id}
+        type={type}
+        isOwner={isOwner}
+        dashboardId={dashboardId}
+        config={(gadget.config ?? {}) as Record<string, unknown>}
+        size={gadget.size}
+      >
+        {renderGadgetBody(type, data)}
+      </GadgetShell>
+    ),
+  }));
+
   return (
-    <div
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-[minmax(180px,auto)]"
-      data-testid="dashboard-grid"
-    >
-      {resolved.map(({ gadget, type, data }) => {
-        const sizeCls = SIZE_TO_CLASS[gadget.size] ?? SIZE_TO_CLASS["1x1"];
-        return (
-          <div
-            key={gadget.id}
-            className={sizeCls}
-            data-testid="gadget"
-            data-gadget-id={gadget.id}
-            data-gadget-type={gadget.type}
-          >
-            <GadgetShell
-              id={gadget.id}
-              type={type}
-              isOwner={isOwner}
-              dashboardId={dashboardId}
-              config={(gadget.config ?? {}) as Record<string, unknown>}
-              size={gadget.size}
-            >
-              {renderGadgetBody(type, data)}
-            </GadgetShell>
-          </div>
-        );
-      })}
-    </div>
+    <SortableGadgetGrid
+      items={items}
+      dashboardId={dashboardId}
+      draggable={isOwner}
+    />
   );
 }
 

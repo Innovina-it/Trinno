@@ -36,11 +36,16 @@ export function TileIndicators({ cardId }: { cardId: string }) {
   if (!hasAny) return null;
 
   return (
-    <div className="mt-1 flex items-center justify-between gap-2 mono-meta-sm text-ink/55">
-      <div className="flex items-center gap-2.5">
+    <div className="ml-auto flex items-center gap-2 mono-meta-sm text-fg-faint">
+      <div className="flex items-center gap-2">
         {itemTotal > 0 && (
           <span
-            className={`inline-flex items-center gap-1 ${itemDone === itemTotal ? "text-moss" : ""}`}
+            className="inline-flex items-center gap-1"
+            style={
+              itemDone === itemTotal
+                ? { color: "var(--status-done)" }
+                : undefined
+            }
             data-testid="tile-checklist"
           >
             <CheckSquare className="size-3" />
@@ -65,14 +70,19 @@ export function TileIndicators({ cardId }: { cardId: string }) {
       {memberProfiles.length > 0 && (
         <div className="flex -space-x-1" data-testid="tile-members">
           {memberProfiles.slice(0, 3).map((p) => (
-            <Avatar key={p.id} className="size-5 ring-2 ring-paper rounded-none">
-              <AvatarFallback className="rounded-none bg-ink text-paper text-[9px] tracking-widest">
+            <Avatar
+              key={p.id}
+              className="size-5 ring-2 ring-[color:var(--bg-deep)] rounded-full"
+            >
+              <AvatarFallback className="rounded-full bg-[color:var(--surface-strong)] text-fg text-[9px] tracking-wider">
                 {p.displayName.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
           ))}
           {memberProfiles.length > 3 && (
-            <span className="ml-1.5 self-center mono-meta-sm">+{memberProfiles.length - 3}</span>
+            <span className="ml-1.5 self-center mono-meta-sm">
+              +{memberProfiles.length - 3}
+            </span>
           )}
         </div>
       )}

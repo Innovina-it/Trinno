@@ -28,7 +28,7 @@ type Step = {
 
 const STEPS: Step[] = [
   {
-    title: "Welcome to Trinnovina.",
+    title: "Welcome to Trinno.",
     body:
       "30 seconds to get you oriented. We'll show you workspaces, boards, the card modal, and the roadmap & dashboards links. You can skip anytime.",
     placement: "center",

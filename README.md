@@ -1,6 +1,6 @@
-# Trello Clone
+# Trinno
 
-Full-feature Trello clone built across 7 incremental plans. Auth, workspaces, boards, lists, cards, drag-drop, real-time multi-user sync, presence, labels, due dates, comments, attachments, activity log, search.
+Internal team workspace. Boards, roadmap, sprints, dashboards. Auth, workspaces, lists, cards, drag-drop, real-time multi-user sync, presence, labels, due dates, comments, attachments, activity log, search.
 
 Stack: Next.js 15 (App Router, Server Actions) + Supabase (Postgres / Auth / Realtime / Storage / Mailpit) + Drizzle ORM with per-request RLS via `dbAsUser` + Tailwind v4 + shadcn/ui (base-ui) + dnd-kit + fractional-indexing + Zustand. Vitest for unit + integration, Playwright for E2E.
 

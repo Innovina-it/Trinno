@@ -20,7 +20,7 @@ export default async function ArchivePage({
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-6 py-10">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">{ws.name} — Archive</h1>
+        <h1 className="text-2xl font-semibold">{ws.name}: Archive</h1>
         <p className="mono-meta-sm text-fg-faint">
           {total} archived item{total === 1 ? "" : "s"}
         </p>

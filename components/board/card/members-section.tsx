@@ -35,9 +35,8 @@ export function MembersSection({ cardId }: { cardId: string }) {
   if (profiles.length === 0) return null;
   return (
     <section className="space-y-3" data-testid="members-section">
-      <div className="flex items-baseline justify-between border-b border-rule pb-1">
-        <h3 className="mono-meta text-ink/70">Members</h3>
-        <span className="mono-meta-sm text-ink/35">MB</span>
+      <div className="flex items-baseline justify-between border-b border-hairline pb-1">
+        <h3 className="mono-meta text-fg-muted">Members</h3>
       </div>
       <ul className="flex flex-wrap gap-1.5">
         {profiles.map((p) => {

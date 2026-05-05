@@ -20,11 +20,11 @@ export type CardPriority = "p0" | "p1" | "p2" | "p3" | "p4";
 // Acceptable per design: priority is semantic warning, like the
 // blocked-status badge. Tints fade red→orange→yellow→neutral.
 const PRIORITY_LABELS: Record<CardPriority, string> = {
-  p0: "P0 — Critical",
-  p1: "P1 — High",
-  p2: "P2 — Medium",
-  p3: "P3 — Low",
-  p4: "P4 — Trivial",
+  p0: "P0 · Critical",
+  p1: "P1 · High",
+  p2: "P2 · Medium",
+  p3: "P3 · Low",
+  p4: "P4 · Trivial",
 };
 
 export const PRIORITY_TINT: Record<

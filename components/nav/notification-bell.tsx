@@ -123,7 +123,7 @@ export function NotificationBell({ userId }: { userId: string }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="relative inline-flex items-center justify-center size-8 rounded-full text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)] transition-colors"
+        className="relative inline-flex items-center justify-center size-8 rounded-md text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
         aria-label={`Notifications${unread ? ` (${unread} unread)` : ""}`}
         data-realtime-ready={subscribed ? "true" : undefined}
       >
@@ -148,9 +148,12 @@ export function NotificationBell({ userId }: { userId: string }) {
           </Link>
         </div>
         {items.length === 0 && (
-          <p className="px-3 py-6 text-sm text-fg-faint text-center italic">
-            Nothing yet.
-          </p>
+          <div className="px-3 py-6 text-center space-y-1">
+            <p className="mono-meta-sm text-fg-faint">NOTHING YET</p>
+            <p className="text-sm text-fg-muted">
+              You will see activity here.
+            </p>
+          </div>
         )}
         <ul className="divide-y divide-hairline">
           {items.map((n) => (

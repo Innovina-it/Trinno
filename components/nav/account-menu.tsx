@@ -1,5 +1,4 @@
 "use client";
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LayoutDashboard, Inbox, Star, History, LogOut } from "lucide-react";
 import {
@@ -11,10 +10,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
-import { createSupabaseBrowser } from "@/lib/supabase/browser";
-import type { FavoriteEntry } from "@/components/nav/favorites-dropdown";
-import type { RecentEntry } from "@/components/nav/recent-dropdown";
+import type { FavoriteEntry, RecentEntry } from "@/components/nav/nav-types";
 import { logout } from "@/actions/auth";
+
+function deriveInitials(email: string): string {
+  // Pull initials from the email's local-part. Prefer characters around `.`,
+  // `-`, or `_`; fall back to the first two letters. No-op on empty string.
+  const local = (email.split("@")[0] ?? "").trim();
+  if (!local) return "??";
+  const parts = local
+    .split(/[._-]+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return local.slice(0, 2).toUpperCase();
+}
 
 export function AccountMenu({
   userId,
@@ -27,64 +39,24 @@ export function AccountMenu({
   favorites: FavoriteEntry[];
   recents: RecentEntry[];
 }) {
-  const [unread, setUnread] = useState(0);
-
-  // Live unread badge — same subscription pattern as the standalone bell.
-  useEffect(() => {
-    let cancelled = false;
-    async function refresh() {
-      try {
-        const r = await fetch("/api/notifications/recent", { cache: "no-store" });
-        if (!r.ok || cancelled) return;
-        const data = await r.json();
-        setUnread(data.unread ?? 0);
-      } catch {}
-    }
-    refresh();
-
-    const supa = createSupabaseBrowser();
-    const channel = supa
-      .channel(`notifications:${userId}`)
-      .on(
-        "postgres_changes" as never,
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `recipient_user_id=eq.${userId}`,
-        },
-        () => setUnread((u) => u + 1),
-      )
-      .subscribe();
-
-    return () => {
-      cancelled = true;
-      supa.removeChannel(channel);
-    };
-  }, [userId]);
-
-  const initials = email.slice(0, 2).toUpperCase();
+  void userId;
+  const initials = deriveInitials(email);
   const favs = favorites.slice(0, 5);
   const recs = recents.slice(0, 5);
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="relative ml-1 size-8 shrink-0 rounded-full bg-gradient-to-br from-accent-cyan to-accent-magenta text-[10px] font-bold text-white hover:scale-105 transition-transform flex items-center justify-center"
+        className="size-8 shrink-0 rounded-full bg-[color:var(--surface-strong)] border border-[color:var(--hairline-hi)] text-[10px] font-semibold text-fg hover:bg-[color:var(--surface-hi)] transition-colors flex items-center justify-center focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
         aria-label={`Account (${email})`}
         title={email}
       >
         {initials}
-        {unread > 0 && (
-          <span
-            aria-label={`${unread} unread notifications`}
-            className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-[color:var(--accent-magenta)] text-[9px] flex items-center justify-center ring-2 ring-[color:var(--bg-deep)] tabular-nums"
-          >
-            {unread > 9 ? "9+" : unread}
-          </span>
-        )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72 max-h-[80vh] overflow-y-auto">
+      <DropdownMenuContent
+        align="end"
+        className="w-72 max-h-[80vh] overflow-y-auto"
+      >
         <DropdownMenuGroup>
           <DropdownMenuLabel>
             <div className="flex flex-col gap-0.5">
@@ -98,12 +70,7 @@ export function AccountMenu({
         <DropdownMenuGroup>
           <DropdownMenuItem render={<Link href="/inbox" />}>
             <Inbox className="size-3.5" />
-            <span className="flex-1">Inbox</span>
-            {unread > 0 && (
-              <span className="mono-meta-sm bg-[color:var(--accent-magenta)] text-white px-1.5 py-0.5 rounded tabular-nums">
-                {unread}
-              </span>
-            )}
+            <span>Inbox</span>
           </DropdownMenuItem>
           <DropdownMenuItem render={<Link href="/dashboards" />}>
             <LayoutDashboard className="size-3.5" />
@@ -171,7 +138,7 @@ export function AccountMenu({
         <form action={logout}>
           <button
             type="submit"
-            className="w-full text-left px-2.5 py-2 text-sm text-[color:var(--accent-magenta)] hover:bg-[rgb(255_43_214/0.08)] rounded-lg transition-colors flex items-center gap-2"
+            className="w-full text-left px-2.5 py-2 text-sm text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] rounded-lg transition-colors flex items-center gap-2"
           >
             <LogOut className="size-3.5" />
             Log out

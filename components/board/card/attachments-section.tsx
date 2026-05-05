@@ -74,20 +74,19 @@ export function AttachmentsSection({ cardId }: { cardId: string }) {
 
   return (
     <section className="space-y-3" data-testid="attachments-section">
-      <div className="flex items-baseline justify-between border-b border-rule pb-1">
-        <h3 className="mono-meta text-ink/70">Attachments</h3>
-        <span className="mono-meta-sm text-ink/35">AT</span>
+      <div className="flex items-baseline justify-between border-b border-hairline pb-1">
+        <h3 className="mono-meta text-fg-muted">Attachments</h3>
       </div>
       <ul className="space-y-1">
         {attachments.map((a) => (
           <li
             key={a.id}
-            className="flex items-center gap-2 border-b border-rule pb-1.5 text-sm"
+            className="flex items-center gap-2 border-b border-hairline pb-1.5 text-sm"
             data-attachment-id={a.id}
           >
-            <Paperclip className="size-3.5 text-ink/50" />
-            <span className="flex-1 truncate text-ink">{a.filename}</span>
-            <span className="mono-meta-sm text-ink/55 tabular-nums">
+            <Paperclip className="size-3.5 text-fg-faint" />
+            <span className="flex-1 truncate text-fg">{a.filename}</span>
+            <span className="mono-meta-sm text-fg-muted tabular-nums">
               {formatSize(a.sizeBytes)}
             </span>
             <Button

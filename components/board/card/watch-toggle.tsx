@@ -1,6 +1,5 @@
 "use client";
 import { useTransition, useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Eye, EyeOff } from "lucide-react";
 import { watchCard, unwatchCard } from "@/actions/watchers";
 import { toast } from "sonner";
@@ -31,23 +30,24 @@ export function WatchToggle({ cardId }: { cardId: string }) {
     });
   }
 
+  const isOn = watching === true;
   return (
-    <Button
+    <button
       type="button"
-      variant={watching ? "secondary" : "ghost"}
-      size="xs"
       onClick={toggle}
       disabled={pending || watching === null}
-      title={watching ? "Watching" : "Watch"}
-      aria-label={watching ? "Stop watching this card" : "Watch this card"}
+      title={isOn ? "Stop watching" : "Watch this card"}
+      aria-label={isOn ? "Stop watching this card" : "Watch this card"}
+      aria-pressed={isOn}
       data-testid="watch-toggle"
+      className={`chip mono-meta-sm inline-flex items-center gap-1.5 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
+        isOn
+          ? "bg-fg/10 text-fg ring-1 ring-fg/40"
+          : "hover:bg-[rgb(255_255_255/0.08)]"
+      }`}
     >
-      {watching ? (
-        <Eye className="size-3.5 mr-1" />
-      ) : (
-        <EyeOff className="size-3.5 mr-1" />
-      )}
-      {watching ? "WATCHING" : "WATCH"}
-    </Button>
+      {isOn ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
+      {isOn ? "WATCHING" : "WATCH"}
+    </button>
   );
 }

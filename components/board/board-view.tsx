@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -80,6 +80,7 @@ export function BoardView({
   children?: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const sp = useSearchParams();
   const lists = useBoardStore((s) => s.lists);
   const cards = useBoardStore((s) => s.cards);
@@ -366,35 +367,20 @@ export function BoardView({
       className="min-h-[calc(100vh-3.5rem)] flex flex-col relative"
       style={{ background: bg }}
     >
-      {/* Soft noise overlay layered over the colored mesh */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.04] mix-blend-overlay"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/></svg>\")",
-          backgroundSize: "200px 200px",
-        }}
-      />
-
-      {/* Board masthead — glass strip with gradient title accent */}
-      <div className="relative border-b border-hairline px-6 py-5 backdrop-blur-xl bg-[color:rgb(10_10_10/0.55)]">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="space-y-2.5 min-w-0">
-            <div className="mono-meta-sm flex items-center gap-2 text-fg-faint">
-              <span className="chip">BOARD</span>
-              <span className="text-fg/60">#{boardCode(board.id)}</span>
-              <span
-                aria-hidden
-                className="block h-1.5 w-6 rounded-full bg-fg/30"
-              />
-            </div>
-            <h1 className="serif-display text-[clamp(2rem,5vw,3.5rem)] leading-[0.95]">
-              <span className="gradient-text">{board.title}</span>
+      {/* Board masthead — quiet, dense strip. Single row when wide. */}
+      <div className="relative border-b border-hairline px-6 py-3 bg-[color:var(--bg-1)]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-baseline gap-3 min-w-0">
+            <span className="mono-meta-sm text-fg-faint shrink-0">
+              BOARD · #{boardCode(board.id)}
+            </span>
+            <h1 className="font-sans text-lg font-semibold tracking-tight text-fg truncate">
+              {board.title}
             </h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <PresenceAvatars viewers={viewers} />
+            <BoardFilterBar currentUserId={currentUser.userId} />
             <button
               type="button"
               onClick={toggleSprintStrip}
@@ -403,30 +389,28 @@ export function BoardView({
               title={
                 showSprintStrip
                   ? "Hide sprint drop strip"
-                  : "Show sprint drop strip — drag a card onto a band to assign it"
+                  : "Show sprint drop strip"
               }
-              className={`chip inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] ${
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
                 showSprintStrip
-                  ? "bg-fg/10 text-fg ring-1 ring-fg/40"
-                  : ""
+                  ? "border-fg/40 bg-fg/10 text-fg"
+                  : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
               }`}
             >
-              <Layers3 className="size-3" />
-              SPRINTS
+              <Layers3 className="size-3.5" />
+              <span>Sprints</span>
             </button>
             <Button
               render={<Link href={`/b/${board.id}/settings`} />}
               nativeButton={false}
-              variant="outline"
+              variant="ghost"
               size="sm"
             >
-              Board settings
+              Settings
             </Button>
           </div>
         </div>
       </div>
-
-      <BoardFilterBar currentUserId={currentUser.userId} />
 
       <div className="relative flex flex-1 items-start gap-4 p-4">
         <div className="flex-1 min-w-0">
@@ -442,7 +426,61 @@ export function BoardView({
                 DndContext so the bands' useDroppable() registrations are
                 visible to onDragEnd. Hidden when the toggle is off. */}
             {showSprintStrip && <SprintDropStrip />}
-            {laneMode === "none" ? (
+            {(() => {
+              const filterActive =
+                filters.types.length > 0 ||
+                filters.labelIds.length > 0 ||
+                filters.due !== null ||
+                filters.assignedToMe ||
+                filters.scheduled;
+              const hiddenByFilters =
+                filterActive && cards.length > 0 && visibleCards.length === 0;
+              if (!hiddenByFilters) return null;
+              return (
+                <div
+                  className="mx-2 mb-3 rounded-xl border border-hairline-hi bg-[color:var(--surface-strong)] px-3 py-2 flex items-center justify-between gap-3"
+                  data-testid="board-filtered-zero"
+                >
+                  <span className="mono-meta-sm text-fg">
+                    {cards.length} {cards.length === 1 ? "CARD" : "CARDS"} HIDDEN BY FILTERS
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const params = new URLSearchParams(sp.toString());
+                      for (const k of [
+                        "types",
+                        "labels",
+                        "due",
+                        "mine",
+                        "scheduled",
+                      ]) {
+                        params.delete(k);
+                      }
+                      const qs = params.toString();
+                      router.replace(qs ? `${pathname}?${qs}` : pathname);
+                    }}
+                    className="mono-meta-sm text-fg-muted hover:text-fg"
+                  >
+                    CLEAR FILTERS
+                  </button>
+                </div>
+              );
+            })()}
+            {lists.length === 0 ? (
+              <div
+                className="mt-6 mx-2 rounded-2xl border border-hairline bg-[color:var(--surface)] px-6 py-16 text-center"
+                data-testid="board-empty"
+              >
+                <p className="mono-meta-sm text-fg-faint">EMPTY BOARD</p>
+                <p className="text-sm text-fg-muted max-w-sm mx-auto mt-2">
+                  Add a list to start organizing cards.
+                </p>
+                <div className="mt-6 flex justify-center">
+                  <AddListForm boardId={board.id} />
+                </div>
+              </div>
+            ) : laneMode === "none" ? (
               <div className="flex items-start gap-4 overflow-x-auto px-2 pb-4 [&>*]:animate-in [&>*]:fade-in [&>*]:slide-in-from-bottom-3 [&>*]:duration-400">
                 <SortableContext
                   items={listSortableIds}

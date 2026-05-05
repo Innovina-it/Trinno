@@ -33,10 +33,10 @@ export function AddListForm({ boardId }: { boardId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="group/add w-80 shrink-0 rounded-2xl border border-dashed border-[color:var(--hairline-hi)] bg-[color:var(--surface)]/60 backdrop-blur-md px-4 py-4 text-left mono-meta text-fg-muted transition-all duration-200 ease-out hover:border-[color:var(--accent-cyan)]/50 hover:bg-[color:var(--surface-strong)] hover:text-fg"
+        className="group/add w-80 shrink-0 rounded-2xl border border-dashed border-[color:var(--hairline-hi)] bg-[color:var(--surface)]/60 backdrop-blur-md px-4 py-4 text-left mono-meta text-fg-muted transition-all duration-200 ease-out hover:border-[color:var(--hairline-hi)] hover:bg-[color:var(--surface-strong)] hover:text-fg"
       >
         <span className="inline-flex items-center gap-2">
-          <span aria-hidden className="flex size-5 items-center justify-center rounded-full bg-gradient-to-br from-accent-cyan to-accent-magenta text-[color:var(--bg-deep)] transition-transform duration-200 group-hover/add:scale-110">
+          <span aria-hidden className="flex size-5 items-center justify-center rounded-full bg-fg text-bg-deep">
             <Plus className="size-3" strokeWidth={3} />
           </span>
           + Add a list

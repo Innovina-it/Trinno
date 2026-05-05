@@ -6,10 +6,10 @@ import {
   type CardPriority,
 } from "@/components/board/card/priority-picker";
 
-// Plan #16b-γ-G G4 — sticky-left gutter strip with 5 colored bands (P0-P4).
-// When the user drags a roadmap bar leftward into this region, the bar
-// snaps to whichever band the cursor Y is over and on pointerup writes
-// `cards.priority = band.value`.
+// Plan #16b-γ-G G4 — sticky-left gutter strip with 5 priority bands (P0-P4).
+// Drop-target during a bar drag: cursor-Y over a band sets that priority on
+// release. Renders as its own column to the LEFT of the lane-label panel —
+// no overlay, no z-stacking conflicts.
 
 export const PRIORITIES: CardPriority[] = ["p0", "p1", "p2", "p3", "p4"];
 const SHORT_LABEL: Record<CardPriority, string> = {
@@ -29,7 +29,7 @@ export const PriorityGutter = forwardRef<
       ref={ref}
       data-testid="roadmap-priority-gutter"
       aria-hidden
-      className="absolute left-0 top-0 w-16 z-10 flex flex-col pointer-events-none"
+      className="shrink-0 w-16 flex flex-col border-r border-hairline bg-[color:var(--bg-1)]"
       style={{ height }}
     >
       {PRIORITIES.map((p) => {
@@ -40,12 +40,18 @@ export const PriorityGutter = forwardRef<
             key={p}
             data-testid="roadmap-priority-band"
             data-priority={p}
-            className={`flex-1 flex items-center justify-center mono-meta-sm text-fg-muted border-r border-hairline transition-colors ${tint.chip} ${
-              isHovered ? "ring-2 ring-fg/60 ring-inset" : ""
+            className={`relative flex-1 flex items-center justify-center gap-1 mono-meta-sm transition-colors border-b border-hairline last:border-b-0 ${
+              isHovered
+                ? "bg-[color:var(--surface-strong)] text-fg ring-1 ring-fg/40 ring-inset"
+                : "text-fg-muted"
             }`}
           >
-            <Flag className="size-3 mr-1" />
-            {SHORT_LABEL[p]}
+            <span
+              aria-hidden
+              className={`absolute left-0 top-0 bottom-0 w-1 ${tint.dot}`}
+            />
+            <Flag className="size-3" />
+            <span>{SHORT_LABEL[p]}</span>
           </div>
         );
       })}

@@ -104,19 +104,19 @@ export function SprintCard({
           <div className="flex items-baseline gap-2">
             <Link
               href={`/w/${workspaceId}/sprints/${sprint.id}`}
-              className="serif-display text-2xl text-fg hover:underline"
+              className="font-sans text-base font-semibold tracking-tight text-fg hover:underline truncate"
             >
               {sprint.name}
             </Link>
-            <span className="chip">{sprint.state.toUpperCase()}</span>
+            <span className="chip mono-meta-sm">
+              {sprint.state.toUpperCase()}
+            </span>
           </div>
           {sprint.goal && (
-            <p className="text-sm text-fg-muted italic">
-              &ldquo;{sprint.goal}&rdquo;
-            </p>
+            <p className="text-sm text-fg-muted">{sprint.goal}</p>
           )}
           {(sprint.startDate || sprint.endDate) && (
-            <p className="mono-meta-sm text-fg-faint">
+            <p className="mono-meta-sm text-fg-faint tabular-nums">
               {sprint.startDate
                 ? new Date(sprint.startDate).toLocaleDateString()
                 : "?"}
@@ -134,9 +134,15 @@ export function SprintCard({
               <div className="mono-meta-sm text-fg-faint tabular-nums">
                 {completedPoints} / {totalPoints} PT
               </div>
-              <div className="h-1.5 w-40 rounded-full bg-[rgb(255_255_255/0.06)] overflow-hidden">
+              <div
+                className="h-1.5 w-40 rounded-full bg-[color:var(--surface-strong)] overflow-hidden"
+                role="progressbar"
+                aria-valuenow={Math.round(progressPct)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
                 <div
-                  className="h-full bg-fg/80"
+                  className="h-full bg-fg/80 transition-[width] duration-300"
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
@@ -176,9 +182,11 @@ export function SprintCard({
       </header>
       <ul className="divide-y divide-hairline">
         {visibleCards.length === 0 && (
-          <li className="px-4 py-6 text-sm text-fg-faint italic text-center">
-            No cards yet. Move cards in from the backlog using the sprint
-            dropdown.
+          <li className="px-4 py-5 text-center space-y-1">
+            <p className="mono-meta-sm text-fg-faint">EMPTY SPRINT</p>
+            <p className="text-sm text-fg-muted">
+              Move cards in from the backlog using the sprint dropdown.
+            </p>
           </li>
         )}
         {visibleCards.map((c) => (

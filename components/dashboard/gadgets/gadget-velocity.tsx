@@ -10,15 +10,7 @@ export function GadgetVelocity({
   }>;
 }) {
   if (!data || data.length === 0) {
-    return (
-      <div className="text-fg-muted text-sm italic">
-        No completed sprints yet.
-      </div>
-    );
+    return <div className="text-sm text-fg-faint">No completed sprints yet.</div>;
   }
-  return (
-    <div className="-m-4">
-      <VelocityStrip data={data} />
-    </div>
-  );
+  return <VelocityStrip data={data} />;
 }

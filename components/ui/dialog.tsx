@@ -31,8 +31,8 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        // Studio-plastic: violet-tinted blur backdrop (no plain black).
-        "fixed inset-0 isolate z-50 bg-[color:rgb(15_8_42/0.60)] backdrop-blur-md duration-200 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        // Neutral dim backdrop, no chroma tint.
+        "fixed inset-0 isolate z-50 bg-[color:rgb(0_0_0/0.65)] backdrop-blur-sm duration-200 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}
       {...props}
@@ -54,11 +54,10 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          // Studio-plastic modal: frosted glass + true gradient hairline border,
-          // generous rounded-2xl, violet ambient shadow. Scale-up + fade entrance.
+          // Solid popover surface per DESIGN.md Solid Popover Rule.
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-5 p-6 text-sm text-fg outline-none sm:max-w-md",
-          "rounded-2xl gradient-border",
-          "shadow-[0_40px_100px_-32px_rgb(139_92_246/0.45),0_1px_0_0_rgb(255_255_255/0.10)_inset]",
+          "rounded-2xl bg-[color:var(--popover)] border border-[color:var(--hairline-hi)]",
+          "shadow-[0_40px_100px_-32px_rgb(0_0_0/0.6),0_1px_0_0_rgb(255_255_255/0.08)_inset]",
           "duration-250 ease-out",
           "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-open:slide-in-from-bottom-2",
           "data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
@@ -129,8 +128,8 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
     <DialogPrimitive.Title
       data-slot="dialog-title"
       className={cn(
-        // Serif italic display title with gradient text — large editorial header
-        "serif-display text-3xl gradient-text leading-none",
+        // Sans 700, tight tracking. Hierarchy through weight + size, not gradient.
+        "font-sans text-xl font-bold tracking-tight text-fg leading-tight",
         className
       )}
       {...props}
@@ -146,7 +145,7 @@ function DialogDescription({
     <DialogPrimitive.Description
       data-slot="dialog-description"
       className={cn(
-        "mono-meta text-fg-muted *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-[color:var(--accent-magenta)]",
+        "text-sm text-fg-muted *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-fg",
         className
       )}
       {...props}
