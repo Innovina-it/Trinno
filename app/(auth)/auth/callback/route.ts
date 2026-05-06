@@ -52,13 +52,17 @@ export async function GET(req: Request) {
   // should not block the user from reaching the app — log and fall through
   // to the default redirect so they at least land on /.
   const cookieStore = await cookies();
-  const wantsSeed = cookieStore.get("tr_seed_demo")?.value === "1";
+  const seedCookie = cookieStore.get("tr_seed_demo")?.value;
+  // "1" → full demo seed (real users).  "minimal" → workspace only
+  // (e2e tests opt in to a clean slate).  Anything else → no seed.
+  const seedMode: "demo" | "minimal" | null =
+    seedCookie === "1" ? "demo" : seedCookie === "minimal" ? "minimal" : null;
   let seededWsId: string | null = null;
-  if (wantsSeed) {
+  if (seedMode) {
     cookieStore.delete("tr_seed_demo");
     if (token) {
       try {
-        const r = await seedDemoWorkspaceImpl(token);
+        const r = await seedDemoWorkspaceImpl(token, { mode: seedMode });
         seededWsId = r.workspaceId;
       } catch (e) {
         // Surface to server logs; user still gets into the app.

@@ -26,8 +26,25 @@ const DAY_MS = 86_400_000;
  */
 export async function seedDemoWorkspaceImpl(
   token: string,
+  opts: { mode?: "demo" | "minimal" } = {},
 ): Promise<{ workspaceId: string }> {
-  const ws = await createWorkspaceImpl(token, { name: "Demo Workspace" });
+  const mode = opts.mode ?? "demo";
+  const ws = await createWorkspaceImpl(
+    token,
+    { name: mode === "minimal" ? "Test Workspace" : "Demo Workspace" },
+  );
+
+  // Minimal mode: just the workspace.  Used by e2e tests so each spec
+  // builds the exact fixture it needs without colliding with seeded
+  // boards/cards/sprints.
+  if (mode === "minimal") {
+    try {
+      await markOnboardingCompletedImpl(token);
+    } catch {
+      // Non-fatal.
+    }
+    return { workspaceId: ws.id };
+  }
 
   // Board pre-seeded with the OKR/Sprint template (5 lists + status mapping
   // + 2 labels). The "blank" template would leave us with nothing to attach

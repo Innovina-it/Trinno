@@ -61,8 +61,12 @@ export function SignupForm() {
       return;
     }
     if (data.session) {
-      const target = seedDemo ? "/auth/callback" : "/";
-      window.location.replace(target);
+      // Always go through /auth/callback — it consults the
+      // `tr_seed_demo` cookie to decide whether to seed and where to
+      // land.  When the cookie is absent (user unchecked the box, or
+      // an e2e test that wants no seed), the callback creates no
+      // workspace and bounces to "/".
+      window.location.replace("/auth/callback");
       return;
     }
     setSubmitting(false);

@@ -30,9 +30,13 @@ async function fetchConfirmLink(email: string): Promise<string> {
 test("signup → confirm → home → logout", async ({ page }) => {
   const email = `e2e-${Date.now()}@example.com`;
 
+  await page.context().addCookies([
+    { name: "tr_seed_demo", value: "minimal", domain: "localhost", path: "/" },
+  ]);
   await page.goto("/signup");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("passw0rd!");
+  await page.getByRole("checkbox").uncheck().catch(() => {});
   await page.getByRole("button", { name: /sign up/i }).click();
   // After signup, "/" redirects to the user's default workspace.
   await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}/);
