@@ -340,9 +340,24 @@
 
   /* Native form controls inherit accent colour */
   input[type="date"],
-  input[type="checkbox"] {
+  input[type="checkbox"],
+  select {
     accent-color: var(--accent-violet);
     color-scheme: dark;
+  }
+
+  /* Native <select> dropdown panel — match dark theme. Options are drawn
+     by the browser/OS and don't inherit Tailwind utilities, so style them
+     here directly. */
+  select option,
+  select optgroup {
+    background-color: #1f1f1f;
+    color: var(--fg);
+  }
+  select option:checked,
+  select option:hover {
+    background-color: var(--surface-hi);
+    color: var(--fg);
   }
 
   /* Typography defaults */

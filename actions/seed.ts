@@ -10,6 +10,7 @@ import { createComponentImpl } from "@/actions/components";
 import { createVersionImpl } from "@/actions/versions";
 import { createDashboardImpl } from "@/actions/dashboards";
 import { createGadgetImpl } from "@/actions/gadgets";
+import { markOnboardingCompletedImpl } from "@/actions/onboarding";
 
 const DAY_MS = 86_400_000;
 
@@ -168,6 +169,16 @@ export async function seedDemoWorkspaceImpl(
     },
     size: "2x1",
   });
+
+  // The seeded workspace is fully populated, so the first-run tour has
+  // nothing to teach.  Mark onboarding complete so the overlay never
+  // shows for users who came in via the demo seed (this also unblocks
+  // e2e tests, which always seed).
+  try {
+    await markOnboardingCompletedImpl(token);
+  } catch {
+    // Non-fatal — the tour will still hide on Skip / Finish.
+  }
 
   return { workspaceId: ws.id };
 }
