@@ -1,23 +1,17 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { useBoardStore } from "@/stores/board-store";
 import { updateCard } from "@/actions/cards";
+import { DateRangePopover, type DateRange } from "@/components/ui/date-range-popover";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 
-function toInputValue(d: Date | string | null | undefined): string {
-  if (!d) return "";
+function toDate(d: Date | string | null | undefined): Date | null {
+  if (!d) return null;
   const dt = d instanceof Date ? d : new Date(d);
-  if (Number.isNaN(dt.getTime())) return "";
-  // YYYY-MM-DD using UTC so the input matches the persisted day across TZs.
-  return dt.toISOString().slice(0, 10);
-}
-
-function fromInputValue(s: string): Date | null {
-  if (!s) return null;
-  const d = new Date(s + "T00:00:00.000Z");
-  return Number.isNaN(d.getTime()) ? null : d;
+  if (Number.isNaN(dt.getTime())) return null;
+  // Normalize to UTC midnight so the calendar grid matches the persisted day.
+  return new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()));
 }
 
 export function RoadmapDatesSection({ cardId }: { cardId: string }) {
@@ -26,42 +20,22 @@ export function RoadmapDatesSection({ cardId }: { cardId: string }) {
   ) as CardRow | undefined;
   const updateCardLocal = useBoardStore((s) => s.updateCard);
   const [pending, start] = useTransition();
-  const initStart = card ? toInputValue(card.startDate) : "";
-  const initTarget = card ? toInputValue(card.targetDate) : "";
-  const [startVal, setStartVal] = useState(initStart);
-  const [targetVal, setTargetVal] = useState(initTarget);
 
   if (!card) return null;
 
-  function persist(field: "start" | "target", next: string) {
-    const date = fromInputValue(next);
-    if (field === "start") setStartVal(next);
-    else setTargetVal(next);
-    if (field === "start") updateCardLocal(cardId, { startDate: date });
-    else updateCardLocal(cardId, { targetDate: date });
-    start(async () => {
-      try {
-        await updateCard(
-          field === "start"
-            ? { id: cardId, startDate: date }
-            : { id: cardId, targetDate: date },
-        );
-      } catch (err) {
-        toast.error((err as Error).message);
-      }
-    });
-  }
+  const value: DateRange = {
+    start: toDate(card.startDate),
+    target: toDate(card.targetDate),
+  };
 
-  function clearBoth() {
-    setStartVal("");
-    setTargetVal("");
-    updateCardLocal(cardId, { startDate: null, targetDate: null });
+  function persist(next: DateRange) {
+    updateCardLocal(cardId, { startDate: next.start, targetDate: next.target });
     start(async () => {
       try {
         await updateCard({
           id: cardId,
-          startDate: null,
-          targetDate: null,
+          startDate: next.start,
+          targetDate: next.target,
         });
       } catch (err) {
         toast.error((err as Error).message);
@@ -70,46 +44,17 @@ export function RoadmapDatesSection({ cardId }: { cardId: string }) {
   }
 
   return (
-    <section className="space-y-3" data-testid="roadmap-dates-section">
+    <section className="space-y-2" data-testid="roadmap-dates-section">
       <div className="flex items-baseline justify-between border-b border-hairline pb-1">
-        <h3 className="mono-meta text-fg-muted">Start / target</h3>
-        <span className="mono-meta-sm text-fg-faint">PLAN</span>
+        <h3 className="mono-meta text-fg-muted">Dates</h3>
+        {pending && <span className="mono-meta-sm text-fg-faint">SAVING…</span>}
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="mono-meta-sm text-fg-muted">Start</span>
-          <input
-            type="date"
-            aria-label="Roadmap start date"
-            value={startVal}
-            onChange={(e) => persist("start", e.target.value)}
-            disabled={pending}
-            className="h-9 rounded-none border border-hairline-hi bg-[color:var(--surface)] px-2.5 py-1 text-sm font-mono text-fg transition-colors focus:border-hairline-hi focus:bg-[color:var(--popover)] outline-none"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="mono-meta-sm text-fg-muted">Target</span>
-          <input
-            type="date"
-            aria-label="Roadmap target date"
-            value={targetVal}
-            onChange={(e) => persist("target", e.target.value)}
-            disabled={pending}
-            className="h-9 rounded-none border border-hairline-hi bg-[color:var(--surface)] px-2.5 py-1 text-sm font-mono text-fg transition-colors focus:border-hairline-hi focus:bg-[color:var(--popover)] outline-none"
-          />
-        </label>
-        {(startVal || targetVal) && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={clearBoth}
-            disabled={pending}
-          >
-            Clear
-          </Button>
-        )}
-      </div>
+      <DateRangePopover
+        value={value}
+        onChange={persist}
+        disabled={pending}
+        triggerLabel="Set start / target"
+      />
     </section>
   );
 }
