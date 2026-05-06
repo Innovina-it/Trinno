@@ -1,5 +1,6 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { lookupProfileByEmail } from "@/actions/profile-lookup";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,47 @@ export function BoardMembersPanel({
   // another tab is reflected here without a hard reload.
   useBoardMembershipSync(boardId);
 
+  type Preview =
+    | { state: "idle" }
+    | { state: "checking" }
+    | { state: "found"; displayName: string; handle: string | null }
+    | { state: "exists" }
+    | { state: "missing" };
+  const [preview, setPreview] = useState<Preview>({ state: "idle" });
+
+  useEffect(() => {
+    const trimmed = email.trim();
+    if (!trimmed.includes("@") || trimmed.length < 3) {
+      setPreview({ state: "idle" });
+      return;
+    }
+    setPreview({ state: "checking" });
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const r = await lookupProfileByEmail(trimmed);
+        if (cancelled) return;
+        if (r.kind === "found") {
+          setPreview({
+            state: "found",
+            displayName: r.displayName,
+            handle: r.handle,
+          });
+        } else if (r.kind === "exists") {
+          setPreview({ state: "exists" });
+        } else {
+          setPreview({ state: "missing" });
+        }
+      } catch {
+        if (!cancelled) setPreview({ state: "idle" });
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [email]);
+
   function invite(e: React.FormEvent) {
     e.preventDefault();
     start(async () => {
@@ -62,7 +104,29 @@ export function BoardMembersPanel({
             onChange={(e) => setEmail(e.target.value)}
             required
             placeholder="user@company.com"
+            aria-describedby="board-invite-preview"
           />
+          <div
+            id="board-invite-preview"
+            className="mono-meta-sm text-fg-faint min-h-4"
+            aria-live="polite"
+          >
+            {preview.state === "checking" && "CHECKING…"}
+            {preview.state === "found" && (
+              <>
+                <span className="text-fg">{preview.displayName}</span>
+                {preview.handle && (
+                  <span className="text-fg-muted"> · @{preview.handle}</span>
+                )}
+              </>
+            )}
+            {preview.state === "exists" && "USER EXISTS"}
+            {preview.state === "missing" && (
+              <span className="text-[color:var(--status-blocked)]">
+                NO USER WITH THAT EMAIL
+              </span>
+            )}
+          </div>
         </div>
         <Select
           value={role}
@@ -74,7 +138,10 @@ export function BoardMembersPanel({
           ]}
           className="w-32"
         />
-        <Button type="submit" disabled={pending || !email}>
+        <Button
+          type="submit"
+          disabled={pending || !email || preview.state === "missing"}
+        >
           {pending ? "Adding…" : "Add"}
         </Button>
       </form>

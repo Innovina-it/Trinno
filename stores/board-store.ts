@@ -22,6 +22,7 @@ import type {
   CardComponentRow,
   CardVersionRow,
   BoardProfile,
+  BoardMemberRole,
 } from "@/lib/queries/board-snapshot";
 
 export type BoardSnapshotInit = {
@@ -40,6 +41,7 @@ export type BoardSnapshotInit = {
   cardComponents: CardComponentRow[];
   cardVersions: CardVersionRow[];
   boardProfiles: BoardProfile[];
+  boardMembers: BoardMemberRole[];
 };
 
 export type BoardState = {
@@ -58,6 +60,7 @@ export type BoardState = {
   cardComponents: CardComponentRow[];
   cardVersions: CardVersionRow[];
   boardProfiles: BoardProfile[];
+  boardMembers: BoardMemberRole[];
 
   // Plan #16b-γ-D (#8) — ephemeral multi-select state. Lives only on the
   // current board view; cleared on navigation by the consumer remounting
@@ -151,6 +154,7 @@ export function createBoardStore(initial: BoardSnapshotInit) {
     cardComponents: initial.cardComponents,
     cardVersions: initial.cardVersions,
     boardProfiles: initial.boardProfiles,
+    boardMembers: initial.boardMembers,
 
     selectedCardIds: new Set<string>(),
     lastSelectedCardId: null,

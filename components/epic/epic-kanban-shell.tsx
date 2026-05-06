@@ -47,6 +47,7 @@ export function EpicKanbanShell({
           cardComponents: [],
           cardVersions: [],
           boardProfiles: [],
+          boardMembers: [],
         }}
       >
         <RealtimeBridge

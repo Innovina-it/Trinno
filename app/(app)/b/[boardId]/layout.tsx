@@ -43,6 +43,7 @@ export default async function BoardLayout({
           cardComponents: snap.cardComponents,
           cardVersions: snap.cardVersions,
           boardProfiles: snap.boardProfiles,
+          boardMembers: snap.boardMembers,
         }}
       >
         {children}

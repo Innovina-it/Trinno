@@ -19,6 +19,7 @@ function fmt(d: Date | string) {
 export function CommentsSection({ cardId }: { cardId: string }) {
   const comments = useBoardStore((s) => s.comments);
   const profiles = useBoardStore((s) => s.boardProfiles);
+  const boardMembers = useBoardStore((s) => s.boardMembers);
   const addComment = useBoardStore((s) => s.addComment);
   const updateComment = useBoardStore((s) => s.updateComment);
   const removeComment = useBoardStore((s) => s.removeComment);
@@ -51,6 +52,14 @@ export function CommentsSection({ cardId }: { cardId: string }) {
     for (const p of profiles) m.set(p.id, p.displayName);
     return m;
   }, [profiles]);
+  const isAdmin = useMemo(
+    () =>
+      currentUserId !== null &&
+      boardMembers.some(
+        (m) => m.userId === currentUserId && m.role === "admin",
+      ),
+    [boardMembers, currentUserId],
+  );
 
   function submitNew() {
     const trimmed = body.trim();
@@ -163,22 +172,24 @@ export function CommentsSection({ cardId }: { cardId: string }) {
                       <span className="ml-1 text-fg-faint">· edited</span>
                     )}
                   </time>
-                  {isOwn && !isEditing && (
+                  {!isEditing && (isOwn || isAdmin) && (
                     <div className="flex items-center gap-0.5 opacity-0 group-hover/comment:opacity-100 focus-within:opacity-100 transition-opacity">
-                      <button
-                        type="button"
-                        onClick={() => startEdit(c.id, c.body)}
-                        aria-label="Edit comment"
-                        title="Edit"
-                        className="size-6 inline-flex items-center justify-center rounded-md text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
-                      >
-                        <Pencil className="size-3" />
-                      </button>
+                      {isOwn && (
+                        <button
+                          type="button"
+                          onClick={() => startEdit(c.id, c.body)}
+                          aria-label="Edit comment"
+                          title="Edit"
+                          className="size-6 inline-flex items-center justify-center rounded-md text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+                        >
+                          <Pencil className="size-3" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => onDelete(c.id)}
-                        aria-label="Delete comment"
-                        title="Delete"
+                        aria-label={isOwn ? "Delete comment" : "Delete (admin)"}
+                        title={isOwn ? "Delete" : "Delete (admin)"}
                         className="size-6 inline-flex items-center justify-center rounded-md text-fg-muted hover:text-[color:var(--status-blocked)] hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
                       >
                         <Trash2 className="size-3" />

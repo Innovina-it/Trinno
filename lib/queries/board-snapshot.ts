@@ -34,6 +34,10 @@ export type ComponentRow = typeof components.$inferSelect;
 export type CardComponentRow = typeof cardComponents.$inferSelect;
 export type CardVersionRow = typeof cardVersions.$inferSelect;
 export type BoardProfile = { id: string; displayName: string };
+export type BoardMemberRole = {
+  userId: string;
+  role: "admin" | "member" | "observer";
+};
 
 export type BoardSnapshot = {
   board: BoardRow;
@@ -51,6 +55,7 @@ export type BoardSnapshot = {
   cardComponents: CardComponentRow[];
   cardVersions: CardVersionRow[];
   boardProfiles: BoardProfile[];
+  boardMembers: BoardMemberRole[];
 };
 
 export async function getBoardSnapshot(
@@ -121,7 +126,7 @@ export async function getBoardSnapshot(
         .orderBy(asc(attachments.createdAt)),
       tx.select().from(cardLinks).where(eq(cardLinks.boardId, boardId)),
       tx
-        .select({ userId: boardMembers.userId })
+        .select({ userId: boardMembers.userId, role: boardMembers.role })
         .from(boardMembers)
         .where(eq(boardMembers.boardId, boardId)),
       tx
@@ -164,6 +169,7 @@ export async function getBoardSnapshot(
       cardComponents: cardComponentRows,
       cardVersions: cardVersionRows,
       boardProfiles: profileRows,
+      boardMembers: memberRows,
     };
   });
 }
