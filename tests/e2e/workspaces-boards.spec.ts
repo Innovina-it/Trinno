@@ -44,10 +44,8 @@ test.fixme("workspace+board lifecycle", async ({ page }) => {
   await signupAndLand(page, email);
 
   // Open workspace switcher in nav, click "New workspace".
-  // The switcher button shows the current workspace name (e.g. "wb-1234567's Workspace") + chevron.
-  // It is the FIRST <button> inside <header> (Log out is the second).
-  await page.locator("header").getByRole("button").first().click();
-  await page.getByRole("menuitem", { name: /new workspace/i }).click();
+  await page.getByTestId("workspace-switcher-trigger").click();
+  await page.getByTestId("workspace-switcher-new").click();
 
   await page.getByLabel("Name").fill("Side Project");
   await page.getByRole("button", { name: /^create$/i }).click();

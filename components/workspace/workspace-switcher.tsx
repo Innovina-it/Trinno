@@ -49,6 +49,7 @@ export function WorkspaceSwitcher({
         }}
       >
         <DropdownMenuTrigger
+          data-testid="workspace-switcher-trigger"
           className="inline-flex items-center gap-1.5 h-8 px-2.5 max-w-[220px] rounded-md text-sm font-semibold tracking-tight text-fg hover:bg-[rgb(255_255_255/0.06)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
         >
           <span className="truncate">
@@ -135,7 +136,10 @@ export function WorkspaceSwitcher({
               <DropdownMenuSeparator />
             </DropdownMenuGroup>
           )}
-          <DropdownMenuItem onClick={() => setOpenCreate(true)}>
+          <DropdownMenuItem
+            data-testid="workspace-switcher-new"
+            onClick={() => setOpenCreate(true)}
+          >
             <Plus className="size-3.5 mr-2 text-fg-muted" />
             <span className="text-sm">New workspace</span>
           </DropdownMenuItem>
