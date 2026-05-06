@@ -182,28 +182,26 @@ export function CardTile({
             className="card-code-stamp leading-none"
             data-card-code={cardCode(card.id)}
           />
-          {/* Bulk-select handle.  Square (not the round complete dot) so
-              the two affordances aren't confused.  Only renders when
-              selection mode is already active (something selected on the
-              board) — entering selection is via Cmd/Ctrl+click on the
-              card body or Shift+click for range, so the handle exists
-              to exit / extend a multi-select, not to start one. */}
-          {(anySelected || isSelected) && (
-            <button
-              type="button"
-              onClick={handleSelectClick}
-              data-testid="tile-select-handle"
-              aria-label={isSelected ? "Deselect card" : "Select card"}
-              aria-pressed={isSelected}
-              className={`size-5 rounded-[4px] border-[1.5px] flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
-                isSelected
-                  ? "bg-[color:var(--accent-cyan)] border-[color:var(--accent-cyan)] text-[color:var(--bg-deep)]"
-                  : "border-hairline-hi text-fg-muted hover:border-fg/60"
-              }`}
-            >
-              {isSelected && <Check className="size-3.5" strokeWidth={3} />}
-            </button>
-          )}
+          {/* Bulk-select handle (top-right).  Square — distinct from the
+              round complete dot.  Hover-visible at rest; persists when
+              selection mode is active.  Cyan accent when selected so it
+              never collides with the neutral white complete fill. */}
+          <button
+            type="button"
+            onClick={handleSelectClick}
+            data-testid="tile-select-handle"
+            aria-label={isSelected ? "Deselect card" : "Select card"}
+            aria-pressed={isSelected}
+            className={`size-5 rounded-[4px] border-[1.5px] flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
+              isSelected
+                ? "bg-[color:var(--accent-cyan)] border-[color:var(--accent-cyan)] text-[color:var(--bg-deep)]"
+                : anySelected
+                  ? "border-hairline-hi text-fg-muted hover:border-fg/60"
+                  : "border-hairline text-transparent opacity-0 group-hover/card:opacity-100 hover:border-hairline-hi"
+            }`}
+          >
+            {isSelected && <Check className="size-3.5" strokeWidth={3} />}
+          </button>
         </div>
       </div>
 
