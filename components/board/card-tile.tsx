@@ -3,13 +3,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useTransition } from "react";
-import { toast } from "sonner";
 import { CalendarRange, Check, CircleDot, CornerLeftUp, Layers3 } from "lucide-react";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
-import { updateCard } from "@/actions/cards";
 import { getCardStatusKind, STATUS_LABEL } from "@/lib/status";
 import { LabelStripes } from "./card/label-stripes";
 import { DuePill } from "./card/due-pill";
@@ -112,29 +109,7 @@ export function CardTile({
     toggleSelected(card.id);
   };
 
-  const updateCardLocal = useBoardStore((s) => s.updateCard);
-  const [completing, startCompleting] = useTransition();
   const completed = card.completedAt != null;
-  const handleToggleComplete = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const next = !completed;
-    updateCardLocal(card.id, {
-      completedAt: next ? new Date() : null,
-      dueComplete: next,
-    });
-    startCompleting(async () => {
-      try {
-        await updateCard({ id: card.id, completed: next });
-      } catch (err) {
-        updateCardLocal(card.id, {
-          completedAt: completed ? card.completedAt : null,
-          dueComplete: completed,
-        });
-        toast.error((err as Error).message);
-      }
-    });
-  };
 
   return (
     <Link
@@ -205,28 +180,15 @@ export function CardTile({
         </div>
       </div>
 
-      {/* Title row: sentence-cased ink, sans, the dominant element.
-          A leading circle-check toggles `completed` directly from the
-          tile, so users can mark cards done without opening the modal. */}
-      <div className="px-3 pb-1 pt-1.5 flex items-start gap-2">
-        <button
-          type="button"
-          onClick={handleToggleComplete}
-          disabled={completing}
-          aria-label={completed ? "Mark not complete" : "Mark complete"}
-          aria-pressed={completed}
-          data-testid="tile-complete-toggle"
-          data-completed={completed ? "true" : "false"}
-          className={`mt-0.5 size-4 shrink-0 rounded-full border flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
-            completed
-              ? "bg-fg border-fg text-[color:var(--bg-deep)]"
-              : "border-hairline-hi text-transparent hover:border-fg/60 hover:text-fg/40"
-          }`}
-        >
-          <Check className="size-2.5" strokeWidth={3} />
-        </button>
+      {/* Title row.  Inline complete-toggle is gone — it collided with
+          the bulk-select handle.  Completion is reached via the card
+          modal's due section.  Done-state shows as line-through +
+          muted ink so the visual signal is preserved. */}
+      <div className="px-3 pb-1 pt-1.5">
         <span
-          className={`block text-sm leading-snug font-medium flex-1 min-w-0 ${
+          data-testid="tile-title"
+          data-completed={completed ? "true" : "false"}
+          className={`block text-sm leading-snug font-medium ${
             completed ? "line-through text-fg-muted" : ""
           }`}
         >
