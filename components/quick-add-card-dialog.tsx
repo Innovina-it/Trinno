@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { BoardStoreContext, type BoardStore } from "@/stores/board-store";
 import { createCard } from "@/actions/cards";
 import { getBoardsWithLists } from "@/actions/boards";
@@ -103,19 +104,13 @@ function BoardModeDialog({
             <>
               <div className="space-y-1.5">
                 <Label htmlFor="quick-add-list">List</Label>
-                <select
-                  id="quick-add-list"
+                <Select
                   value={listId}
-                  onChange={(e) => setListId(e.target.value)}
+                  onValueChange={setListId}
                   data-testid="quick-add-list"
-                  className="h-10 w-full rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm outline-none focus-visible:border-[color:var(--accent-cyan)]/60"
-                >
-                  {boardLists.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.title}
-                    </option>
-                  ))}
-                </select>
+                  options={boardLists.map((l) => ({ value: l.id, label: l.title }))}
+                  className="w-full"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="quick-add-title">Title</Label>
@@ -244,40 +239,34 @@ function GlobalModeDialog({
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="quick-add-board">Board</Label>
-              <select
-                id="quick-add-board"
+              <Select
                 value={boardId}
-                onChange={(e) => setBoardId(e.target.value)}
+                onValueChange={setBoardId}
                 data-testid="quick-add-board"
-                className="h-10 w-full rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm outline-none focus-visible:border-[color:var(--accent-cyan)]/60"
-              >
-                {boards.map((b) => (
-                  <option key={b.boardId} value={b.boardId}>
-                    {b.workspaceName} · {b.boardTitle}
-                  </option>
-                ))}
-              </select>
+                options={boards.map((b) => ({
+                  value: b.boardId,
+                  label: `${b.workspaceName} · ${b.boardTitle}`,
+                }))}
+                className="w-full"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="quick-add-list-global">List</Label>
-              <select
-                id="quick-add-list-global"
+              <Select
                 value={listId}
-                onChange={(e) => setListId(e.target.value)}
+                onValueChange={setListId}
                 data-testid="quick-add-list"
                 disabled={!selectedBoard || selectedBoard.lists.length === 0}
-                className="h-10 w-full rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm outline-none focus-visible:border-[color:var(--accent-cyan)]/60 disabled:opacity-60"
-              >
-                {!selectedBoard || selectedBoard.lists.length === 0 ? (
-                  <option value="">No lists in this board</option>
-                ) : (
-                  selectedBoard.lists.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.title}
-                    </option>
-                  ))
-                )}
-              </select>
+                options={
+                  !selectedBoard || selectedBoard.lists.length === 0
+                    ? [{ value: "", label: "No lists in this board" }]
+                    : selectedBoard.lists.map((l) => ({
+                        value: l.id,
+                        label: l.title,
+                      }))
+                }
+                className="w-full"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="quick-add-title-global">Title</Label>

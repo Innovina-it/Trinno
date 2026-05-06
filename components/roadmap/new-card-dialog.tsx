@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -240,39 +241,33 @@ export function RoadmapNewCardDialog({
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1 text-xs">
               <span className="mono-meta-sm text-fg-faint">BOARD</span>
-              <select
+              <Select
                 value={boardId}
-                onChange={(e) => setBoardId(e.target.value)}
+                onValueChange={setBoardId}
                 data-testid="roadmap-new-card-board"
-                className="w-full rounded-md border border-hairline bg-transparent px-2 py-1.5 text-fg outline-none focus:border-fg/40"
-              >
-                {visibleBoards.length === 0 && (
-                  <option value="">No boards</option>
-                )}
-                {visibleBoards.map((b) => (
-                  <option key={b.id} value={b.id} className="bg-[color:var(--surface-strong)]">
-                    {b.title}
-                  </option>
-                ))}
-              </select>
+                options={
+                  visibleBoards.length === 0
+                    ? [{ value: "", label: "No boards" }]
+                    : visibleBoards.map((b) => ({ value: b.id, label: b.title }))
+                }
+                className="w-full"
+                size="sm"
+              />
             </label>
             <label className="space-y-1 text-xs">
               <span className="mono-meta-sm text-fg-faint">LIST</span>
-              <select
+              <Select
                 value={listId}
-                onChange={(e) => setListId(e.target.value)}
+                onValueChange={setListId}
                 data-testid="roadmap-new-card-list"
-                className="w-full rounded-md border border-hairline bg-transparent px-2 py-1.5 text-fg outline-none focus:border-fg/40"
-              >
-                {listsForBoard.length === 0 && (
-                  <option value="">No lists</option>
-                )}
-                {listsForBoard.map((l) => (
-                  <option key={l.id} value={l.id} className="bg-[color:var(--surface-strong)]">
-                    {l.title}
-                  </option>
-                ))}
-              </select>
+                options={
+                  listsForBoard.length === 0
+                    ? [{ value: "", label: "No lists" }]
+                    : listsForBoard.map((l) => ({ value: l.id, label: l.title }))
+                }
+                className="w-full"
+                size="sm"
+              />
             </label>
           </div>
           <div className="grid grid-cols-2 gap-3">

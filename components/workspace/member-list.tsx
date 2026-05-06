@@ -3,6 +3,7 @@ import { useTransition } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, type SelectOption } from "@/components/ui/select";
 import { changeMemberRole, removeMember } from "@/actions/workspace-members";
 import { toast } from "sonner";
 
@@ -34,29 +35,32 @@ export function MemberList({
           </Avatar>
           <span className="flex-1">{m.displayName}</span>
           <Badge variant="outline">{m.role}</Badge>
-          <select
+          <Select
             value={m.role}
             disabled={m.role === "owner" || pending}
-            onChange={(e) => {
-              const v = e.target.value as Member["role"];
+            onValueChange={(v) =>
               start(async () => {
                 try {
                   await changeMemberRole({
                     workspaceId,
                     userId: m.userId,
-                    role: v,
+                    role: v as Member["role"],
                   });
                 } catch (err) {
                   toast.error((err as Error).message);
                 }
-              });
-            }}
-            className="h-8 px-2 rounded border bg-background text-sm"
-          >
-            <option value="member">Member</option>
-            <option value="admin">Admin</option>
-            {m.role === "owner" && <option value="owner">Owner</option>}
-          </select>
+              })
+            }
+            options={[
+              { value: "member", label: "Member" },
+              { value: "admin", label: "Admin" },
+              ...(m.role === "owner"
+                ? ([{ value: "owner", label: "Owner" }] as SelectOption[])
+                : []),
+            ]}
+            size="sm"
+            className="w-28"
+          />
           <Button
             size="sm"
             variant="destructive"

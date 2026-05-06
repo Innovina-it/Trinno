@@ -1,6 +1,7 @@
 "use client";
 import { useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { Select, type SelectOption } from "@/components/ui/select";
 import {
   DndContext,
   PointerSensor,
@@ -235,28 +236,26 @@ export function AllTasksView({
           className="chip mono-meta-sm bg-transparent border border-hairline focus:border-fg/40 outline-none"
         />
         {sprints.length > 0 && (
-          <select
+          <Select
             value={sprintFilter}
-            onChange={(e) => {
+            onValueChange={(v) => {
               const params = new URLSearchParams(sp.toString());
-              if (e.target.value) params.set("sprint", e.target.value);
+              if (v) params.set("sprint", v);
               else params.delete("sprint");
               router.replace(`${pathname}?${params.toString()}`, {
                 scroll: false,
               });
             }}
+            options={[
+              { value: "", label: "ANY SPRINT" },
+              ...sprints
+                .filter((s) => s.state !== "completed")
+                .map<SelectOption>((s) => ({ value: s.id, label: s.name })),
+            ]}
             data-testid="all-tasks-sprint-filter"
-            className="chip mono-meta-sm bg-transparent border border-hairline"
-          >
-            <option value="">ANY SPRINT</option>
-            {sprints
-              .filter((s) => s.state !== "completed")
-              .map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-          </select>
+            size="sm"
+            className="min-w-32"
+          />
         )}
       </div>
       {emptyReason ? (

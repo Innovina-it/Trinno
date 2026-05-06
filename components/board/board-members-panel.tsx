@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   inviteBoardMember,
@@ -59,15 +60,16 @@ export function BoardMembersPanel({
             placeholder="user@company.com"
           />
         </div>
-        <select
+        <Select
           value={role}
-          onChange={(e) => setRole(e.target.value as Role)}
-          className="h-9 px-3 rounded border border-hairline-hi bg-background text-sm"
-        >
-          <option value="observer">Observer</option>
-          <option value="member">Member</option>
-          <option value="admin">Admin</option>
-        </select>
+          onValueChange={(v) => setRole(v as Role)}
+          options={[
+            { value: "observer", label: "Observer" },
+            { value: "member", label: "Member" },
+            { value: "admin", label: "Admin" },
+          ]}
+          className="w-32"
+        />
         <Button type="submit" disabled={pending || !email}>
           {pending ? "Adding…" : "Add"}
         </Button>
@@ -88,28 +90,30 @@ export function BoardMembersPanel({
             </Avatar>
             <span className="flex-1">{m.displayName}</span>
             <Badge variant="outline">{m.role}</Badge>
-            <select
+            <Select
               value={m.role}
-              onChange={(e) => {
-                const v = e.target.value as Role;
+              disabled={pending}
+              onValueChange={(v) =>
                 start(async () => {
                   try {
                     await changeBoardMemberRole({
                       boardId,
                       userId: m.userId,
-                      role: v,
+                      role: v as Role,
                     });
                   } catch (err) {
                     toast.error((err as Error).message);
                   }
-                });
-              }}
-              className="h-8 px-2 rounded border border-hairline-hi bg-background text-sm"
-            >
-              <option value="observer">Observer</option>
-              <option value="member">Member</option>
-              <option value="admin">Admin</option>
-            </select>
+                })
+              }
+              options={[
+                { value: "observer", label: "Observer" },
+                { value: "member", label: "Member" },
+                { value: "admin", label: "Admin" },
+              ]}
+              size="sm"
+              className="w-28"
+            />
             <Button
               size="sm"
               variant="destructive"

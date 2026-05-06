@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import { createDashboard } from "@/actions/dashboards";
 import { toast } from "sonner";
@@ -99,18 +100,12 @@ export function CreateDashboardButton({
             {scope === "workspace" && (
               <div className="space-y-1.5">
                 <Label htmlFor="dash-ws">Workspace</Label>
-                <select
-                  id="dash-ws"
+                <Select
                   value={workspaceId}
-                  onChange={(e) => setWorkspaceId(e.target.value)}
-                  className="w-full rounded-lg border border-hairline bg-transparent px-3 py-2 text-sm"
-                >
-                  {workspaces.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setWorkspaceId}
+                  options={workspaces.map((w) => ({ value: w.id, label: w.name }))}
+                  className="w-full"
+                />
               </div>
             )}
             <DialogFooter>

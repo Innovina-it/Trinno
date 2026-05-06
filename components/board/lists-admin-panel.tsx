@@ -2,6 +2,7 @@
 import { useState, useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { setWipLimit, setListStatusKind } from "@/actions/lists";
 import { toast } from "sonner";
 
@@ -93,21 +94,16 @@ function StatusSetter({
   return (
     <div className="flex items-center gap-2">
       <span className="mono-meta-sm text-fg-faint">STATUS</span>
-      <select
+      <Select
         value={v}
-        onChange={(e) => onChange(e.target.value)}
+        onValueChange={onChange}
         disabled={pending}
         aria-label="List status mapping"
         data-testid="list-status-select"
-        data-list-id={listId}
-        className="h-8 rounded-md border border-hairline bg-[color:var(--surface)] px-2 text-sm text-fg outline-none focus:border-fg/50"
-      >
-        {STATUS_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+        options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+        size="sm"
+        className="w-36"
+      />
     </div>
   );
 }

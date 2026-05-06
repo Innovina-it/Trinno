@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { useBoardStore } from "@/stores/board-store";
 import { createLabel, toggleCardLabel } from "@/actions/labels";
 
@@ -121,18 +122,13 @@ export function LabelsSection({ cardId }: { cardId: string }) {
             maxLength={60}
             className="flex-1"
           />
-          <select
+          <Select
             value={color}
-            onChange={(e) => setColor(e.target.value)}
+            onValueChange={setColor}
             aria-label="Label color"
-            className="h-9 rounded-none border border-hairline-hi bg-[color:var(--surface)] px-2 text-sm font-mono"
-          >
-            {PALETTE.map((c) => (
-              <option key={c} value={c} style={{ backgroundColor: c }}>
-                {c}
-              </option>
-            ))}
-          </select>
+            options={PALETTE.map((c) => ({ value: c, label: c }))}
+            className="w-28"
+          />
           <Button type="button" size="sm" onClick={onAdd} disabled={pending}>
             Add
           </Button>

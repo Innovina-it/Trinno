@@ -5,7 +5,6 @@ import {
   Activity,
   BarChart3,
   Calendar,
-  CalendarRange,
   FileText,
   Hash,
   LineChart,
@@ -24,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { createGadget } from "@/actions/gadgets";
 import { toast } from "sonner";
 
@@ -66,9 +66,6 @@ const SIZES: Array<{ id: GadgetSize; cols: number; rows: number }> = [
   { id: "3x1", cols: 3, rows: 1 },
   { id: "3x2", cols: 3, rows: 2 },
 ];
-
-const SELECT_CLS =
-  "w-full h-10 rounded-md border border-hairline bg-[color:var(--surface)] px-3 text-sm text-fg outline-none hover:border-hairline-hi focus-visible:border-[color:var(--accent-cyan)]/60";
 
 export function AddGadgetButton({
   dashboardId,
@@ -265,66 +262,59 @@ export function AddGadgetButton({
             {meta.needsWorkspace && (
               <div className="space-y-1.5">
                 <Label htmlFor="gad-ws">Workspace</Label>
-                <select
-                  id="gad-ws"
+                <Select
                   value={workspaceId}
-                  onChange={(e) => setWorkspaceId(e.target.value)}
-                  className={SELECT_CLS}
-                  required
-                >
-                  {workspaces.length === 0 && <option value="">—</option>}
-                  {workspaces.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setWorkspaceId}
+                  options={
+                    workspaces.length === 0
+                      ? [{ value: "", label: "—" }]
+                      : workspaces.map((w) => ({ value: w.id, label: w.name }))
+                  }
+                  className="w-full"
+                />
               </div>
             )}
 
             {!meta.needsWorkspace && type !== "markdown_note" && (
               <div className="space-y-1.5">
                 <Label htmlFor="gad-ws-opt">Workspace (optional)</Label>
-                <select
-                  id="gad-ws-opt"
+                <Select
                   value={workspaceId}
-                  onChange={(e) => setWorkspaceId(e.target.value)}
-                  className={SELECT_CLS}
-                >
-                  <option value="">All my workspaces</option>
-                  {workspaces.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setWorkspaceId}
+                  options={[
+                    { value: "", label: "All my workspaces" },
+                    ...workspaces.map((w) => ({ value: w.id, label: w.name })),
+                  ]}
+                  className="w-full"
+                />
               </div>
             )}
 
             {type === "count" && (
               <div className="space-y-1.5">
                 <Label htmlFor="gad-what">What to count</Label>
-                <select
-                  id="gad-what"
+                <Select
                   value={what}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     setWhat(
-                      e.target.value as
+                      v as
                         | "open_cards"
                         | "overdue"
                         | "my_assignments"
                         | "completed_this_week",
                     )
                   }
-                  className={SELECT_CLS}
-                >
-                  <option value="open_cards">Open cards</option>
-                  <option value="overdue">Overdue</option>
-                  <option value="my_assignments">My assignments</option>
-                  <option value="completed_this_week">
-                    Completed this week
-                  </option>
-                </select>
+                  options={[
+                    { value: "open_cards", label: "Open cards" },
+                    { value: "overdue", label: "Overdue" },
+                    { value: "my_assignments", label: "My assignments" },
+                    {
+                      value: "completed_this_week",
+                      label: "Completed this week",
+                    },
+                  ]}
+                  className="w-full"
+                />
               </div>
             )}
 

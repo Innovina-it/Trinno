@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { getBoardsWithLists } from "@/actions/boards";
 import { moveCardCrossBoard } from "@/actions/cards";
 import { errorBus } from "@/lib/errors/error-bus";
@@ -158,57 +159,45 @@ export function MoveToBoardDialog({
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="move-ws">Workspace</Label>
-              <select
-                id="move-ws"
+              <Select
                 value={workspaceId}
-                onChange={(e) => setWorkspaceId(e.target.value)}
+                onValueChange={setWorkspaceId}
                 data-testid="move-ws"
-                className="h-10 w-full rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm outline-none focus-visible:border-[color:var(--accent-cyan)]/60"
-              >
-                {workspaces.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
+                options={workspaces.map((w) => ({ value: w.id, label: w.name }))}
+                className="w-full"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="move-board">Board</Label>
-              <select
-                id="move-board"
+              <Select
                 value={boardId}
-                onChange={(e) => setBoardId(e.target.value)}
+                onValueChange={setBoardId}
                 data-testid="move-board"
                 disabled={boardsForWs.length === 0}
-                className="h-10 w-full rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm outline-none focus-visible:border-[color:var(--accent-cyan)]/60 disabled:opacity-60"
-              >
-                {boardsForWs.map((b) => (
-                  <option key={b.boardId} value={b.boardId}>
-                    {b.boardTitle}
-                  </option>
-                ))}
-              </select>
+                options={boardsForWs.map((b) => ({
+                  value: b.boardId,
+                  label: b.boardTitle,
+                }))}
+                className="w-full"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="move-list">List</Label>
-              <select
-                id="move-list"
+              <Select
                 value={listId}
-                onChange={(e) => setListId(e.target.value)}
+                onValueChange={setListId}
                 data-testid="move-list"
                 disabled={!selectedBoard || selectedBoard.lists.length === 0}
-                className="h-10 w-full rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm outline-none focus-visible:border-[color:var(--accent-cyan)]/60 disabled:opacity-60"
-              >
-                {!selectedBoard || selectedBoard.lists.length === 0 ? (
-                  <option value="">No lists in this board</option>
-                ) : (
-                  selectedBoard.lists.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.title}
-                    </option>
-                  ))
-                )}
-              </select>
+                options={
+                  !selectedBoard || selectedBoard.lists.length === 0
+                    ? [{ value: "", label: "No lists in this board" }]
+                    : selectedBoard.lists.map((l) => ({
+                        value: l.id,
+                        label: l.title,
+                      }))
+                }
+                className="w-full"
+              />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button

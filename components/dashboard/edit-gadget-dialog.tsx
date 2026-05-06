@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { updateGadget } from "@/actions/gadgets";
 import { toast } from "sonner";
 
@@ -35,9 +36,6 @@ const SIZES: Array<{ id: GadgetSize; cols: number; rows: number }> = [
   { id: "3x1", cols: 3, rows: 1 },
   { id: "3x2", cols: 3, rows: 2 },
 ];
-
-const SELECT_CLS =
-  "w-full h-10 rounded-md border border-hairline bg-[color:var(--surface)] px-3 text-sm text-fg outline-none hover:border-hairline-hi focus-visible:border-[color:var(--accent-cyan)]/60";
 
 export function EditGadgetDialog({
   open,
@@ -181,27 +179,25 @@ export function EditGadgetDialog({
           {type === "count" && (
             <div className="space-y-1.5">
               <Label htmlFor="edit-what">What to count</Label>
-              <select
-                id="edit-what"
+              <Select
                 value={what}
-                onChange={(e) =>
+                onValueChange={(v) =>
                   setWhat(
-                    e.target.value as
+                    v as
                       | "open_cards"
                       | "overdue"
                       | "my_assignments"
                       | "completed_this_week",
                   )
                 }
-                className={SELECT_CLS}
-              >
-                <option value="open_cards">Open cards</option>
-                <option value="overdue">Overdue</option>
-                <option value="my_assignments">My assignments</option>
-                <option value="completed_this_week">
-                  Completed this week
-                </option>
-              </select>
+                options={[
+                  { value: "open_cards", label: "Open cards" },
+                  { value: "overdue", label: "Overdue" },
+                  { value: "my_assignments", label: "My assignments" },
+                  { value: "completed_this_week", label: "Completed this week" },
+                ]}
+                className="w-full"
+              />
             </div>
           )}
 
