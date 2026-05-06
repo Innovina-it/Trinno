@@ -30,6 +30,12 @@ jobs:
         with:
           version: latest
       - run: npm ci
+      # E2E + integration specs assert the "Check your email" flow.
+      # Local dev keeps auto-confirm (enable_confirmations = false) for
+      # ergonomics, so flip it to true only inside CI before supabase
+      # boots.
+      - name: Enable email confirmations for CI
+        run: sed -i '/^\[auth\.email\]/,/^\[/ s/^enable_confirmations = false$/enable_confirmations = true/' supabase/config.toml
       - run: supabase start
       - name: Capture env
         run: |
@@ -62,6 +68,8 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Enable email confirmations for CI
+        run: sed -i '/^\[auth\.email\]/,/^\[/ s/^enable_confirmations = false$/enable_confirmations = true/' supabase/config.toml
       - run: supabase start
       - name: Capture env
         run: |
