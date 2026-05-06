@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
-import { getDashboard } from "@/lib/queries/dashboards";
+import { getDashboard, listDashboardMembers } from "@/lib/queries/dashboards";
 import { listWorkspaces } from "@/lib/queries/workspaces";
 import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
 import { DashboardGrid } from "@/components/dashboard/dashboard-grid";
 import { AddGadgetButton } from "@/components/dashboard/add-gadget-dialog";
+import { ShareDashboardDialog } from "@/components/dashboard/share-dashboard-dialog";
 
 export default async function DashboardPage({
   params,
@@ -20,6 +21,11 @@ export default async function DashboardPage({
   if (!dash) notFound();
   const isOwner = dash.ownerId === user.id;
   const workspaces = await listWorkspaces(token);
+  // Editor role from `dashboard_members` mirrors the owner for UPDATE on
+  // the dashboard + full CRUD on its gadgets (see migration 0068).
+  const members = await listDashboardMembers(token, dashboardId);
+  const myMembership = members.find((m) => m.userId === user.id);
+  const canEdit = isOwner || myMembership?.role === "editor";
   // Plan #16b-β — only personal-scope dashboards skip the workspace store.
   const snapshot = dash.workspaceId
     ? await getWorkspaceSnapshot(token, dash.workspaceId)
@@ -42,19 +48,28 @@ export default async function DashboardPage({
           <div className="min-w-0 space-y-1">
             <span className="mono-meta-sm text-fg-faint">
               {dash.scope.toUpperCase()} DASHBOARD
-              {!isOwner && " · READ ONLY"}
+              {!canEdit && " · READ ONLY"}
+              {!isOwner && canEdit && " · SHARED · EDITOR"}
             </span>
             <h1 className="font-sans text-2xl font-bold tracking-tight text-fg truncate">
               {dash.name}
             </h1>
           </div>
-          {isOwner && (
-            <AddGadgetButton
-              dashboardId={dashboardId}
-              dashboardWorkspaceId={dash.workspaceId}
-              workspaces={workspaces.map((w) => ({ id: w.id, name: w.name }))}
-            />
-          )}
+          <div className="flex items-center gap-2">
+            {isOwner && (
+              <ShareDashboardDialog
+                dashboardId={dashboardId}
+                members={members}
+              />
+            )}
+            {canEdit && (
+              <AddGadgetButton
+                dashboardId={dashboardId}
+                dashboardWorkspaceId={dash.workspaceId}
+                workspaces={workspaces.map((w) => ({ id: w.id, name: w.name }))}
+              />
+            )}
+          </div>
         </div>
       </header>
       <DashboardGrid
@@ -62,6 +77,7 @@ export default async function DashboardPage({
         ownerId={dash.ownerId}
         viewerId={user.id}
         workspaceId={dash.workspaceId}
+        canEdit={canEdit}
       />
     </div>
   );

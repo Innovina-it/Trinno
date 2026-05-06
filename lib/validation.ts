@@ -117,7 +117,15 @@ export const CascadeShiftBlockedInput = z.object({
 });
 
 export const CreateCardInput = z.object({
-  listId: Uuid, title: Title,
+  listId: Uuid,
+  title: Title,
+  // Optional date span — when both set on create, the card is born on the
+  // roadmap. Quick-add on the board can leave these blank.
+  startDate: z.union([z.string(), z.date()]).nullable().optional(),
+  targetDate: z.union([z.string(), z.date()]).nullable().optional(),
+  // Optional parent epic. When set, child inherits parent's dates if its
+  // own are blank.
+  parentCardId: Uuid.nullable().optional(),
 });
 export const CardType = z.enum(["epic", "story", "task", "subtask", "bug"]);
 // Plan #16b-γ-C (#1) — card priority. Mirrors the SQL enum.
@@ -140,6 +148,7 @@ export const UpdateCardInput = z.object({
   // depending on kind.
   coverKind: z.enum(["none", "color", "image"]).optional(),
   coverValue: z.string().max(500).nullable().optional(),
+  ownerId: Uuid.nullable().optional(),
 });
 export const MoveCardInput = z.object({
   id: Uuid, listId: Uuid, position: z.string().min(1).max(64),
@@ -412,6 +421,23 @@ export const UpdateDashboardInput = z.object({
 });
 
 export const DeleteDashboardInput = z.object({ id: Uuid });
+
+// Dashboard sharing.
+export const DashboardRoleZ = z.enum(["viewer", "editor"]);
+export const ShareDashboardInput = z.object({
+  dashboardId: Uuid,
+  email: Email,
+  role: DashboardRoleZ,
+});
+export const ChangeDashboardRoleInput = z.object({
+  dashboardId: Uuid,
+  userId: Uuid,
+  role: DashboardRoleZ,
+});
+export const RemoveDashboardMemberInput = z.object({
+  dashboardId: Uuid,
+  userId: Uuid,
+});
 
 export const GadgetType = z.enum([
   "count",

@@ -42,21 +42,23 @@ const SIZE_TO_CLASS: Record<string, string> = {
 
 export async function DashboardGrid({
   dashboardId,
-  ownerId,
   viewerId,
   workspaceId,
+  canEdit,
 }: {
   dashboardId: string;
   ownerId: string;
   viewerId: string;
   workspaceId: string | null;
+  canEdit: boolean;
 }) {
   const token = (await getSessionToken())!;
   const gadgets = (await listGadgetsForDashboard(
     token,
     dashboardId,
   )) as GadgetRow[];
-  const isOwner = ownerId === viewerId;
+  // canEdit covers owner + dashboard_members.role = 'editor'.
+  const isOwner = canEdit;
 
   // Resolve all gadgets in parallel.
   const resolved = await Promise.all(

@@ -503,6 +503,22 @@ export const dashboards = pgTable("dashboards", {
     .defaultNow(),
 });
 
+export const dashboardRole = pgEnum("dashboard_role", ["viewer", "editor"]);
+
+export const dashboardMembers = pgTable(
+  "dashboard_members",
+  {
+    dashboardId: uuid("dashboard_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    role: dashboardRole("role").notNull().default("viewer"),
+    addedBy: uuid("added_by"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.dashboardId, t.userId] }) }),
+);
+
 export const gadgets = pgTable("gadgets", {
   id: uuid("id").primaryKey().defaultRandom(),
   dashboardId: uuid("dashboard_id").notNull(),
