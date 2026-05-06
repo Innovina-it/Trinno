@@ -19,13 +19,13 @@ function humanType(type: string): string {
     "card.roadmap_order": "reordered roadmap row",
     "card.label.add": "added label",
     "card.label.remove": "removed label",
-    "card.member.assign": "assigned member",
-    "card.member.unassign": "unassigned member",
+    "card.member.assign": "assigned",
+    "card.member.unassign": "unassigned",
     "comment.create": "commented",
     "comment.edit": "edited comment",
     "comment.delete": "deleted comment",
-    "board.member.add": "joined board",
-    "board.member.remove": "left board",
+    "board.member.add": "added to board",
+    "board.member.remove": "removed from board",
   };
   return map[type] ?? type;
 }

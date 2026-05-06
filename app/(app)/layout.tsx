@@ -6,6 +6,7 @@ import { TourOverlay } from "@/components/onboarding/tour-overlay";
 import { ErrorPane } from "@/components/error-pane";
 import { UndoBanner } from "@/components/undo-banner";
 import { ShortcutsOverlay } from "@/components/shortcuts-overlay";
+import { AccessNotice } from "@/components/access-notice";
 import { QuickAddCardMount } from "@/components/quick-add-card-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import { listWorkspaces } from "@/lib/queries/workspaces";
@@ -114,6 +115,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <ErrorPane />
       <UndoBanner />
       <ShortcutsOverlay />
+      <AccessNotice />
       <QuickAddCardMount hasWorkspaces={ws.length > 0} />
       <CommandPalette
         workspaces={ws.map((w) => ({ id: w.id, name: w.name }))}

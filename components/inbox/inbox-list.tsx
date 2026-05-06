@@ -9,8 +9,10 @@ import {
   Calendar,
   CalendarRange,
   CornerUpRight,
+  Link2,
   MessageSquare,
   Tag,
+  Timer,
   Undo,
   UserPlus,
   Users,
@@ -43,6 +45,8 @@ const KIND_META: Record<string, KindMeta> = {
   "card.due": { verb: "set due date on", Icon: Calendar },
   "card.dates": { verb: "rescheduled", Icon: CalendarRange },
   "card.label.added": { verb: "labeled", Icon: Tag },
+  "card.linked": { verb: "linked a card to", Icon: Link2 },
+  "card.sprint_changed": { verb: "moved sprint on", Icon: Timer },
   "board.member.added": { verb: "added you to a board", Icon: Users },
 };
 

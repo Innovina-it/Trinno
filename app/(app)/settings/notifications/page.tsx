@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
+import { NotificationPrefsForm } from "@/components/settings/notification-prefs-form";
 
 const KIND_DESCRIPTIONS: Array<{ kind: string; label: string; desc: string }> = [
   { kind: "comment.mention", label: "Mentions", desc: "Someone @mentions you in a comment." },
@@ -55,22 +56,11 @@ export default async function NotificationSettingsPage() {
 
       <section className="space-y-3">
         <h2 className="mono-meta-sm text-fg-faint">EVENTS</h2>
-        <div className="rounded-xl border border-hairline bg-[color:var(--surface)] divide-y divide-hairline overflow-hidden">
-          {KIND_DESCRIPTIONS.map((k) => (
-            <PrefRow
-              key={k.kind}
-              id={`kind-${k.kind}`}
-              label={k.label}
-              desc={k.desc}
-              checked
-              flush
-            />
-          ))}
-        </div>
+        <NotificationPrefsForm kinds={KIND_DESCRIPTIONS} />
       </section>
 
       <p className="mono-meta-sm text-fg-faint">
-        Persisted preferences are coming soon. The toggles above are visual only today.
+        In-app toggles persist immediately.  Email delivery is not wired yet.
       </p>
     </div>
   );

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useBoardStore } from "@/stores/board-store";
@@ -10,6 +10,10 @@ import {
 } from "@/actions/comments";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Pencil, Trash2 } from "lucide-react";
+import {
+  MentionPopover,
+  type MentionPopoverHandle,
+} from "@/components/board/card/mention-popover";
 
 function fmt(d: Date | string) {
   const dt = d instanceof Date ? d : new Date(d);
@@ -20,6 +24,7 @@ export function CommentsSection({ cardId }: { cardId: string }) {
   const comments = useBoardStore((s) => s.comments);
   const profiles = useBoardStore((s) => s.boardProfiles);
   const boardMembers = useBoardStore((s) => s.boardMembers);
+  const boardId = useBoardStore((s) => s.boardId);
   const addComment = useBoardStore((s) => s.addComment);
   const updateComment = useBoardStore((s) => s.updateComment);
   const removeComment = useBoardStore((s) => s.removeComment);
@@ -29,6 +34,9 @@ export function CommentsSection({ cardId }: { cardId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [caret, setCaret] = useState(0);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const mentionRef = useRef<MentionPopoverHandle | null>(null);
 
   // Resolve the viewer's auth uid once. Owner-only edit/delete affordance
   // hides for non-owners; the server still enforces via RLS.
@@ -89,6 +97,8 @@ export function CommentsSection({ cardId }: { cardId: string }) {
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // Let the @-mention popover claim arrow / enter / escape first.
+    if (mentionRef.current?.onKeyDown(e)) return;
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       submitNew();
@@ -235,16 +245,41 @@ export function CommentsSection({ cardId }: { cardId: string }) {
         })}
       </ul>
       <form onSubmit={onSubmit} className="space-y-2">
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder="Write a comment. Cmd/Ctrl+Enter to send."
-          rows={3}
-          maxLength={20_000}
-          aria-label="New comment"
-          className="w-full rounded-xl border border-hairline bg-[color:var(--surface)] p-3 text-sm font-sans text-fg outline-none transition-colors hover:border-[color:var(--hairline-hi)] focus-visible:border-[color:var(--accent-cyan)]/60 focus-visible:bg-[color:var(--surface-strong)] focus-visible:shadow-[0_0_0_3px_rgb(0_229_255/0.20)] placeholder:italic placeholder:text-fg-faint"
-        />
+        <div className="relative">
+          <textarea
+            ref={composerRef}
+            value={body}
+            onChange={(e) => {
+              setBody(e.target.value);
+              setCaret(e.target.selectionStart);
+            }}
+            onKeyUp={(e) => setCaret(e.currentTarget.selectionStart)}
+            onClick={(e) => setCaret(e.currentTarget.selectionStart)}
+            onKeyDown={onKeyDown}
+            placeholder="Write a comment.  @mention works.  Cmd/Ctrl+Enter to send."
+            rows={3}
+            maxLength={20_000}
+            aria-label="New comment"
+            className="w-full rounded-xl border border-hairline bg-[color:var(--surface)] p-3 text-sm font-sans text-fg outline-none transition-colors hover:border-[color:var(--hairline-hi)] focus-visible:border-[color:var(--accent-cyan)]/60 focus-visible:bg-[color:var(--surface-strong)] focus-visible:shadow-[0_0_0_3px_rgb(0_229_255/0.20)] placeholder:italic placeholder:text-fg-faint"
+          />
+          <MentionPopover
+            ref={mentionRef}
+            boardId={boardId}
+            value={body}
+            caret={caret}
+            onChange={(next, nextCaret) => {
+              setBody(next);
+              setCaret(nextCaret);
+              // Restore caret in the textarea after React re-renders.
+              queueMicrotask(() => {
+                if (composerRef.current) {
+                  composerRef.current.focus();
+                  composerRef.current.setSelectionRange(nextCaret, nextCaret);
+                }
+              });
+            }}
+          />
+        </div>
         <div className="flex justify-end">
           <Button
             type="submit"

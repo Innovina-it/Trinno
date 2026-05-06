@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { getBoardSnapshot } from "@/lib/queries/board-snapshot";
 import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
@@ -18,7 +18,11 @@ export default async function BoardLayout({
   await requireUser();
   const token = (await getSessionToken())!;
   const snap = await getBoardSnapshot(token, boardId);
-  if (!snap) notFound();
+  // Snapshot returns null when RLS hides the row — meaning the board
+  // either never existed or the viewer was just removed.  Redirect to
+  // the home shell with a notice so the topnav reads it once and toasts
+  // "you no longer have access".
+  if (!snap) redirect("/?notice=removed");
   const workspaceSnapshot = await getWorkspaceSnapshot(
     token,
     snap.board.workspaceId,
