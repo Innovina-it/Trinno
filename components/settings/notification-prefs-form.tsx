@@ -7,33 +7,40 @@ import {
 } from "@/actions/user-notification-prefs";
 
 export type Kind = { kind: string; label: string; desc: string };
+type Channel = "in_app" | "email";
 
 export function NotificationPrefsForm({ kinds }: { kinds: Kind[] }) {
-  const [prefs, setPrefs] = useState<Record<string, boolean>>({});
+  // Map<channel, Map<kind, enabled>>.  in_app defaults TRUE when no row
+  // exists; email defaults FALSE (opt-in).
+  const [inApp, setInApp] = useState<Record<string, boolean>>({});
+  const [email, setEmail] = useState<Record<string, boolean>>({});
   const [, start] = useTransition();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     listNotificationPrefs()
       .then((rows) => {
-        const map: Record<string, boolean> = {};
+        const a: Record<string, boolean> = {};
+        const e: Record<string, boolean> = {};
         for (const r of rows) {
-          if (r.channel === "in_app") map[r.kind] = r.enabled;
+          if (r.channel === "in_app") a[r.kind] = r.enabled;
+          else if (r.channel === "email") e[r.kind] = r.enabled;
         }
-        setPrefs(map);
+        setInApp(a);
+        setEmail(e);
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
 
-  function toggle(kind: string, next: boolean) {
-    setPrefs((p) => ({ ...p, [kind]: next }));
+  function toggle(channel: Channel, kind: string, next: boolean) {
+    const setter = channel === "in_app" ? setInApp : setEmail;
+    setter((p) => ({ ...p, [kind]: next }));
     start(async () => {
       try {
-        await setNotificationPref({ kind, channel: "in_app", enabled: next });
+        await setNotificationPref({ kind, channel, enabled: next });
       } catch (err) {
-        // Rollback on error.
-        setPrefs((p) => ({ ...p, [kind]: !next }));
+        setter((p) => ({ ...p, [kind]: !next }));
         toast.error((err as Error).message);
       }
     });
@@ -41,31 +48,48 @@ export function NotificationPrefsForm({ kinds }: { kinds: Kind[] }) {
 
   return (
     <div
-      className="rounded-xl border border-hairline bg-[color:var(--surface)] divide-y divide-hairline overflow-hidden"
+      className="rounded-xl border border-hairline bg-[color:var(--surface)] overflow-hidden"
       aria-busy={loading}
     >
+      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-4 py-2 border-b border-hairline mono-meta-sm text-fg-faint">
+        <span>EVENT</span>
+        <span className="w-16 text-center">IN-APP</span>
+        <span className="w-16 text-center">EMAIL</span>
+      </div>
       {kinds.map((k) => {
-        const id = `kind-${k.kind}`;
-        // Default to enabled when no row exists.
-        const checked = prefs[k.kind] !== false;
+        // Default in-app = enabled when no row.  Default email = OFF.
+        const inAppOn = inApp[k.kind] !== false;
+        const emailOn = email[k.kind] === true;
         return (
-          <label
+          <div
             key={k.kind}
-            htmlFor={id}
-            className="flex items-center gap-3 cursor-pointer select-none px-4 py-3"
+            className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-4 py-3 border-t border-hairline first:border-t-0"
           >
-            <input
-              id={id}
-              type="checkbox"
-              checked={checked}
-              onChange={(e) => toggle(k.kind, e.target.checked)}
-              className="size-4 rounded-sm border border-hairline-hi bg-[color:var(--surface-strong)] accent-fg shrink-0"
-            />
-            <span className="flex-1 min-w-0">
-              <span className="block text-sm text-fg font-medium">{k.label}</span>
+            <span className="min-w-0">
+              <span className="block text-sm text-fg font-medium">
+                {k.label}
+              </span>
               <span className="block mono-meta-sm text-fg-faint">{k.desc}</span>
             </span>
-          </label>
+            <span className="w-16 flex justify-center">
+              <input
+                type="checkbox"
+                aria-label={`In-app: ${k.label}`}
+                checked={inAppOn}
+                onChange={(e) => toggle("in_app", k.kind, e.target.checked)}
+                className="size-4 rounded-sm border border-hairline-hi bg-[color:var(--surface-strong)] accent-fg"
+              />
+            </span>
+            <span className="w-16 flex justify-center">
+              <input
+                type="checkbox"
+                aria-label={`Email: ${k.label}`}
+                checked={emailOn}
+                onChange={(e) => toggle("email", k.kind, e.target.checked)}
+                className="size-4 rounded-sm border border-hairline-hi bg-[color:var(--surface-strong)] accent-fg"
+              />
+            </span>
+          </div>
         );
       })}
     </div>

@@ -63,12 +63,34 @@ When you add a custom domain (step 9), update Site URL.
 
 ## 5. Email provider
 
-Quickest path: keep Supabase built-in SMTP (rate-limited 3/hr per email, fine for internal demo).
+Two distinct email surfaces:
 
-For real use, plug in:
+### 5a. Auth emails (signup confirmation, password reset)
 
-- **Resend** (recommended, free tier 3k/mo): sign up, verify domain, copy SMTP creds into Supabase **Authentication -> Email Templates -> SMTP**.
+These flow through Supabase's GoTrue.
+
+- Quickest path: keep Supabase built-in SMTP (rate-limited 3/hr per email, fine for internal demo).
+- For real use, plug in **Resend** (recommended, free tier 3k/mo): sign up, verify domain, copy SMTP creds into Supabase **Authentication → Email Templates → SMTP**.
 - **Postmark / SES** also work.
+
+### 5b. App notification emails (mentions, assigns, board invites)
+
+The app emits in-app notifications for every collab event; if a user opts in (per-kind toggle in `/settings/notifications`, `channel = 'email'`), a Vercel cron job picks up unsent rows and dispatches via the Resend HTTP API.
+
+Required env vars (in Vercel):
+
+```
+RESEND_API_KEY        = re_...                 # https://resend.com/api-keys
+RESEND_FROM           = "Trinno <hello@yourdomain>"  # verified sender
+NEXT_PUBLIC_APP_URL   = https://your.vercel.app       # for link bodies
+CRON_SECRET           = <strong random string>        # Vercel cron auth
+```
+
+Schedule lives at [vercel.json](./vercel.json) — runs every 5 minutes. The route at `app/api/cron/send-emails/route.ts` checks `Authorization: Bearer ${CRON_SECRET}` and runs `processPendingEmails()` from [lib/notify-email.ts](./lib/notify-email.ts).
+
+Default policy: email is **opt-in**. A row in `user_notification_prefs(user_id, kind, channel='email', enabled=true)` is required for the worker to send anything. The same migration that drives in-app prefs (0026) backs email prefs.
+
+Notifications older than 24h with `email_sent_at IS NULL` are still picked up but should be rare; consider a backfill query if you wire this in long after data exists.
 
 ## 6. Restrict signup (internal-team)
 

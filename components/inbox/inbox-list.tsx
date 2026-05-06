@@ -61,6 +61,7 @@ type N = {
   workspaceId: string | null;
   readAt: Date | string | null;
   createdAt: Date | string;
+  payload?: unknown;
 };
 
 function rel(d: Date | string): string {
@@ -324,7 +325,19 @@ export function InboxList({
                               <span className="text-fg-muted"> {meta.verb}</span>
                               <span className="font-medium text-fg">
                                 {" "}
-                                {n.cardTitle ?? n.boardTitle ?? "(item)"}
+                                {(() => {
+                                  const p =
+                                    n.payload as
+                                      | { count?: number }
+                                      | null
+                                      | undefined;
+                                  if (p?.count && p.count > 1) {
+                                    return `${p.count} cards`;
+                                  }
+                                  return (
+                                    n.cardTitle ?? n.boardTitle ?? "(item)"
+                                  );
+                                })()}
                               </span>
                             </div>
                             <div className="mono-meta-sm text-fg-faint mt-0.5 flex items-center gap-2 tabular-nums">
