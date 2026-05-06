@@ -47,6 +47,8 @@ const KIND_META: Record<string, KindMeta> = {
   "card.label.added": { verb: "labeled", Icon: Tag },
   "card.linked": { verb: "linked a card to", Icon: Link2 },
   "card.sprint_changed": { verb: "moved sprint on", Icon: Timer },
+  "card.owner_assigned": { verb: "made you owner of", Icon: UserPlus },
+  "card.owner_unassigned": { verb: "removed you as owner of", Icon: Users },
   "board.member.added": { verb: "added you to a board", Icon: Users },
 };
 
