@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useWorkspaceMembershipSync } from "@/hooks/use-workspace-membership-sync";
 import {
   WorkspaceSwitcher,
   type WorkspaceLite,
@@ -23,6 +24,7 @@ import {
   Map,
   Menu,
   Tag,
+  Users,
 } from "lucide-react";
 
 type WsLink = {
@@ -48,6 +50,11 @@ export function TopNav({
   recents: RecentEntry[];
 }) {
   const pathname = usePathname() ?? "";
+  // Re-fetch the layout (which re-runs `listWorkspaces`) whenever a row
+  // for this user appears in or disappears from `workspace_members` —
+  // covers invites, removals, and role changes pushed from another tab
+  // or another user, without forcing a hard reload.
+  useWorkspaceMembershipSync(userId);
   const wsForLinks = activeWorkspaceId ?? workspaces[0]?.id;
   const wsLinks: WsLink[] = wsForLinks
     ? [
@@ -55,6 +62,7 @@ export function TopNav({
         { href: `/w/${wsForLinks}/boards`, label: "Boards", Icon: Columns, testId: "nav-boards" },
         { href: `/w/${wsForLinks}/backlog`, label: "Backlog", Icon: Tag, testId: "nav-backlog" },
         { href: `/w/${wsForLinks}/all-tasks`, label: "My tasks", Icon: ListChecks, testId: "nav-all-tasks" },
+        { href: `/workload`, label: "Workload", Icon: Users, testId: "nav-workload" },
         { href: `/w/${wsForLinks}/versions`, label: "Versions", Icon: Calendar, testId: "nav-versions" },
         { href: `/w/${wsForLinks}/archive`, label: "Archive", Icon: Archive, testId: "nav-archive" },
       ]
