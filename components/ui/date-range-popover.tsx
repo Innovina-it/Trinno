@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Popover } from "@base-ui/react";
 import { CalendarRange, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 // Studio-Console date range picker. Replaces the native <input type="date">
@@ -173,84 +172,108 @@ export function DateRangePopover({
 
   const isEmpty = !value.start && !value.target;
 
+  // Click-outside + Esc to close.  We render the popup inline (not in a
+  // portal) so it nests cleanly inside whatever modal/dialog the trigger
+  // lives in — base-ui's Popover Portal fights with Dialog focus trapping
+  // and the trigger silently fails to open the popup on the first click.
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger
+    <div ref={wrapRef} className="relative inline-block">
+      <button
+        type="button"
         disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
         data-testid="date-range-trigger"
         className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-hairline-hi bg-[color:var(--surface)] text-fg hover:bg-[color:var(--surface-strong)] disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 font-mono text-[0.8rem] tabular-nums"
       >
         <CalendarRange className="size-3.5 text-fg-muted" aria-hidden />
         <span className={isEmpty ? "text-fg-faint" : undefined}>{triggerText}</span>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Positioner sideOffset={6} align="start">
-          <Popover.Popup
-            className="w-[640px] max-w-[calc(100vw-2rem)] rounded-2xl border border-hairline-hi bg-[color:var(--popover)] p-3 shadow-[0_40px_100px_-32px_rgba(0,0,0,0.6)] outline-none"
-            onKeyDown={onGridKey}
-          >
-            {/* Preset row */}
-            <div className="flex items-center gap-1.5 mb-3 px-1">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.label}
-                  type="button"
-                  onClick={() => applyPreset(p.days)}
-                  className="chip mono-meta-sm px-2 py-1 hover:bg-[color:var(--surface-hi)] hover:text-fg"
-                >
-                  {p.label}
-                </button>
-              ))}
+      </button>
+      {open && (
+        <div
+          role="dialog"
+          aria-label="Pick start and target dates"
+          onKeyDown={onGridKey}
+          className="absolute left-0 top-full mt-2 z-50 w-[640px] max-w-[calc(100vw-2rem)] rounded-2xl border border-hairline-hi bg-[color:var(--popover)] p-3 shadow-[0_40px_100px_-32px_rgba(0,0,0,0.6)] outline-none"
+        >
+          {/* Preset row */}
+          <div className="flex items-center gap-1.5 mb-3 px-1">
+            {PRESETS.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => applyPreset(p.days)}
+                className="chip mono-meta-sm px-2 py-1 hover:bg-[color:var(--surface-hi)] hover:text-fg"
+              >
+                {p.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setAnchor(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)));
+                setFocusDay(today);
+              }}
+              className="chip mono-meta-sm px-2 py-1 hover:bg-[color:var(--surface-hi)] hover:text-fg"
+              title="Jump focus to today (T)"
+            >
+              TODAY
+            </button>
+            <span className="ml-auto mono-meta-sm text-fg-faint">
+              {picking === "start" ? "PICK START" : "PICK TARGET"}
+            </span>
+            {!isEmpty && (
               <button
                 type="button"
-                onClick={() => {
-                  setAnchor(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)));
-                  setFocusDay(today);
-                }}
-                className="chip mono-meta-sm px-2 py-1 hover:bg-[color:var(--surface-hi)] hover:text-fg"
-                title="Jump focus to today (T)"
+                onClick={clear}
+                aria-label="Clear dates"
+                className="size-6 rounded-md text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] inline-flex items-center justify-center"
               >
-                TODAY
+                <X className="size-3.5" />
               </button>
-              <span className="ml-auto mono-meta-sm text-fg-faint">
-                {picking === "start" ? "PICK START" : "PICK TARGET"}
-              </span>
-              {!isEmpty && (
-                <button
-                  type="button"
-                  onClick={clear}
-                  aria-label="Clear dates"
-                  className="size-6 rounded-md text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] inline-flex items-center justify-center"
-                >
-                  <X className="size-3.5" />
-                </button>
-              )}
-            </div>
+            )}
+          </div>
 
-            {/* Two-month grid */}
-            <div ref={gridRef} className="grid grid-cols-2 gap-3">
-              {[anchor, new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 1))].map(
-                (m, mi) => (
-                  <MonthGrid
-                    key={mi}
-                    anchor={m}
-                    cells={mi === 0 ? cells : cellsNext}
-                    today={today}
-                    focusDay={focusDay}
-                    inRange={inRange}
-                    isEdge={isEdge}
-                    onPick={pickDay}
-                    onHover={setHover}
-                    onPrev={mi === 0 ? () => setAnchor(addMonths(anchor, -1)) : undefined}
-                    onNext={mi === 1 ? () => setAnchor(addMonths(anchor, 1)) : undefined}
-                  />
-                ),
-              )}
-            </div>
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+          {/* Two-month grid */}
+          <div ref={gridRef} className="grid grid-cols-2 gap-3">
+            {[anchor, new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 1))].map(
+              (m, mi) => (
+                <MonthGrid
+                  key={mi}
+                  anchor={m}
+                  cells={mi === 0 ? cells : cellsNext}
+                  today={today}
+                  focusDay={focusDay}
+                  inRange={inRange}
+                  isEdge={isEdge}
+                  onPick={pickDay}
+                  onHover={setHover}
+                  onPrev={mi === 0 ? () => setAnchor(addMonths(anchor, -1)) : undefined}
+                  onNext={mi === 1 ? () => setAnchor(addMonths(anchor, 1)) : undefined}
+                />
+              ),
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -318,17 +341,30 @@ function MonthGrid({
         ))}
         {cells.map(({ day, inMonth }) => {
           const edge = isEdge(day);
-          const ranged = inRange(day);
+          const ranged = inRange(day) && !edge;
           const isToday = isSameDay(day, today);
           const isFocus = isSameDay(day, focusDay);
-          const base = "size-7 inline-flex items-center justify-center text-[0.78rem] font-mono tabular-nums transition-colors rounded-md";
-          let cls = base;
-          if (!inMonth) cls += " text-fg-faint/50";
-          else cls += " text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)]";
-          if (ranged && !edge) cls += " bg-[color:var(--surface-strong)] text-fg";
-          if (edge) cls += " bg-fg text-[color:var(--bg-deep)] hover:bg-fg";
-          if (isToday && !edge) cls += " ring-1 ring-fg/40 ring-inset";
-          if (isFocus && !edge) cls += " outline-none ring-1 ring-fg/60";
+          // Build classes with single-source resolution per concern so
+          // Tailwind doesn't end up with two `text-*` rules competing
+          // (the previous implementation left `text-fg-muted` and
+          // `text-[color:var(--bg-deep)]` both attached, and the cascade
+          // sometimes won the muted one — selected day went invisible).
+          const palette = edge
+            ? "bg-fg text-[#0a0a0a] hover:bg-fg"
+            : ranged
+              ? "bg-[color:var(--surface-strong)] text-fg hover:bg-[color:var(--surface-hi)]"
+              : !inMonth
+                ? "text-fg-faint/50 hover:bg-[color:var(--surface-strong)] hover:text-fg-muted"
+                : "text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)]";
+          const ring = isToday && !edge
+            ? " ring-1 ring-fg/40 ring-inset"
+            : isFocus && !edge
+              ? " outline-none ring-1 ring-fg/60"
+              : "";
+          const cls =
+            "size-7 inline-flex items-center justify-center text-[0.78rem] font-mono tabular-nums transition-colors rounded-md " +
+            palette +
+            ring;
           return (
             <button
               key={day.toISOString()}
