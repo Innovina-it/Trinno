@@ -62,11 +62,6 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Tune Supabase auth for CI
-        run: |
-          sed -i '/^\[auth\.email\]/,/^\[/ s/^enable_confirmations = false$/enable_confirmations = true/' supabase/config.toml
-          sed -i '/^\[auth\.rate_limit\]/,/^\[/ s/^email_sent = .*/email_sent = 2000/' supabase/config.toml
-          grep -E "^enable_confirmations|^email_sent" supabase/config.toml
       - run: supabase start
       - name: Capture env
         run: |
