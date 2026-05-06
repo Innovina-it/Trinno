@@ -72,35 +72,46 @@ export function NotificationBell({ userId }: { userId: string }) {
     void refresh().then(() => {
       initialFetchDone = true;
     });
-    const ch = supa
-      .channel(`notif:${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-          filter: `recipient_user_id=eq.${userId}`,
-        },
-        () => {
-          void refresh();
-          // Only pulse for realtime arrivals (not the initial fetch).
-          if (!initialFetchDone || cancelled) return;
-          setPulse(true);
-          if (pulseTimer) clearTimeout(pulseTimer);
-          pulseTimer = setTimeout(() => {
-            if (!cancelled) setPulse(false);
-          }, 1000);
-        },
-      )
-      .subscribe((status) => {
-        if (cancelled) return;
-        setSubscribed(status === "SUBSCRIBED");
-      });
+    let ch: ReturnType<typeof supa.channel> | null = null;
+    (async () => {
+      // Bind the JWT to the realtime socket BEFORE subscribing — without
+      // it the socket carries the anon role and the
+      // `notifications_self_select` RLS policy silently drops every CDC
+      // event for this user.
+      const { data } = await supa.auth.getSession();
+      const token = data.session?.access_token;
+      if (token) await supa.realtime.setAuth(token);
+      if (cancelled) return;
+      ch = supa
+        .channel(`notif:${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "notifications",
+            filter: `recipient_user_id=eq.${userId}`,
+          },
+          () => {
+            void refresh();
+            // Only pulse for realtime arrivals (not the initial fetch).
+            if (!initialFetchDone || cancelled) return;
+            setPulse(true);
+            if (pulseTimer) clearTimeout(pulseTimer);
+            pulseTimer = setTimeout(() => {
+              if (!cancelled) setPulse(false);
+            }, 1000);
+          },
+        )
+        .subscribe((status) => {
+          if (cancelled) return;
+          setSubscribed(status === "SUBSCRIBED");
+        });
+    })();
     return () => {
       cancelled = true;
       if (pulseTimer) clearTimeout(pulseTimer);
-      void supa.removeChannel(ch);
+      if (ch) void supa.removeChannel(ch);
     };
   }, [userId]);
 

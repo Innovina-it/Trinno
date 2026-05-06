@@ -24,7 +24,17 @@ export async function createCommentImpl(token: string, input: { cardId: string; 
       boardId: "00000000-0000-0000-0000-000000000000",
     }).returning();
     if (!row) throw new Error("Forbidden");
-    return row;
+    // The before-insert trigger overwrites `board_id` with the card's
+    // real board, but `RETURNING` reflects the pre-trigger value (the
+    // sentinel UUID).  Re-read the row so callers — and
+    // `revalidatePath(/b/<boardId>)` in the wrapper below — see the
+    // actual board the comment belongs to.
+    const [fresh] = await tx
+      .select()
+      .from(comments)
+      .where(eq(comments.id, row.id))
+      .limit(1);
+    return fresh ?? row;
   });
 }
 

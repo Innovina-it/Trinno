@@ -2,13 +2,14 @@ import Link from "next/link";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { listNotifications, unreadCount } from "@/lib/queries/notifications";
 import { InboxList } from "@/components/inbox/inbox-list";
+import { InboxSync } from "@/components/inbox/inbox-sync";
 
 export default async function InboxPage({
   searchParams,
 }: {
   searchParams: Promise<{ filter?: string }>;
 }) {
-  await requireUser();
+  const user = await requireUser();
   const token = (await getSessionToken())!;
   const sp = await searchParams;
 
@@ -40,6 +41,7 @@ export default async function InboxPage({
         </h1>
       </header>
       <InboxList items={items} activeFilter={sp.filter ?? "all"} />
+      <InboxSync userId={user.id} />
       {items.length === 0 && (
         // Plan #16b-γ-C (#8) — empty-state explainer. We render it
         // alongside the InboxList so the filter chips stay reachable

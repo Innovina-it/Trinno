@@ -7,6 +7,7 @@ import { dbAsUser } from "@/lib/db/client";
 import { profiles } from "@/lib/db/schema";
 import { BoardView } from "@/components/board/board-view";
 import { ActivityFeed } from "@/components/board/activity-feed";
+import { ActivityFeedSync } from "@/components/board/activity-feed-sync";
 import { ActivityShell } from "@/components/board/activity-shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { recordBoardViewImpl } from "@/actions/favorites";
@@ -67,6 +68,7 @@ export default async function BoardPage({
         >
           <ActivityFeed boardId={boardId} workspaceId={snap.board.workspaceId} />
         </Suspense>
+        <ActivityFeedSync boardId={boardId} />
       </ActivityShell>
     </BoardView>
   );

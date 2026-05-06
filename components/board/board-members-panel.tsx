@@ -12,6 +12,7 @@ import {
   changeBoardMemberRole,
   removeBoardMember,
 } from "@/actions/board-members";
+import { useBoardMembershipSync } from "@/hooks/use-board-membership-sync";
 
 type Member = {
   userId: string;
@@ -32,6 +33,9 @@ export function BoardMembersPanel({
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("member");
   const [pending, start] = useTransition();
+  // Live updates so a concurrent admin's role change / removal in
+  // another tab is reflected here without a hard reload.
+  useBoardMembershipSync(boardId);
 
   function invite(e: React.FormEvent) {
     e.preventDefault();

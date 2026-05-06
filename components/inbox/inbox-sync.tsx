@@ -3,47 +3,41 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
-// Subscribe to `workspace_members` changes for the signed-in user.  When
-// somebody invites them or removes them, the topnav needs to re-fetch
-// the workspaces list (which the (app) layout already pulls fresh, but
-// only on a full request).  We trigger router.refresh() to bust the RSC
-// payload and pick up the change without a hard reload.
-export function useWorkspaceMembershipSync(userId: string) {
+// Keep the SSR-rendered /inbox list live: subscribe to `notifications`
+// CDC for the signed-in user and refresh the route on every change so
+// new arrivals, read-state flips, and bulk markings show without a
+// manual reload.
+export function InboxSync({ userId }: { userId: string }) {
   const router = useRouter();
   useEffect(() => {
     if (!userId) return;
     const supa = createSupabaseBrowser();
     let cancelled = false;
     let channel: ReturnType<typeof supa.channel> | null = null;
-
     (async () => {
-      // The realtime socket evaluates RLS using the JWT bound to it.
-      // Without setAuth() the socket carries the anon role and the
-      // ws_members_select policy silently drops every CDC event.
       const { data } = await supa.auth.getSession();
       const token = data.session?.access_token;
       if (token) await supa.realtime.setAuth(token);
       if (cancelled) return;
-
       channel = supa
-        .channel(`workspace_members:${userId}`)
+        .channel(`inbox:${userId}`)
         .on(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           "postgres_changes" as any,
           {
             event: "*",
             schema: "public",
-            table: "workspace_members",
-            filter: `user_id=eq.${userId}`,
+            table: "notifications",
+            filter: `recipient_user_id=eq.${userId}`,
           },
           () => router.refresh(),
         )
         .subscribe();
     })();
-
     return () => {
       cancelled = true;
       if (channel) supa.removeChannel(channel);
     };
   }, [userId, router]);
+  return null;
 }
