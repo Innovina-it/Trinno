@@ -85,6 +85,21 @@ export const SetListStatusKindInput = z.object({
   statusKind: ListStatusKindZ.nullable(),
 });
 
+// Per-list custom color. Null clears it and the strip falls back to the
+// status-derived color (or neutral hairline if unmapped).
+export const ListColorZ = z.enum([
+  "slate",
+  "amber",
+  "sky",
+  "emerald",
+  "rose",
+  "violet",
+]);
+export const SetListColorInput = z.object({
+  id: Uuid,
+  color: ListColorZ.nullable(),
+});
+
 // Plan #epic-as-kanban — idempotent resolver: find or create the list on
 // `boardId` mapped to `statusKind`. Used by the epic-kanban drag handler
 // so the five status columns appear automatically.

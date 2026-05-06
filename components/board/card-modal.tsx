@@ -281,7 +281,8 @@ export function CardModal({
   }
 
   const hasRoadmapDates = Boolean(card.startDate || card.targetDate);
-  const showRoadmapLink = Boolean(workspaceId && hasRoadmapDates);
+  const onRoadmap = card.type === "epic" || card.type === "story";
+  const showRoadmapLink = Boolean(workspaceId && hasRoadmapDates && onRoadmap);
 
   // Save indicator copy.
   const saveIndicator = pending

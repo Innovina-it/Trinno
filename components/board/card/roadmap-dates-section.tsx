@@ -6,8 +6,6 @@ import { useBoardStore } from "@/stores/board-store";
 import { updateCard } from "@/actions/cards";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 
-const ROADMAP_TYPES = new Set(["epic", "story"]);
-
 function toInputValue(d: Date | string | null | undefined): string {
   if (!d) return "";
   const dt = d instanceof Date ? d : new Date(d);
@@ -34,7 +32,6 @@ export function RoadmapDatesSection({ cardId }: { cardId: string }) {
   const [targetVal, setTargetVal] = useState(initTarget);
 
   if (!card) return null;
-  if (!ROADMAP_TYPES.has(card.type)) return null;
 
   function persist(field: "start" | "target", next: string) {
     const date = fromInputValue(next);
@@ -75,7 +72,7 @@ export function RoadmapDatesSection({ cardId }: { cardId: string }) {
   return (
     <section className="space-y-3" data-testid="roadmap-dates-section">
       <div className="flex items-baseline justify-between border-b border-hairline pb-1">
-        <h3 className="mono-meta text-fg-muted">Roadmap dates</h3>
+        <h3 className="mono-meta text-fg-muted">Start / target</h3>
         <span className="mono-meta-sm text-fg-faint">PLAN</span>
       </div>
       <div className="flex flex-wrap items-center gap-3">

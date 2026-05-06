@@ -107,6 +107,7 @@ export const lists = pgTable("lists", {
     .defaultNow(),
   wipLimit: integer("wip_limit"),
   statusKind: listStatusKind("status_kind"),
+  color: text("color"),
 });
 
 export const cardPriority = pgEnum("card_priority", [

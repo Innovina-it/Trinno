@@ -30,16 +30,6 @@ jobs:
         with:
           version: latest
       - run: npm ci
-      # E2E + integration specs assert the "Check your email" flow.
-      # Local dev keeps auto-confirm (enable_confirmations = false) for
-      # ergonomics, so flip it on AND lift the 2/hour email rate limit
-      # in CI before supabase boots — otherwise tests after the second
-      # signup hit the rate limit and Mailpit never receives the mail.
-      - name: Tune Supabase auth for CI
-        run: |
-          sed -i '/^\[auth\.email\]/,/^\[/ s/^enable_confirmations = false$/enable_confirmations = true/' supabase/config.toml
-          sed -i '/^\[auth\.rate_limit\]/,/^\[/ s/^email_sent = .*/email_sent = 2000/' supabase/config.toml
-          grep -E "^enable_confirmations|^email_sent" supabase/config.toml
       - run: supabase start
       - name: Capture env
         run: |

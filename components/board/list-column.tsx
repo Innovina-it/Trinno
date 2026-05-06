@@ -7,11 +7,11 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Archive, Trash2, MoreVertical } from "lucide-react";
+import { Archive, Trash2, MoreVertical, Check } from "lucide-react";
 import { toast } from "sonner";
 import type { ListRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
-import { archiveList, deleteList } from "@/actions/lists";
+import { archiveList, deleteList, setListColor } from "@/actions/lists";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -43,6 +43,22 @@ const STATUS_ACCENT: Record<string, string> = {
   blocked:     "var(--status-blocked)",
 };
 const NEUTRAL_ACCENT = "var(--hairline-hi)";
+
+// Optional per-list custom color, set via the column "…" menu. Wins over
+// the status-derived accent when present. Keys are persisted to
+// `lists.color` and validated by `ListColorZ`.
+type ListColorKey = "slate" | "amber" | "sky" | "emerald" | "rose" | "violet";
+const COLOR_PALETTE: { key: ListColorKey; label: string; rgb: string }[] = [
+  { key: "slate",   label: "Slate",   rgb: "rgb(148 163 184)" },
+  { key: "amber",   label: "Amber",   rgb: "rgb(245 158 11)" },
+  { key: "sky",     label: "Sky",     rgb: "rgb(56 189 248)" },
+  { key: "emerald", label: "Emerald", rgb: "rgb(34 197 94)" },
+  { key: "rose",    label: "Rose",    rgb: "rgb(251 113 133)" },
+  { key: "violet",  label: "Violet",  rgb: "rgb(167 139 250)" },
+];
+const COLOR_RGB: Record<ListColorKey, string> = Object.fromEntries(
+  COLOR_PALETTE.map((c) => [c.key, c.rgb]),
+) as Record<ListColorKey, string>;
 
 export function ListColumn({
   list,
@@ -87,8 +103,13 @@ export function ListColumn({
     data: { type: "list-drop", listId: list.id },
   });
 
+  const customColor = list.color
+    ? COLOR_RGB[list.color as ListColorKey]
+    : undefined;
   const statusAccent = list.statusKind ? STATUS_ACCENT[list.statusKind] : undefined;
-  const accent = statusAccent ?? NEUTRAL_ACCENT;
+  // Custom color > status mapping > neutral hairline.
+  const accent = customColor ?? statusAccent ?? NEUTRAL_ACCENT;
+  const accentIsExplicit = Boolean(customColor || statusAccent);
 
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),
@@ -126,6 +147,21 @@ export function ListColumn({
         const m = (err as Error).message;
         toast.error(`Delete failed: ${m}`);
         errorBus.push({ message: `Delete list failed: ${m}` });
+      }
+    });
+  }
+  const [, startColor] = useTransition();
+  function onSetColor(next: ListColorKey | null) {
+    const prev = (list.color ?? null) as ListColorKey | null;
+    if (prev === next) return;
+    updateListLocal(list.id, { color: next });
+    startColor(async () => {
+      try {
+        await setListColor({ id: list.id, color: next });
+      } catch (err) {
+        updateListLocal(list.id, { color: prev });
+        const m = (err as Error).message;
+        toast.error(`Color update failed: ${m}`);
       }
     });
   }
@@ -175,7 +211,7 @@ export function ListColumn({
         aria-hidden
         className="pointer-events-none absolute left-0 top-0 bottom-0"
         style={{
-          width: statusAccent ? "3px" : "2px",
+          width: accentIsExplicit ? "3px" : "2px",
           background: `linear-gradient(180deg, ${accent} 0%, transparent 100%)`,
         }}
       />
@@ -204,10 +240,10 @@ export function ListColumn({
                       boxShadow:
                         "inset 0 0 0 1px color-mix(in oklab, var(--status-blocked) 50%, transparent)",
                     }
-                  : statusAccent
+                  : accentIsExplicit
                     ? {
-                        boxShadow: `inset 0 0 0 1px ${statusAccent}`,
-                        color: statusAccent,
+                        boxShadow: `inset 0 0 0 1px ${accent}`,
+                        color: accent,
                       }
                     : undefined
               }
@@ -230,7 +266,44 @@ export function ListColumn({
           >
             <MoreVertical className="size-3.5" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-56">
+            <div className="px-2 py-1.5">
+              <div className="mono-meta-sm text-fg-faint mb-1.5">COLOR</div>
+              <div className="flex items-center gap-1.5">
+                {COLOR_PALETTE.map((c) => {
+                  const active = list.color === c.key;
+                  return (
+                    <button
+                      key={c.key}
+                      type="button"
+                      aria-label={c.label}
+                      aria-pressed={active}
+                      onClick={() => onSetColor(c.key)}
+                      className="relative size-5 rounded-full border border-hairline-hi transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+                      style={{ background: c.rgb }}
+                    >
+                      {active && (
+                        <Check
+                          className="absolute inset-0 m-auto size-3 text-[color:var(--bg-deep)]"
+                          aria-hidden
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  aria-label="Reset color"
+                  aria-pressed={!list.color}
+                  onClick={() => onSetColor(null)}
+                  className="relative size-5 rounded-full border border-hairline-hi bg-[color:var(--surface)] text-fg-muted transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+                  title="Reset to status color"
+                >
+                  <span className="absolute inset-0 m-auto block size-3 rounded-full border border-hairline-hi" />
+                </button>
+              </div>
+            </div>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               data-testid="list-archive"
               onClick={() => onArchive()}

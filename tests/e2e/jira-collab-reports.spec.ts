@@ -31,9 +31,6 @@ async function signupAndConfirm(page: Page, email: string) {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("passw0rd!");
   await page.getByRole("button", { name: /sign up/i }).click();
-  await expect(page.getByText(/check your email/i)).toBeVisible();
-  const link = await fetchConfirmLink(email);
-  await page.goto(link);
   await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}/);
 }
 

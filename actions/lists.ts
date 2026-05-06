@@ -8,7 +8,7 @@ import { positionBetween } from "@/lib/ordering";
 import { STATUS_DEFAULT_TITLE, type StatusKind } from "@/lib/status";
 import {
   CreateListInput, RenameListInput, MoveListInput, ArchiveListInput,
-  SetWipLimitInput, SetListStatusKindInput, DeleteListInput,
+  SetWipLimitInput, SetListStatusKindInput, SetListColorInput, DeleteListInput,
   EnsureStatusListInput,
 } from "@/lib/validation";
 
@@ -232,5 +232,34 @@ export async function setListStatusKind(
   const r = await setListStatusKindImpl(t, input);
   revalidatePath(`/b/${r.boardId}`);
   revalidatePath(`/b/${r.boardId}/settings`);
+  return r;
+}
+
+export async function setListColorImpl(
+  token: string,
+  input: {
+    id: string;
+    color: "slate" | "amber" | "sky" | "emerald" | "rose" | "violet" | null;
+  },
+) {
+  const p = SetListColorInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const [row] = await tx
+      .update(lists)
+      .set({ color: p.color })
+      .where(eq(lists.id, p.id))
+      .returning();
+    if (!row) throw new Error("Forbidden");
+    return row;
+  });
+}
+
+export async function setListColor(
+  input: Parameters<typeof setListColorImpl>[1],
+) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const r = await setListColorImpl(t, input);
+  revalidatePath(`/b/${r.boardId}`);
   return r;
 }
