@@ -94,13 +94,16 @@ Vercel Pro plan -> Project -> **Settings -> Deployment Protection -> Standard Pr
 
 ## 7. Storage policies
 
-Migration `supabase/migrations/0057_storage_rls.sql` adds defense-in-depth RLS on the `card-attachments` bucket:
+The `card-attachments` bucket is private (`public = false`) and access happens server-side through signed URLs from `app/api/upload/route.ts`. RLS on `storage.objects` is owned by `supabase_storage_admin`, so the migration runner cannot apply the policy via `supabase db push` (`must be owner of table objects (SQLSTATE 42501)`).
 
-- Default-deny on `anon` and `authenticated` clients.
-- Service-role admin client bypasses RLS (used by `app/api/upload/route.ts` for signed URLs).
-- Read fallback for board members in case signed URLs are bypassed.
+The template lives at `supabase/migrations/0057_storage_rls.sql.disabled`. Apply it manually after first deploy:
 
-Verify the policy is live in Supabase Studio -> **Storage -> Policies**.
+1. Open Supabase Studio -> **SQL Editor**.
+2. Paste the policy block from the file (the `do $$ ... drop policy ...` cleanup + `create policy card_attachments_member_read ...`).
+3. Run.
+4. Verify in Supabase Studio -> **Storage -> Policies** that `card_attachments_member_read` exists on `storage.objects`.
+
+This is defense-in-depth: the bucket is already private and access is signed-URL-mediated.
 
 ## 8. Error monitoring (recommended)
 
