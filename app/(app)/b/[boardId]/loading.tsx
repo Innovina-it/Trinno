@@ -20,7 +20,7 @@ export default function BoardLoading() {
             <Skeleton className="h-5 w-24 bg-white/20" />
             <div className="flex flex-col gap-1.5">
               {[0, 1, 2].map((j) => (
-                <Skeleton key={j} className="h-12 w-full rounded-md bg-white/85" />
+                <Skeleton key={j} className="h-12 w-full rounded-md bg-white/10" />
               ))}
             </div>
             <Skeleton className="h-6 w-full bg-white/10" />
