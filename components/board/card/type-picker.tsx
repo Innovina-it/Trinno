@@ -22,6 +22,11 @@ const TYPES = [
 export type CardType = typeof TYPES[number]["id"];
 
 export function TypeIcon({ type, className }: { type: string; className?: string }) {
+  // 'task' is the default type for most cards; the hollow Square glyph
+  // reads as a clickable checkbox, not a type marker.  Drop the icon
+  // for that path — absence of an icon == "task" by convention.  Other
+  // types keep their distinctive glyphs.
+  if (type === "task") return null;
   const t = TYPES.find((x) => x.id === type) ?? TYPES[2];
   return <t.Icon className={className ?? "size-3.5"} aria-label={t.label} />;
 }
