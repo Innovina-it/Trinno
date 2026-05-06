@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { CalendarRange, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Calendar, CalendarRange, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 // Studio-Console date range picker. Replaces the native <input type="date">
 // pair, matching DESIGN.md popover surface, mono-meta, hairline tokens.
@@ -279,6 +279,159 @@ export function DateRangePopover({
 
 function addMonths(d: Date, n: number): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
+}
+
+// Single-day picker built on the same calendar grid as DateRangePopover.
+// Used for `dueDate`-style fields where one date wins.
+const SINGLE_PRESETS: { label: string; days: number }[] = [
+  { label: "TODAY", days: 0 },
+  { label: "+1W", days: 7 },
+  { label: "+2W", days: 14 },
+  { label: "+1M", days: 30 },
+];
+
+export function DatePopover({
+  value,
+  onChange,
+  disabled,
+  triggerLabel = "Set date",
+}: {
+  value: Date | null;
+  onChange: (next: Date | null) => void;
+  disabled?: boolean;
+  triggerLabel?: string;
+}) {
+  const today = startOfDayUTC(new Date());
+  const [open, setOpen] = useState(false);
+  const seedAnchor = startOfDayUTC(value ?? new Date());
+  const [anchor, setAnchor] = useState<Date>(() =>
+    new Date(Date.UTC(seedAnchor.getUTCFullYear(), seedAnchor.getUTCMonth(), 1)),
+  );
+  const [focusDay, setFocusDay] = useState<Date>(seedAnchor);
+
+  useEffect(() => {
+    if (!open) return;
+    const seed = startOfDayUTC(value ?? new Date());
+    setAnchor(new Date(Date.UTC(seed.getUTCFullYear(), seed.getUTCMonth(), 1)));
+    setFocusDay(seed);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function pickDay(d: Date) {
+    onChange(d);
+    setOpen(false);
+  }
+  function applyPreset(days: number) {
+    pickDay(addDaysUTC(today, days));
+  }
+  function clear() {
+    onChange(null);
+  }
+  function nudgeFocus(deltaDays: number) {
+    const next = addDaysUTC(focusDay, deltaDays);
+    setFocusDay(next);
+    if (
+      next.getUTCFullYear() !== anchor.getUTCFullYear() ||
+      next.getUTCMonth() !== anchor.getUTCMonth()
+    ) {
+      setAnchor(new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth(), 1)));
+    }
+  }
+  function onGridKey(e: React.KeyboardEvent) {
+    if (e.key === "ArrowLeft") { e.preventDefault(); nudgeFocus(-1); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); nudgeFocus(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); nudgeFocus(-7); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); nudgeFocus(7); }
+    else if (e.key === "Enter") { e.preventDefault(); pickDay(focusDay); }
+    else if (e.key.toLowerCase() === "t") { e.preventDefault(); nudgeFocus(diffDays(focusDay, today)); }
+  }
+
+  const cells = buildMonth(anchor);
+  const cellsNext = buildMonth(addMonths(anchor, 1));
+
+  const triggerText = value ? fmtChip(value) : triggerLabel;
+  const isEmpty = !value;
+
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} className="relative inline-block">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        data-testid="date-popover-trigger"
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-hairline-hi bg-[color:var(--surface)] text-fg hover:bg-[color:var(--surface-strong)] disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 font-mono text-[0.8rem] tabular-nums"
+      >
+        <Calendar className="size-3.5 text-fg-muted" aria-hidden />
+        <span className={isEmpty ? "text-fg-faint" : undefined}>{triggerText}</span>
+      </button>
+      {open && (
+        <div
+          role="dialog"
+          aria-label="Pick date"
+          onKeyDown={onGridKey}
+          className="absolute left-0 top-full mt-2 z-50 w-[640px] max-w-[calc(100vw-2rem)] rounded-2xl border border-hairline-hi bg-[color:var(--popover)] p-3 shadow-[0_40px_100px_-32px_rgba(0,0,0,0.6)] outline-none"
+        >
+          <div className="flex items-center gap-1.5 mb-3 px-1">
+            {SINGLE_PRESETS.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => applyPreset(p.days)}
+                className="chip mono-meta-sm px-2 py-1 hover:bg-[color:var(--surface-hi)] hover:text-fg"
+              >
+                {p.label}
+              </button>
+            ))}
+            <span className="ml-auto mono-meta-sm text-fg-faint">PICK DATE</span>
+            {!isEmpty && (
+              <button
+                type="button"
+                onClick={clear}
+                aria-label="Clear date"
+                className="size-6 rounded-md text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] inline-flex items-center justify-center"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {[anchor, addMonths(anchor, 1)].map((m, mi) => (
+              <MonthGrid
+                key={mi}
+                anchor={m}
+                cells={mi === 0 ? cells : cellsNext}
+                today={today}
+                focusDay={focusDay}
+                inRange={() => false}
+                isEdge={(d) => (value && isSameDay(d, value) ? "start" : null)}
+                onPick={pickDay}
+                onHover={() => {}}
+                onPrev={mi === 0 ? () => setAnchor(addMonths(anchor, -1)) : undefined}
+                onNext={mi === 1 ? () => setAnchor(addMonths(anchor, 1)) : undefined}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function MonthGrid({
