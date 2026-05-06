@@ -26,6 +26,7 @@ export const boardVisibility = pgEnum("board_visibility", [
 export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey(),
   displayName: text("display_name").notNull(),
+  handle: text("handle").notNull(),
   avatarUrl: text("avatar_url"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -147,6 +148,7 @@ export const cards = pgTable("cards", {
   priority: cardPriority("priority"),
   coverKind: text("cover_kind").notNull().default("none"),
   coverValue: text("cover_value"),
+  ownerId: uuid("owner_id"),
 });
 
 export const labels = pgTable("labels", {

@@ -78,6 +78,10 @@ export async function ActivityFeed({
       <ul className="overflow-y-auto divide-y divide-hairline">
         {rows.map((r) => {
           const isRoadmapDates = r.type === "card.dates" && r.cardId;
+          // Member events carry the *target* user in r.targetName.  Render
+          // "Ali added Bob" instead of just "Ali" so the feed actually
+          // reflects who was affected.
+          const targetName = (r as { targetName?: string | null }).targetName;
           const body = (
             <>
               <div className="mono-meta-sm text-fg-faint">{humanType(r.type)}</div>
@@ -85,6 +89,12 @@ export async function ActivityFeed({
                 <span className="font-medium text-fg">
                   {r.actorName ?? "Someone"}
                 </span>
+                {targetName && (
+                  <>
+                    <span className="text-fg-muted"> · </span>
+                    <span className="font-medium text-fg">{targetName}</span>
+                  </>
+                )}
               </div>
               <div className="mono-meta-sm text-fg-faint mt-0.5">
                 {rel(r.createdAt as unknown as string)}

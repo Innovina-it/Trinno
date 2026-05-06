@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { changeMemberRole, removeMember } from "@/actions/workspace-members";
+import { useWorkspaceMembersSync } from "@/hooks/use-workspace-members-sync";
 import { toast } from "sonner";
 
 type Member = {
@@ -22,6 +23,9 @@ export function MemberList({
   members: Member[];
 }) {
   const [pending, start] = useTransition();
+  // Live updates so a concurrent admin's invite / role change / removal
+  // in another tab is reflected here without a manual reload.
+  useWorkspaceMembersSync(workspaceId);
 
   return (
     <ul className="divide-y rounded border">
