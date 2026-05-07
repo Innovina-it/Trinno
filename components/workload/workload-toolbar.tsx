@@ -1,7 +1,7 @@
 "use client";
 import { Select } from "@/components/ui/select";
 
-export type RangePreset = "week" | "4w" | "quarter";
+export type RangePreset = "week" | "month" | "quarter";
 export type SortKind = "peak" | "alpha";
 
 export function WorkloadToolbar({
@@ -66,7 +66,7 @@ export function WorkloadToolbar({
           aria-label="Range preset"
           className="inline-flex h-8 rounded-md border border-hairline-hi bg-[color:var(--surface)] p-0.5 gap-0.5"
         >
-          {(["week", "4w", "quarter"] as const).map((r) => (
+          {(["week", "month", "quarter"] as const).map((r) => (
             <button
               key={r}
               type="button"
@@ -81,7 +81,7 @@ export function WorkloadToolbar({
                   : "text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)]")
               }
             >
-              {r === "week" ? "WEEK" : r === "4w" ? "4W" : "QUARTER"}
+              {r.toUpperCase()}
             </button>
           ))}
         </div>

@@ -11,8 +11,15 @@ import {
 import { WorkloadBar } from "./workload-bar";
 
 const MS_DAY = 86_400_000;
-const PX_PER_DAY = 14;
 const LANE_LABEL_WIDTH = 200;
+// Per-range density.  WEEK is short (~10 days) so each day is wide and
+// bars + day labels breathe.  QUARTER spans ~3 months so we trade
+// per-day density for fitting more on screen.
+const PX_PER_DAY_BY_RANGE: Record<RangePreset, number> = {
+  week: 56,
+  month: 22,
+  quarter: 9,
+};
 const LANE_BAR_HEIGHT = 22;
 const LANE_PADDING_Y = 6;
 
@@ -38,7 +45,7 @@ function rangeFor(preset: RangePreset, today: Date): { start: Date; end: Date } 
   if (preset === "week") {
     return { start: addDays(today, -2), end: addDays(today, 7) };
   }
-  if (preset === "4w") {
+  if (preset === "month") {
     return { start: addDays(today, -7), end: addDays(today, 28) };
   }
   return { start: addDays(today, -7), end: addDays(today, 90) };
@@ -81,7 +88,8 @@ export function WorkloadView({
 
   const [wsFilter, setWsFilter] = useState("");
   const [sprintFilter, setSprintFilter] = useState("");
-  const [rangePreset, setRangePreset] = useState<RangePreset>("4w");
+  const [rangePreset, setRangePreset] = useState<RangePreset>("month");
+  const PX_PER_DAY = PX_PER_DAY_BY_RANGE[rangePreset];
   const [sortKind, setSortKind] = useState<SortKind>("peak");
 
   const today = useMemo(() => startOfDayUtc(new Date()), []);
