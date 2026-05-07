@@ -228,18 +228,31 @@ export function WorkloadView({
                   PERSON
                 </div>
                 <div className="relative flex-1" style={{ width: gridWidth }}>
-                  {monthRuns(dayCells).map((run) => (
-                    <div
-                      key={run.start}
-                      className="absolute inset-y-0 px-2 mono-meta-sm text-fg-muted flex items-center border-l border-hairline first:border-l-0"
-                      style={{
-                        left: run.start * PX_PER_DAY,
-                        width: run.length * PX_PER_DAY,
-                      }}
-                    >
-                      {fmtMonthShort(addDays(rangeStart, run.start))}
-                    </div>
-                  ))}
+                  {monthRuns(dayCells).map((run) => {
+                    const runWidth = run.length * PX_PER_DAY;
+                    // Hide the month label when the run is too narrow to
+                    // fit it without overlapping the next month's label.
+                    // ~36px buys "APR" + padding; below that, keep the
+                    // boundary line and drop the text.
+                    const showLabel = runWidth >= 36;
+                    return (
+                      <div
+                        key={run.start}
+                        className="absolute inset-y-0 mono-meta-sm text-fg-muted flex items-center overflow-hidden border-l border-hairline first:border-l-0"
+                        style={{
+                          left: run.start * PX_PER_DAY,
+                          width: runWidth,
+                          paddingLeft: showLabel ? 8 : 0,
+                        }}
+                      >
+                        {showLabel && (
+                          <span className="truncate">
+                            {fmtMonthShort(addDays(rangeStart, run.start))}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

@@ -61,7 +61,11 @@ export function WorkloadToolbar({
         />
       </Field>
       <Field label="RANGE">
-        <div role="radiogroup" aria-label="Range preset" className="flex gap-1">
+        <div
+          role="radiogroup"
+          aria-label="Range preset"
+          className="inline-flex h-8 rounded-md border border-hairline-hi bg-[color:var(--surface)] p-0.5 gap-0.5"
+        >
           {(["week", "4w", "quarter"] as const).map((r) => (
             <button
               key={r}
@@ -71,9 +75,9 @@ export function WorkloadToolbar({
               onClick={() => setRangePreset(r)}
               data-testid={`workload-range-${r}`}
               className={
-                "h-7 px-2.5 rounded-md mono-meta-sm transition-colors " +
+                "px-2.5 rounded-[5px] mono-meta-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 " +
                 (rangePreset === r
-                  ? "bg-[color:var(--surface-hi)] text-fg ring-1 ring-fg/20 ring-inset"
+                  ? "bg-[color:var(--surface-hi)] text-fg"
                   : "text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)]")
               }
             >
