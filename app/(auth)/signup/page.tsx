@@ -23,7 +23,7 @@ export default function SignupPage() {
               Create account
             </h1>
             <p className="text-sm text-fg-muted">
-              You will get a confirmation email. Open it to finish setup.
+              Internal team workspace. You will land in the app right after.
             </p>
           </div>
 
