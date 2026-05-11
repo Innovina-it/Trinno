@@ -19,9 +19,11 @@ import type { SprintLite } from "@/components/sprint/sprint-picker";
 export function BacklogClient({
   workspaceId,
   workspaceName,
+  canManageSprints,
 }: {
   workspaceId: string;
   workspaceName: string;
+  canManageSprints: boolean;
 }) {
   const { subscribed } = useWorkspaceRealtime(workspaceId);
   const cards = useWorkspaceStore((s) => s.cards);
@@ -65,6 +67,7 @@ export function BacklogClient({
     sprintId: string | null;
     storyPoints?: number | null;
     archived?: boolean;
+    completedAt?: Date | string | null;
   };
 
   const cardsBySprint = useMemo(() => {
@@ -80,6 +83,7 @@ export function BacklogClient({
         sprintId: c.sprintId,
         storyPoints: c.storyPoints,
         archived: c.archived,
+        completedAt: (c as { completedAt?: Date | string | null }).completedAt ?? null,
       });
       map.set(k, arr);
     }
@@ -123,7 +127,9 @@ export function BacklogClient({
               />
               {subscribed ? "Live" : "Offline"}
             </span>
-            <CreateSprintDialog workspaceId={workspaceId} />
+            {canManageSprints && (
+              <CreateSprintDialog workspaceId={workspaceId} />
+            )}
           </div>
         </div>
       </header>
@@ -136,6 +142,7 @@ export function BacklogClient({
             cards={cardsBySprint.get(active.id) ?? []}
             allSprints={allSprints}
             workspaceId={workspaceId}
+            canManageSprints={canManageSprints}
           />
         ) : (
           <div className="rounded-xl border border-hairline bg-[color:var(--surface)] px-4 py-6 text-center space-y-1">
@@ -158,6 +165,7 @@ export function BacklogClient({
               allSprints={allSprints}
               workspaceId={workspaceId}
               activeExists={Boolean(active)}
+              canManageSprints={canManageSprints}
             />
           ))}
           {planned.length === 0 && (
@@ -170,7 +178,11 @@ export function BacklogClient({
         <h2 className="mono-meta text-fg-muted">
           BACKLOG ({backlogCards.length})
         </h2>
-        <BacklogList cards={backlogCards} sprints={allSprints} />
+        <BacklogList
+          cards={backlogCards}
+          sprints={allSprints}
+          canManageSprints={canManageSprints}
+        />
       </section>
 
       {completed.length > 0 && (

@@ -5,7 +5,6 @@ import { createBoardImpl } from "@/actions/boards";
 import { createListImpl } from "@/actions/lists";
 import {
   createCardImpl,
-  archiveCardImpl,
   updateCardImpl,
 } from "@/actions/cards";
 import {
@@ -86,7 +85,9 @@ describe("sprint stats", () => {
     expect(r.points[0].pointsCompleted).toBe(0);
   });
 
-  it("burndown reflects an archived card's points as completed", async () => {
+  it("burndown reflects a completed card's points as completed", async () => {
+    // After migration 0062, completion is `cards.completed_at` (not
+    // `archived`). The DB trigger keeps `due_complete` mirrored.
     const u = await makeUser("st3");
     const { ws, l } = await setup(u.jwt);
     const sp = await createSprintImpl(u.jwt, {
@@ -98,7 +99,7 @@ describe("sprint stats", () => {
     const c = await createCardImpl(u.jwt, { listId: l.id, title: "C" });
     await updateCardImpl(u.jwt, { id: c.id, storyPoints: 8 });
     await assignCardToSprintImpl(u.jwt, { cardId: c.id, sprintId: sp.id });
-    await archiveCardImpl(u.jwt, { id: c.id, archived: true });
+    await updateCardImpl(u.jwt, { id: c.id, completed: true });
 
     const r = await computeBurndown(u.jwt, sp.id);
     const lastPoint = r.points[r.points.length - 1];
@@ -107,6 +108,9 @@ describe("sprint stats", () => {
   });
 
   it("velocity returns completed sprints with summed points", async () => {
+    // Velocity now reads `cards.completed_at` (migration 0062). Mark the
+    // card complete BEFORE starting the sprint so completed_at lands
+    // inside the sprint's open window per `card_sprint_history`.
     const u = await makeUser("st4");
     const { ws, l } = await setup(u.jwt);
     const sp = await createSprintImpl(u.jwt, { workspaceId: ws.id, name: "S" });
@@ -114,9 +118,7 @@ describe("sprint stats", () => {
     await updateCardImpl(u.jwt, { id: c.id, storyPoints: 13 });
     await assignCardToSprintImpl(u.jwt, { cardId: c.id, sprintId: sp.id });
     await startSprintImpl(u.jwt, { id: sp.id });
-    await archiveCardImpl(u.jwt, { id: c.id, archived: true });
-    // Archived cards stay attached to the sprint when carrying over to backlog
-    // (only non-archived move). That preserves the velocity signal.
+    await updateCardImpl(u.jwt, { id: c.id, completed: true });
     await completeSprintImpl(u.jwt, { id: sp.id, carryoverTo: "backlog" });
 
     const v = await computeVelocity(u.jwt, ws.id, 6);

@@ -63,7 +63,11 @@ import { useRoadmapDragHarness } from "./use-roadmap-drag-harness";
 const ROW_HEIGHT = 36; // 28px bar + 8px gap
 const LANE_HEADER_HEIGHT = 28;
 const LANE_GAP = 12;
-const HEADER_STRIP_HEIGHT = 36;
+// Two-row header: date labels (e.g. "May 1") sit in the top ~24px,
+// sprint labels (e.g. "SPRINT 15 · ACTIVE") in the bottom ~28px above
+// the 4px stripe. Splitting these prevents the previous label collision
+// where both rendered into the same 36px slot.
+const HEADER_STRIP_HEIGHT = 56;
 const LANE_LABEL_WIDTH = 200;
 
 function fmtHeader(d: Date, zoom: Zoom): string {
@@ -72,7 +76,13 @@ function fmtHeader(d: Date, zoom: Zoom): string {
     timeZone: "UTC",
   });
   if (zoom === "week") {
-    return `${monthShort} ${d.getUTCDate()}`;
+    const weekday = d.toLocaleString("en-US", {
+      weekday: "short",
+      timeZone: "UTC",
+    });
+    return d.getUTCDate() === 1
+      ? `${weekday} ${monthShort} ${d.getUTCDate()}`
+      : `${weekday} ${d.getUTCDate()}`;
   }
   if (zoom === "month") {
     return `${monthShort} ${d.getUTCFullYear()}`;
@@ -93,7 +103,7 @@ function buildHeaderTicks(
     let cur = gridStart;
     while (cur.getTime() <= gridEnd.getTime()) {
       ticks.push({ date: cur, x: xForDate(cur, gridStart, ppd) });
-      cur = addDays(cur, 7);
+      cur = addDays(cur, 1);
     }
   } else if (zoom === "month") {
     let cur = new Date(
@@ -207,6 +217,102 @@ export function RoadmapView({
   const gutterRef = useRef<HTMLDivElement | null>(null);
   // Ref to the lane label panel for row-drag hit-testing (G1).
   const labelPanelRef = useRef<HTMLDivElement | null>(null);
+
+  // Space-to-pan: hold spacebar to swap the scroller into a Photoshop /
+  // Figma-style hand tool. While `spacePan` is true the cursor flips to
+  // grab and a pointerdown on the scroller starts a horizontal pan
+  // instead of bubbling to bar/canvas drag handlers.
+  const [spacePan, setSpacePan] = useState(false);
+  const spacePanRef = useRef(false);
+  spacePanRef.current = spacePan;
+  useEffect(() => {
+    function isTextTarget(t: EventTarget | null): boolean {
+      if (!(t instanceof HTMLElement)) return false;
+      const tag = t.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (t.isContentEditable) return true;
+      return false;
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.code !== "Space") return;
+      if (e.repeat) {
+        if (spacePanRef.current) e.preventDefault();
+        return;
+      }
+      if (isTextTarget(e.target)) return;
+      e.preventDefault();
+      setSpacePan(true);
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.code !== "Space") return;
+      setSpacePan(false);
+    }
+    function onBlur() {
+      // Releasing focus (alt-tab etc.) drops the keyup, so reset to
+      // avoid the cursor sticking in grab mode.
+      setSpacePan(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
+
+  // Pan-drag bookkeeping for the active gesture.
+  const panRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startScrollLeft: number;
+  } | null>(null);
+  const [panning, setPanning] = useState(false);
+
+  const handleScrollerPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!spacePanRef.current) return;
+      if (e.button !== 0) return;
+      const sc = scrollerRef.current;
+      if (!sc) return;
+      // Capture the gesture: we want subsequent move/up events even if
+      // the pointer leaves the scroller bounds.
+      sc.setPointerCapture(e.pointerId);
+      panRef.current = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startScrollLeft: sc.scrollLeft,
+      };
+      setPanning(true);
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    [],
+  );
+
+  const handleScrollerPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const p = panRef.current;
+      if (!p || p.pointerId !== e.pointerId) return;
+      const sc = scrollerRef.current;
+      if (!sc) return;
+      const dx = e.clientX - p.startX;
+      sc.scrollLeft = p.startScrollLeft - dx;
+    },
+    [],
+  );
+
+  const endPan = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const p = panRef.current;
+    if (!p || p.pointerId !== e.pointerId) return;
+    const sc = scrollerRef.current;
+    if (sc && sc.hasPointerCapture(e.pointerId)) {
+      sc.releasePointerCapture(e.pointerId);
+    }
+    panRef.current = null;
+    setPanning(false);
+  }, []);
 
   // Plan #16b-γ-A (#3) — critical-path overlay toggle. Local state only;
   // intentionally not URL-synced because the overlay is a per-session
@@ -330,6 +436,15 @@ export function RoadmapView({
         archived: c.archived,
         roadmapOrder: c.roadmapOrder ?? null,
         priority: c.priority ?? null,
+        // completedAt feeds the bar's lime ring + line-through. Was
+        // missing — the toggle fired the server call fine, but UI never
+        // reflected because the prop was always undefined.
+        completedAt:
+          c.completedAt
+            ? c.completedAt instanceof Date
+              ? c.completedAt
+              : new Date(c.completedAt)
+            : null,
       }));
   }, [storeCards, storeBoards, queryNorm, filters, sprintFilter]);
 
@@ -373,7 +488,19 @@ export function RoadmapView({
 
   const ppd = pixelsPerDay(zoom);
   const now = useMemo(() => new Date(), []);
-  const gridStart = useMemo(() => gridStartFor(now, zoom), [now, zoom]);
+  // Base origin = current period (week/month/quarter). If any card starts
+  // before that, walk the origin back to cover it (snapped to the same
+  // zoom period so grid ticks stay aligned). Mirrors the forward extension
+  // we already do for late targets.
+  const gridStart = useMemo(() => {
+    const base = gridStartFor(now, zoom);
+    const minStart = cards.reduce(
+      (acc, c) => (c.startDate.getTime() < acc ? c.startDate.getTime() : acc),
+      base.getTime(),
+    );
+    if (minStart >= base.getTime()) return base;
+    return gridStartFor(new Date(minStart), zoom);
+  }, [cards, now, zoom]);
   const gridEnd = useMemo(() => {
     const baseEnd = gridEndFor(gridStart, zoom);
     // Extend to cover any card past 6 months.
@@ -451,9 +578,17 @@ export function RoadmapView({
         if (rows.length > cur) maxByStackRow.set(p.row, rows.length);
       }
       for (const v of maxByStackRow.values()) extraRows += v;
+      // Header card occupies its own row above body cards (see barCoords:
+      // bodyTop = barRowsTop + ROW_HEIGHT when headerCard is set). Lane
+      // height must therefore reserve 1 row for the header PLUS bodyRows
+      // for stories. Without the header, fall back to at least 1 body
+      // row so empty lanes still render.
+      const totalBarRows = lane.headerCard
+        ? 1 + bodyRows
+        : Math.max(1, bodyRows);
       const height =
         LANE_HEADER_HEIGHT +
-        (Math.max(1, bodyRows) + extraRows) * ROW_HEIGHT +
+        (totalBarRows + extraRows) * ROW_HEIGHT +
         LANE_GAP;
       const top = yCursor;
       yCursor += height;
@@ -667,19 +802,29 @@ export function RoadmapView({
     } catch {
       saved = null;
     }
-    if (!saved) return;
     // Apply saved zoom only if URL is silent on the matter.
-    if (saved.zoom && !zoomParam && (ZOOMS as string[]).includes(saved.zoom)) {
+    if (saved?.zoom && !zoomParam && (ZOOMS as string[]).includes(saved.zoom)) {
       const params = new URLSearchParams(sp.toString());
       params.set("zoom", saved.zoom);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }
-    // Apply scrollX after first paint.
-    if (typeof saved.scrollX === "number") {
+    // Apply scrollX after first paint. If nothing saved, anchor on `now` so
+    // the user lands on "today" even when the grid extends backward to
+    // cover past-dated cards.
+    if (typeof saved?.scrollX === "number") {
       requestAnimationFrame(() => {
         if (scrollerRef.current) {
           scrollerRef.current.scrollLeft = saved!.scrollX!;
         }
+      });
+    } else {
+      requestAnimationFrame(() => {
+        const sc = scrollerRef.current;
+        if (!sc) return;
+        const x = xForDate(startOfDay(now), gridStart, ppd);
+        const desired = x - sc.clientWidth / 4;
+        const max = sc.scrollWidth - sc.clientWidth;
+        sc.scrollLeft = Math.max(0, Math.min(max, desired));
       });
     }
     // Note: we intentionally don't include sp / pathname / router in deps —
@@ -904,13 +1049,15 @@ export function RoadmapView({
       <RoadmapFilterBar />
 
       {cards.length > 0 && (
-        <RoadmapMiniMap
-          cards={cards}
-          gridStart={gridStart}
-          gridEnd={gridEnd}
-          canvasWidth={width}
-          scrollerRef={scrollerRef}
-        />
+        <div className="hidden md:block">
+          <RoadmapMiniMap
+            cards={cards}
+            gridStart={gridStart}
+            gridEnd={gridEnd}
+            canvasWidth={width}
+            scrollerRef={scrollerRef}
+          />
+        </div>
       )}
 
       {cards.length === 0 ? (
@@ -1050,6 +1197,16 @@ export function RoadmapView({
             ref={scrollerRef}
             className="flex-1 overflow-x-auto overflow-y-hidden"
             data-testid="roadmap-scroller"
+            data-pan-mode={
+              panning ? "panning" : spacePan ? "ready" : undefined
+            }
+            style={{
+              cursor: panning ? "grabbing" : spacePan ? "grab" : undefined,
+            }}
+            onPointerDownCapture={handleScrollerPointerDown}
+            onPointerMove={handleScrollerPointerMove}
+            onPointerUp={endPan}
+            onPointerCancel={endPan}
           >
             <div
               ref={canvasRef}
@@ -1066,8 +1223,12 @@ export function RoadmapView({
                 {ticks.map((t, i) => (
                   <div
                     key={i}
-                    className="absolute top-0 h-full flex items-end pb-1 pl-1.5"
-                    style={{ left: t.x, width: 1 }}
+                    className="absolute top-0 flex items-start pt-1 pl-1.5"
+                    style={{
+                      left: t.x,
+                      width: zoom === "week" ? ppd : 1,
+                      height: 24,
+                    }}
                   >
                     <span className="whitespace-nowrap">
                       {fmtHeader(t.date, zoom)}
@@ -1201,9 +1362,9 @@ export function RoadmapView({
               })()}
               {/* Plan #16b-γ-G G6 polish — visual snap guide. Drawn
                   while a drag is in progress and a snap candidate is
-                  within the 4-day window. Suppressed when Alt is held
-                  (the release will skip snap). Sits between today-line
-                  and the bar layer so labels read above weekend
+                  within its snap window. Suppressed when Alt is held (the
+                  release will skip snap). Sits between today-line and the
+                  bar layer so labels read above weekend
                   stripes but below dragged bars. */}
               {drag.snapPreview &&
                 (() => {
@@ -1293,11 +1454,11 @@ export function RoadmapView({
                           return (
                             <div
                               key={sc.id}
-                              className="absolute h-3 rounded-sm border border-fg/25 bg-fg/8 hover:border-fg/50 transition-colors flex items-center px-1.5 cursor-pointer select-none"
+                              className="absolute h-4 rounded-full border border-dashed border-fg/40 bg-[color:var(--surface)]/70 hover:border-fg/80 hover:bg-[color:var(--surface-strong)] transition-colors flex items-center pl-3 pr-2 cursor-pointer select-none"
                               style={{
-                                left: sx + 16,
-                                width: Math.max(sw - 16, 8),
-                                top: 12,
+                                left: sx + 24,
+                                width: Math.max(sw - 24, 12),
+                                top: 10,
                               }}
                               data-card-id={sc.id}
                               data-testid="roadmap-subtask-bar"
@@ -1308,7 +1469,15 @@ export function RoadmapView({
                                 .toISOString()
                                 .slice(0, 10)}`}
                             >
-                              <span className="text-[10px] text-fg-muted truncate">
+                              <span
+                                aria-hidden
+                                className="absolute -left-3 top-1/2 h-px w-3 bg-fg/30"
+                              />
+                              <span
+                                aria-hidden
+                                className="absolute left-1.5 top-1/2 -translate-y-1/2 size-1 rounded-full bg-fg/50"
+                              />
+                              <span className="text-[10px] text-fg-muted truncate tracking-tight">
                                 {sc.title}
                               </span>
                             </div>
@@ -1565,16 +1734,99 @@ function RoadmapShortcutsDialog({
           <dt className="mono-meta text-fg-faint">/</dt>
           <dd className="text-fg">Focus search</dd>
           <dt className="mono-meta text-fg-faint">Esc</dt>
-          <dd className="text-fg">Clear search / close menus</dd>
+          <dd className="text-fg">
+            Cancel drag · clear search · close menus
+          </dd>
           <dt className="mono-meta text-fg-faint">+ / −</dt>
           <dd className="text-fg">Zoom in / out</dd>
           <dt className="mono-meta text-fg-faint">← / →</dt>
           <dd className="text-fg">Scroll the timeline</dd>
+          <dt className="mono-meta text-fg-faint">Shift + ← / →</dt>
+          <dd className="text-fg">Page the timeline by one viewport</dd>
+          <dt className="mono-meta text-fg-faint">Hold Space + drag</dt>
+          <dd className="text-fg">Pan the timeline with the mouse</dd>
           <dt className="mono-meta text-fg-faint">n</dt>
           <dd className="text-fg">New card</dd>
+          <dt className="mono-meta text-fg-faint">Right-click bar</dt>
+          <dd className="text-fg">Open card context menu</dd>
           <dt className="mono-meta text-fg-faint">?</dt>
           <dd className="text-fg">Show this list</dd>
         </dl>
+        <section
+          className="mt-5 space-y-1.5"
+          data-testid="roadmap-bar-legend"
+        >
+          <h3 className="mono-meta-sm text-fg-faint tracking-[0.14em]">
+            BAR PATTERNS
+          </h3>
+          <dl className="rounded-md border border-hairline bg-[color:var(--surface)] divide-y divide-hairline overflow-hidden">
+            {[
+              {
+                label: "TODO",
+                desc: "Untriaged. Solid fill.",
+                pattern: {
+                  background:
+                    "color-mix(in oklab, var(--status-todo) 22%, transparent)",
+                },
+              },
+              {
+                label: "IN PROGRESS",
+                desc: "Pulses. Reduced-motion safe.",
+                pattern: {
+                  background:
+                    "color-mix(in oklab, var(--status-in-progress) 38%, transparent)",
+                  boxShadow:
+                    "inset 0 0 0 1px color-mix(in oklab, var(--status-in-progress) 55%, transparent)",
+                },
+              },
+              {
+                label: "REVIEW",
+                desc: "Diagonal stripes. Waiting on a human.",
+                pattern: {
+                  background:
+                    "color-mix(in oklab, var(--status-review) 22%, transparent)",
+                  backgroundImage:
+                    "repeating-linear-gradient(45deg, color-mix(in oklab, var(--status-review) 45%, transparent) 0 4px, transparent 4px 8px)",
+                },
+              },
+              {
+                label: "DONE",
+                desc: "Horizontal hatches. Closed and frozen.",
+                pattern: {
+                  background:
+                    "color-mix(in oklab, var(--status-done) 22%, transparent)",
+                  backgroundImage:
+                    "repeating-linear-gradient(0deg, color-mix(in oklab, var(--status-done) 50%, transparent) 0 2px, transparent 2px 6px)",
+                },
+              },
+              {
+                label: "BLOCKED",
+                desc: "Inset ring. Fenced off, needs a decision.",
+                pattern: {
+                  background:
+                    "color-mix(in oklab, var(--status-blocked) 12%, transparent)",
+                  boxShadow:
+                    "inset 0 0 0 2px color-mix(in oklab, var(--status-blocked) 60%, transparent)",
+                },
+              },
+            ].map((row) => (
+              <div
+                key={row.label}
+                className="grid grid-cols-[3rem_6rem_1fr] gap-3 px-3 py-2 items-center"
+              >
+                <span
+                  aria-hidden
+                  className="h-5 w-full rounded-md border border-hairline-hi"
+                  style={row.pattern as React.CSSProperties}
+                />
+                <dt className="mono-meta-sm tabular-nums text-fg">
+                  {row.label}
+                </dt>
+                <dd className="text-sm text-fg-muted">{row.desc}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
       </DialogContent>
     </Dialog>
   );

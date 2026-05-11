@@ -37,12 +37,13 @@ function rowToCard(r: Record<string, unknown>, boardId: string): CardSnap {
     roadmapOrder: (r.roadmap_order as number | null) ?? null,
     priority:
       (r.priority as "p0" | "p1" | "p2" | "p3" | "p4" | null) ?? null,
+    ownerId: (r.owner_id as string | null) ?? null,
+    completedAt: r.completed_at ? new Date(r.completed_at as string) : null,
   };
 }
 
 export function useWorkspaceRealtime(workspaceId: string) {
   const upsertCard = useWorkspaceStore((s) => s.upsertCard);
-  const patchCard = useWorkspaceStore((s) => s.patchCard);
   const removeCard = useWorkspaceStore((s) => s.removeCard);
   const upsertList = useWorkspaceStore((s) => s.upsertList);
   const patchList = useWorkspaceStore((s) => s.patchList);
@@ -81,6 +82,7 @@ export function useWorkspaceRealtime(workspaceId: string) {
 
       const ch = supa.channel(`ws:${workspaceId}`);
       channel = ch;
+      const boardIds = new Set(boards.map((b) => b.id));
 
       for (const b of boards) {
         ch.on(
@@ -115,6 +117,20 @@ export function useWorkspaceRealtime(workspaceId: string) {
               if (r.archived) {
                 removeList(r.id as string);
               } else {
+                upsertList({
+                  id: r.id as string,
+                  boardId: b.id,
+                  title: r.title as string,
+                  position: (r.position as string) ?? "",
+                  statusKind:
+                    (r.status_kind as
+                      | "todo"
+                      | "in_progress"
+                      | "review"
+                      | "done"
+                      | "blocked"
+                      | null) ?? null,
+                });
                 patchList(r.id as string, {
                   title: r.title as string,
                   position: (r.position as string) ?? "",
@@ -130,27 +146,6 @@ export function useWorkspaceRealtime(workspaceId: string) {
               }
             } else if (payload.eventType === "DELETE" && payload.old) {
               removeList((payload.old as { id: string }).id);
-            }
-          },
-        );
-        ch.on(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          "postgres_changes" as any,
-          {
-            event: "*",
-            schema: "public",
-            table: "cards",
-            filter: `board_id=eq.${b.id}`,
-          },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (payload: any) => {
-            if (payload.eventType === "INSERT" && payload.new) {
-              upsertCard(rowToCard(payload.new, b.id));
-            } else if (payload.eventType === "UPDATE" && payload.new) {
-              const next = rowToCard(payload.new, b.id);
-              patchCard(next.id, next);
-            } else if (payload.eventType === "DELETE" && payload.old) {
-              removeCard((payload.old as { id: string }).id);
             }
           },
         );
@@ -206,6 +201,30 @@ export function useWorkspaceRealtime(workspaceId: string) {
           },
         );
       }
+
+      ch.on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        "postgres_changes" as any,
+        {
+          event: "*",
+          schema: "public",
+          table: "cards",
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (payload: any) => {
+          if (payload.eventType === "INSERT" && payload.new) {
+            const boardId = payload.new.board_id as string;
+            if (boardIds.has(boardId)) upsertCard(rowToCard(payload.new, boardId));
+          } else if (payload.eventType === "UPDATE" && payload.new) {
+            const boardId = payload.new.board_id as string;
+            const next = rowToCard(payload.new, boardId);
+            if (next.archived || !boardIds.has(boardId)) removeCard(next.id);
+            else upsertCard(next);
+          } else if (payload.eventType === "DELETE" && payload.old) {
+            removeCard((payload.old as { id: string }).id);
+          }
+        },
+      );
 
       ch.on(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -331,7 +350,6 @@ export function useWorkspaceRealtime(workspaceId: string) {
     workspaceId,
     boards,
     upsertCard,
-    patchCard,
     removeCard,
     upsertList,
     patchList,

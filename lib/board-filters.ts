@@ -6,6 +6,7 @@ export type Filters = {
   due: "overdue" | "this-week" | null;
   assignedToMe: boolean;
   scheduled: boolean;
+  hideCompleted: boolean;
 };
 
 type FilterCard = {
@@ -14,6 +15,7 @@ type FilterCard = {
   parentCardId?: string | null;
   dueDate?: Date | string | null;
   dueComplete?: boolean | null;
+  completedAt?: Date | string | null;
   sprintId?: string | null;
   startDate?: Date | string | null;
   targetDate?: Date | string | null;
@@ -27,12 +29,17 @@ export function parseFilters(sp: URLSearchParams): Filters {
   // `me=1` is NOT supported.
   const assignedToMe = sp.get("assignee") === "me";
   const scheduled = sp.get("scheduled") === "1";
+  // `done=hide` matches the URL key used by the workload page (see
+  // components/workload/workload-view.tsx). On the board the default is
+  // OFF (completed cards visible) so we only persist when toggled on.
+  const hideCompleted = sp.get("done") === "hide";
   return {
     types,
     labelIds,
     due: due === "overdue" || due === "this-week" ? due : null,
     assignedToMe,
     scheduled,
+    hideCompleted,
   };
 }
 
@@ -43,6 +50,7 @@ export function serializeFilters(f: Filters): URLSearchParams {
   if (f.due) sp.set("due", f.due);
   if (f.assignedToMe) sp.set("assignee", "me");
   if (f.scheduled) sp.set("scheduled", "1");
+  if (f.hideCompleted) sp.set("done", "hide");
   return sp;
 }
 
@@ -51,7 +59,8 @@ export function isFilterActive(f: Filters): boolean {
     || f.labelIds.length > 0
     || f.due !== null
     || f.assignedToMe
-    || f.scheduled;
+    || f.scheduled
+    || f.hideCompleted;
 }
 
 export function applyFilters<T extends FilterCard>(
@@ -102,6 +111,9 @@ export function applyFilters<T extends FilterCard>(
     }
     if (f.scheduled) {
       if (!c.startDate && !c.targetDate) return false;
+    }
+    if (f.hideCompleted) {
+      if (c.completedAt != null) return false;
     }
     return true;
   });

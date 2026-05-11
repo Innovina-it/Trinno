@@ -64,7 +64,6 @@ export function ListColumn({
   list,
   boardId,
   workspaceId,
-  ordinal,
   cardIdFilter,
 }: {
   list: ListRow;
@@ -202,7 +201,7 @@ export function ListColumn({
       style={style}
       data-list-id={list.id}
       data-dragging={isDragging ? "true" : undefined}
-      className="group/list relative flex w-80 shrink-0 flex-col rounded-2xl glass overflow-hidden transition-all duration-300 ease-out data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02]"
+      className="group/list relative flex w-[85vw] max-w-[320px] sm:w-80 shrink-0 snap-start flex-col rounded-2xl glass overflow-hidden transition-all duration-300 ease-out data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02]"
     >
       {/* Per-list accent strip — vertical bar on the left edge, fades top-to-bottom.
           Status-coloured lists get a thicker strip + soft glow so the workflow

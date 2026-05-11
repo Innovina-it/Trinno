@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { parseFilters, applyFilters, partitionLanes } from "@/lib/board-filters";
+import {
+  parseFilters,
+  serializeFilters,
+  applyFilters,
+  partitionLanes,
+} from "@/lib/board-filters";
 
 const cards = [
   { id: "c1", title: "Bug fix", listId: "l1", boardId: "b", archived: false, type: "bug", parentCardId: null, dueDate: null, dueComplete: false, sprintId: null, position: "a" },
@@ -84,5 +89,64 @@ describe("partitionLanes", () => {
     expect(out.find((l) => l.key === "story")?.cardIds).toEqual(["c2"]);
     expect(out.find((l) => l.key === "task")?.cardIds).toEqual(["c3"]);
     expect(out.find((l) => l.key === "bug")?.cardIds).toEqual(["c1"]);
+  });
+});
+
+describe("hideCompleted filter", () => {
+  const baseFilters: Omit<
+    Parameters<typeof serializeFilters>[0],
+    "hideCompleted"
+  > = {
+    types: [],
+    labelIds: [],
+    due: null,
+    assignedToMe: false,
+    scheduled: false,
+  };
+
+  it("parses done=hide as hideCompleted: true", () => {
+    const f = parseFilters(new URLSearchParams("done=hide"));
+    expect(f.hideCompleted).toBe(true);
+  });
+
+  it("defaults hideCompleted to false when absent", () => {
+    const f = parseFilters(new URLSearchParams(""));
+    expect(f.hideCompleted).toBe(false);
+  });
+
+  it("serializes hideCompleted: true to done=hide", () => {
+    const sp = serializeFilters({ ...baseFilters, hideCompleted: true });
+    expect(sp.get("done")).toBe("hide");
+  });
+
+  it("omits the done key when hideCompleted is false", () => {
+    const sp = serializeFilters({ ...baseFilters, hideCompleted: false });
+    expect(sp.has("done")).toBe(false);
+  });
+
+  it("applyFilters with hideCompleted true drops cards with completedAt set", () => {
+    const stub = [
+      { id: "a", title: "A", archived: false, completedAt: null },
+      { id: "b", title: "B", archived: false, completedAt: new Date() },
+    ];
+    const out = applyFilters(
+      stub,
+      { cardLabels: [], cardMembers: [], currentUserId: null },
+      { ...baseFilters, hideCompleted: true },
+    );
+    expect(out.map((c) => c.id)).toEqual(["a"]);
+  });
+
+  it("applyFilters with hideCompleted false keeps both", () => {
+    const stub = [
+      { id: "a", title: "A", archived: false, completedAt: null },
+      { id: "b", title: "B", archived: false, completedAt: new Date() },
+    ];
+    const out = applyFilters(
+      stub,
+      { cardLabels: [], cardMembers: [], currentUserId: null },
+      { ...baseFilters, hideCompleted: false },
+    );
+    expect(out.map((c) => c.id)).toEqual(["a", "b"]);
   });
 });

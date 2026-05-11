@@ -20,7 +20,7 @@ export default async function AllTasksPage({
 
   return (
     <WorkspaceStoreProvider initial={snapshot}>
-      <div className="mx-auto max-w-[1600px] px-6 py-10 space-y-6">
+      <div className="mx-auto max-w-[1600px] px-3 sm:px-4 md:px-6 py-6 md:py-10 space-y-6">
         <header className="space-y-3 border-b border-hairline pb-6">
           <span className="chip">{ws.name.toUpperCase()} / MY TASKS</span>
           <div className="flex items-baseline justify-between gap-4">

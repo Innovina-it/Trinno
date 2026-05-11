@@ -1,6 +1,6 @@
 import { eq, desc, inArray } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { activity, profiles } from "@/lib/db/schema";
+import { activity, profiles, cards } from "@/lib/db/schema";
 
 export async function listActivityForBoard(
   token: string,
@@ -17,9 +17,11 @@ export async function listActivityForBoard(
         actorId: activity.actorId,
         createdAt: activity.createdAt,
         actorName: profiles.displayName,
+        cardTitle: cards.title,
       })
       .from(activity)
       .leftJoin(profiles, eq(profiles.id, activity.actorId))
+      .leftJoin(cards, eq(cards.id, activity.cardId))
       .where(eq(activity.boardId, boardId))
       .orderBy(desc(activity.createdAt))
       .limit(limit);

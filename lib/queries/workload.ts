@@ -26,6 +26,7 @@ export type WorkloadCard = {
   storyPoints: number | null;
   priority: "p0" | "p1" | "p2" | "p3" | "p4" | null;
   statusKind: "todo" | "in_progress" | "review" | "done" | "blocked" | null;
+  completedAt: Date | null;
   boardId: string;
   boardTitle: string;
   workspaceId: string;
@@ -70,6 +71,7 @@ export async function listWorkload(
       workspaceName: workspaces.name,
       sprintId: cards.sprintId,
       sprintName: sprints.name,
+      completedAt: cards.completedAt,
     };
 
     // Members rows: card_members JOIN cards (with dates) JOIN lists JOIN
@@ -135,6 +137,7 @@ export async function listWorkload(
       workspaceName: r.workspaceName,
       sprintId: (r.sprintId ?? null) as string | null,
       sprintName: (r.sprintName ?? null) as string | null,
+      completedAt: (r.completedAt ?? null) as Date | null,
       userId: r.userId as string,
       role,
     });

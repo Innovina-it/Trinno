@@ -11,6 +11,7 @@ import {
 import { Plus } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
 import { toggleCardComponent } from "@/actions/card-components";
+import { undoBus } from "@/lib/undo-bus";
 
 export function ComponentCardSection({ cardId }: { cardId: string }) {
   const components = useBoardStore((s) => s.components);
@@ -36,6 +37,8 @@ export function ComponentCardSection({ cardId }: { cardId: string }) {
 
   function toggle(componentId: string) {
     const wasAttached = attachedIds.has(componentId);
+    const componentName =
+      components.find((c) => c.id === componentId)?.name ?? "Component";
     if (wasAttached) {
       removeCardComponent(cardId, componentId);
     } else {
@@ -48,6 +51,36 @@ export function ComponentCardSection({ cardId }: { cardId: string }) {
     start(async () => {
       try {
         await toggleCardComponent({ cardId, componentId });
+        undoBus.push({
+          message: wasAttached
+            ? `Removed ${componentName}`
+            : `Added ${componentName}`,
+          undo: async () => {
+            if (wasAttached) {
+              addCardComponent({
+                cardId,
+                componentId,
+                boardId: "00000000-0000-0000-0000-000000000000",
+              });
+            } else {
+              removeCardComponent(cardId, componentId);
+            }
+            try {
+              await toggleCardComponent({ cardId, componentId });
+            } catch (err) {
+              if (wasAttached) {
+                removeCardComponent(cardId, componentId);
+              } else {
+                addCardComponent({
+                  cardId,
+                  componentId,
+                  boardId: "00000000-0000-0000-0000-000000000000",
+                });
+              }
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
       } catch (err) {
         if (wasAttached) {
           addCardComponent({

@@ -2,6 +2,7 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useBoardStore } from "@/stores/board-store";
 import { CheckSquare, Paperclip, MessageSquare } from "lucide-react";
+import type { BoardProfile } from "@/lib/queries/board-snapshot";
 
 export function TileIndicators({ cardId }: { cardId: string }) {
   const profiles = useBoardStore((s) => s.boardProfiles);
@@ -16,7 +17,7 @@ export function TileIndicators({ cardId }: { cardId: string }) {
     .map((cm) => cm.userId);
   const memberProfiles = memberIds
     .map((uid) => profiles.find((p) => p.id === uid))
-    .filter((p): p is { id: string; displayName: string } => Boolean(p));
+    .filter((p): p is BoardProfile => Boolean(p));
 
   const myChecklistIds = new Set(
     checklists.filter((c) => c.cardId === cardId).map((c) => c.id),

@@ -6,6 +6,7 @@ import { requireUser, getSessionToken } from "@/lib/auth";
 import { CardModal } from "@/components/board/card-modal";
 import { CardActivity } from "@/components/board/card/card-activity";
 import { listSprintsForWorkspace } from "@/lib/queries/sprints";
+import { listMembers } from "@/lib/queries/workspaces";
 
 export default async function InterceptedCardPage({
   params,
@@ -13,7 +14,7 @@ export default async function InterceptedCardPage({
   params: Promise<{ boardId: string; cardId: string }>;
 }) {
   const { cardId } = await params;
-  await requireUser();
+  const user = await requireUser();
   const token = (await getSessionToken())!;
   const rows = await dbAsUser(token, async (tx) =>
     tx.select().from(cards).where(eq(cards.id, cardId)),
@@ -27,6 +28,10 @@ export default async function InterceptedCardPage({
   const sprints = board
     ? await listSprintsForWorkspace(token, board.workspaceId)
     : [];
+  const members = board ? await listMembers(token, board.workspaceId) : [];
+  const currentMember = members.find((m) => m.userId === user.id);
+  const canManageSprints =
+    currentMember?.role === "owner" || currentMember?.role === "admin";
 
   return (
     <CardModal
@@ -51,6 +56,7 @@ export default async function InterceptedCardPage({
       }}
       sprints={sprints.map((s) => ({ id: s.id, name: s.name, state: s.state }))}
       workspaceId={board?.workspaceId}
+      canManageSprints={canManageSprints}
     >
       <CardActivity cardId={c.id} workspaceId={board?.workspaceId} />
     </CardModal>

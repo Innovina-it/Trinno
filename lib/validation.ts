@@ -149,6 +149,11 @@ export const UpdateCardInput = z.object({
   coverKind: z.enum(["none", "color", "image"]).optional(),
   coverValue: z.string().max(500).nullable().optional(),
   ownerId: Uuid.nullable().optional(),
+  // Single source of truth for "card is done". Setting `completed: true`
+  // stamps `completed_at = now()`; `false` clears it. The DB trigger
+  // keeps `dueComplete` in lockstep so legacy code paths continue to
+  // work without dual-writes.
+  completed: z.boolean().optional(),
 });
 export const MoveCardInput = z.object({
   id: Uuid, listId: Uuid, position: z.string().min(1).max(64),
@@ -183,9 +188,14 @@ export const AddChecklistItemInput = z.object({ checklistId: Uuid, text: z.strin
 export const ToggleChecklistItemInput = z.object({ id: Uuid, completed: z.boolean() });
 export const RemoveChecklistItemInput = z.object({ id: Uuid });
 
-export const CreateCommentInput = z.object({ cardId: Uuid, body: z.string().trim().min(1).max(20_000) });
+export const CreateCommentInput = z.object({
+  cardId: Uuid,
+  body: z.string().trim().min(1).max(20_000),
+  parentCommentId: Uuid.nullish(),
+});
 export const EditCommentInput = z.object({ id: Uuid, body: z.string().trim().min(1).max(20_000) });
 export const DeleteCommentInput = z.object({ id: Uuid });
+export const ResolveCommentInput = z.object({ id: Uuid, resolved: z.boolean() });
 
 export const RegisterAttachmentInput = z.object({
   cardId: Uuid,
@@ -242,6 +252,14 @@ export const AssignCardToSprintInput = z.object({
 export const BulkShiftCardDatesInput = z.object({
   cardIds: z.array(Uuid).min(1).max(50),
   deltaMinutes: z.number().int(),
+});
+
+// Bulk mark-complete (or un-complete). Capped at 500 ids/call — this
+// path only writes `completed_at`, no per-row joins, so the larger cap
+// is safe vs the 50-row limit on bulk archive/sprint.
+export const BulkSetCompletedInput = z.object({
+  cardIds: z.array(Uuid).min(1).max(500),
+  completed: z.boolean(),
 });
 
 export const MarkNotificationReadInput = z.object({
@@ -491,4 +509,3 @@ export const ToggleFavoriteBoardInput = z.object({ boardId: Uuid });
 // freshest board to the top. Fired best-effort on every board page
 // render — failures are swallowed.
 export const RecordBoardViewInput = z.object({ boardId: Uuid });
-

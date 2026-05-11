@@ -5,7 +5,9 @@ import { sql as dsql } from "drizzle-orm";
 import * as schema from "./schema";
 
 const queryClient = postgres(process.env.DATABASE_URL!, {
-  max: 10,
+  max: Number(process.env.DATABASE_POOL_MAX ?? 2),
+  idle_timeout: 10,
+  connect_timeout: 5,
   prepare: false,
 });
 // Internal: raw connection bypasses RLS. Never export — all callers must

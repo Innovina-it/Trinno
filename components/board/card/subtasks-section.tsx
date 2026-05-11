@@ -8,6 +8,8 @@ import { TypeIcon } from "./type-picker";
 import { Plus, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { CompleteToggle } from "./complete-toggle";
+import { undoBus } from "@/lib/undo-bus";
 
 export function SubtasksSection({
   cardId, listId, boardId,
@@ -24,16 +26,14 @@ export function SubtasksSection({
     () => cards.filter((c) => (c as { parentCardId?: string | null }).parentCardId === cardId && !c.archived),
     [cards, cardId],
   );
-  // Sub-tasks reuse `archived` as the closed state because cards have no
-  // dedicated `completed_at` column yet (see migration template
-  // 0058_card_completed_at.sql.disabled). We label the count "closed" so
-  // the UI does not promise a semantic the schema cannot back.
-  const closed = children.filter(
-    (c) =>
-      (c as { type?: string }).type === "subtask" && c.archived,
+  // Completion now uses cards.completed_at (migration 0062). The DB
+  // trigger keeps it in sync with cards.due_complete so legacy callers
+  // continue to work.
+  const completedCount = children.filter(
+    (c) => (c as { completedAt?: Date | string | null }).completedAt != null,
   ).length;
   const total = children.length;
-  const pct = total === 0 ? 0 : Math.round((closed / total) * 100);
+  const pct = total === 0 ? 0 : Math.round((completedCount / total) * 100);
 
   function create(e: React.FormEvent) {
     e.preventDefault();
@@ -47,20 +47,62 @@ export function SubtasksSection({
         updateCardLocal(child.id, { type: "subtask", parentCardId: cardId } as Partial<typeof child>);
         setText("");
         setAdding(false);
+        undoBus.push({
+          message: "Sub-task added",
+          undo: async () => {
+            removeCardLocal(child.id);
+            try {
+              await archiveCard({ id: child.id, archived: true });
+            } catch (err) {
+              addCardLocal({
+                ...child,
+                type: "subtask",
+                parentCardId: cardId,
+              });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
         void updated;
       } catch (err) { toast.error((err as Error).message); }
     });
   }
 
-  function toggleArchive(child: { id: string; archived: boolean }) {
+  function toggleArchive(child: (typeof cards)[number]) {
+    const nextArchived = !child.archived;
+    if (nextArchived) removeCardLocal(child.id);
+    else updateCardLocal(child.id, { archived: false });
     start(async () => {
       try {
-        await archiveCard({ id: child.id, archived: !child.archived });
-        if (child.archived) updateCardLocal(child.id, { archived: false });
-        else removeCardLocal(child.id);
-      } catch (err) { toast.error((err as Error).message); }
+        await archiveCard({ id: child.id, archived: nextArchived });
+        undoBus.push({
+          message: nextArchived ? "Sub-task archived" : "Sub-task restored",
+          undo: async () => {
+            if (nextArchived) {
+              addCardLocal({ ...child, archived: false });
+            } else {
+              removeCardLocal(child.id);
+            }
+            try {
+              await archiveCard({ id: child.id, archived: child.archived });
+            } catch (err) {
+              if (nextArchived) {
+                removeCardLocal(child.id);
+              } else {
+                updateCardLocal(child.id, { archived: false });
+              }
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
+      } catch (err) {
+        if (nextArchived) addCardLocal(child);
+        else updateCardLocal(child.id, { archived: child.archived });
+        toast.error((err as Error).message);
+      }
     });
   }
+
 
   return (
     <div className="space-y-3" data-testid="subtasks-section">
@@ -68,7 +110,7 @@ export function SubtasksSection({
         <h3 className="mono-meta text-fg">Sub-tasks</h3>
         {total > 0 && (
           <span className="mono-meta-sm text-fg-muted tabular-nums">
-            {closed} OF {total} CLOSED
+            {pct === 100 ? "ALL DONE" : `${completedCount} OF ${total} DONE`}
           </span>
         )}
       </div>
@@ -81,39 +123,51 @@ export function SubtasksSection({
           aria-valuemax={100}
         >
           <div
-            className="h-full bg-fg/70 rounded transition-[width] duration-300"
+            className={`h-full rounded transition-[width,background-color] duration-300 ${
+              pct === 100 ? "bg-[color:var(--accent-lime)]" : "bg-fg/70"
+            }`}
             style={{ width: `${pct}%` }}
           />
         </div>
       )}
       <ul className="space-y-1">
-        {children.map((c) => (
-          <li
-            key={c.id}
-            className="flex items-center gap-2 text-sm border border-hairline rounded-lg p-2"
-          >
-            <input
-              type="checkbox"
-              checked={c.archived}
-              onChange={() => toggleArchive({ id: c.id, archived: c.archived })}
-              className="accent-fg"
-            />
-            <TypeIcon type={(c as { type?: string }).type ?? "task"} />
-            <Link
-              href={`/b/${boardId}/c/${c.id}`}
-              className={`flex-1 hover:underline ${c.archived ? "line-through text-fg-muted" : ""}`}
+        {children.map((c) => {
+          const completedAt = (c as { completedAt?: Date | string | null }).completedAt ?? null;
+          const isDone = completedAt != null;
+          return (
+            <li
+              key={c.id}
+              className="flex items-center gap-2 text-sm border border-hairline rounded-lg p-2"
             >
-              {c.title}
-            </Link>
-            <Button
-              type="button" variant="ghost" size="xs"
-              onClick={() => toggleArchive({ id: c.id, archived: c.archived })}
-              disabled={pending}
-            >
-              <Trash2 className="size-3" />
-            </Button>
-          </li>
-        ))}
+              <CompleteToggle
+                cardId={c.id}
+                completed={isDone}
+                size="sm"
+                onLocalChange={(next) =>
+                  updateCardLocal(c.id, {
+                    completedAt: next ? new Date() : null,
+                    dueComplete: next,
+                  } as Partial<typeof c>)
+                }
+              />
+              <TypeIcon type={(c as { type?: string }).type ?? "task"} />
+              <Link
+                href={`/b/${boardId}/c/${c.id}`}
+                className={`flex-1 hover:underline ${isDone ? "line-through text-fg-muted" : ""}`}
+              >
+                {c.title}
+              </Link>
+              <Button
+                type="button" variant="ghost" size="xs"
+                onClick={() => toggleArchive(c)}
+                disabled={pending}
+                title="Archive (remove from list)"
+              >
+                <Trash2 className="size-3" />
+              </Button>
+            </li>
+          );
+        })}
       </ul>
       {!adding ? (
         <Button

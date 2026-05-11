@@ -36,8 +36,28 @@ const VERB_BY_KIND: Record<string, string> = {
   "card.moved": "moved a card you watch",
   "card.linked": "linked a card to one you watch",
   "card.sprint_changed": "moved a card you watch to a different sprint",
+  "card.completed": "completed a card you watch",
   "board.member.added": "added you to a board",
 };
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (ch) => {
+    switch (ch) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      case "'":
+        return "&#39;";
+      default:
+        return ch;
+    }
+  });
+}
 
 function admin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -146,12 +166,17 @@ export async function processPendingEmails(opts: {
           : "/inbox";
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
       const link = `${baseUrl}${linkPath}`;
+      const actorNameHtml = escapeHtml(actorName);
+      const verbHtml = escapeHtml(verb);
+      const cardTitleHtml = escapeHtml(cardTitle);
+      const boardTitleHtml = escapeHtml(boardTitle);
+      const linkHtml = escapeHtml(link);
       const html = `
         <div style="font-family: -apple-system, system-ui, sans-serif; color: #fafafa; background: #0a0a0a; padding: 24px;">
           <p style="margin: 0 0 12px 0; font-size: 14px; color: #fafafa99;">Trinno</p>
-          <p style="margin: 0 0 8px 0; font-size: 16px;"><strong>${actorName}</strong> ${verb}${cardTitle ? ` <strong>${cardTitle}</strong>` : ""}.</p>
-          ${boardTitle ? `<p style="margin: 0 0 16px 0; font-size: 13px; color: #fafafa99;">Board · ${boardTitle}</p>` : ""}
-          <p style="margin: 0 0 24px 0;"><a href="${link}" style="color: #38bdf8;">Open in Trinno</a></p>
+          <p style="margin: 0 0 8px 0; font-size: 16px;"><strong>${actorNameHtml}</strong> ${verbHtml}${cardTitle ? ` <strong>${cardTitleHtml}</strong>` : ""}.</p>
+          ${boardTitle ? `<p style="margin: 0 0 16px 0; font-size: 13px; color: #fafafa99;">Board · ${boardTitleHtml}</p>` : ""}
+          <p style="margin: 0 0 24px 0;"><a href="${linkHtml}" style="color: #38bdf8;">Open in Trinno</a></p>
           <p style="margin: 24px 0 0 0; font-size: 12px; color: #fafafa59;">
             You're receiving this because you opted in to email for this kind in /settings/notifications.
           </p>

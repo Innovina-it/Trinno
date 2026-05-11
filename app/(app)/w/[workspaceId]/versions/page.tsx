@@ -24,7 +24,7 @@ export default async function VersionsListPage({
   const versions = await listVersions(token, workspaceId);
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10 space-y-10">
+    <div className="mx-auto max-w-6xl px-3 sm:px-4 md:px-6 py-6 md:py-10 space-y-10">
       <header className="space-y-3 border-b border-hairline pb-6">
         <span className="chip">{ws.name.toUpperCase()} / VERSIONS</span>
         <h1 className="serif-display text-5xl">Releases</h1>

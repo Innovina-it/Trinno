@@ -3,16 +3,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
-  Command,
-  Star,
-  Clock,
-  FileSearch,
-  PlusSquare,
-  FolderPlus,
-  Sun,
-  LogOut,
+  Archive,
   ArrowRight,
+  Calendar,
+  Clock,
+  Columns,
+  Command,
+  FileSearch,
+  FolderPlus,
+  Inbox,
+  LayoutDashboard,
   ListChecks,
+  LogOut,
+  Map as MapIcon,
+  PlusSquare,
+  Star,
+  Sun,
+  Tag,
+  Users,
 } from "lucide-react";
 import {
   Dialog,
@@ -21,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { search } from "@/actions/search";
 import { logout } from "@/actions/auth";
+import { useCommandPalette } from "@/lib/use-command-palette";
 
 export type PaletteFavorite = {
   boardId: string;
@@ -32,9 +41,10 @@ export type PaletteRecent = PaletteFavorite;
 
 type PaletteItem = {
   id: string;
-  section: "Recents" | "Favorites" | "Cards" | "Actions";
+  section: "Goto" | "Recents" | "Favorites" | "Cards" | "Actions";
   label: string;
   sub?: string;
+  shortcut?: string;
   icon: React.ReactNode;
   onSelect: () => void | Promise<void>;
 };
@@ -69,25 +79,23 @@ export function CommandPalette({
 }) {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const [open, setOpen] = useState(false);
+  // Open state lives in a shared store so the nav's ⌘K trigger button
+  // and the `useNavChords` hook can both flip it. Esc closes locally.
+  const { open, setOpen } = useCommandPalette();
   const [q, setQ] = useState("");
   const [cardResults, setCardResults] = useState<CardResult[]>([]);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // ⌘K / Ctrl+K open + Esc close.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
-        e.preventDefault();
-        setOpen((o) => !o);
-      } else if (e.key === "Escape" && open) {
+      if (e.key === "Escape" && open) {
         setOpen(false);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, setOpen]);
 
   // Reset state on close.
   useEffect(() => {
@@ -119,6 +127,108 @@ export function CommandPalette({
   const items = useMemo<PaletteItem[]>(() => {
     const out: PaletteItem[] = [];
     const needle = q.toLowerCase().trim();
+    const targetWsId = activeWorkspaceId ?? workspaces[0]?.id;
+
+    // Goto destinations — primary nav surfaces, plus app-globals (Inbox,
+    // Dashboards, Workload). Mirrors the chord shortcuts in
+    // `useNavChords`. Workspace-scoped goto entries are suppressed when
+    // the user has no workspace yet.
+    type Goto = {
+      id: string;
+      label: string;
+      sub?: string;
+      shortcut: string;
+      icon: React.ReactNode;
+      href: string;
+      requiresWs?: boolean;
+    };
+    const gotos: Goto[] = [
+      {
+        id: "goto:roadmap",
+        label: "Roadmap",
+        shortcut: "g r",
+        icon: <MapIcon className="size-3.5 text-fg-muted" />,
+        href: targetWsId ? `/w/${targetWsId}/roadmap` : "",
+        requiresWs: true,
+      },
+      {
+        id: "goto:boards",
+        label: "Boards",
+        shortcut: "g b",
+        icon: <Columns className="size-3.5 text-fg-muted" />,
+        href: targetWsId ? `/w/${targetWsId}/boards` : "",
+        requiresWs: true,
+      },
+      {
+        id: "goto:backlog",
+        label: "Backlog",
+        shortcut: "g l",
+        icon: <Tag className="size-3.5 text-fg-muted" />,
+        href: targetWsId ? `/w/${targetWsId}/backlog` : "",
+        requiresWs: true,
+      },
+      {
+        id: "goto:all-tasks",
+        label: "My tasks",
+        shortcut: "g t",
+        icon: <ListChecks className="size-3.5 text-fg-muted" />,
+        href: targetWsId ? `/w/${targetWsId}/all-tasks` : "",
+        requiresWs: true,
+      },
+      {
+        id: "goto:inbox",
+        label: "Inbox",
+        shortcut: "g i",
+        icon: <Inbox className="size-3.5 text-fg-muted" />,
+        href: "/inbox",
+      },
+      {
+        id: "goto:dashboards",
+        label: "Dashboards",
+        shortcut: "g d",
+        icon: <LayoutDashboard className="size-3.5 text-fg-muted" />,
+        href: "/dashboards",
+      },
+      {
+        id: "goto:workload",
+        label: "Workload",
+        shortcut: "g w",
+        icon: <Users className="size-3.5 text-fg-muted" />,
+        href: "/workload",
+      },
+      {
+        id: "goto:versions",
+        label: "Versions",
+        shortcut: "",
+        icon: <Calendar className="size-3.5 text-fg-muted" />,
+        href: targetWsId ? `/w/${targetWsId}/versions` : "",
+        requiresWs: true,
+      },
+      {
+        id: "goto:archive",
+        label: "Archive",
+        shortcut: "",
+        icon: <Archive className="size-3.5 text-fg-muted" />,
+        href: targetWsId ? `/w/${targetWsId}/archive` : "",
+        requiresWs: true,
+      },
+    ];
+    for (const g of gotos) {
+      if (g.requiresWs && !targetWsId) continue;
+      if (needle && !g.label.toLowerCase().includes(needle)) continue;
+      out.push({
+        id: g.id,
+        section: "Goto",
+        label: g.label,
+        sub: g.sub,
+        shortcut: g.shortcut || undefined,
+        icon: g.icon,
+        onSelect: () => {
+          router.push(g.href);
+          setOpen(false);
+        },
+      });
+    }
 
     // Recents
     for (const r of recents) {
@@ -172,23 +282,12 @@ export function CommandPalette({
     }
 
     // Actions — always shown but filtered by q if present.
-    // Plan #workspace-routing — "Open my tasks" and "New board…" route
-    // to the *active* workspace (resolved server-side from the URL),
-    // falling back to the first workspace only when the active one is
-    // unknown (e.g. /inbox or a personal-scope dashboard).
-    const targetWsId = activeWorkspaceId ?? workspaces[0]?.id;
+    // Plan #workspace-routing — "New board…" routes to the *active*
+    // workspace (resolved server-side from the URL), falling back to
+    // the first workspace only when the active one is unknown
+    // (e.g. /inbox or a personal-scope dashboard). "Open my tasks"
+    // moved to Goto with `g t`.
     const actions: PaletteItem[] = [
-      {
-        id: "act:open-my-tasks",
-        section: "Actions",
-        label: "Open my tasks",
-        sub: "Workspace-wide kanban grouped by status",
-        icon: <ListChecks className="size-3.5 text-fg-muted" />,
-        onSelect: () => {
-          if (targetWsId) router.push(`/w/${targetWsId}/all-tasks`);
-          setOpen(false);
-        },
-      },
       {
         id: "act:new-board",
         section: "Actions",
@@ -239,16 +338,30 @@ export function CommandPalette({
     }
 
     return out;
-  }, [q, recents, favorites, cardResults, workspaces, activeWorkspaceId, theme, setTheme, router]);
+  }, [q, recents, favorites, cardResults, workspaces, activeWorkspaceId, theme, setTheme, setOpen, router]);
 
-  // Group items per section for rendering.
+  // Group items per section for rendering. Plain array of pairs so we
+  // don't reach for the JS `Map` constructor — Turbopack misresolves it
+  // when `Map` is also re-exported as an alias from a sibling module
+  // import in this file (the lucide `Map` icon).
   const grouped = useMemo(() => {
-    const g = new Map<PaletteItem["section"], PaletteItem[]>();
+    const order: PaletteItem["section"][] = [];
+    const byName = new globalThis.Map<
+      PaletteItem["section"],
+      PaletteItem[]
+    >();
     for (const it of items) {
-      if (!g.has(it.section)) g.set(it.section, []);
-      g.get(it.section)!.push(it);
+      let bucket = byName.get(it.section);
+      if (!bucket) {
+        bucket = [];
+        byName.set(it.section, bucket);
+        order.push(it.section);
+      }
+      bucket.push(it);
     }
-    return Array.from(g.entries());
+    return order.map(
+      (s) => [s, byName.get(s)!] as [PaletteItem["section"], PaletteItem[]],
+    );
   }, [items]);
 
   // Reset active index when items shrink/grow.
@@ -273,7 +386,15 @@ export function CommandPalette({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
-        className="sm:max-w-lg p-0 gap-0"
+        className={[
+          "sm:max-w-lg p-0 gap-0",
+          // Full-screen on mobile: drop the centered card framing, take
+          // the whole viewport so the keyboard doesn't crash the list
+          // and the result panel actually has room to breathe.
+          "max-md:inset-0 max-md:top-0 max-md:left-0 max-md:translate-x-0 max-md:translate-y-0",
+          "max-md:max-w-none max-md:w-full max-md:h-dvh max-md:rounded-none",
+          "max-md:slide-in-from-bottom-0 max-md:zoom-in-100",
+        ].join(" ")}
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">Command palette</DialogTitle>
@@ -292,7 +413,7 @@ export function CommandPalette({
           <span className="mono-meta-sm text-fg-faint">ESC</span>
         </div>
         <div
-          className="max-h-[60vh] overflow-y-auto p-1"
+          className="max-h-[60vh] md:max-h-[60vh] max-md:flex-1 max-md:max-h-none overflow-y-auto p-1"
           data-testid="command-palette-list"
         >
           {items.length === 0 && (
@@ -331,7 +452,12 @@ export function CommandPalette({
                             {it.sub}
                           </span>
                         )}
-                        {isActive && (
+                        {it.shortcut && (
+                          <kbd className="mono-meta-sm text-fg-faint border border-hairline rounded px-1.5 py-0.5 leading-none tracking-[0.08em]">
+                            {it.shortcut}
+                          </kbd>
+                        )}
+                        {!it.shortcut && isActive && (
                           <ArrowRight className="size-3 text-fg-faint" />
                         )}
                       </button>

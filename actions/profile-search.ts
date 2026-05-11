@@ -1,5 +1,5 @@
 "use server";
-import { sql, and, eq, or, ilike, ne } from "drizzle-orm";
+import { sql, and, eq, or, ilike, ne, inArray } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { profiles, boards } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
@@ -45,14 +45,14 @@ export async function searchMentionables(
 
     const where = q
       ? and(
-          sql`${profiles.id} = any(${ids})`,
+          inArray(profiles.id, ids),
           or(
             ilike(profiles.handle, `${q}%`),
             ilike(profiles.displayName, `%${q}%`),
           ),
           ne(profiles.id, me),
         )
-      : and(sql`${profiles.id} = any(${ids})`, ne(profiles.id, me));
+      : and(inArray(profiles.id, ids), ne(profiles.id, me));
 
     const rows = await tx
       .select({

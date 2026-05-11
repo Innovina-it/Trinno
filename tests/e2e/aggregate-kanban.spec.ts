@@ -1,30 +1,4 @@
-import { test, expect, request as pwRequest, type Page } from "@playwright/test";
-
-const MAILPIT = "http://127.0.0.1:54324";
-
-async function fetchConfirmLink(email: string): Promise<string> {
-  const api = await pwRequest.newContext({ baseURL: MAILPIT });
-  for (let i = 0; i < 30; i++) {
-    const list = await api.get(
-      `/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
-    );
-    if (list.ok()) {
-      const data = await list.json();
-      if (data.messages && data.messages.length > 0) {
-        const id = data.messages[0].ID;
-        const detail = await api.get(`/api/v1/message/${id}`);
-        const msg = await detail.json();
-        const body: string = msg.HTML || msg.Text || "";
-        const m =
-          body.match(/href="([^"]*\/auth\/v1\/verify[^"]*)"/) ??
-          body.match(/(https?:\/\/[^\s"<>]+\/auth\/v1\/verify[^\s"<>]+)/);
-        if (m) return m[1].replace(/&amp;/g, "&");
-      }
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error(`no email arrived for ${email}`);
-}
+import { test, expect, type Page } from "@playwright/test";
 
 async function signupAndLand(page: Page, prefix: string) {
   const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
@@ -89,9 +63,8 @@ test("MY TASKS link in top nav navigates to aggregate view", async ({ page }) =>
   await expect(page.getByTestId("all-tasks-empty-no-boards")).toBeVisible();
 });
 
-// FIXME: needs triage after recent UI/seed/onboarding changes (Plan #16b post-rebrand).
 
-test.fixme("dragging a card between status columns persists the move", async ({
+test("dragging a card between status columns persists the move", async ({
   page,
 }) => {
   test.setTimeout(180_000);

@@ -32,6 +32,7 @@ const KIND_LABEL: Record<string, string> = {
   "card.unassigned": "unassigned you from",
   "card.archived": "archived",
   "card.unarchived": "restored",
+  "card.completed": "completed",
   "card.moved": "moved",
   "card.due": "set due date on",
   "card.dates": "updated roadmap dates on",
@@ -45,6 +46,11 @@ function rel(d: string) {
   if (sec < 3600) return `${Math.round(sec / 60)}m`;
   if (sec < 86400) return `${Math.round(sec / 3600)}h`;
   return `${Math.round(sec / 86400)}d`;
+}
+
+function preview(payload: Record<string, unknown>): string | null {
+  const p = payload.preview;
+  return typeof p === "string" && p.trim() ? p.trim() : null;
 }
 
 export function NotificationBell({ userId }: { userId: string }) {
@@ -134,7 +140,7 @@ export function NotificationBell({ userId }: { userId: string }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="relative inline-flex items-center justify-center size-8 rounded-md text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+        className="relative inline-flex items-center justify-center size-9 rounded-md text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 [@media(hover:none)_and_(pointer:coarse)]:min-h-11 [@media(hover:none)_and_(pointer:coarse)]:min-w-11"
         aria-label={`Notifications${unread ? ` (${unread} unread)` : ""}`}
         data-realtime-ready={subscribed ? "true" : undefined}
       >
@@ -147,7 +153,7 @@ export function NotificationBell({ userId }: { userId: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-80 max-h-96 overflow-auto p-0"
+        className="w-[min(calc(100vw-1rem),20rem)] max-h-[min(70dvh,24rem)] overflow-auto p-0"
       >
         <div className="px-3 py-2 border-b border-hairline flex items-baseline justify-between">
           <span className="mono-meta">Inbox</span>
@@ -196,6 +202,11 @@ export function NotificationBell({ userId }: { userId: string }) {
                   <span>{n.boardTitle ?? ""}</span>
                   <span>{rel(n.createdAt)}</span>
                 </div>
+                {preview(n.payload) && (
+                  <p className="mt-1 line-clamp-2 text-xs text-fg-muted">
+                    {preview(n.payload)}
+                  </p>
+                )}
               </Link>
             </li>
           ))}

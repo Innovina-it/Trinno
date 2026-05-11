@@ -72,6 +72,8 @@ export type WorkspaceSnapshot = {
     roadmapOrder: number | null;
     // Plan #16b-γ-G G4 — priority enum (P0-P4). NULL = unset.
     priority: "p0" | "p1" | "p2" | "p3" | "p4" | null;
+    ownerId: string | null;
+    completedAt: Date | null;
   }>;
   sprints: Array<{
     id: string;
@@ -219,6 +221,8 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
           position: cards.position,
           roadmapOrder: cards.roadmapOrder,
           priority: cards.priority,
+          ownerId: cards.ownerId,
+          completedAt: cards.completedAt,
         })
         .from(cards)
         .where(inArray(cards.boardId, boardIds)),

@@ -18,6 +18,10 @@ export type RoadmapCard = {
   roadmapOrder: number | null;
   // Plan #16b-γ-G G4 — priority enum (P0-P4). NULL = unset.
   priority: "p0" | "p1" | "p2" | "p3" | "p4" | null;
+  // Single-source-of-truth completion timestamp. Bars get a strikethrough
+  // + dimmed treatment when this is set so completed work is visible at
+  // a glance on the timeline.
+  completedAt?: Date | null;
 };
 
 export type RoadmapLink = { fromId: string; toId: string };

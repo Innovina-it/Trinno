@@ -4,6 +4,7 @@ import { useBoardStore } from "@/stores/board-store";
 import { updateCard } from "@/actions/cards";
 import { toast } from "sonner";
 import { Hash } from "lucide-react";
+import { undoBus } from "@/lib/undo-bus";
 
 const FIB = [1, 2, 3, 5, 8, 13];
 
@@ -20,12 +21,30 @@ export function StoryPointsPicker({
   const [custom, setCustom] = useState<string>("");
 
   function set(next: number | null) {
+    if (next === storyPoints) return;
+    const prev = storyPoints;
     updateCardLocal(cardId, { storyPoints: next } as { storyPoints: number | null });
     start(async () => {
       try {
         await updateCard({ id: cardId, storyPoints: next });
+        undoBus.push({
+          message: next == null ? "Story points cleared" : "Story points updated",
+          undo: async () => {
+            updateCardLocal(cardId, { storyPoints: prev } as {
+              storyPoints: number | null;
+            });
+            try {
+              await updateCard({ id: cardId, storyPoints: prev });
+            } catch (err) {
+              updateCardLocal(cardId, { storyPoints: next } as {
+                storyPoints: number | null;
+              });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
       } catch (err) {
-        updateCardLocal(cardId, { storyPoints } as {
+        updateCardLocal(cardId, { storyPoints: prev } as {
           storyPoints: number | null;
         });
         toast.error((err as Error).message);

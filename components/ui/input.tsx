@@ -12,6 +12,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         // Studio-plastic: glass with hairline, pill / rounded corners,
         // cyan focus glow ring (no harsh 2px border switch).
         "h-10 w-full min-w-0 rounded-xl px-3.5 py-1 text-sm text-fg",
+        "[@media(hover:none)_and_(pointer:coarse)]:min-h-11",
         "bg-[color:var(--surface)] border border-[color:var(--hairline)]",
         "transition-[background-color,border-color,box-shadow,color] duration-200 ease-out outline-none",
         "file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground",

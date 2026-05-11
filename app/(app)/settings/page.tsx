@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Bell, ChevronRight, User } from "lucide-react";
 import { requireUser } from "@/lib/auth";
+import { SeedRichButton } from "@/components/settings/seed-rich-button";
 
 export default async function SettingsIndexPage() {
   const user = await requireUser();
@@ -20,7 +21,7 @@ export default async function SettingsIndexPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8 space-y-6">
+    <div className="mx-auto max-w-3xl px-3 sm:px-4 md:px-6 py-6 md:py-8 space-y-6">
       <header className="space-y-1 border-b border-hairline pb-4">
         <span className="mono-meta-sm text-fg-faint">SETTINGS</span>
         <h1 className="font-sans text-2xl font-bold tracking-tight text-fg">
@@ -52,6 +53,16 @@ export default async function SettingsIndexPage() {
           </li>
         ))}
       </ul>
+
+      <section className="space-y-3 pt-2">
+        <h2 className="mono-meta text-fg-muted">Developer</h2>
+        <p className="text-sm text-fg-muted">
+          Spin up a fully-populated workspace with 3 boards, 4 sprints, and
+          ~50 cards across types/dates/owners/priorities — useful for
+          exercising roadmap, workload, and dashboards.
+        </p>
+        <SeedRichButton />
+      </section>
     </div>
   );
 }

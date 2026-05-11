@@ -26,7 +26,10 @@ export async function markOnboardingCompletedImpl(
       .update(profiles)
       .set({ onboardingCompletedAt: new Date() })
       .where(eq(profiles.id, userId))
-      .returning();
+      .returning({
+        id: profiles.id,
+        onboardingCompletedAt: profiles.onboardingCompletedAt,
+      });
     if (!row) throw new Error("Forbidden");
     return row;
   });

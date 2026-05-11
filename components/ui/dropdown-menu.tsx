@@ -57,11 +57,11 @@ function DropdownMenuLabel({
   className,
   inset,
   ...props
-}: MenuPrimitive.GroupLabel.Props & {
+}: React.ComponentProps<"div"> & {
   inset?: boolean
 }) {
   return (
-    <MenuPrimitive.GroupLabel
+    <div
       data-slot="dropdown-menu-label"
       data-inset={inset}
       className={cn(
@@ -88,7 +88,7 @@ function DropdownMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "group/dropdown-menu-item relative flex cursor-default items-center gap-2 rounded-xl px-2.5 py-2 text-sm outline-hidden select-none transition-all duration-150 focus:bg-[color:var(--surface-hi)] focus:text-fg focus:translate-x-0.5 data-inset:pl-7 data-[variant=destructive]:text-[color:var(--accent-magenta)] data-[variant=destructive]:focus:bg-[color:rgb(255_43_214/0.10)] data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "group/dropdown-menu-item relative flex cursor-default items-center gap-2 rounded-xl px-2.5 py-2 text-sm outline-hidden select-none transition-all duration-150 focus:bg-[color:var(--surface-hi)] focus:text-fg focus:translate-x-0.5 data-inset:pl-7 data-[variant=destructive]:text-[color:var(--accent-magenta)] data-[variant=destructive]:focus:bg-[color:rgb(255_43_214/0.10)] data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [@media(hover:none)_and_(pointer:coarse)]:min-h-11",
         className
       )}
       {...props}

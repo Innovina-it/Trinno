@@ -115,10 +115,11 @@ describe("board templates", () => {
       tx.select().from(labels).where(eq(labels.boardId, board.id)),
     );
     expect(lbs.map((l) => l.name).sort()).toEqual([
-      "P0",
-      "P1",
-      "P2",
+      "crash",
+      "data-loss",
+      "perf",
       "regression",
+      "ui",
     ]);
   });
 

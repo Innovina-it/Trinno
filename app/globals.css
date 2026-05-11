@@ -93,6 +93,14 @@
 }
 
 :root {
+  /* Safe-area insets — wired so bottom sheets, FABs, and the bulk
+     action bar can dodge iOS notch / home indicator. Browsers that do
+     not surface env() values evaluate to 0. */
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left, 0px);
+  --safe-right:  env(safe-area-inset-right, 0px);
+
   /* Monochrome dark — pure greyscale, no chroma */
   --bg-deep:        #0a0a0a;
   --bg-1:           #141414;
@@ -550,6 +558,30 @@
 @utility hairline {
   border: 1px solid var(--hairline);
 }
+
+/* -------------------------------------------------------------------------
+   Responsive utilities — Packet 1 (mobile + tablet responsive refit)
+   --------------------------------------------------------------------------
+   `.touch-target` floors any control to 44x44px effective hit area on
+   touch viewports. DESIGN.md keeps 32px primary / 24px dense on hover-
+   capable devices; this rule fires only when the primary input is touch.
+
+   `.cq-card-modal` enables container queries on the card modal shell so
+   its meta sidebar can collapse based on its own width, not the
+   viewport. Tailwind v4 ships @container variant support; use this class
+   when scoping a CQ wrapper that several children need to react to.
+   ------------------------------------------------------------------------ */
+@media (hover: none) and (pointer: coarse) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+@utility cq-card-modal {
+  container-type: inline-size;
+  container-name: card-modal;
+}
 @utility rule {
   border-top: 1px solid var(--hairline);
 }
@@ -625,6 +657,306 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--fg-muted);
+}
+
+/* Office transition loader - a tiny desk scene for route loading states. */
+.office-loader {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.035), transparent 28%),
+    radial-gradient(54rem 28rem at 50% 16%, rgb(255 255 255 / 0.055), transparent 62%),
+    var(--bg-deep);
+}
+.office-loader::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.24;
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 96px 96px;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+}
+.office-loader__stage {
+  position: relative;
+  z-index: 1;
+}
+.office-loader__desk {
+  position: relative;
+  width: min(86vw, 520px);
+  height: 270px;
+}
+.office-loader__deskline {
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  bottom: 38px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--hairline-hi), transparent);
+}
+.office-loader__lamp {
+  position: absolute;
+  left: 40px;
+  top: 28px;
+  width: 98px;
+  height: 172px;
+}
+.office-loader__lamp::before {
+  content: "";
+  position: absolute;
+  left: 48px;
+  top: 66px;
+  width: 2px;
+  height: 86px;
+  background: var(--hairline-hi);
+  transform: rotate(-18deg);
+  transform-origin: top;
+}
+.office-loader__lamp::after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  bottom: 28px;
+  width: 86px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.09);
+  border: 1px solid var(--hairline);
+}
+.office-loader__lamp span {
+  position: absolute;
+  left: 15px;
+  top: 36px;
+  width: 96px;
+  height: 58px;
+  border-radius: 46px 46px 18px 18px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0.09));
+  border: 1px solid var(--hairline-hi);
+  transform: rotate(-10deg);
+  box-shadow: 0 34px 78px -18px rgb(255 255 255 / 0.28);
+  animation: office-lamp-nod 2.8s ease-in-out infinite;
+}
+.office-loader__monitor {
+  position: absolute;
+  left: 50%;
+  top: 44px;
+  width: 224px;
+  height: 138px;
+  border-radius: 14px;
+  border: 1px solid var(--hairline-hi);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.10), rgb(255 255 255 / 0.035)),
+    var(--surface);
+  transform: translateX(-50%);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.12) inset,
+    0 28px 70px -34px rgb(0 0 0 / 0.9);
+}
+.office-loader__monitor::after {
+  content: "";
+  position: absolute;
+  left: 92px;
+  bottom: -54px;
+  width: 40px;
+  height: 54px;
+  background: linear-gradient(180deg, var(--hairline-hi), transparent);
+  clip-path: polygon(32% 0, 68% 0, 100% 100%, 0 100%);
+}
+.office-loader__monitor-bar,
+.office-loader__monitor-row {
+  position: absolute;
+  left: 20px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.16);
+}
+.office-loader__monitor-bar {
+  top: 20px;
+  width: 76px;
+  height: 8px;
+}
+.office-loader__monitor-row {
+  height: 10px;
+  animation: office-row-scan 1.8s ease-in-out infinite;
+}
+.office-loader__monitor-row--a {
+  top: 52px;
+  width: 156px;
+}
+.office-loader__monitor-row--b {
+  top: 76px;
+  width: 112px;
+  animation-delay: 160ms;
+}
+.office-loader__monitor-row--c {
+  top: 100px;
+  width: 136px;
+  animation-delay: 320ms;
+}
+.office-loader__cursor {
+  position: absolute;
+  right: 28px;
+  bottom: 27px;
+  width: 9px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--fg);
+  animation: office-cursor-blink 850ms steps(2, end) infinite;
+}
+.office-loader__note {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 54px;
+  border: 1px solid var(--hairline);
+  background: rgb(255 255 255 / 0.12);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  transform: rotate(-5deg);
+  animation: office-note-wiggle 3.4s ease-in-out infinite;
+}
+.office-loader__note--one {
+  right: 92px;
+  top: 34px;
+}
+.office-loader__note--two {
+  right: 52px;
+  top: 104px;
+  width: 48px;
+  height: 46px;
+  transform: rotate(7deg);
+  animation-delay: 420ms;
+}
+.office-loader__coffee {
+  position: absolute;
+  right: 54px;
+  bottom: 55px;
+  width: 54px;
+  height: 48px;
+  border-radius: 6px 6px 16px 16px;
+  border: 1px solid var(--hairline-hi);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.07));
+}
+.office-loader__coffee::after {
+  content: "";
+  position: absolute;
+  right: -17px;
+  top: 11px;
+  width: 22px;
+  height: 20px;
+  border: 2px solid var(--hairline-hi);
+  border-left: 0;
+  border-radius: 0 16px 16px 0;
+}
+.office-loader__steam {
+  position: absolute;
+  bottom: 48px;
+  width: 2px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.28);
+  animation: office-steam 1.9s ease-in-out infinite;
+}
+.office-loader__steam--one {
+  left: 13px;
+}
+.office-loader__steam--two {
+  left: 26px;
+  animation-delay: 260ms;
+}
+.office-loader__steam--three {
+  left: 39px;
+  animation-delay: 520ms;
+}
+.office-loader__keyboard {
+  position: absolute;
+  left: 50%;
+  bottom: 54px;
+  display: grid;
+  grid-template-columns: repeat(6, 18px);
+  gap: 6px;
+  transform: translateX(-50%) skewX(-8deg);
+}
+.office-loader__keyboard span {
+  height: 10px;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.14);
+  border: 1px solid rgb(255 255 255 / 0.06);
+  animation: office-key-tap 1.7s ease-in-out infinite;
+}
+.office-loader__keyboard span:nth-child(3n) {
+  animation-delay: 180ms;
+}
+.office-loader__keyboard span:nth-child(4n) {
+  animation-delay: 360ms;
+}
+.office-loader__progress span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--fg), transparent);
+  animation: office-progress 1.45s ease-in-out infinite;
+}
+
+@keyframes office-lamp-nod {
+  0%, 100% { transform: rotate(-10deg); }
+  50% { transform: rotate(-5deg); }
+}
+@keyframes office-row-scan {
+  0%, 100% { opacity: 0.34; transform: translateX(0); }
+  50% { opacity: 0.9; transform: translateX(16px); }
+}
+@keyframes office-cursor-blink {
+  0%, 45% { opacity: 1; }
+  46%, 100% { opacity: 0.2; }
+}
+@keyframes office-note-wiggle {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -5px; }
+}
+@keyframes office-steam {
+  0% { opacity: 0; transform: translateY(8px) scaleY(0.65); }
+  35% { opacity: 0.75; }
+  100% { opacity: 0; transform: translateY(-18px) scaleY(1.15); }
+}
+@keyframes office-key-tap {
+  0%, 100% { transform: translateY(0); background: rgb(255 255 255 / 0.13); }
+  48% { transform: translateY(2px); background: rgb(255 255 255 / 0.27); }
+}
+@keyframes office-progress {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(250%); }
+}
+
+@media (max-width: 640px) {
+  .office-loader__desk {
+    width: min(92vw, 390px);
+    height: 230px;
+  }
+  .office-loader__lamp {
+    left: 10px;
+    transform: scale(0.82);
+    transform-origin: left bottom;
+  }
+  .office-loader__monitor {
+    width: 190px;
+    height: 124px;
+  }
+  .office-loader__note--one {
+    right: 42px;
+  }
+  .office-loader__note--two {
+    right: 18px;
+  }
+  .office-loader__coffee {
+    right: 22px;
+  }
 }
 
 /* Rotating soft halo — applied to floating decorative shapes on auth + hero */

@@ -88,6 +88,7 @@ export function RoadmapFilterBar() {
         due: null,
         assignedToMe: false,
         scheduled: false,
+        hideCompleted: false,
       },
       "",
     );
@@ -192,7 +193,7 @@ export function RoadmapFilterBar() {
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onSelect={clearAll}
+                onClick={clearAll}
                 data-testid="roadmap-filter-clear"
                 className="text-fg-muted"
               >

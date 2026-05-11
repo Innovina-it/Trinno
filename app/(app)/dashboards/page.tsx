@@ -12,7 +12,7 @@ export default async function DashboardsPage() {
   const workspaces = await listWorkspaces(token);
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8 space-y-6">
+    <div className="mx-auto max-w-3xl px-3 sm:px-4 md:px-6 py-6 md:py-8 space-y-6">
       <header className="flex items-end justify-between gap-4 border-b border-hairline pb-4">
         <div className="space-y-1">
           <span className="mono-meta-sm text-fg-faint">

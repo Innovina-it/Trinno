@@ -7,13 +7,16 @@ import {
   createComment,
   editComment,
   deleteComment,
+  resolveComment,
 } from "@/actions/comments";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
-import { Pencil, Trash2 } from "lucide-react";
+import { CheckCircle2, CornerDownRight, Pencil, Quote, Reply, RotateCcw, Trash2 } from "lucide-react";
 import {
   MentionPopover,
   type MentionPopoverHandle,
 } from "@/components/board/card/mention-popover";
+import type { CommentRow } from "@/lib/queries/board-snapshot";
+import { undoBus } from "@/lib/undo-bus";
 
 function fmt(d: Date | string) {
   const dt = d instanceof Date ? d : new Date(d);
@@ -33,6 +36,7 @@ export function CommentsSection({ cardId }: { cardId: string }) {
   const [pending, start] = useTransition();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState("");
+  const [replyToId, setReplyToId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [caret, setCaret] = useState(0);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -60,6 +64,25 @@ export function CommentsSection({ cardId }: { cardId: string }) {
     for (const p of profiles) m.set(p.id, p.displayName);
     return m;
   }, [profiles]);
+  const profileByHandle = useMemo(() => {
+    const m = new Map<string, { id: string; displayName: string; handle: string }>();
+    for (const p of profiles) m.set(p.handle.toLowerCase(), p);
+    return m;
+  }, [profiles]);
+  const repliesByParent = useMemo(() => {
+    const m = new Map<string, CommentRow[]>();
+    for (const c of cardComments) {
+      if (!c.parentCommentId) continue;
+      const arr = m.get(c.parentCommentId) ?? [];
+      arr.push(c);
+      m.set(c.parentCommentId, arr);
+    }
+    return m;
+  }, [cardComments]);
+  const topLevelComments = useMemo(
+    () => cardComments.filter((c) => !c.parentCommentId),
+    [cardComments],
+  );
   const isAdmin = useMemo(
     () =>
       currentUserId !== null &&
@@ -72,18 +95,64 @@ export function CommentsSection({ cardId }: { cardId: string }) {
   function submitNew() {
     const trimmed = body.trim();
     if (!trimmed) return;
+    const parentCommentId = replyToId;
+    const matchedMentions = Array.from(
+      new Set(
+        Array.from(trimmed.matchAll(/(^|\s)@([A-Za-z0-9_.-]{2,40})/g))
+          .map((m) => m[2].toLowerCase())
+          .filter((h) => profileByHandle.has(h)),
+      ),
+    );
     setBody("");
+    setReplyToId(null);
     start(async () => {
       try {
-        const row = await createComment({ cardId, body: trimmed });
+        const row = await createComment({
+          cardId,
+          body: trimmed,
+          parentCommentId,
+        });
         addComment({
           id: row.id,
           cardId: row.cardId,
           boardId: row.boardId,
           authorId: row.authorId,
+          parentCommentId: row.parentCommentId,
           body: row.body,
           createdAt: new Date(row.createdAt),
           editedAt: row.editedAt ? new Date(row.editedAt) : null,
+          resolvedAt: row.resolvedAt ? new Date(row.resolvedAt) : null,
+          resolvedBy: row.resolvedBy,
+        });
+        if (matchedMentions.length > 0) {
+          toast.success(
+            `${matchedMentions.length} ${matchedMentions.length === 1 ? "teammate was" : "teammates were"} mentioned and notified`,
+          );
+        } else if (parentCommentId) {
+          toast.success("Reply posted");
+        }
+        undoBus.push({
+          message: parentCommentId ? "Reply posted" : "Comment posted",
+          undo: async () => {
+            removeComment(row.id);
+            try {
+              await deleteComment({ id: row.id });
+            } catch (err) {
+              addComment({
+                id: row.id,
+                cardId: row.cardId,
+                boardId: row.boardId,
+                authorId: row.authorId,
+                parentCommentId: row.parentCommentId,
+                body: row.body,
+                createdAt: new Date(row.createdAt),
+                editedAt: row.editedAt ? new Date(row.editedAt) : null,
+                resolvedAt: row.resolvedAt ? new Date(row.resolvedAt) : null,
+                resolvedBy: row.resolvedBy,
+              });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
         });
       } catch (err) {
         toast.error((err as Error).message);
@@ -109,6 +178,22 @@ export function CommentsSection({ cardId }: { cardId: string }) {
     setEditingId(id);
     setEditingBody(current);
   }
+  function startReply(c: CommentRow) {
+    setReplyToId(c.parentCommentId ?? c.id);
+    setBody("");
+    queueMicrotask(() => composerRef.current?.focus());
+  }
+  function quoteComment(c: CommentRow) {
+    const author = profileById.get(c.authorId) ?? "Someone";
+    const quote = `> ${author}: ${c.body.replace(/\n/g, "\n> ")}\n\n`;
+    setReplyToId(c.parentCommentId ?? c.id);
+    setBody((curr) => `${quote}${curr}`);
+    queueMicrotask(() => {
+      composerRef.current?.focus();
+      const end = quote.length;
+      composerRef.current?.setSelectionRange(end, end);
+    });
+  }
   function cancelEdit() {
     setEditingId(null);
     setEditingBody("");
@@ -117,6 +202,11 @@ export function CommentsSection({ cardId }: { cardId: string }) {
     const id = editingId;
     const next = editingBody.trim();
     if (!id || !next) return;
+    const prev = cardComments.find((c) => c.id === id);
+    if (!prev || prev.body === next) {
+      cancelEdit();
+      return;
+    }
     setEditingId(null);
     setEditingBody("");
     start(async () => {
@@ -125,6 +215,30 @@ export function CommentsSection({ cardId }: { cardId: string }) {
         updateComment(id, {
           body: row.body,
           editedAt: row.editedAt ? new Date(row.editedAt) : new Date(),
+        });
+        undoBus.push({
+          message: "Comment edited",
+          undo: async () => {
+            updateComment(id, {
+              body: prev.body,
+              editedAt: prev.editedAt,
+            });
+            try {
+              const restored = await editComment({ id, body: prev.body });
+              updateComment(id, {
+                body: restored.body,
+                editedAt: restored.editedAt
+                  ? new Date(restored.editedAt)
+                  : new Date(),
+              });
+            } catch (err) {
+              updateComment(id, {
+                body: row.body,
+                editedAt: row.editedAt ? new Date(row.editedAt) : new Date(),
+              });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
         });
       } catch (err) {
         toast.error((err as Error).message);
@@ -156,95 +270,246 @@ export function CommentsSection({ cardId }: { cardId: string }) {
     });
   }
 
+  function onResolve(c: CommentRow, resolved: boolean) {
+    const prev = c;
+    updateComment(c.id, {
+      resolvedAt: resolved ? new Date() : null,
+      resolvedBy: resolved ? currentUserId : null,
+    });
+    start(async () => {
+      try {
+        const row = await resolveComment({ id: c.id, resolved });
+        updateComment(c.id, {
+          resolvedAt: row.resolvedAt ? new Date(row.resolvedAt) : null,
+          resolvedBy: row.resolvedBy,
+          editedAt: row.editedAt ? new Date(row.editedAt) : prev.editedAt,
+        });
+        undoBus.push({
+          message: resolved ? "Comment resolved" : "Comment reopened",
+          undo: async () => {
+            updateComment(c.id, {
+              resolvedAt: prev.resolvedAt,
+              resolvedBy: prev.resolvedBy,
+              editedAt: prev.editedAt,
+            });
+            try {
+              const restored = await resolveComment({
+                id: c.id,
+                resolved: !resolved,
+              });
+              updateComment(c.id, {
+                resolvedAt: restored.resolvedAt
+                  ? new Date(restored.resolvedAt)
+                  : null,
+                resolvedBy: restored.resolvedBy,
+                editedAt: restored.editedAt
+                  ? new Date(restored.editedAt)
+                  : prev.editedAt,
+              });
+            } catch (err) {
+              updateComment(c.id, {
+                resolvedAt: row.resolvedAt ? new Date(row.resolvedAt) : null,
+                resolvedBy: row.resolvedBy,
+                editedAt: row.editedAt ? new Date(row.editedAt) : prev.editedAt,
+              });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
+      } catch (err) {
+        updateComment(c.id, prev);
+        toast.error((err as Error).message);
+      }
+    });
+  }
+
+  function renderBody(text: string) {
+    const out: React.ReactNode[] = [];
+    const re = /(^|\s)@([A-Za-z0-9_.-]{2,40})/g;
+    let last = 0;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(text))) {
+      const start = match.index + match[1].length;
+      if (start > last) out.push(text.slice(last, start));
+      const handle = match[2];
+      const profile = profileByHandle.get(handle.toLowerCase());
+      out.push(
+        profile ? (
+          <button
+            key={`${start}-${handle}`}
+            type="button"
+            title={`Mention ${profile.displayName} in a reply`}
+            onClick={() => {
+              setBody((curr) =>
+                curr.trim() ? `${curr.trimEnd()} @${handle} ` : `@${handle} `,
+              );
+              queueMicrotask(() => composerRef.current?.focus());
+            }}
+            className="rounded bg-[color:var(--accent-cyan)]/12 px-1 py-0.5 font-medium text-fg ring-1 ring-[color:var(--accent-cyan)]/30 hover:bg-[color:var(--accent-cyan)]/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--accent-cyan)]"
+          >
+            @{handle}
+          </button>
+        ) : (
+          <span
+            key={`${start}-${handle}`}
+            title={`@${handle}`}
+            className="rounded bg-fg/5 px-1 py-0.5 text-fg-muted"
+          >
+            @{handle}
+          </span>
+        ),
+      );
+      last = start + handle.length + 1;
+    }
+    if (last < text.length) out.push(text.slice(last));
+    return out;
+  }
+
+  function renderComment(c: CommentRow, depth = 0) {
+    const isOwn = currentUserId !== null && c.authorId === currentUserId;
+    const isEditing = editingId === c.id;
+    const canModerate = isOwn || isAdmin;
+    const replies = repliesByParent.get(c.id) ?? [];
+    const isResolved = c.resolvedAt != null;
+    return (
+      <li
+        key={c.id}
+        data-comment-id={c.id}
+        data-depth={depth}
+        data-resolved={isResolved ? "true" : undefined}
+        className={`rounded-xl border border-hairline bg-[color:var(--surface)] p-3 text-sm group/comment ${
+          depth > 0 ? "ml-5" : ""
+        } ${isResolved ? "opacity-75" : ""}`}
+      >
+        <div className="mb-1.5 flex items-baseline justify-between gap-2 border-b border-hairline pb-1">
+          <span className="mono-meta text-fg inline-flex items-center gap-1.5">
+            {depth > 0 && <CornerDownRight className="size-3 text-fg-faint" />}
+            {profileById.get(c.authorId) ?? "Unknown"}
+            {isResolved && (
+              <span className="chip mono-meta-sm text-[color:var(--status-done)]">
+                RESOLVED
+              </span>
+            )}
+          </span>
+          <div className="flex items-center gap-2">
+            <time className="mono-meta-sm text-fg-faint">
+              {fmt(c.createdAt)}
+              {c.editedAt && <span className="ml-1 text-fg-faint">· edited</span>}
+            </time>
+            {!isEditing && (
+              <div className="flex items-center gap-0.5 opacity-0 group-hover/comment:opacity-100 focus-within:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  onClick={() => startReply(c)}
+                  aria-label="Reply to comment"
+                  title="Reply"
+                  className="size-6 inline-flex items-center justify-center rounded-md text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+                >
+                  <Reply className="size-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => quoteComment(c)}
+                  aria-label="Quote comment"
+                  title="Quote"
+                  className="size-6 inline-flex items-center justify-center rounded-md text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+                >
+                  <Quote className="size-3" />
+                </button>
+                {canModerate && depth === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => onResolve(c, !isResolved)}
+                    aria-label={isResolved ? "Reopen comment thread" : "Resolve comment thread"}
+                    title={isResolved ? "Reopen" : "Resolve"}
+                    className="size-6 inline-flex items-center justify-center rounded-md text-fg-muted hover:text-[color:var(--status-done)] hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+                  >
+                    {isResolved ? <RotateCcw className="size-3" /> : <CheckCircle2 className="size-3" />}
+                  </button>
+                )}
+                {isOwn && (
+                  <button
+                    type="button"
+                    onClick={() => startEdit(c.id, c.body)}
+                    aria-label="Edit comment"
+                    title="Edit"
+                    className="size-6 inline-flex items-center justify-center rounded-md text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+                  >
+                    <Pencil className="size-3" />
+                  </button>
+                )}
+                {canModerate && (
+                  <button
+                    type="button"
+                    onClick={() => onDelete(c.id)}
+                    aria-label={isOwn ? "Delete comment" : "Delete (admin)"}
+                    title={isOwn ? "Delete" : "Delete (admin)"}
+                    className="size-6 inline-flex items-center justify-center rounded-md text-fg-muted hover:text-[color:var(--status-blocked)] hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        {isEditing ? (
+          <div className="space-y-2">
+            <textarea
+              autoFocus
+              value={editingBody}
+              onChange={(e) => setEditingBody(e.target.value)}
+              onKeyDown={onEditKey}
+              rows={3}
+              className="w-full rounded-md border border-hairline bg-[color:var(--surface)] p-2 text-sm font-sans text-fg outline-none hover:border-hairline-hi focus-visible:border-[color:var(--accent-cyan)]/60"
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={cancelEdit}>
+                Cancel
+              </Button>
+              <Button type="button" size="sm" onClick={saveEdit} disabled={!editingBody.trim()}>
+                Save
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="whitespace-pre-wrap text-fg">{renderBody(c.body)}</p>
+        )}
+        {replies.length > 0 && (
+          <ul className="mt-2 space-y-2">
+            {replies.map((reply) => renderComment(reply, depth + 1))}
+          </ul>
+        )}
+      </li>
+    );
+  }
+
   return (
     <section className="space-y-3" data-testid="comments-section">
       <ul className="space-y-2" data-testid="comments-list">
-        {cardComments.length === 0 && (
+        {topLevelComments.length === 0 && (
           <li className="text-sm text-fg-faint italic">No comments yet.</li>
         )}
-        {cardComments.map((c) => {
-          const isOwn = currentUserId !== null && c.authorId === currentUserId;
-          const isEditing = editingId === c.id;
-          return (
-            <li
-              key={c.id}
-              data-comment-id={c.id}
-              className="rounded-xl border border-hairline bg-[color:var(--surface)] p-3 text-sm group/comment"
-            >
-              <div className="mb-1.5 flex items-baseline justify-between gap-2 border-b border-hairline pb-1">
-                <span className="mono-meta text-fg">
-                  {profileById.get(c.authorId) ?? "Unknown"}
-                </span>
-                <div className="flex items-center gap-2">
-                  <time className="mono-meta-sm text-fg-faint">
-                    {fmt(c.createdAt)}
-                    {c.editedAt && (
-                      <span className="ml-1 text-fg-faint">· edited</span>
-                    )}
-                  </time>
-                  {!isEditing && (isOwn || isAdmin) && (
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover/comment:opacity-100 focus-within:opacity-100 transition-opacity">
-                      {isOwn && (
-                        <button
-                          type="button"
-                          onClick={() => startEdit(c.id, c.body)}
-                          aria-label="Edit comment"
-                          title="Edit"
-                          className="size-6 inline-flex items-center justify-center rounded-md text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
-                        >
-                          <Pencil className="size-3" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => onDelete(c.id)}
-                        aria-label={isOwn ? "Delete comment" : "Delete (admin)"}
-                        title={isOwn ? "Delete" : "Delete (admin)"}
-                        className="size-6 inline-flex items-center justify-center rounded-md text-fg-muted hover:text-[color:var(--status-blocked)] hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
-                      >
-                        <Trash2 className="size-3" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {isEditing ? (
-                <div className="space-y-2">
-                  <textarea
-                    autoFocus
-                    value={editingBody}
-                    onChange={(e) => setEditingBody(e.target.value)}
-                    onKeyDown={onEditKey}
-                    rows={3}
-                    className="w-full rounded-md border border-hairline bg-[color:var(--surface)] p-2 text-sm font-sans text-fg outline-none hover:border-hairline-hi focus-visible:border-[color:var(--accent-cyan)]/60"
-                  />
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={cancelEdit}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={saveEdit}
-                      disabled={!editingBody.trim()}
-                    >
-                      Save
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <p className="whitespace-pre-wrap text-fg">{c.body}</p>
-              )}
-            </li>
-          );
-        })}
+        {topLevelComments.map((c) => renderComment(c))}
       </ul>
       <form onSubmit={onSubmit} className="space-y-2">
+        {replyToId && (
+          <div className="flex items-center justify-between rounded-lg border border-hairline bg-[color:var(--surface)] px-2 py-1 text-xs text-fg-muted">
+            <span>
+              Replying in thread with{" "}
+              <span className="text-fg">
+                {profileById.get(cardComments.find((c) => c.id === replyToId)?.authorId ?? "") ?? "Someone"}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setReplyToId(null)}
+              className="mono-meta-sm hover:text-fg"
+            >
+              CANCEL
+            </button>
+          </div>
+        )}
         <div className="relative">
           <textarea
             ref={composerRef}

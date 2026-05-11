@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { undoBus } from "@/lib/undo-bus";
 
 type CrossBoardCandidate = Awaited<
   ReturnType<typeof searchCardsForLinkAction>
@@ -179,6 +180,18 @@ export function CardLinksSection({
         // The mirror row will arrive via realtime
         setOpen(false);
         setQ("");
+        undoBus.push({
+          message: "Card link added",
+          undo: async () => {
+            removeCardLinkLocal(link.id);
+            try {
+              await deleteCardLink({ id: link.id });
+            } catch (err) {
+              addCardLinkLocal(link);
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
       } catch (err) {
         toast.error((err as Error).message);
       }
@@ -186,11 +199,29 @@ export function CardLinksSection({
   }
 
   function remove(id: string) {
+    const link = cardLinks.find((l) => l.id === id);
+    if (!link) return;
+    removeCardLinkLocal(id);
     start(async () => {
       try {
         await deleteCardLink({ id });
-        removeCardLinkLocal(id);
+        undoBus.push({
+          message: "Card link removed",
+          undo: async () => {
+            try {
+              const restored = await createCardLink({
+                fromCardId: link.fromCardId,
+                toCardId: link.toCardId,
+                kind: link.kind,
+              });
+              addCardLinkLocal(restored);
+            } catch (err) {
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
       } catch (err) {
+        addCardLinkLocal(link);
         toast.error((err as Error).message);
       }
     });

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { updateCard } from "@/actions/cards";
 import { useBoardStore } from "@/stores/board-store";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
+import { undoBus } from "@/lib/undo-bus";
 
 export type CoverKind = "none" | "color" | "image";
 
@@ -117,6 +118,7 @@ export function CoverPicker({
 
   function setCover(nextKind: CoverKind, nextValue: string | null) {
     const prev = { coverKind, coverValue };
+    if (nextKind === prev.coverKind && nextValue === prev.coverValue) return;
     updateCardLocal(cardId, {
       coverKind: nextKind,
       coverValue: nextValue,
@@ -127,6 +129,25 @@ export function CoverPicker({
           id: cardId,
           coverKind: nextKind,
           coverValue: nextValue,
+        });
+        undoBus.push({
+          message: nextKind === "none" ? "Cover cleared" : "Cover updated",
+          undo: async () => {
+            updateCardLocal(cardId, prev);
+            try {
+              await updateCard({
+                id: cardId,
+                coverKind: prev.coverKind,
+                coverValue: prev.coverValue,
+              });
+            } catch (err) {
+              updateCardLocal(cardId, {
+                coverKind: nextKind,
+                coverValue: nextValue,
+              });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
         });
       } catch (err) {
         updateCardLocal(cardId, prev);

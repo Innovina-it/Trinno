@@ -1,6 +1,6 @@
-import { eq, and, isNotNull, inArray, desc } from "drizzle-orm";
+import { eq, and, isNotNull, desc, inArray } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { sprints, cards, activity } from "@/lib/db/schema";
+import { sprints, cards, cardSprintHistory } from "@/lib/db/schema";
 
 export type BurndownPoint = {
   day: string;
@@ -32,36 +32,20 @@ export async function computeBurndown(
       .select({
         id: cards.id,
         storyPoints: cards.storyPoints,
+        completedAt: cards.completedAt,
       })
       .from(cards)
       .where(and(eq(cards.sprintId, sprintId), isNotNull(cards.storyPoints)));
 
     const total = sprintCards.reduce((s, c) => s + (c.storyPoints ?? 0), 0);
-    const cardIds = sprintCards.map((c) => c.id);
 
-    // Map cardId -> most recent 'card.archive' timestamp.
-    const archivedMap = new Map<string, Date>();
-    if (cardIds.length > 0) {
-      const acts = await tx
-        .select({
-          cardId: activity.cardId,
-          createdAt: activity.createdAt,
-          type: activity.type,
-        })
-        .from(activity)
-        .where(inArray(activity.cardId, cardIds))
-        .orderBy(desc(activity.createdAt));
-
-      for (const a of acts) {
-        if (!a.cardId) continue;
-        if (archivedMap.has(a.cardId)) continue;
-        if (a.type === "card.archive") {
-          archivedMap.set(a.cardId, new Date(a.createdAt as unknown as string));
-        } else if (a.type === "card.unarchive") {
-          // explicit unarchive after archive — record sentinel so we skip
-          archivedMap.set(a.cardId, new Date(0));
-        }
-      }
+    // Single source of truth: cards.completed_at (kept in sync with
+    // cards.due_complete by the DB trigger from migration 0062). The
+    // previous implementation walked card.archive activity rows, which
+    // conflated "removed from view" with "completed".
+    const completedAtById = new Map<string, Date>();
+    for (const c of sprintCards) {
+      if (c.completedAt) completedAtById.set(c.id, c.completedAt);
     }
 
     const ptsByCard = new Map(sprintCards.map((c) => [c.id, c.storyPoints ?? 0]));
@@ -78,8 +62,8 @@ export async function computeBurndown(
     const points: BurndownPoint[] = days.map((d, idx) => {
       let completed = 0;
       for (const [id, pts] of ptsByCard) {
-        const at = archivedMap.get(id);
-        if (at && at.getTime() > 0 && at <= new Date(d.getTime() + 86_400_000 - 1)) {
+        const at = completedAtById.get(id);
+        if (at && at <= new Date(d.getTime() + 86_400_000 - 1)) {
           completed += pts;
         }
       }
@@ -131,20 +115,108 @@ export async function computeVelocity(
       completedAt: Date | null;
     }> = [];
     for (const sp of completedSprints.reverse()) {
-      const sprintCards = await tx
+      // Velocity uses cards.completed_at (migration 0062), not cards.archived,
+      // since archive == "removed from view" not "completed". A card counts
+      // toward this sprint's velocity iff:
+      //   - some card_sprint_history row places the card on THIS sprint
+      //     across an interval that contains `completed_at` (migration
+      //     0089 — replaces the old "current cards.sprint_id" reading
+      //     so cards moved between sprints are attributed to whichever
+      //     sprint they were IN at completion time),
+      //   - it has story points,
+      //   - completed_at is set, AND
+      //   - completed_at also falls inside the sprint window
+      //     [start_date, completed_at ?? end_date].
+      // Backfill (0089) seeds one row per assigned card, but if any
+      // gap exists (history empty for a sprint that has cards) we fall
+      // back to the legacy `cards.sprintId` reading to avoid silently
+      // zeroing out historical velocity.
+      const history = await tx
         .select({
-          id: cards.id,
-          storyPoints: cards.storyPoints,
-          archived: cards.archived,
+          cardId: cardSprintHistory.cardId,
+          assignedAt: cardSprintHistory.assignedAt,
+          removedAt: cardSprintHistory.removedAt,
         })
-        .from(cards)
-        .where(
-          and(eq(cards.sprintId, sp.id), isNotNull(cards.storyPoints)),
-        );
+        .from(cardSprintHistory)
+        .where(eq(cardSprintHistory.sprintId, sp.id));
 
-      const completed = sprintCards
-        .filter((c) => c.archived)
-        .reduce((s, c) => s + (c.storyPoints ?? 0), 0);
+      let sprintCards: Array<{
+        id: string;
+        storyPoints: number | null;
+        completedAt: Date | null;
+      }>;
+
+      if (history.length === 0) {
+        sprintCards = await tx
+          .select({
+            id: cards.id,
+            storyPoints: cards.storyPoints,
+            completedAt: cards.completedAt,
+          })
+          .from(cards)
+          .where(
+            and(
+              eq(cards.sprintId, sp.id),
+              isNotNull(cards.storyPoints),
+              isNotNull(cards.completedAt),
+            ),
+          );
+      } else {
+        const cardIds = Array.from(new Set(history.map((h) => h.cardId)));
+        const cardRows = await tx
+          .select({
+            id: cards.id,
+            storyPoints: cards.storyPoints,
+            completedAt: cards.completedAt,
+          })
+          .from(cards)
+          .where(
+            and(
+              inArray(cards.id, cardIds),
+              isNotNull(cards.storyPoints),
+              isNotNull(cards.completedAt),
+            ),
+          );
+
+        // Keep only cards whose `completed_at` lies inside SOME open
+        // window for THIS sprint. A card may have multiple history
+        // rows on the same sprint (assigned → removed → re-assigned);
+        // any one match is enough.
+        const historyByCard = new Map<
+          string,
+          Array<{ assignedAt: Date; removedAt: Date | null }>
+        >();
+        for (const h of history) {
+          const arr = historyByCard.get(h.cardId) ?? [];
+          arr.push({
+            assignedAt: h.assignedAt instanceof Date ? h.assignedAt : new Date(h.assignedAt),
+            removedAt: h.removedAt
+              ? h.removedAt instanceof Date
+                ? h.removedAt
+                : new Date(h.removedAt)
+              : null,
+          });
+          historyByCard.set(h.cardId, arr);
+        }
+        sprintCards = cardRows.filter((c) => {
+          if (!c.completedAt) return false;
+          const at = c.completedAt instanceof Date ? c.completedAt : new Date(c.completedAt);
+          const windows = historyByCard.get(c.id) ?? [];
+          return windows.some(
+            (w) => at >= w.assignedAt && (w.removedAt === null || at < w.removedAt),
+          );
+        });
+      }
+
+      const windowStart = sp.startDate ?? sp.createdAt ?? null;
+      const windowEnd = sp.completedAt ?? sp.endDate ?? null;
+      const completed = sprintCards.reduce((s, c) => {
+        if (!c.completedAt) return s;
+        const at = c.completedAt instanceof Date ? c.completedAt : new Date(c.completedAt);
+        if (windowStart && at < windowStart) return s;
+        if (windowEnd && at > windowEnd) return s;
+        return s + (c.storyPoints ?? 0);
+      }, 0);
 
       out.push({
         sprintId: sp.id,

@@ -75,8 +75,7 @@ async function signupSeedAndLand(page: Page, prefix: string) {
   return { email, workspaceId: wsMatch[1] };
 }
 
-// FIXME: needs triage after recent UI/seed/onboarding changes (Plan #16b post-rebrand).
-test.fixme("epic-kanban: drag a child from todo to done, persists across reload", async ({
+test("epic-kanban: drag a child from todo to done, persists across reload", async ({
   page,
 }) => {
   await signupSeedAndLand(page, "epic-kanban");

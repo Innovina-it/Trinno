@@ -1,4 +1,4 @@
-import { eq, asc, and } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { boards, lists, workspaces } from "@/lib/db/schema";
 

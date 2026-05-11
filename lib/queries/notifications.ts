@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull, sql } from "drizzle-orm";
+import { eq, and, desc, isNull, sql, inArray } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import {
   notifications,
@@ -37,7 +37,7 @@ export async function listNotifications(
     const where = and(
       unreadOnly ? isNull(notifications.readAt) : sql`true`,
       kinds && kinds.length
-        ? sql`${notifications.kind} = any(${kinds})`
+        ? inArray(notifications.kind, kinds)
         : sql`true`,
     );
     const rows = await tx
@@ -94,5 +94,36 @@ export async function isWatchingCard(
       )
       .limit(1);
     return rows.length > 0;
+  });
+}
+
+export type CardWatcherRow = {
+  userId: string;
+  displayName: string;
+  handle: string;
+  avatarUrl: string | null;
+  auto: boolean;
+  createdAt: Date;
+};
+
+export async function listCardWatchers(
+  token: string,
+  cardId: string,
+): Promise<CardWatcherRow[]> {
+  return dbAsUser(token, async (tx) => {
+    const rows = await tx
+      .select({
+        userId: cardWatchers.userId,
+        displayName: profiles.displayName,
+        handle: profiles.handle,
+        avatarUrl: profiles.avatarUrl,
+        auto: cardWatchers.auto,
+        createdAt: cardWatchers.createdAt,
+      })
+      .from(cardWatchers)
+      .innerJoin(profiles, eq(profiles.id, cardWatchers.userId))
+      .where(eq(cardWatchers.cardId, cardId))
+      .orderBy(cardWatchers.createdAt);
+    return rows;
   });
 }

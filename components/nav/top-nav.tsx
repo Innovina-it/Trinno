@@ -1,33 +1,48 @@
 "use client";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useWorkspaceMembershipSync } from "@/hooks/use-workspace-membership-sync";
 import {
   WorkspaceSwitcher,
   type WorkspaceLite,
 } from "@/components/workspace/workspace-switcher";
-import { SearchBox } from "@/components/nav/search-box";
 import { AccountMenu } from "@/components/nav/account-menu";
 import { NotificationBell } from "@/components/nav/notification-bell";
-import type { FavoriteEntry, RecentEntry } from "@/components/nav/nav-types";
+import { MobileNavDrawer } from "@/components/nav/mobile-nav-drawer";
+import { useNavChords } from "@/lib/use-nav-chords";
+import { openCommandPalette } from "@/lib/use-command-palette";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import {
   Archive,
   Calendar,
+  ChevronDown,
   Columns,
+  Home,
   ListChecks,
   Map,
   Menu,
+  MoreHorizontal,
+  Search,
   Tag,
   Users,
 } from "lucide-react";
 
-type WsLink = {
+type Primary = {
+  href: string;
+  label: string;
+  Icon: typeof Map;
+  testId: string;
+  chord: string;
+};
+
+type Secondary = {
   href: string;
   label: string;
   Icon: typeof Map;
@@ -39,29 +54,46 @@ export function TopNav({
   userId,
   workspaces,
   activeWorkspaceId,
-  favorites,
-  recents,
 }: {
   email: string;
   userId: string;
   workspaces: WorkspaceLite[];
   activeWorkspaceId?: string;
-  favorites: FavoriteEntry[];
-  recents: RecentEntry[];
 }) {
   const pathname = usePathname() ?? "";
-  // Re-fetch the layout (which re-runs `listWorkspaces`) whenever a row
-  // for this user appears in or disappears from `workspace_members` —
-  // covers invites, removals, and role changes pushed from another tab
-  // or another user, without forcing a hard reload.
   useWorkspaceMembershipSync(userId);
+  useNavChords({ workspaceId: activeWorkspaceId ?? null });
+  // base-ui's <DropdownMenu> generates ids via React.useId(); under React
+  // 19 + Next.js 15 SSR those ids desync between server and client and
+  // log a hydration mismatch. Defer dropdown rendering until after the
+  // first client paint to skip the SSR pass for those subtrees.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const wsForLinks = activeWorkspaceId ?? workspaces[0]?.id;
-  const wsLinks: WsLink[] = wsForLinks
+
+  // Five primaries — destinations a user touches in the same session.
+  // "Home" is always first; it's the cross-workspace personal dashboard
+  // and never depends on `wsForLinks`.
+  const primary: Primary[] = [
+    { href: `/me`, label: "Home", Icon: Home, testId: "nav-home", chord: "g h" },
+    ...(wsForLinks
+      ? ([
+          { href: `/w/${wsForLinks}/roadmap`, label: "Roadmap", Icon: Map, testId: "nav-roadmap", chord: "g r" },
+          { href: `/w/${wsForLinks}/boards`, label: "Boards", Icon: Columns, testId: "nav-boards", chord: "g b" },
+          { href: `/w/${wsForLinks}/backlog`, label: "Backlog", Icon: Tag, testId: "nav-backlog", chord: "g l" },
+          { href: `/w/${wsForLinks}/all-tasks`, label: "My tasks", Icon: ListChecks, testId: "nav-all-tasks", chord: "g t" },
+        ] as Primary[])
+      : []),
+  ];
+
+  // Secondaries live in More so the bar stays uncluttered. Workload sits
+  // here too because it's cross-workspace and shouldn't masquerade as a
+  // workspace-scoped link.
+  const secondary: Secondary[] = wsForLinks
     ? [
-        { href: `/w/${wsForLinks}/roadmap`, label: "Roadmap", Icon: Map, testId: "nav-roadmap" },
-        { href: `/w/${wsForLinks}/boards`, label: "Boards", Icon: Columns, testId: "nav-boards" },
-        { href: `/w/${wsForLinks}/backlog`, label: "Backlog", Icon: Tag, testId: "nav-backlog" },
-        { href: `/w/${wsForLinks}/all-tasks`, label: "My tasks", Icon: ListChecks, testId: "nav-all-tasks" },
         { href: `/workload`, label: "Workload", Icon: Users, testId: "nav-workload" },
         { href: `/w/${wsForLinks}/versions`, label: "Versions", Icon: Calendar, testId: "nav-versions" },
         { href: `/w/${wsForLinks}/archive`, label: "Archive", Icon: Archive, testId: "nav-archive" },
@@ -72,6 +104,9 @@ export function TopNav({
     if (!pathname) return false;
     return pathname === href || pathname.startsWith(href + "/");
   }
+
+  const moreActive = secondary.some((s) => isActive(s.href));
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
     <>
@@ -85,33 +120,39 @@ export function TopNav({
 
       <header className="sticky top-0 z-40 border-b border-hairline bg-[color:var(--bg-1)]">
         <div className="relative mx-auto max-w-screen-2xl px-4 h-14 flex items-center gap-3">
-          {/* LEFT: brand + workspace */}
+          {/* LEFT — brand + workspace */}
           <div className="flex items-center gap-2.5 shrink-0">
             <Link
               href={wsForLinks ? `/w/${wsForLinks}` : "/"}
               aria-label="Trinno home"
-              className="flex items-center gap-2 group/brand focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 rounded-md"
+              className="flex items-center gap-2 group/brand focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 rounded-md px-1 py-0.5"
             >
-              {/* Tile shown on mobile only (wordmark replaces it ≥sm). */}
+              {/* Mono "tn." monogram doubles as logo. The dot anchors it. */}
               <span
                 aria-hidden
-                className="sm:hidden relative flex size-7 items-center justify-center rounded-md border border-hairline-hi bg-[color:var(--surface-strong)] transition-colors group-hover/brand:bg-[color:var(--surface-hi)]"
+                className="mono-meta tracking-[0.04em] text-fg leading-none"
               >
-                <span className="size-1.5 rounded-full bg-fg" />
+                tn<span className="text-fg-faint">.</span>
               </span>
               <span className="hidden sm:inline font-sans text-sm font-semibold tracking-tight text-fg">
                 Trinno
               </span>
             </Link>
-            <WorkspaceSwitcher
-              workspaces={workspaces}
-              activeId={activeWorkspaceId}
-            />
+            <span aria-hidden className="hidden sm:inline h-5 w-px bg-hairline" />
+            {mounted && (
+              <WorkspaceSwitcher
+                workspaces={workspaces}
+                activeId={activeWorkspaceId}
+              />
+            )}
           </div>
 
-          {/* MIDDLE: workspace nav (lg+). */}
-          <nav className="hidden lg:flex items-center gap-0.5 ml-auto mr-2">
-            {wsLinks.map((l) => {
+          {/* CENTER — primary nav (lg+) */}
+          <nav
+            className="hidden lg:flex items-stretch h-full ml-auto mr-2"
+            aria-label="Primary"
+          >
+            {primary.map((l) => {
               const active = isActive(l.href);
               return (
                 <Link
@@ -120,60 +161,127 @@ export function TopNav({
                   data-testid={l.testId}
                   data-active={active ? "true" : undefined}
                   aria-current={active ? "page" : undefined}
-                  className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
+                  title={`${l.label} · ${l.chord}`}
+                  className={`group/nav relative inline-flex items-center gap-1.5 h-full px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-fg/40 ${
                     active
-                      ? "bg-fg/10 text-fg"
-                      : "text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.05)]"
+                      ? "text-fg"
+                      : "text-fg-muted hover:text-fg"
                   }`}
                 >
                   <l.Icon className="size-3.5" />
                   <span>{l.label}</span>
+                  {/* 2px structural rule under the active link, anchored
+                      to the header's bottom hairline. Replaces the prior
+                      pill-fill which collided with hover state. */}
+                  <span
+                    aria-hidden
+                    className={`absolute left-2 right-2 -bottom-px h-[2px] transition-opacity ${
+                      active
+                        ? "bg-fg opacity-100"
+                        : "bg-fg opacity-0 group-hover/nav:opacity-30"
+                    }`}
+                  />
                 </Link>
               );
             })}
-          </nav>
 
-          {/* Compact (<lg) hamburger */}
-          <div className="lg:hidden ml-auto">
-            {wsForLinks && (
+            {/* MORE — overflow for low-traffic destinations */}
+            {mounted && secondary.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  className="inline-flex items-center justify-center size-8 rounded-md text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
-                  aria-label="Workspace navigation"
+                  data-testid="nav-more"
+                  data-active={moreActive ? "true" : undefined}
+                  className={`group/nav relative inline-flex items-center gap-1.5 h-full px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-fg/40 ${
+                    moreActive
+                      ? "text-fg"
+                      : "text-fg-muted hover:text-fg"
+                  }`}
                 >
-                  <Menu className="size-4" />
+                  <MoreHorizontal className="size-3.5" />
+                  <span>More</span>
+                  <ChevronDown className="size-3 text-fg-faint" />
+                  <span
+                    aria-hidden
+                    className={`absolute left-2 right-2 -bottom-px h-[2px] transition-opacity ${
+                      moreActive
+                        ? "bg-fg opacity-100"
+                        : "bg-fg opacity-0 group-hover/nav:opacity-30"
+                    }`}
+                  />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  {wsLinks.map((l) => (
+                  <DropdownMenuLabel>
+                    <span className="mono-meta-sm text-fg-faint tracking-[0.14em]">
+                      MORE
+                    </span>
+                  </DropdownMenuLabel>
+                  {secondary.map((s) => (
                     <DropdownMenuItem
-                      key={l.href}
-                      render={
-                        <Link href={l.href} data-testid={l.testId} />
-                      }
+                      key={s.href}
+                      render={<Link href={s.href} data-testid={s.testId} />}
                     >
-                      <l.Icon className="size-3.5" />
-                      {l.label}
+                      <s.Icon className="size-3.5" />
+                      {s.label}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
+          </nav>
+
+          {/* COMPACT (<lg) hamburger — left-slide drawer */}
+          <div className="lg:hidden ml-auto">
+            {mounted && wsForLinks && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setDrawerOpen(true)}
+                  aria-label="Open navigation"
+                  aria-expanded={drawerOpen}
+                  data-testid="nav-mobile-trigger"
+                  className="inline-flex items-center justify-center size-9 rounded-md text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 [@media(hover:none)_and_(pointer:coarse)]:min-h-11 [@media(hover:none)_and_(pointer:coarse)]:min-w-11"
+                >
+                  <Menu className="size-4" />
+                </button>
+                <MobileNavDrawer
+                  open={drawerOpen}
+                  onOpenChange={setDrawerOpen}
+                  primary={primary}
+                  secondary={secondary}
+                  email={email}
+                  isActive={isActive}
+                />
+              </>
+            )}
           </div>
 
-          <span aria-hidden className="hidden lg:inline h-6 w-px bg-hairline" />
-
-          {/* RIGHT: search + bell + avatar */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <div className="hidden md:block">
-              <SearchBox />
-            </div>
-            <NotificationBell userId={userId} />
-            <AccountMenu
-              userId={userId}
-              email={email}
-              favorites={favorites}
-              recents={recents}
-            />
+          {/* RIGHT — palette · bell · avatar */}
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => openCommandPalette()}
+              data-testid="palette-trigger"
+              aria-label="Open command palette"
+              title="Search or jump (⌘K)"
+              className="hidden md:inline-flex items-center gap-2 h-8 pl-2 pr-1.5 rounded-md border border-hairline bg-[color:var(--surface)] text-xs text-fg-faint hover:text-fg hover:border-hairline-hi transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+            >
+              <Search className="size-3.5" aria-hidden />
+              <span className="text-fg-muted">Search</span>
+              <kbd className="ml-2 mono-meta-sm border border-hairline rounded px-1 py-0 leading-none tabular-nums">
+                ⌘K
+              </kbd>
+            </button>
+            {/* Compact icon-only trigger below md */}
+            <button
+              type="button"
+              onClick={() => openCommandPalette()}
+              aria-label="Open command palette"
+              className="md:hidden inline-flex items-center justify-center size-9 rounded-md text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 [@media(hover:none)_and_(pointer:coarse)]:min-h-11 [@media(hover:none)_and_(pointer:coarse)]:min-w-11"
+            >
+              <Search className="size-4" />
+            </button>
+            {mounted && <NotificationBell userId={userId} />}
+            {mounted && <AccountMenu userId={userId} email={email} />}
           </div>
         </div>
       </header>

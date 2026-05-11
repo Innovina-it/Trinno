@@ -8,6 +8,7 @@ import {
   Bell,
   Calendar,
   CalendarRange,
+  CheckCircle2,
   CornerUpRight,
   Link2,
   MessageSquare,
@@ -41,6 +42,7 @@ const KIND_META: Record<string, KindMeta> = {
   "card.unassigned": { verb: "unassigned you from", Icon: Users },
   "card.archived": { verb: "archived", Icon: Archive },
   "card.unarchived": { verb: "restored", Icon: CornerUpRight },
+  "card.completed": { verb: "completed", Icon: CheckCircle2 },
   "card.moved": { verb: "moved", Icon: CornerUpRight },
   "card.due": { verb: "set due date on", Icon: Calendar },
   "card.dates": { verb: "rescheduled", Icon: CalendarRange },
@@ -103,6 +105,13 @@ function hrefFor(n: N): string {
   }
   if (n.relatedBoardId) return `/b/${n.relatedBoardId}`;
   return "/inbox";
+}
+
+function previewFor(n: N): string | null {
+  const p = n.payload as { preview?: unknown } | null | undefined;
+  return typeof p?.preview === "string" && p.preview.trim()
+    ? p.preview.trim()
+    : null;
 }
 
 export function InboxList({
@@ -351,6 +360,17 @@ export function InboxList({
                               <span>·</span>
                               <span>{rel(n.createdAt)}</span>
                             </div>
+                            {previewFor(n) && (
+                              <p className="mt-1 line-clamp-2 text-xs leading-snug text-fg-muted">
+                                {previewFor(n)}
+                              </p>
+                            )}
+                            {(n.kind === "comment.mention" ||
+                              n.kind === "comment.create") && (
+                              <div className="mt-1 mono-meta-sm text-fg-faint">
+                                OPEN TO REPLY
+                              </div>
+                            )}
                           </div>
                         </Link>
                         {!n.readAt && (

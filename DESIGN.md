@@ -206,6 +206,18 @@ Five workflow tokens. Used at 100% saturation only inside `<StatusKindBadge>`, l
 - **Status Done** (`#22c55e`): closed, emerald.
 - **Status Blocked** (`#fb7185`): blocked dependency, rose-400. Picked deliberately less saturated than rose-500 to avoid vibration on near-black.
 
+#### Roadmap Bar Patterns
+
+Status fills on roadmap bars carry an additional texture so the operator can read state without color (color-blind safe + reduced-saturation legible). The texture is **not** decoration; each value carries documented meaning. The legend lives in the shortcuts overlay on the roadmap (`?` to open).
+
+- **Todo**: solid fill at 22% of `--status-todo`. No texture.
+- **In Progress**: solid fill at 38% of `--status-in-progress` + a 1px inset ring at 55% + pulse animation. The pulse is the texture; it stops under `prefers-reduced-motion`.
+- **Review**: 45° diagonal stripes (`repeating-linear-gradient(45deg, ...)` at 4px/8px) over a 22% `--status-review` base. The stripes mean "waiting on a human". Hover reveals the reviewer.
+- **Done**: horizontal hatches (`repeating-linear-gradient(0deg, ...)` at 2px/6px) over a 22% `--status-done` base. Hatches mean "closed and frozen"; ressembles a finished ledger.
+- **Blocked**: solid fill at 12–18% of `--status-blocked` + a 2px inset ring at 60%. Ring is the texture; the bar reads "fenced off".
+
+The patterns are constants — do not introduce a sixth status texture without updating this section and the legend in `components/shortcuts-overlay.tsx`.
+
 ### Tertiary: Priority Dots
 
 Five dot tokens for `P0` to `P4`, used as 4px left-edge stripes inside the priority gutter and as 2px dots inside priority chips. Never as background fills.

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useBoardStore } from "@/stores/board-store";
 import { toggleCardMember } from "@/actions/card-members";
 import { toast } from "sonner";
+import { undoBus } from "@/lib/undo-bus";
 
 export function MembersSection({ cardId }: { cardId: string }) {
   const profiles = useBoardStore((s) => s.boardProfiles);
@@ -19,11 +20,29 @@ export function MembersSection({ cardId }: { cardId: string }) {
 
   function toggle(userId: string) {
     const wasAssigned = assigned.has(userId);
+    const memberName =
+      profiles.find((p) => p.id === userId)?.displayName ?? "Member";
     if (wasAssigned) removeCardMember(cardId, userId);
     else addCardMember({ cardId, userId });
     start(async () => {
       try {
         await toggleCardMember({ cardId, userId });
+        undoBus.push({
+          message: wasAssigned
+            ? `Unassigned ${memberName}`
+            : `Assigned ${memberName}`,
+          undo: async () => {
+            if (wasAssigned) addCardMember({ cardId, userId });
+            else removeCardMember(cardId, userId);
+            try {
+              await toggleCardMember({ cardId, userId });
+            } catch (err) {
+              if (wasAssigned) removeCardMember(cardId, userId);
+              else addCardMember({ cardId, userId });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
       } catch (err) {
         if (wasAssigned) addCardMember({ cardId, userId });
         else removeCardMember(cardId, userId);
@@ -38,6 +57,10 @@ export function MembersSection({ cardId }: { cardId: string }) {
       <div className="flex items-baseline justify-between border-b border-hairline pb-1">
         <h3 className="mono-meta text-fg-muted">Members</h3>
       </div>
+      <p className="text-xs leading-snug text-fg-muted">
+        Collaborators helping with the work. Assigned members are auto-watched
+        for future comments and changes.
+      </p>
       <ul className="flex flex-wrap gap-1.5">
         {profiles.map((p) => {
           const on = assigned.has(p.id);

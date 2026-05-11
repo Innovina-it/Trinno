@@ -11,6 +11,7 @@ import { TypeIcon } from "./type-picker";
 import { Link2, X, Search } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { undoBus } from "@/lib/undo-bus";
 
 export function ParentPicker({
   cardId, parentCardId, boardId,
@@ -23,18 +24,64 @@ export function ParentPicker({
 
   const parent = parentCardId ? cards.find((c) => c.id === parentCardId) : null;
 
+  // Descendants of this card would create a parent cycle if picked as
+  // parent — the DB cycle-guard trigger rejects them anyway. Exclude
+  // them up front so the user never sees impossible options.
+  const descendantIds = useMemo(() => {
+    const childrenOf = new Map<string, string[]>();
+    for (const c of cards) {
+      if (!c.parentCardId) continue;
+      const list = childrenOf.get(c.parentCardId) ?? [];
+      list.push(c.id);
+      childrenOf.set(c.parentCardId, list);
+    }
+    const out = new Set<string>();
+    const stack = [cardId];
+    while (stack.length) {
+      const id = stack.pop()!;
+      const kids = childrenOf.get(id);
+      if (!kids) continue;
+      for (const k of kids) {
+        if (!out.has(k)) {
+          out.add(k);
+          stack.push(k);
+        }
+      }
+    }
+    return out;
+  }, [cards, cardId]);
+
   const candidates = useMemo(() => {
     return cards
-      .filter((c) => c.id !== cardId && !c.archived)
+      .filter(
+        (c) => c.id !== cardId && !c.archived && !descendantIds.has(c.id),
+      )
       .filter((c) => !q.trim() || c.title.toLowerCase().includes(q.toLowerCase()))
       .slice(0, 30);
-  }, [cards, cardId, q]);
+  }, [cards, cardId, descendantIds, q]);
 
   function setParent(nextId: string | null) {
     const prev = parentCardId;
+    if (nextId === prev) return;
+    const nextParent = nextId ? cards.find((c) => c.id === nextId) : null;
     updateCardLocal(cardId, { parentCardId: nextId });
     start(async () => {
-      try { await updateCard({ id: cardId, parentCardId: nextId }); setOpen(false); }
+      try {
+        await updateCard({ id: cardId, parentCardId: nextId });
+        setOpen(false);
+        undoBus.push({
+          message: nextParent ? "Parent card updated" : "Parent card cleared",
+          undo: async () => {
+            updateCardLocal(cardId, { parentCardId: prev });
+            try {
+              await updateCard({ id: cardId, parentCardId: prev });
+            } catch (err) {
+              updateCardLocal(cardId, { parentCardId: nextId });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
+      }
       catch (err) {
         updateCardLocal(cardId, { parentCardId: prev });
         toast.error((err as Error).message);

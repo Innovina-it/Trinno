@@ -1,30 +1,4 @@
-import { test, expect, request as pwRequest, type Page } from "@playwright/test";
-
-const MAILPIT = "http://127.0.0.1:54324";
-
-async function fetchConfirmLink(email: string): Promise<string> {
-  const api = await pwRequest.newContext({ baseURL: MAILPIT });
-  for (let i = 0; i < 30; i++) {
-    const list = await api.get(
-      `/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
-    );
-    if (list.ok()) {
-      const data = await list.json();
-      if (data.messages && data.messages.length > 0) {
-        const id = data.messages[0].ID;
-        const detail = await api.get(`/api/v1/message/${id}`);
-        const msg = await detail.json();
-        const body: string = msg.HTML || msg.Text || "";
-        const m =
-          body.match(/href="([^"]*\/auth\/v1\/verify[^"]*)"/) ??
-          body.match(/(https?:\/\/[^\s"<>]+\/auth\/v1\/verify[^\s"<>]+)/);
-        if (m) return m[1].replace(/&amp;/g, "&");
-      }
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error(`no email arrived for ${email}`);
-}
+import { test, expect, type Page } from "@playwright/test";
 
 async function signupAndLandOnDefaultWorkspace(page: Page, email: string) {
   await page.context().addCookies([{ name: "tr_seed_demo", value: "minimal", domain: "localhost", path: "/" }]);
@@ -112,9 +86,8 @@ async function setCardType(page: Page, kind: "Epic" | "Story") {
   ).toBeVisible({ timeout: 5000 });
 }
 
-// FIXME: needs triage after recent UI/seed/onboarding changes (Plan #16b post-rebrand).
 
-test.fixme("jira-gantt integration: drag, critical path, cascade, cross-context realtime", async ({
+test("jira-gantt integration: drag, critical path, cascade, cross-context realtime", async ({
   browser,
 }) => {
   test.setTimeout(180_000);

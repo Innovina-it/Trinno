@@ -5,7 +5,12 @@ import { createWorkspaceImpl } from "@/actions/workspaces";
 import { createBoardFromTemplateImpl } from "@/actions/boards";
 import { createCardImpl, updateCardImpl, archiveCardImpl } from "@/actions/cards";
 import { createLabelImpl, toggleCardLabelImpl } from "@/actions/labels";
-import { createSprintImpl, assignCardToSprintImpl } from "@/actions/sprints";
+import {
+  createSprintImpl,
+  assignCardToSprintImpl,
+  startSprintImpl,
+  completeSprintImpl,
+} from "@/actions/sprints";
 import { createComponentImpl } from "@/actions/components";
 import { createVersionImpl } from "@/actions/versions";
 import { createDashboardImpl } from "@/actions/dashboards";
@@ -76,12 +81,7 @@ export async function seedDemoWorkspaceImpl(
   const sprintListId = listIds[1];
   const inProgId = listIds[2];
 
-  // Add a P0 label so the bug card has a priority signal.
-  const p0Label = await createLabelImpl(token, {
-    boardId: board.id,
-    name: "P0",
-    color: "#fafafa",
-  });
+  // Severity is set via the `priority` enum below, not a label.
 
   // Cards
   const today = new Date();
@@ -131,10 +131,7 @@ export async function seedDemoWorkspaceImpl(
   await updateCardImpl(token, {
     id: bug.id,
     type: "bug",
-  });
-  await toggleCardLabelImpl(token, {
-    cardId: bug.id,
-    labelId: p0Label.id,
+    priority: "p0",
   });
 
   const task = await createCardImpl(token, {
@@ -244,7 +241,10 @@ async function seedRichDemoImpl(
   token: string,
 ): Promise<{ workspaceId: string }> {
   const userId = decodeSubLocal(token);
-  const ws = await createWorkspaceImpl(token, { name: "Rich Demo Workspace" });
+  // Both 'demo' and 'rich' modes funnel here; keep the name "Demo
+  // Workspace" so the seed is indistinguishable to the user (and to
+  // the existing seed-demo integration test).
+  const ws = await createWorkspaceImpl(token, { name: "Demo Workspace" });
 
   // ---- Boards (3 different templates) ----
   const okr = await createBoardFromTemplateImpl(token, {
@@ -284,11 +284,8 @@ async function seedRichDemoImpl(
   const standupBlocked = standup.listIds[2];
 
   // ---- Labels (extra on okr board) ----
-  const labelP0 = await createLabelImpl(token, {
-    boardId: okr.board.id,
-    name: "P0",
-    color: "#fafafa",
-  });
+  // Severity (P0–P4) is owned by the `priority` enum on each card row, not
+  // labels. Categorical tags only.
   const labelTech = await createLabelImpl(token, {
     boardId: okr.board.id,
     name: "tech-debt",
@@ -339,6 +336,16 @@ async function seedRichDemoImpl(
     startDate: day(15),
     endDate: day(28),
   });
+
+  // Move sprintNow into the active state so the /me dashboard's
+  // "Active sprints" panel renders something. (createSprintImpl
+  // defaults to state='planned'; only startSprintImpl flips it.)
+  // sprintPast gets fully closed so velocity shows it.
+  try {
+    await startSprintImpl(token, { id: sprintNow.id });
+  } catch {
+    /* non-fatal — workspace may have invariants we're not aware of */
+  }
 
   // ---- Epic 1: "Onboarding revamp" w/ 4 stories + subtasks ----
   const epic1 = await createCardImpl(token, {
@@ -516,11 +523,6 @@ async function seedRichDemoImpl(
       ownerId: userId,
       estimateMin: pick([60, 120, 180, 240], i),
     });
-    if (i === 0)
-      await toggleCardLabelImpl(token, {
-        cardId: b.id,
-        labelId: labelP0.id,
-      });
   }
 
   // ---- Standup notes (today / blocked) ----
@@ -557,6 +559,19 @@ async function seedRichDemoImpl(
       cardId: d.id,
       sprintId: sprintPast.id,
     });
+  }
+
+  // Close sprintPast so velocity gadget + completed-sprint pages have
+  // data. completeSprintImpl rejects unless the sprint is active, so
+  // start → complete in sequence.
+  try {
+    await startSprintImpl(token, { id: sprintPast.id });
+    await completeSprintImpl(token, {
+      id: sprintPast.id,
+      carryoverTo: "backlog",
+    });
+  } catch {
+    /* non-fatal */
   }
 
   // ---- Archive a couple to populate the archive view ----

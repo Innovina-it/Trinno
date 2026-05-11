@@ -58,7 +58,8 @@ export function gridStartFor(now: Date, zoom: Zoom): Date {
  * End of the visible grid. Always at least 6 months ahead of `start`,
  * regardless of zoom. Callers may extend further to cover specific cards.
  */
-export function gridEndFor(start: Date, _zoom: Zoom): Date {
+export function gridEndFor(start: Date, zoom: Zoom): Date {
+  void zoom;
   return addDays(startOfDay(start), 180);
 }
 

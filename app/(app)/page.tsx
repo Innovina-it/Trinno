@@ -5,7 +5,31 @@ import { listWorkspaces } from "@/lib/queries/workspaces";
 export default async function Home() {
   await requireUser();
   const token = (await getSessionToken())!;
-  const ws = await listWorkspaces(token);
+  let ws: Awaited<ReturnType<typeof listWorkspaces>> = [];
+  let loadError: string | null = null;
+  try {
+    ws = await listWorkspaces(token);
+  } catch (err) {
+    loadError =
+      err instanceof Error ? err.message : "Could not load workspaces.";
+  }
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-5 px-6 py-12">
+        <span className="mono-meta-sm text-fg-faint">SIGNED IN</span>
+        <h1 className="font-sans text-3xl font-bold tracking-tight text-fg">
+          Database is busy
+        </h1>
+        <p className="text-sm text-fg-muted max-w-md">
+          Login succeeded, but the workspace list could not load. Refresh once
+          after the database frees a connection.
+        </p>
+        <pre className="max-h-48 overflow-auto rounded-xl border border-hairline bg-[color:var(--surface)] p-3 text-xs text-fg-muted">
+          {loadError}
+        </pre>
+      </div>
+    );
+  }
   if (ws.length === 0) {
     return (
       <div className="mx-auto max-w-3xl space-y-8 px-6 py-12">

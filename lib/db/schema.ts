@@ -34,6 +34,10 @@ export const profiles = pgTable("profiles", {
   onboardingCompletedAt: timestamp("onboarding_completed_at", {
     withTimezone: true,
   }),
+  // Migration 0090 — daily email digest opt-in. Default OFF; flipped by
+  // the toggle in /settings/notifications. The digest cron reads only
+  // rows where this is TRUE.
+  emailDigestOptin: boolean("email_digest_optin").notNull().default(false),
 });
 
 export const workspaces = pgTable("workspaces", {
@@ -149,6 +153,7 @@ export const cards = pgTable("cards", {
   coverKind: text("cover_kind").notNull().default("none"),
   coverValue: text("cover_value"),
   ownerId: uuid("owner_id"),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
 });
 
 export const labels = pgTable("labels", {
@@ -206,11 +211,14 @@ export const comments = pgTable("comments", {
   cardId: uuid("card_id").notNull(),
   boardId: uuid("board_id").notNull(),
   authorId: uuid("author_id").notNull(),
+  parentCommentId: uuid("parent_comment_id"),
   body: text("body").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
   editedAt: timestamp("edited_at", { withTimezone: true }),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolvedBy: uuid("resolved_by"),
 });
 
 export const attachments = pgTable("attachments", {
@@ -277,6 +285,38 @@ export const sprints = pgTable("sprints", {
     .notNull()
     .defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
+// Migration 0089 — sprint-assignment history. One row per
+// (card, sprint) assignment with an open/close window so velocity can
+// attribute completions to whichever sprint the card was IN at the
+// moment `cards.completed_at` was set. Written exclusively by the
+// `track_card_sprint_change` trigger.
+export const cardSprintHistory = pgTable("card_sprint_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  cardId: uuid("card_id").notNull(),
+  sprintId: uuid("sprint_id"),
+  assignedAt: timestamp("assigned_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  removedAt: timestamp("removed_at", { withTimezone: true }),
+});
+
+// Migration 0091 — generic field-change audit. One row per tracked
+// field that flipped on cards UPDATE: title / priority / owner_id /
+// start_date / target_date / due_date / completed_at / sprint_id /
+// parent_card_id / type / story_points / estimate_min. Written by the
+// `cards_record_field_history` trigger (security definer).
+export const cardFieldHistory = pgTable("card_field_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  cardId: uuid("card_id").notNull(),
+  actorId: uuid("actor_id"),
+  field: text("field").notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  changedAt: timestamp("changed_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export const notifications = pgTable("notifications", {

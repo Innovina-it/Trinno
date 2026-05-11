@@ -268,13 +268,82 @@ export function createBoardStore(initial: BoardSnapshotInit) {
       })),
 
     removeCard: (id) =>
-      set((state) => ({ cards: state.cards.filter((c) => c.id !== id) })),
+      set((state) => {
+        const selectedCardIds = new Set(state.selectedCardIds);
+        selectedCardIds.delete(id);
+        return {
+          cards: state.cards.filter((c) => c.id !== id),
+          cardLabels: state.cardLabels.filter((cl) => cl.cardId !== id),
+          cardMembers: state.cardMembers.filter((cm) => cm.cardId !== id),
+          checklists: state.checklists.filter((c) => c.cardId !== id),
+          checklistItems: state.checklistItems.filter((i) =>
+            state.checklists.some(
+              (c) => c.id === i.checklistId && c.cardId !== id,
+            ),
+          ),
+          comments: state.comments.filter((c) => c.cardId !== id),
+          attachments: state.attachments.filter((a) => a.cardId !== id),
+          cardLinks: state.cardLinks.filter(
+            (l) => l.fromCardId !== id && l.toCardId !== id,
+          ),
+          cardComponents: state.cardComponents.filter((cc) => cc.cardId !== id),
+          cardVersions: state.cardVersions.filter((cv) => cv.cardId !== id),
+          selectedCardIds,
+          lastSelectedCardId:
+            state.lastSelectedCardId === id ? null : state.lastSelectedCardId,
+        };
+      }),
 
     removeList: (id) =>
-      set((state) => ({
-        lists: state.lists.filter((l) => l.id !== id),
-        cards: state.cards.filter((c) => c.listId !== id),
-      })),
+      set((state) => {
+        const removedCardIds = new Set(
+          state.cards.filter((c) => c.listId === id).map((c) => c.id),
+        );
+        const removedChecklistIds = new Set(
+          state.checklists
+            .filter((c) => removedCardIds.has(c.cardId))
+            .map((c) => c.id),
+        );
+        const selectedCardIds = new Set(state.selectedCardIds);
+        for (const cardId of removedCardIds) selectedCardIds.delete(cardId);
+        return {
+          lists: state.lists.filter((l) => l.id !== id),
+          cards: state.cards.filter((c) => c.listId !== id),
+          cardLabels: state.cardLabels.filter(
+            (cl) => !removedCardIds.has(cl.cardId),
+          ),
+          cardMembers: state.cardMembers.filter(
+            (cm) => !removedCardIds.has(cm.cardId),
+          ),
+          checklists: state.checklists.filter(
+            (c) => !removedCardIds.has(c.cardId),
+          ),
+          checklistItems: state.checklistItems.filter(
+            (i) => !removedChecklistIds.has(i.checklistId),
+          ),
+          comments: state.comments.filter((c) => !removedCardIds.has(c.cardId)),
+          attachments: state.attachments.filter(
+            (a) => !removedCardIds.has(a.cardId),
+          ),
+          cardLinks: state.cardLinks.filter(
+            (l) =>
+              !removedCardIds.has(l.fromCardId) &&
+              !removedCardIds.has(l.toCardId),
+          ),
+          cardComponents: state.cardComponents.filter(
+            (cc) => !removedCardIds.has(cc.cardId),
+          ),
+          cardVersions: state.cardVersions.filter(
+            (cv) => !removedCardIds.has(cv.cardId),
+          ),
+          selectedCardIds,
+          lastSelectedCardId:
+            state.lastSelectedCardId &&
+            removedCardIds.has(state.lastSelectedCardId)
+              ? null
+              : state.lastSelectedCardId,
+        };
+      }),
 
     addLabel: (l) =>
       set((state) =>

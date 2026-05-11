@@ -22,10 +22,12 @@ export function SprintPicker({
   cardId,
   sprintId,
   sprints,
+  readOnly = false,
 }: {
   cardId: string;
   sprintId: string | null;
   sprints: SprintLite[];
+  readOnly?: boolean;
 }) {
   const [pending, start] = useTransition();
   const current = sprints.find((s) => s.id === sprintId);
@@ -40,6 +42,15 @@ export function SprintPicker({
         toast.error((err as Error).message);
       }
     });
+  }
+
+  if (readOnly) {
+    return (
+      <span className="chip inline-flex items-center gap-1.5 text-fg-muted">
+        <Calendar className="size-3" />
+        <span className="truncate max-w-[10rem]">{label.toUpperCase()}</span>
+      </span>
+    );
   }
 
   return (

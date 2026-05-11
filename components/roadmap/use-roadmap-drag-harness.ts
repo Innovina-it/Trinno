@@ -184,6 +184,8 @@ export interface RoadmapDragHarnessOutput {
 
 const PAINT_THRESHOLD_PX = 4;
 const CHIP_DRAG_THRESHOLD_PX = 4;
+const MONDAY_SNAP_THRESHOLD_DAYS = 0;
+const SMART_SNAP_THRESHOLD_DAYS = 4;
 
 export function useRoadmapDragHarness(
   input: RoadmapDragHarnessInput,
@@ -397,21 +399,32 @@ export function useRoadmapDragHarness(
       d: Date,
       includeBlockers: boolean,
     ): SnapPreview | null => {
-      type Cand = SnapPreview;
+      type Cand = SnapPreview & { thresholdDays: number };
       const candidates: Cand[] = [];
       const day = d.getUTCDay();
       const sinceMonday = (day + 6) % 7;
       const prevMonday = addDays(startOfDay(d), -sinceMonday);
       const nextMonday = addDays(prevMonday, 7);
       candidates.push(
-        { date: prevMonday, kind: "monday", label: "Mon" },
-        { date: nextMonday, kind: "monday", label: "Mon" },
+        {
+          date: prevMonday,
+          kind: "monday",
+          label: "Mon",
+          thresholdDays: MONDAY_SNAP_THRESHOLD_DAYS,
+        },
+        {
+          date: nextMonday,
+          kind: "monday",
+          label: "Mon",
+          thresholdDays: MONDAY_SNAP_THRESHOLD_DAYS,
+        },
       );
       for (const s of dragSprintEndsRef.current) {
         candidates.push({
           date: s.date,
           kind: "sprint",
           label: `${s.name} end`,
+          thresholdDays: SMART_SNAP_THRESHOLD_DAYS,
         });
       }
       if (includeBlockers) {
@@ -420,6 +433,7 @@ export function useRoadmapDragHarness(
             date: b.date,
             kind: "blocker",
             label: b.cardTitle,
+            thresholdDays: SMART_SNAP_THRESHOLD_DAYS,
           });
         }
       }
@@ -427,7 +441,7 @@ export function useRoadmapDragHarness(
       let bestDiff = Number.POSITIVE_INFINITY;
       for (const c of candidates) {
         const diff = Math.abs(dayDiff(d, c.date));
-        if (diff <= 4 && diff < bestDiff) {
+        if (diff <= c.thresholdDays && diff < bestDiff) {
           best = c;
           bestDiff = diff;
         }
@@ -439,27 +453,43 @@ export function useRoadmapDragHarness(
 
   const snapDate = useCallback(
     (d: Date, extraCandidates: Date[] = []): Date => {
-      const candidates: Date[] = [...extraCandidates];
+      const candidates: Array<{ date: Date; thresholdDays: number }> =
+        extraCandidates.map((date) => ({
+          date,
+          thresholdDays: SMART_SNAP_THRESHOLD_DAYS,
+        }));
       const day = d.getUTCDay();
       const sinceMonday = (day + 6) % 7;
       const prevMonday = addDays(startOfDay(d), -sinceMonday);
       const nextMonday = addDays(prevMonday, 7);
-      candidates.push(prevMonday, nextMonday);
+      candidates.push(
+        {
+          date: prevMonday,
+          thresholdDays: MONDAY_SNAP_THRESHOLD_DAYS,
+        },
+        {
+          date: nextMonday,
+          thresholdDays: MONDAY_SNAP_THRESHOLD_DAYS,
+        },
+      );
       for (const s of storeSprintsRef.current) {
         if (s.endDate) {
           candidates.push(
-            startOfDay(
-              s.endDate instanceof Date ? s.endDate : new Date(s.endDate),
-            ),
+            {
+              date: startOfDay(
+                s.endDate instanceof Date ? s.endDate : new Date(s.endDate),
+              ),
+              thresholdDays: SMART_SNAP_THRESHOLD_DAYS,
+            },
           );
         }
       }
       let best: Date | null = null;
       let bestDiff = Number.POSITIVE_INFINITY;
       for (const c of candidates) {
-        const diff = Math.abs(dayDiff(d, c));
-        if (diff <= 4 && diff < bestDiff) {
-          best = c;
+        const diff = Math.abs(dayDiff(d, c.date));
+        if (diff <= c.thresholdDays && diff < bestDiff) {
+          best = c.date;
           bestDiff = diff;
         }
       }
@@ -690,8 +720,15 @@ export function useRoadmapDragHarness(
             await updateCard({ id: cardId, parentCardId: targetEpicId });
           } catch (err) {
             patchCardInStore(cardId, { parentCardId: origParentId });
-            const raw = (err as Error).message ?? "Reparent failed";
-            const isCycle = raw.startsWith("PARENT_CYCLE");
+            const e = err as { message?: string; cause?: { message?: string } };
+            // Drizzle wraps pg errors so the actual cause sits on `err.cause`.
+            // Surface that when present so users see "FK violation"/"row not
+            // found" instead of an opaque SQL dump.
+            const causeMsg = e?.cause?.message;
+            const raw = causeMsg ?? e?.message ?? "Reparent failed";
+            const isCycle =
+              (e?.message ?? "").startsWith("PARENT_CYCLE") ||
+              (causeMsg ?? "").toLowerCase().includes("parent cycle");
             const message = isCycle
               ? `Cannot move card under ${targetTitle} — cycle detected.`
               : `Reparent failed: ${raw}`;
@@ -1086,20 +1123,17 @@ export function useRoadmapDragHarness(
       const startISO = addDays(gridStart, startDays).toISOString().slice(0, 10);
       const endISO = addDays(gridStart, endDays).toISOString().slice(0, 10);
       const epicBoardId = p.row.boardId;
-      if (deltaPx < PAINT_THRESHOLD_PX) {
-        onOpenNewCardDialog({
-          start: startISO,
-          board: epicBoardId ?? undefined,
-          parent: p.row.epicId,
-        });
-      } else {
-        onOpenNewCardDialog({
-          start: startISO,
-          target: endISO,
-          board: epicBoardId ?? undefined,
-          parent: p.row.epicId,
-        });
-      }
+      // Click without drag = treat as plain canvas click; do nothing.
+      // Only a deliberate drag-paint past PAINT_THRESHOLD_PX opens the
+      // new-card dialog with a span. Avoids accidental modal pops on
+      // every empty-area click.
+      if (deltaPx < PAINT_THRESHOLD_PX) return;
+      onOpenNewCardDialog({
+        start: startISO,
+        target: endISO,
+        board: epicBoardId ?? undefined,
+        parent: p.row.epicId,
+      });
     },
     [gridStart, onPaintPointerMove, ppd, onOpenNewCardDialog],
   );

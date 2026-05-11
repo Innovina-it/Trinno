@@ -1,5 +1,5 @@
 "use client";
-import type { RefObject } from "react";
+import { useState, type RefObject } from "react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -10,6 +10,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { cn } from "@/lib/utils";
 import {
   CalendarClock,
   CalendarDays,
@@ -20,6 +22,7 @@ import {
   Plus,
   Search,
   Settings2,
+  Sliders,
   ZoomIn,
 } from "lucide-react";
 import type { Zoom } from "@/lib/roadmap/dates";
@@ -88,10 +91,221 @@ export function RoadmapHeader({
   const viewOptionsCount =
     (showCriticalPath ? 1 : 0) + (autoCascade ? 1 : 0) + (gutter ? 1 : 0);
 
+  // <md: every left-zone control (zoom, lane mode, view options, jump-to-
+  // date) collapses behind a single Display pill. The BottomSheet houses
+  // the same setters with simple inline radio/checkbox rows so the
+  // operator doesn't juggle four nested dropdowns on a phone.
+  const [displaySheetOpen, setDisplaySheetOpen] = useState(false);
+
+  // Lightweight inline rows used inside the mobile Display sheet.
+  // Each value renders as a 44px-min row so touch tap-areas stay honest.
+  function SheetRadioRow<T extends string>({
+    name,
+    value,
+    options,
+    onChange,
+  }: {
+    name: string;
+    value: T;
+    options: { value: T; label: string }[];
+    onChange: (next: T) => void;
+  }) {
+    return (
+      <div role="radiogroup" aria-label={name} className="space-y-1">
+        {options.map((o) => {
+          const checked = o.value === value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={checked}
+              onClick={() => onChange(o.value)}
+              className={cn(
+                "w-full flex items-center justify-between gap-3 px-3 rounded-xl min-h-11 text-sm transition-colors",
+                checked
+                  ? "bg-[color:var(--surface-hi)] text-fg"
+                  : "text-fg-muted hover:bg-[color:var(--surface-strong)] hover:text-fg",
+              )}
+            >
+              <span>{o.label}</span>
+              {checked && (
+                <span aria-hidden className="size-1.5 rounded-full bg-fg" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function SheetCheckRow({
+    label,
+    checked,
+    onChange,
+    testId,
+  }: {
+    label: string;
+    checked: boolean;
+    onChange: (next: boolean) => void;
+    testId?: string;
+  }) {
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        data-testid={testId}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "w-full flex items-center justify-between gap-3 px-3 rounded-xl min-h-11 text-sm transition-colors",
+          checked
+            ? "bg-[color:var(--surface-hi)] text-fg"
+            : "text-fg-muted hover:bg-[color:var(--surface-strong)] hover:text-fg",
+        )}
+      >
+        <span>{label}</span>
+        <span
+          aria-hidden
+          className={cn(
+            "relative inline-flex items-center w-8 h-5 rounded-full border transition-colors",
+            checked
+              ? "bg-fg border-fg"
+              : "bg-[color:var(--surface)] border-hairline-hi",
+          )}
+        >
+          <span
+            className={cn(
+              "absolute size-3.5 rounded-full transition-transform",
+              checked
+                ? "translate-x-3 bg-bg-deep"
+                : "translate-x-0.5 bg-fg-muted",
+            )}
+          />
+        </span>
+      </button>
+    );
+  }
+
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* LEFT — view controls */}
-      <div className="flex items-center gap-1.5">
+      {/* MOBILE — single Display pill collapses zoom + lane + view options
+          + jump-to-date into one BottomSheet. Idle UI stays grayscale per
+          DESIGN.md Idle Mute Rule. */}
+      <button
+        type="button"
+        onClick={() => setDisplaySheetOpen(true)}
+        data-testid="roadmap-display-sheet-trigger"
+        aria-haspopup="dialog"
+        aria-expanded={displaySheetOpen}
+        className="md:hidden inline-flex items-center gap-1.5 rounded-full border border-hairline bg-[color:var(--surface)] px-3 py-1.5 text-xs text-fg hover:bg-[rgb(255_255_255/0.08)] [@media(hover:none)_and_(pointer:coarse)]:min-h-11"
+      >
+        <Sliders className="size-3.5" aria-hidden />
+        <span>Display</span>
+        {viewOptionsCount > 0 && (
+          <span
+            aria-label={`${viewOptionsCount} view options enabled`}
+            className="inline-flex items-center justify-center rounded-full bg-fg text-bg-deep size-4 text-[10px] font-semibold tabular-nums"
+          >
+            {viewOptionsCount}
+          </span>
+        )}
+      </button>
+      <BottomSheet
+        open={displaySheetOpen}
+        onOpenChange={setDisplaySheetOpen}
+        title="Display"
+        description="Zoom, lane grouping, view options, and date jump."
+      >
+        <div className="space-y-5">
+          <section>
+            <p className="mono-meta-sm text-fg-faint tracking-[0.14em] px-3 pb-1">
+              ZOOM
+            </p>
+            <SheetRadioRow
+              name="Zoom"
+              value={zoom}
+              options={ZOOMS.map((z) => ({ value: z, label: ZOOM_LABEL[z] }))}
+              onChange={(next) => onSetZoom(next)}
+            />
+          </section>
+          <section>
+            <p className="mono-meta-sm text-fg-faint tracking-[0.14em] px-3 pb-1">
+              GROUP LANES
+            </p>
+            <SheetRadioRow
+              name="Group lanes"
+              value={laneMode}
+              options={LANE_MODES.map((m) => ({
+                value: m,
+                label: LANE_MODE_LABEL[m],
+              }))}
+              onChange={(next) => onSetLaneMode(next)}
+            />
+          </section>
+          <section>
+            <p className="mono-meta-sm text-fg-faint tracking-[0.14em] px-3 pb-1">
+              VIEW OPTIONS
+            </p>
+            <div className="space-y-1">
+              <SheetCheckRow
+                label="Critical path"
+                checked={showCriticalPath}
+                onChange={onToggleCriticalPath}
+                testId="roadmap-critical-toggle-sheet"
+              />
+              <SheetCheckRow
+                label="Auto-reschedule"
+                checked={autoCascade}
+                onChange={onToggleAutoCascade}
+                testId="roadmap-auto-cascade-toggle-sheet"
+              />
+              <SheetCheckRow
+                label="Priority gutter"
+                checked={gutter}
+                onChange={onToggleGutter}
+                testId="roadmap-priority-gutter-toggle-sheet"
+              />
+            </div>
+          </section>
+          <section>
+            <p className="mono-meta-sm text-fg-faint tracking-[0.14em] px-3 pb-1">
+              JUMP
+            </p>
+            <div className="flex gap-2 px-3">
+              <button
+                type="button"
+                onClick={() => {
+                  onJumpToDate(new Date());
+                  setDisplaySheetOpen(false);
+                }}
+                className="flex-1 min-h-11 rounded-xl border border-hairline bg-[color:var(--surface)] text-sm text-fg hover:bg-[color:var(--surface-strong)] transition-colors"
+              >
+                Today
+              </button>
+              <label className="flex-1 inline-flex items-center gap-2 px-3 min-h-11 rounded-xl border border-hairline bg-[color:var(--surface)] hover:bg-[color:var(--surface-strong)] transition-colors cursor-pointer">
+                <CalendarDays
+                  className="size-3.5 text-fg-faint"
+                  aria-hidden
+                />
+                <input
+                  type="date"
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      onJumpToDate(new Date(e.target.value));
+                      setDisplaySheetOpen(false);
+                    }
+                  }}
+                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-fg text-sm"
+                />
+              </label>
+            </div>
+          </section>
+        </div>
+      </BottomSheet>
+
+      {/* DESKTOP LEFT — view controls (≥md) */}
+      <div className="hidden md:flex items-center gap-1.5">
         <DropdownMenu>
           <DropdownMenuTrigger
             data-testid="roadmap-zoom"
@@ -219,8 +433,9 @@ export function RoadmapHeader({
 
       {/* RIGHT — date jump + primary action + help */}
       <div className="flex items-center gap-1.5">
-        {/* Date jump compound control. */}
-        <div className="inline-flex items-stretch rounded-full border border-hairline bg-[color:var(--surface)] divide-x divide-hairline overflow-hidden text-xs">
+        {/* Date jump compound control. Hidden <md: (lives inside the
+            Display sheet on mobile). */}
+        <div className="hidden md:inline-flex items-stretch rounded-full border border-hairline bg-[color:var(--surface)] divide-x divide-hairline overflow-hidden text-xs">
           <button
             type="button"
             onClick={() => onJumpToDate(new Date())}

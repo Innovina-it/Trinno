@@ -1,9 +1,12 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Calendar, X, ExternalLink } from "lucide-react";
+import { updateCard } from "@/actions/cards";
 import type { WorkloadCard } from "@/lib/queries/workload";
+import type { DragMode } from "@/lib/workload/drag";
 
 const STATUS_FILL: Record<string, string> = {
   todo: "color-mix(in oklab, var(--status-todo) 30%, var(--surface-strong))",
@@ -35,24 +38,44 @@ function spanDays(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1;
 }
 
+const RESIZE_ZONE_PX = 6;
+// Width below which we hide the resize zones — bars smaller than this
+// would dedicate their entire surface to resize hit-zones, leaving no
+// "move" area to grab. ~3x the zone width keeps a usable middle.
+const MIN_BAR_WIDTH_FOR_RESIZE = RESIZE_ZONE_PX * 3 + 4;
+
 export function WorkloadBar({
   card,
   x,
   width,
   top,
   height,
+  // Optional drag wiring. Omitted when the lane is read-only or the
+  // card is in a state that disallows drag (completed).
+  onBeginDrag,
+  // True while THIS bar is the one being dragged — drives cursor +
+  // raised z-index for the active bar.
+  isDraggingActive,
+  // True while ANY drag is in flight — used to suppress the <Link>
+  // click on pointerup for the dragged bar without disturbing other
+  // bars' tooltip state.
+  isAnyDragInFlight,
 }: {
   card: WorkloadCard;
   x: number;
   width: number;
   top: number;
   height: number;
+  onBeginDrag?: (mode: DragMode, e: React.PointerEvent) => void;
+  isDraggingActive?: boolean;
+  isAnyDragInFlight?: boolean;
 }) {
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState<{ x: number; y: number } | null>(
     null,
   );
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isOwner = card.role === "owner";
   const fill =
@@ -94,19 +117,99 @@ export function WorkloadBar({
   }, [menuOpen]);
 
   const days = spanDays(card.startDate, card.targetDate);
+  const isCompleted = card.completedAt != null;
+  const dragEnabled = !!onBeginDrag && !isCompleted;
+  const showResizeZones = dragEnabled && width >= MIN_BAR_WIDTH_FOR_RESIZE;
+
+  // pointerdown on the bar body / edges. Each branch routes to the
+  // matching drag mode. `data-readonly` mirrors the absence of
+  // `onBeginDrag` so tests + downstream styling can read it.
+  function onPointerDownBody(e: React.PointerEvent) {
+    if (!dragEnabled) {
+      if (isCompleted) {
+        // Soft cue rather than a blocking dialog. The bar is still a
+        // <Link> so right-click and click-through still work.
+        toast.info("Card is complete");
+      }
+      return;
+    }
+    onBeginDrag!("move", e);
+  }
+  function onPointerDownLeft(e: React.PointerEvent) {
+    if (!dragEnabled) return;
+    onBeginDrag!("resize-left", e);
+  }
+  function onPointerDownRight(e: React.PointerEvent) {
+    if (!dragEnabled) return;
+    onBeginDrag!("resize-right", e);
+  }
+
+  // Suppress navigation if the user just finished a drag. The pointerup
+  // -> click sequence still fires after our drag listeners run, so we
+  // gate Link activation behind the hook's isDragging flag.
+  function onClickLink(e: React.MouseEvent) {
+    if (isAnyDragInFlight) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
+
+  // Keyboard nudge — Arrow keys shift the bar's date span by ±1 day,
+  // Shift+Arrow shifts by ±7 days. Persists directly via updateCard
+  // (single discrete event — no optimistic Map needed, the realtime
+  // echo will refresh the bar). Skips on completed cards, mirroring
+  // the drag harness's gate.
+  function onKeyDownBar(e: React.KeyboardEvent) {
+    if (!dragEnabled) return;
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const days = e.shiftKey ? 7 : 1;
+    const sign = e.key === "ArrowLeft" ? -1 : 1;
+    const deltaMs = sign * days * 86_400_000;
+    const nextStart = new Date(card.startDate.getTime() + deltaMs);
+    const nextTarget = new Date(card.targetDate.getTime() + deltaMs);
+    const cardId = card.id;
+    startTransition(() => {
+      void (async () => {
+        try {
+          await updateCard({
+            id: cardId,
+            startDate: nextStart.toISOString(),
+            targetDate: nextTarget.toISOString(),
+          });
+        } catch (err) {
+          toast.error((err as Error).message ?? "Failed to update dates");
+        }
+      })();
+    });
+  }
+
+  const cursor = !dragEnabled
+    ? "cursor-pointer"
+    : isDraggingActive
+      ? "cursor-grabbing"
+      : "cursor-grab";
 
   return (
     <>
       <Link
         href={`/b/${card.boardId}/c/${card.id}`}
         scroll={false}
+        tabIndex={0}
         onMouseEnter={onEnter}
         onMouseLeave={onLeave}
         onContextMenu={onContextMenu}
+        onPointerDown={onPointerDownBody}
+        onClick={onClickLink}
+        onKeyDown={onKeyDownBar}
         data-testid="workload-bar"
         data-card-id={card.id}
         data-role={card.role}
-        className="absolute rounded-md text-xs leading-none flex items-center overflow-hidden whitespace-nowrap text-fg transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+        data-completed={isCompleted ? "true" : "false"}
+        data-readonly={!dragEnabled ? "true" : "false"}
+        data-dragging={isDraggingActive ? "true" : "false"}
+        className={`absolute rounded-md text-xs leading-none flex items-center overflow-hidden whitespace-nowrap text-fg transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${cursor} ${isCompleted ? "opacity-55 saturate-50" : ""}`}
         style={{
           left: x,
           top,
@@ -117,6 +220,16 @@ export function WorkloadBar({
           boxShadow: isOwner
             ? "inset 0 1px 0 0 rgb(255 255 255 / 0.06)"
             : "none",
+          // Active dragged bar floats above siblings + today line so
+          // it visually leads the move.
+          zIndex: isDraggingActive ? 25 : undefined,
+          // Subtle scale lift while dragging so it feels picked-up.
+          transform: isDraggingActive ? "translateY(-1px)" : undefined,
+          // Stop the browser from claiming horizontal touch swipes for
+          // native scroll on this bar — we want pointermove (touch +
+          // pen) to drive the drag. The surrounding scroller keeps
+          // touch-action: auto so swipes outside bars still scroll.
+          touchAction: "none",
         }}
       >
         {priorityStripe && (
@@ -127,14 +240,37 @@ export function WorkloadBar({
           />
         )}
         <span
-          className="px-2 truncate"
+          className={`px-2 truncate ${isCompleted ? "line-through" : ""}`}
           style={{ paddingLeft: priorityStripe ? 8 : undefined }}
         >
           {card.title}
         </span>
+        {/* Resize hit-zones — only rendered when there's enough bar
+            width to fit them without swallowing the move zone. The
+            zones sit on top of the link surface and stop the
+            pointerdown propagating so the body's "move" handler
+            doesn't fire for the same gesture. */}
+        {showResizeZones && (
+          <>
+            <span
+              aria-hidden
+              data-testid="workload-bar-resize-left"
+              onPointerDown={onPointerDownLeft}
+              className="absolute inset-y-0 left-0 cursor-ew-resize"
+              style={{ width: RESIZE_ZONE_PX, touchAction: "none" }}
+            />
+            <span
+              aria-hidden
+              data-testid="workload-bar-resize-right"
+              onPointerDown={onPointerDownRight}
+              className="absolute inset-y-0 right-0 cursor-ew-resize"
+              style={{ width: RESIZE_ZONE_PX, touchAction: "none" }}
+            />
+          </>
+        )}
       </Link>
 
-      {tooltipOpen && (
+      {tooltipOpen && !isDraggingActive && (
         <div
           role="tooltip"
           className="absolute z-30 pointer-events-none rounded-lg border border-hairline-hi bg-[color:var(--popover)] px-3 py-2 shadow-[0_24px_60px_-16px_rgba(0,0,0,0.7)]"

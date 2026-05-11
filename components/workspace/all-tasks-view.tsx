@@ -282,6 +282,7 @@ export function AllTasksView({
                     sprintName={c.sprintId ? sprintNameById.get(c.sprintId) ?? null : null}
                     priority={c.priority as CardPriority | null}
                     dueDate={c.dueDate}
+                    completedAt={c.completedAt ?? null}
                   />
                 ))}
               </AllTasksColumn>
