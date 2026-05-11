@@ -15,6 +15,7 @@ const KIND_VERB: Record<string, string> = {
   "card.created": "created",
   "card.archived": "archived",
   "card.unarchived": "restored",
+  "card.completed": "completed",
   "card.moved": "moved",
   "card.assigned": "assigned",
   "card.unassigned": "unassigned",

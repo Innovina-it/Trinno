@@ -33,11 +33,14 @@ async function makeUser(p: string, displayName?: string) {
     email_confirm: true,
   });
   // displayName is auto-derived from email-local-part by signup trigger;
-  // override if provided so @mentions tests are deterministic.
+  // override if provided so @mentions tests are deterministic. The
+  // mention trigger resolves `@handle` against `profiles.handle` (added
+  // in migration 0066, decoupled from display_name), so set both —
+  // otherwise the trigger queries `handle = 'alice-…'` and misses.
   if (displayName) {
     await service
       .from("profiles")
-      .update({ display_name: displayName })
+      .update({ display_name: displayName, handle: displayName })
       .eq("id", data.user!.id);
   }
   const { data: s } = await createClient(url, anon).auth.signInWithPassword({

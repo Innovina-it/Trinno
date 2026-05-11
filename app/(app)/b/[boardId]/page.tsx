@@ -58,11 +58,17 @@ export default async function BoardPage({
       <ActivityShell>
         <Suspense
           fallback={
-            <aside className="w-72 shrink-0 rounded-2xl glass p-3 space-y-2">
-              <Skeleton className="h-4 w-24 bg-white/15" />
-              <Skeleton className="h-3 w-full bg-white/10" />
-              <Skeleton className="h-3 w-5/6 bg-white/10" />
-              <Skeleton className="h-3 w-4/6 bg-white/10" />
+            <aside className="w-[300px] shrink-0 rounded-2xl border border-hairline bg-[color:var(--bg-1)]">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-hairline">
+                <Skeleton className="h-3 w-16 bg-white/15" />
+                <Skeleton className="h-3 w-6 bg-white/10" />
+              </div>
+              <div className="p-3 space-y-2.5">
+                <Skeleton className="h-3 w-full bg-white/10" />
+                <Skeleton className="h-3 w-5/6 bg-white/10" />
+                <Skeleton className="h-3 w-4/6 bg-white/10" />
+                <Skeleton className="h-3 w-5/6 bg-white/10" />
+              </div>
             </aside>
           }
         >

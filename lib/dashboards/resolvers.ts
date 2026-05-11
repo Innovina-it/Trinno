@@ -5,6 +5,7 @@ import {
   asc,
   gte,
   lte,
+  isNull,
   isNotNull,
   sql,
   type SQL,
@@ -41,7 +42,7 @@ export async function resolveCount(
       case "overdue":
         whereParts.push(
           eq(cards.archived, false),
-          eq(cards.dueComplete, false),
+          isNull(cards.completedAt),
           isNotNull(cards.dueDate),
           lte(cards.dueDate, new Date()),
         );
@@ -158,7 +159,7 @@ export async function resolveDueThisWeek(
   return dbAsUser(token, async (tx) => {
     const whereParts: SQL[] = [
       eq(cards.archived, false),
-      eq(cards.dueComplete, false),
+      isNull(cards.completedAt),
       isNotNull(cards.dueDate),
       gte(cards.dueDate, now),
       lte(cards.dueDate, week),
@@ -267,7 +268,7 @@ export async function resolveOnRoadmap(
         total: sql<number>`count(*)::int`,
         scheduled: sql<number>`count(*) filter (where ${cards.startDate} is not null or ${cards.targetDate} is not null)::int`,
         unscheduled: sql<number>`count(*) filter (where ${cards.startDate} is null and ${cards.targetDate} is null)::int`,
-        overdue: sql<number>`count(*) filter (where ${cards.targetDate} is not null and ${cards.targetDate} < now() and ${cards.dueComplete} = false)::int`,
+        overdue: sql<number>`count(*) filter (where ${cards.targetDate} is not null and ${cards.targetDate} < now() and ${cards.completedAt} is null)::int`,
       })
       .from(cards)
       .innerJoin(boards, eq(boards.id, cards.boardId))

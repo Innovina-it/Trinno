@@ -31,7 +31,7 @@ export default async function InboxPage({
   const unread = await unreadCount(token);
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10 space-y-6">
+    <div className="mx-auto max-w-3xl px-3 sm:px-4 md:px-6 py-6 md:py-10 space-y-6">
       <header className="space-y-1 border-b border-hairline pb-4">
         <span className="mono-meta-sm text-fg-faint">
           {unread} UNREAD · {items.length} SHOWN

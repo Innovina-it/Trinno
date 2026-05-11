@@ -120,7 +120,7 @@ export function BoardMembersPanel({
                 )}
               </>
             )}
-            {preview.state === "exists" && "USER EXISTS"}
+            {preview.state === "exists" && "ACCOUNT EXISTS · ADDING WILL GRANT BOARD ACCESS"}
             {preview.state === "missing" && (
               <span className="text-[color:var(--status-blocked)]">
                 NO USER WITH THAT EMAIL
@@ -167,6 +167,13 @@ export function BoardMembersPanel({
               onValueChange={(v) =>
                 start(async () => {
                   try {
+                    if (
+                      !confirm(
+                        `Change ${m.displayName}'s board role from ${m.role} to ${v}?`,
+                      )
+                    ) {
+                      return;
+                    }
                     await changeBoardMemberRole({
                       boardId,
                       userId: m.userId,
@@ -192,6 +199,13 @@ export function BoardMembersPanel({
               onClick={() =>
                 start(async () => {
                   try {
+                    if (
+                      !confirm(
+                        `Remove ${m.displayName} from this board? They may lose access to its cards.`,
+                      )
+                    ) {
+                      return;
+                    }
                     await removeBoardMember({ boardId, userId: m.userId });
                   } catch (err) {
                     toast.error((err as Error).message);

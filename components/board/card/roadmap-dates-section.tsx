@@ -1,10 +1,13 @@
 "use client";
 import { useTransition } from "react";
 import { toast } from "sonner";
+import { CalendarRange } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
 import { updateCard } from "@/actions/cards";
 import { DateRangePopover, type DateRange } from "@/components/ui/date-range-popover";
+import { Button } from "@/components/ui/button";
 import type { CardRow } from "@/lib/queries/board-snapshot";
+import { undoBus } from "@/lib/undo-bus";
 
 function toDate(d: Date | string | null | undefined): Date | null {
   if (!d) return null;
@@ -18,17 +21,42 @@ export function RoadmapDatesSection({ cardId }: { cardId: string }) {
   const card = useBoardStore((s) =>
     s.cards.find((c) => c.id === cardId),
   ) as CardRow | undefined;
+  const parent = useBoardStore((s) =>
+    card?.parentCardId
+      ? s.cards.find((c) => c.id === card.parentCardId)
+      : null,
+  ) as CardRow | undefined | null;
   const updateCardLocal = useBoardStore((s) => s.updateCard);
   const [pending, start] = useTransition();
 
   if (!card) return null;
 
+  const currentCard = card;
   const value: DateRange = {
-    start: toDate(card.startDate),
-    target: toDate(card.targetDate),
+    start: toDate(currentCard.startDate),
+    target: toDate(currentCard.targetDate),
   };
 
+  // Subtask date inheritance signal: if this card has a parent and both
+  // start and target match the parent's, the values were copied at
+  // create-time (see actions/cards.ts createCardImpl). Surface that so
+  // the user understands why dates appeared without explicit input.
+  const parentStart = parent ? toDate(parent.startDate) : null;
+  const parentTarget = parent ? toDate(parent.targetDate) : null;
+  const inheritedFromParent =
+    !!parent &&
+    !!value.start &&
+    !!value.target &&
+    !!parentStart &&
+    !!parentTarget &&
+    value.start.getTime() === parentStart.getTime() &&
+    value.target.getTime() === parentTarget.getTime();
+
   function persist(next: DateRange) {
+    const prev = {
+      startDate: currentCard.startDate,
+      targetDate: currentCard.targetDate,
+    };
     updateCardLocal(cardId, { startDate: next.start, targetDate: next.target });
     start(async () => {
       try {
@@ -37,10 +65,39 @@ export function RoadmapDatesSection({ cardId }: { cardId: string }) {
           startDate: next.start,
           targetDate: next.target,
         });
+        undoBus.push({
+          message: "Roadmap dates updated",
+          undo: async () => {
+            updateCardLocal(cardId, prev);
+            try {
+              await updateCard({
+                id: cardId,
+                startDate: prev.startDate,
+                targetDate: prev.targetDate,
+              });
+            } catch (err) {
+              updateCardLocal(cardId, {
+                startDate: next.start,
+                targetDate: next.target,
+              });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
       } catch (err) {
+        updateCardLocal(cardId, prev);
         toast.error((err as Error).message);
       }
     });
+  }
+
+  const onRoadmap = Boolean(value.start && value.target);
+
+  function promote() {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const week = new Date(today.getTime() + 7 * 86_400_000);
+    persist({ start: today, target: week });
   }
 
   return (
@@ -55,6 +112,32 @@ export function RoadmapDatesSection({ cardId }: { cardId: string }) {
         disabled={pending}
         triggerLabel="Set start / target"
       />
+      {/* Persistence hint: dates are stored & rendered as UTC midnight
+          (see toDate above). Surfacing the timezone here pre-empts the
+          "why does my Friday show as Thursday in Tokyo" support thread. */}
+      <span className="mono-meta-sm text-fg-faint">DATES IN UTC</span>
+      {inheritedFromParent && (
+        <span
+          data-testid="roadmap-dates-inherited"
+          className="mono-meta-sm text-fg-faint"
+        >
+          INHERITED FROM PARENT
+        </span>
+      )}
+      {!onRoadmap && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={promote}
+          disabled={pending}
+          data-testid="roadmap-promote"
+          className="gap-1.5 normal-case tracking-normal"
+        >
+          <CalendarRange className="size-3" />
+          Promote to roadmap (today + 7 days)
+        </Button>
+      )}
     </section>
   );
 }

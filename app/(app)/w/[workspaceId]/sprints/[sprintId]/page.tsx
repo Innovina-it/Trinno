@@ -41,7 +41,7 @@ export default async function SprintDetailPage({
   const completed = sprintCards.filter((c) => c.archived);
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10 space-y-8">
+    <div className="mx-auto max-w-5xl px-3 sm:px-4 md:px-6 py-6 md:py-10 space-y-8">
       <header className="space-y-2 border-b border-hairline pb-4">
         <div className="flex items-center gap-1.5 mono-meta-sm text-fg-faint">
           <Link

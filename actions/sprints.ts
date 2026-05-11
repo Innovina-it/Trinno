@@ -1,8 +1,8 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, isNull } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { sprints, cards } from "@/lib/db/schema";
+import { sprints, cards, boards, workspaceMembers } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
   CreateSprintInput,
@@ -25,10 +25,49 @@ export type SprintConflictCard = {
   targetDate: Date | null;
 };
 
+type SprintTx = Parameters<Parameters<typeof dbAsUser>[1]>[0];
+
+function decodeSub(jwt: string): string {
+  const [, payload] = jwt.split(".");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
+}
+
 function asDate(v: string | Date | null | undefined): Date | null | undefined {
   if (v === undefined) return undefined;
   if (v === null) return null;
   return v instanceof Date ? v : new Date(v);
+}
+
+async function assertCanManageSprints(
+  tx: SprintTx,
+  workspaceId: string,
+  userId: string,
+) {
+  const [membership] = await tx
+    .select({ role: workspaceMembers.role })
+    .from(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (membership?.role !== "owner" && membership?.role !== "admin") {
+    throw new Error("Only workspace owners and admins can manage sprints.");
+  }
+}
+
+async function getSprintWorkspaceId(tx: SprintTx, sprintId: string) {
+  const [row] = await tx
+    .select({ workspaceId: sprints.workspaceId })
+    .from(sprints)
+    .where(eq(sprints.id, sprintId))
+    .limit(1);
+
+  if (!row) throw new Error("Forbidden");
+  return row.workspaceId;
 }
 
 export async function createSprintImpl(
@@ -42,7 +81,9 @@ export async function createSprintImpl(
   },
 ) {
   const p = CreateSprintInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    await assertCanManageSprints(tx, p.workspaceId, actorId);
     const [row] = await tx
       .insert(sprints)
       .values({
@@ -69,12 +110,15 @@ export async function updateSprintImpl(
   },
 ) {
   const p = UpdateSprintInput.parse(input);
+  const actorId = decodeSub(token);
   const patch: Record<string, unknown> = {};
   if (p.name !== undefined) patch.name = p.name;
   if (p.goal !== undefined) patch.goal = p.goal;
   if (p.startDate !== undefined) patch.startDate = asDate(p.startDate);
   if (p.endDate !== undefined) patch.endDate = asDate(p.endDate);
   return dbAsUser(token, async (tx) => {
+    const workspaceId = await getSprintWorkspaceId(tx, p.id);
+    await assertCanManageSprints(tx, workspaceId, actorId);
     const [row] = await tx
       .update(sprints)
       .set(patch)
@@ -87,7 +131,10 @@ export async function updateSprintImpl(
 
 export async function deleteSprintImpl(token: string, input: { id: string }) {
   const p = DeleteSprintInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const workspaceId = await getSprintWorkspaceId(tx, p.id);
+    await assertCanManageSprints(tx, workspaceId, actorId);
     const r = await tx
       .delete(sprints)
       .where(eq(sprints.id, p.id))
@@ -104,7 +151,10 @@ export async function startSprintImpl(
   conflictCards: SprintConflictCard[];
 }> {
   const p = StartSprintInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const workspaceId = await getSprintWorkspaceId(tx, p.id);
+    await assertCanManageSprints(tx, workspaceId, actorId);
     // Postgres' partial unique index will reject if another active sprint exists.
     const [row] = await tx
       .update(sprints)
@@ -189,18 +239,24 @@ export async function completeSprintImpl(
   input: { id: string; carryoverTo: "backlog" | string },
 ) {
   const p = CompleteSprintInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
-    // Move incomplete (non-archived) cards to carryover destination.
+    const workspaceId = await getSprintWorkspaceId(tx, p.id);
+    await assertCanManageSprints(tx, workspaceId, actorId);
+    // Carry over cards that are not yet marked complete (completed_at is
+    // null). Completed cards stay attached to the closing sprint as a
+    // historic record. Archived-but-not-completed cards still carry over —
+    // they aren't done.
     if (p.carryoverTo === "backlog") {
       await tx
         .update(cards)
         .set({ sprintId: null })
-        .where(and(eq(cards.sprintId, p.id), eq(cards.archived, false)));
+        .where(and(eq(cards.sprintId, p.id), isNull(cards.completedAt)));
     } else {
       await tx
         .update(cards)
         .set({ sprintId: p.carryoverTo })
-        .where(and(eq(cards.sprintId, p.id), eq(cards.archived, false)));
+        .where(and(eq(cards.sprintId, p.id), isNull(cards.completedAt)));
     }
     const [row] = await tx
       .update(sprints)
@@ -217,7 +273,25 @@ export async function assignCardToSprintImpl(
   input: { cardId: string; sprintId: string | null },
 ) {
   const p = AssignCardToSprintInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const [cardAccess] = await tx
+      .select({ workspaceId: boards.workspaceId })
+      .from(cards)
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .where(eq(cards.id, p.cardId))
+      .limit(1);
+    if (!cardAccess) throw new Error("Forbidden");
+
+    await assertCanManageSprints(tx, cardAccess.workspaceId, actorId);
+
+    if (p.sprintId !== null) {
+      const sprintWorkspaceId = await getSprintWorkspaceId(tx, p.sprintId);
+      if (sprintWorkspaceId !== cardAccess.workspaceId) {
+        throw new Error("Sprint must belong to the card workspace.");
+      }
+    }
+
     const [row] = await tx
       .update(cards)
       .set({ sprintId: p.sprintId })

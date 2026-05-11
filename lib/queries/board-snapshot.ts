@@ -1,4 +1,4 @@
-import { eq, asc, and, inArray } from "drizzle-orm";
+import { eq, asc, and, inArray, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import {
   boards,
@@ -33,7 +33,12 @@ export type CardLinkRow = typeof cardLinks.$inferSelect;
 export type ComponentRow = typeof components.$inferSelect;
 export type CardComponentRow = typeof cardComponents.$inferSelect;
 export type CardVersionRow = typeof cardVersions.$inferSelect;
-export type BoardProfile = { id: string; displayName: string };
+export type BoardProfile = {
+  id: string;
+  displayName: string;
+  handle: string;
+  avatarUrl: string | null;
+};
 export type BoardMemberRole = {
   userId: string;
   role: "admin" | "member" | "observer";
@@ -57,6 +62,59 @@ export type BoardSnapshot = {
   boardProfiles: BoardProfile[];
   boardMembers: BoardMemberRole[];
 };
+
+async function listCommentsCompat(
+  tx: Parameters<Parameters<typeof dbAsUser>[1]>[0],
+  boardId: string,
+): Promise<CommentRow[]> {
+  const rows = await tx.execute(sql`
+    select
+      c.id,
+      c.card_id,
+      c.board_id,
+      c.author_id,
+      nullif(to_jsonb(c)->>'parent_comment_id', '')::uuid as parent_comment_id,
+      c.body,
+      c.created_at,
+      c.edited_at,
+      nullif(to_jsonb(c)->>'resolved_at', '')::timestamptz as resolved_at,
+      nullif(to_jsonb(c)->>'resolved_by', '')::uuid as resolved_by
+    from public.comments c
+    where c.board_id = ${boardId}
+    order by c.created_at asc
+  `);
+  return (rows as unknown as Array<{
+    id: string;
+    card_id: string;
+    board_id: string;
+    author_id: string;
+    parent_comment_id: string | null;
+    body: string;
+    created_at: Date | string;
+    edited_at: Date | string | null;
+    resolved_at: Date | string | null;
+    resolved_by: string | null;
+  }>).map((r) => ({
+    id: r.id,
+    cardId: r.card_id,
+    boardId: r.board_id,
+    authorId: r.author_id,
+    parentCommentId: r.parent_comment_id ?? null,
+    body: r.body,
+    createdAt: r.created_at instanceof Date ? r.created_at : new Date(r.created_at),
+    editedAt: r.edited_at
+      ? r.edited_at instanceof Date
+        ? r.edited_at
+        : new Date(r.edited_at)
+      : null,
+    resolvedAt: r.resolved_at
+      ? r.resolved_at instanceof Date
+        ? r.resolved_at
+        : new Date(r.resolved_at)
+      : null,
+    resolvedBy: r.resolved_by ?? null,
+  }));
+}
 
 export async function getBoardSnapshot(
   token: string,
@@ -114,11 +172,7 @@ export async function getBoardSnapshot(
         .from(checklistItems)
         .where(eq(checklistItems.boardId, boardId))
         .orderBy(asc(checklistItems.position)),
-      tx
-        .select()
-        .from(comments)
-        .where(eq(comments.boardId, boardId))
-        .orderBy(asc(comments.createdAt)),
+      listCommentsCompat(tx, boardId),
       tx
         .select()
         .from(attachments)
@@ -149,7 +203,12 @@ export async function getBoardSnapshot(
       memberIds.length === 0
         ? []
         : await tx
-            .select({ id: profiles.id, displayName: profiles.displayName })
+            .select({
+              id: profiles.id,
+              displayName: profiles.displayName,
+              handle: profiles.handle,
+              avatarUrl: profiles.avatarUrl,
+            })
             .from(profiles)
             .where(inArray(profiles.id, memberIds));
 

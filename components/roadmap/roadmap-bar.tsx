@@ -6,10 +6,13 @@ import {
   useTransition,
   type CSSProperties,
 } from "react";
+import { createPortal } from "react-dom";
 import type React from "react";
 import {
   Archive,
   CalendarRange,
+  Check,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -21,6 +24,7 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
+import { useWorkspaceStore } from "@/stores/workspace-store";
 import { STATUS_LABEL, type StatusKind } from "@/lib/status";
 import { archiveCard, updateCard } from "@/actions/cards";
 import {
@@ -136,6 +140,7 @@ export function RoadmapBar({
   onOpen?: (cardId: string, boardId: string) => void;
 }) {
   const router = useRouter();
+  const patchCardLocal = useWorkspaceStore((s) => s.patchCard);
   const dot = TYPE_DOT[card.type] ?? "bg-fg/40";
   const [menu, setMenu] = useState<ContextMenu | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -143,17 +148,31 @@ export function RoadmapBar({
   const [datesStart, setDatesStart] = useState(() => isoForInput(card.startDate));
   const [datesTarget, setDatesTarget] = useState(() => isoForInput(card.targetDate));
   const [tooltipOpen, setTooltipOpen] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
   const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const barRef = useRef<HTMLDivElement | null>(null);
   const [, startTransition] = useTransition();
 
   function scheduleTooltip() {
     if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
-    tooltipTimer.current = setTimeout(() => setTooltipOpen(true), 350);
+    tooltipTimer.current = setTimeout(() => {
+      // Capture viewport coords at open time so the portal-rendered
+      // tooltip can be positioned with `position: fixed`, escaping the
+      // roadmap grid's `overflow-hidden` clip. We don't track scroll —
+      // mouseleave (which fires on scroll-induced pointer drift) hides
+      // the tooltip anyway.
+      if (barRef.current) {
+        const r = barRef.current.getBoundingClientRect();
+        setTooltipPos({ left: r.left + r.width / 2, top: r.bottom + 6 });
+      }
+      setTooltipOpen(true);
+    }, 350);
   }
   function cancelTooltip() {
     if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
     tooltipTimer.current = null;
     setTooltipOpen(false);
+    setTooltipPos(null);
   }
   useEffect(() => {
     return () => {
@@ -225,6 +244,31 @@ export function RoadmapBar({
     });
   }
 
+  function handleToggleComplete() {
+    const next = !isCompleted;
+    setMenu(null);
+    // Optimistic patch to the workspace store so the bar flips
+    // immediately. Realtime CDC will reconcile when the trigger emits
+    // the canonical row. Without this, the bar stays in its pre-click
+    // state until the round-trip completes — looks broken.
+    patchCardLocal(card.id, {
+      completedAt: next ? new Date() : null,
+      dueComplete: next,
+    });
+    startTransition(async () => {
+      try {
+        await updateCard({ id: card.id, completed: next });
+      } catch (err) {
+        // Roll back optimistic patch.
+        patchCardLocal(card.id, {
+          completedAt: next ? null : new Date(),
+          dueComplete: !next,
+        });
+        toast.error((err as Error).message);
+      }
+    });
+  }
+
   // Plan #16b-γ-G G4 — keyboard parity for the gutter drag. Same items
   // are flat (no submenu) since the existing menu is a stack of plain
   // buttons. Includes a "Clear priority" entry when one is set.
@@ -272,9 +316,11 @@ export function RoadmapBar({
   // unset cards.
   const priority = card.priority ?? null;
   const priorityDot = priority ? PRIORITY_TINT[priority as CardPriority].dot : null;
+  const isCompleted = card.completedAt != null;
   return (
     <>
       <div
+        ref={barRef}
         style={{
           left: x,
           width: Math.max(width, 12),
@@ -286,7 +332,8 @@ export function RoadmapBar({
                    flex items-center px-2 select-none group/bar
                    ${fill.className}
                    ${focused ? "ring-2 ring-fg/50" : ""}
-                   ${tooltipOpen || menu ? "z-30" : ""}`}
+                   ${tooltipOpen || menu ? "z-30" : ""}
+                   ${isCompleted ? "opacity-55 saturate-50" : ""}`}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
           cancelTooltip();
@@ -342,11 +389,61 @@ export function RoadmapBar({
           <span className="absolute inset-y-0 right-0 w-1.5 bg-fg/40 rounded-r-md" />
           <ChevronRight className="size-3 text-fg/80 relative" />
         </span>
+        {width < 40 ? (
+          <span
+            aria-hidden
+            className={`mr-1.5 inline-block size-1.5 rounded-full ${dot}`}
+          />
+        ) : (
+          <button
+            type="button"
+            data-testid="roadmap-bar-complete-toggle"
+            data-completed={isCompleted ? "true" : "false"}
+            aria-label={
+              isCompleted
+                ? `Mark ${card.title} not complete`
+                : `Mark ${card.title} complete`
+            }
+            aria-pressed={isCompleted}
+            // Capture phase so we beat the bar's bubble-phase
+            // onPointerDown (which kicks off `onMoveStart` and ate the
+            // click). stopImmediatePropagation kills any sibling
+            // handler in the same phase too.
+            onPointerDownCapture={(e) => {
+              e.stopPropagation();
+              e.nativeEvent.stopImmediatePropagation();
+            }}
+            onMouseDownCapture={(e) => {
+              e.stopPropagation();
+              e.nativeEvent.stopImmediatePropagation();
+            }}
+            onClickCapture={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              e.nativeEvent.stopImmediatePropagation();
+              handleToggleComplete();
+            }}
+            className={`relative z-20 mr-1.5 inline-flex items-center justify-center shrink-0 size-3 rounded-full border transition-colors focus:outline-none focus:ring-1 focus:ring-fg/40 ${
+              isCompleted
+                ? "bg-[color:var(--accent-lime)] border-[color:var(--accent-lime)]"
+                : "border-fg/40 hover:border-fg/70"
+            }`}
+          >
+            {isCompleted && (
+              <Check
+                aria-hidden
+                className="size-2 stroke-[3] text-bg-deep"
+              />
+            )}
+          </button>
+        )}
         <span
-          aria-hidden
-          className={`mr-1.5 inline-block size-1.5 rounded-full ${dot}`}
-        />
-        <span className="text-xs text-fg truncate">{card.title}</span>
+          className={`text-xs text-fg truncate ${
+            isCompleted ? "line-through" : ""
+          }`}
+        >
+          {card.title}
+        </span>
         {/* A2 — hover overflow trigger. Sits just left of the right resize
             handle. Stops drag from starting on press. */}
         <button
@@ -364,11 +461,20 @@ export function RoadmapBar({
         >
           <MoreHorizontal className="size-3" />
         </button>
-        {tooltipOpen && !menu && (
+      </div>
+      {tooltipOpen && !menu && tooltipPos && typeof document !== "undefined" &&
+        createPortal(
           <div
             role="tooltip"
             data-testid="roadmap-bar-tooltip"
-            className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-20 w-64 rounded-md border border-hairline-hi bg-[color:var(--popover)] shadow-xl p-3 text-xs text-fg pointer-events-none"
+            style={{
+              position: "fixed",
+              left: tooltipPos.left,
+              top: tooltipPos.top,
+              transform: "translateX(-50%)",
+              zIndex: 60,
+            }}
+            className="w-64 rounded-md border border-hairline-hi bg-[color:var(--popover)] shadow-xl p-3 text-xs text-fg pointer-events-none"
           >
             <div className="serif-display text-base leading-tight">
               {card.title}
@@ -396,10 +502,18 @@ export function RoadmapBar({
               <dd className="text-fg">
                 {card.targetDate.toISOString().slice(0, 10)}
               </dd>
+              {card.completedAt && (
+                <>
+                  <dt className="text-fg-faint">DONE</dt>
+                  <dd className="text-fg">
+                    {card.completedAt.toISOString().slice(0, 10)}
+                  </dd>
+                </>
+              )}
             </dl>
-          </div>
+          </div>,
+          document.body,
         )}
-      </div>
       {menu && (
         <div
           ref={menuRef}
@@ -443,6 +557,16 @@ export function RoadmapBar({
           >
             <CalendarRange className="size-3" />
             Edit dates
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleToggleComplete}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
+            data-testid="roadmap-bar-menu-complete"
+          >
+            <CheckCircle2 className="size-3" />
+            {isCompleted ? "Mark not complete" : "Mark complete"}
           </button>
           <div className="my-1 border-t border-hairline" />
           {(["p0", "p1", "p2", "p3", "p4"] as CardPriority[]).map((p) => (

@@ -47,7 +47,7 @@ export function CompleteSprintDialog({
           </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
             <p className="text-sm text-fg-muted">
-              Move the remaining (non-archived) cards to:
+              Move cards not yet marked complete to:
             </p>
             <div className="space-y-1.5">
               <label className="flex items-center gap-2 text-sm">

@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { getSessionToken, requireUser } from "@/lib/auth";
-import { userNotificationPrefs } from "@/lib/db/schema";
+import { profiles, userNotificationPrefs } from "@/lib/db/schema";
 import { z } from "zod";
 
 const SetPrefInput = z.object({
@@ -57,6 +57,39 @@ export async function setNotificationPref(
         ],
         set: { enabled: p.enabled },
       });
+  });
+  revalidatePath("/settings/notifications");
+}
+
+/**
+ * Daily email digest opt-in.  Stored on profiles.email_digest_optin
+ * (migration 0090) — global flag, separate from the per-(kind, channel)
+ * rows in user_notification_prefs.  The cron at /api/notifications/digest
+ * reads only profiles where this is TRUE.
+ */
+export async function getEmailDigestPref(): Promise<boolean> {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const userId = decodeSub(t);
+  return dbAsUser(t, async (tx) => {
+    const [row] = await tx
+      .select({ optin: profiles.emailDigestOptin })
+      .from(profiles)
+      .where(eq(profiles.id, userId));
+    return row?.optin ?? false;
+  });
+}
+
+export async function setEmailDigestPref(enabled: boolean) {
+  z.boolean().parse(enabled);
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const userId = decodeSub(t);
+  await dbAsUser(t, async (tx) => {
+    await tx
+      .update(profiles)
+      .set({ emailDigestOptin: enabled })
+      .where(eq(profiles.id, userId));
   });
   revalidatePath("/settings/notifications");
 }

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { NotificationPrefsForm } from "@/components/settings/notification-prefs-form";
+import { EmailDigestToggle } from "@/components/settings/email-digest-toggle";
+import { getEmailDigestPref } from "@/actions/user-notification-prefs";
 
 const KIND_DESCRIPTIONS: Array<{ kind: string; label: string; desc: string }> = [
   { kind: "comment.mention", label: "Mentions", desc: "Someone @mentions you in a comment." },
@@ -9,13 +11,15 @@ const KIND_DESCRIPTIONS: Array<{ kind: string; label: string; desc: string }> = 
   { kind: "card.due", label: "Due dates", desc: "Cards you watch reach their due date." },
   { kind: "card.dates", label: "Roadmap reschedules", desc: "Watched card start or target date moves." },
   { kind: "card.archived", label: "Archive activity", desc: "Cards you watch are archived or restored." },
+  { kind: "card.completed", label: "Completions", desc: "Cards you watch are marked complete." },
   { kind: "board.member.added", label: "Board membership", desc: "You are added to a board." },
 ];
 
 export default async function NotificationSettingsPage() {
   await requireUser();
+  const digestOptin = await getEmailDigestPref();
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8 space-y-6">
+    <div className="mx-auto max-w-3xl px-3 sm:px-4 md:px-6 py-6 md:py-8 space-y-6">
       <header className="space-y-2 border-b border-hairline pb-4">
         <div className="flex items-center gap-1.5 mono-meta-sm text-fg-faint">
           <Link href="/settings" className="hover:text-fg">SETTINGS</Link>
@@ -45,12 +49,7 @@ export default async function NotificationSettingsPage() {
             label="Email each event"
             desc="Sends an email per notification. Off by default to avoid noise."
           />
-          <PrefRow
-            id="email-digest"
-            label="Email daily digest"
-            desc="One summary at 09:00 local time. Coming soon."
-            disabled
-          />
+          <EmailDigestToggle initial={digestOptin} />
         </div>
       </section>
 

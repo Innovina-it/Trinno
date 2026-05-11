@@ -39,17 +39,20 @@ const buttonVariants = cva(
           "text-fg underline underline-offset-4 decoration-hairline-hi hover:decoration-fg hover:text-fg",
       },
       size: {
+        // Touch-floor overrides keep DESIGN.md desktop density (28/32/36/44)
+        // intact on hover-capable devices but floor every size <44px to a
+        // 44x44 hit area on touch viewports.
         default:
-          "h-9 gap-1.5 px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        xs: "h-7 gap-1 px-2.5 text-[0.68rem] tracking-wider uppercase has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1 px-3 text-[0.72rem] tracking-wider uppercase has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-3.5",
+          "h-9 gap-1.5 px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3 [@media(hover:none)_and_(pointer:coarse)]:min-h-11",
+        xs: "h-7 gap-1 px-2.5 text-[0.68rem] tracking-wider uppercase has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-3 [@media(hover:none)_and_(pointer:coarse)]:min-h-11",
+        sm: "h-8 gap-1 px-3 text-[0.72rem] tracking-wider uppercase has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-3.5 [@media(hover:none)_and_(pointer:coarse)]:min-h-11",
         lg: "h-11 gap-2 px-5 text-[0.85rem] tracking-wider uppercase has-data-[icon=inline-end]:pr-3.5 has-data-[icon=inline-start]:pl-3.5",
-        icon: "size-9 rounded-full",
+        icon: "size-9 rounded-full [@media(hover:none)_and_(pointer:coarse)]:min-h-11 [@media(hover:none)_and_(pointer:coarse)]:min-w-11",
         "icon-xs":
-          "size-7 rounded-full [&_svg:not([class*='size-'])]:size-3",
+          "size-7 rounded-full [&_svg:not([class*='size-'])]:size-3 [@media(hover:none)_and_(pointer:coarse)]:min-h-11 [@media(hover:none)_and_(pointer:coarse)]:min-w-11",
         "icon-sm":
-          "size-8 rounded-full",
-        "icon-lg": "size-10 rounded-full",
+          "size-8 rounded-full [@media(hover:none)_and_(pointer:coarse)]:min-h-11 [@media(hover:none)_and_(pointer:coarse)]:min-w-11",
+        "icon-lg": "size-10 rounded-full [@media(hover:none)_and_(pointer:coarse)]:min-h-11 [@media(hover:none)_and_(pointer:coarse)]:min-w-11",
       },
     },
     defaultVariants: {

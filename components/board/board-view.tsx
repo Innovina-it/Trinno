@@ -18,7 +18,7 @@ import {
   horizontalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
-import { Layers3 } from "lucide-react";
+import { ChevronRight, Layers3 } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { errorBus } from "@/lib/errors/error-bus";
@@ -44,6 +44,7 @@ import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { useBoardPresence, type Viewer } from "@/hooks/use-board-presence";
 import { PresenceAvatars } from "./presence-avatars";
 import { boardCode } from "@/lib/format";
+import { useActivityPanel } from "@/lib/use-activity-panel";
 import {
   parseFilters,
   applyFilters,
@@ -90,6 +91,7 @@ export function BoardView({
   const boardProfiles = useBoardStore((s) => s.boardProfiles);
   const moveListLocal = useBoardStore((s) => s.moveList);
   const moveCardLocal = useBoardStore((s) => s.moveCard);
+  const activity = useActivityPanel();
   // Plan #16b-γ-Master-D D1 — optimistic patches for sprint assignment go
   // through the per-board store (drives card-tile.sprintId visibility) and
   // the workspace store (drives the human-readable chip name). The CDC
@@ -128,7 +130,16 @@ export function BoardView({
 
   useBoardRealtime(board.id, board.workspaceId);
   useWorkspaceRealtime(board.workspaceId);
-  const viewers = useBoardPresence(board.id, currentUser);
+  const activePresenceCardId = pathname.match(/\/c\/([0-9a-f-]{36})/)?.[1] ?? null;
+  const activePresenceCard = activePresenceCardId
+    ? cards.find((c) => c.id === activePresenceCardId)
+    : null;
+  const viewers = useBoardPresence(board.id, {
+    ...currentUser,
+    location: activePresenceCard ? "card" : "board",
+    cardId: activePresenceCard?.id ?? null,
+    cardTitle: activePresenceCard?.title ?? null,
+  });
 
   const filters = useMemo(
     () => parseFilters(new URLSearchParams(sp.toString())),
@@ -276,17 +287,32 @@ export function BoardView({
         const targetCard = cards.find((c) => c.id === overKey.id);
         if (!targetCard) return;
         toListId = targetCard.listId;
-        const targetListCards = cards.filter(
-          (c) => c.listId === toListId && c.id !== activeKey.id,
-        );
-        let dropIndex = targetListCards.findIndex((c) => c.id === overKey.id);
-        if (dropIndex < 0) dropIndex = targetListCards.length;
-        prevPos =
-          dropIndex > 0 ? targetListCards[dropIndex - 1].position : null;
-        nextPos =
-          dropIndex < targetListCards.length
-            ? targetListCards[dropIndex].position
-            : null;
+        const targetListCards = cards.filter((c) => c.listId === toListId);
+        if (sourceCard.listId === toListId) {
+          const oldIndex = targetListCards.findIndex((c) => c.id === activeKey.id);
+          const newIndex = targetListCards.findIndex((c) => c.id === overKey.id);
+          if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+          const reordered = arrayMove(targetListCards, oldIndex, newIndex);
+          const movedIndex = reordered.findIndex((c) => c.id === activeKey.id);
+          prevPos =
+            movedIndex > 0 ? reordered[movedIndex - 1].position : null;
+          nextPos =
+            movedIndex < reordered.length - 1
+              ? reordered[movedIndex + 1].position
+              : null;
+        } else {
+          const targetWithoutActive = targetListCards.filter(
+            (c) => c.id !== activeKey.id,
+          );
+          let dropIndex = targetWithoutActive.findIndex((c) => c.id === overKey.id);
+          if (dropIndex < 0) dropIndex = targetWithoutActive.length;
+          prevPos =
+            dropIndex > 0 ? targetWithoutActive[dropIndex - 1].position : null;
+          nextPos =
+            dropIndex < targetWithoutActive.length
+              ? targetWithoutActive[dropIndex].position
+              : null;
+        }
       } else if (overData?.type === "list-drop" || overData?.type === "list") {
         toListId = overData.listId ?? null;
         if (!toListId) return;
@@ -364,11 +390,11 @@ export function BoardView({
 
   return (
     <div
-      className="min-h-[calc(100vh-3.5rem)] flex flex-col relative"
+      className="min-h-[calc(100dvh-3.5rem)] flex flex-col relative"
       style={{ background: bg }}
     >
       {/* Board masthead — quiet, dense strip. Single row when wide. */}
-      <div className="relative border-b border-hairline px-6 py-3 bg-[color:var(--bg-1)]">
+      <div className="relative border-b border-hairline px-3 sm:px-4 md:px-6 py-3 bg-[color:var(--bg-1)]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-3 min-w-0">
             <span className="mono-meta-sm text-fg-faint shrink-0">
@@ -400,6 +426,23 @@ export function BoardView({
               <Layers3 className="size-3.5" />
               <span>Sprints</span>
             </button>
+            <button
+              type="button"
+              onClick={activity.toggle}
+              data-testid="board-activity-toggle"
+              aria-pressed={activity.open}
+              title={activity.open ? "Hide activity" : "Show activity"}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
+                activity.open
+                  ? "border-fg/40 bg-fg/10 text-fg"
+                  : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
+              }`}
+            >
+              <ChevronRight
+                className={`size-3.5 transition-transform ${activity.open ? "rotate-90" : "rotate-180"}`}
+              />
+              <span>Activity</span>
+            </button>
             <Button
               render={<Link href={`/b/${board.id}/settings`} />}
               nativeButton={false}
@@ -412,7 +455,7 @@ export function BoardView({
         </div>
       </div>
 
-      <div className="relative flex flex-1 items-start gap-4 p-4">
+      <div className="relative flex flex-1 items-start gap-4 p-2 sm:p-3 md:p-4">
         <div className="flex-1 min-w-0">
           <DndContext
             id={`dnd-board-${board.id}`}
@@ -481,7 +524,7 @@ export function BoardView({
                 </div>
               </div>
             ) : laneMode === "none" ? (
-              <div className="flex items-start gap-4 overflow-x-auto px-2 pb-4 [&>*]:animate-in [&>*]:fade-in [&>*]:slide-in-from-bottom-3 [&>*]:duration-400">
+              <div className="flex items-start gap-4 overflow-x-auto px-2 pb-4 max-sm:snap-x max-sm:snap-mandatory [&>*]:animate-in [&>*]:fade-in [&>*]:slide-in-from-bottom-3 [&>*]:duration-400">
                 <SortableContext
                   items={listSortableIds}
                   strategy={horizontalListSortingStrategy}
@@ -516,7 +559,7 @@ export function BoardView({
                       key={`lane:${laneMode}:${lane.key || "_empty"}`}
                       lane={lane}
                     >
-                      <div className="flex items-start gap-4 overflow-x-auto px-2 pb-4">
+                      <div className="flex items-start gap-4 overflow-x-auto px-2 pb-4 max-sm:snap-x max-sm:snap-mandatory">
                         <SortableContext
                           items={listSortableIds}
                           strategy={horizontalListSortingStrategy}

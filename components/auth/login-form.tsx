@@ -53,7 +53,7 @@ export function LoginForm() {
       return;
     }
     router.replace("/");
-    router.refresh();
+    window.location.assign("/");
   }
 
   function onPasswordKeyEvent(e: React.KeyboardEvent<HTMLInputElement>) {

@@ -57,6 +57,8 @@ function rowToCard(r: Record<string, unknown>): CardRow {
     coverKind: ((r.cover_kind as string) ?? "none") as CardRow["coverKind"],
     coverValue: (r.cover_value ?? null) as string | null,
     roadmapOrder: (r.roadmap_order ?? null) as number | null,
+    ownerId: (r.owner_id ?? null) as string | null,
+    completedAt: r.completed_at ? new Date(r.completed_at as string) : null,
   };
 }
 
@@ -112,9 +114,12 @@ function rowToComment(r: Record<string, unknown>): CommentRow {
     cardId: r.card_id as string,
     boardId: r.board_id as string,
     authorId: r.author_id as string,
+    parentCommentId: (r.parent_comment_id as string | null) ?? null,
     body: r.body as string,
     createdAt: new Date(r.created_at as string),
     editedAt: r.edited_at ? new Date(r.edited_at as string) : null,
+    resolvedAt: r.resolved_at ? new Date(r.resolved_at as string) : null,
+    resolvedBy: (r.resolved_by as string | null) ?? null,
   };
 }
 
@@ -255,6 +260,7 @@ export function useBoardRealtime(boardId: string, workspaceId?: string) {
               if (r.archived) {
                 removeList(r.id);
               } else {
+                addList(rowToList(r));
                 if (r.position) moveList(r.id, r.position);
                 if (typeof r.title === "string") renameList(r.id, r.title);
                 // Propagate non-positional fields too (wip_limit, status_kind).
@@ -273,18 +279,26 @@ export function useBoardRealtime(boardId: string, workspaceId?: string) {
             event: "*",
             schema: "public",
             table: "cards",
-            filter: `board_id=eq.${boardId}`,
           },
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (payload: any) => {
             if (payload.eventType === "INSERT" && payload.new) {
-              addCard(rowToCard(payload.new));
+              if (payload.new.board_id === boardId) {
+                addCard(rowToCard(payload.new));
+              }
             } else if (payload.eventType === "UPDATE" && payload.new) {
               const r = payload.new;
-              if (r.archived) {
+              if (r.board_id !== boardId) {
+                // Cross-board moves no longer match the source board after
+                // update. Listening without a board filter lets us evict the
+                // stale card from the old board before the user can drag/edit
+                // it locally.
+                removeCard(r.id);
+              } else if (r.archived) {
                 removeCard(r.id);
               } else {
                 const next = rowToCard(r);
+                addCard(next);
                 // Patch in place so non-position fields (title, description,
                 // due_date, due_complete, cover_color) propagate too.
                 updateCard(next.id, next);

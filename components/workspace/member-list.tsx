@@ -45,6 +45,13 @@ export function MemberList({
             onValueChange={(v) =>
               start(async () => {
                 try {
+                  if (
+                    !confirm(
+                      `Change ${m.displayName}'s workspace role from ${m.role} to ${v}?`,
+                    )
+                  ) {
+                    return;
+                  }
                   await changeMemberRole({
                     workspaceId,
                     userId: m.userId,
@@ -72,6 +79,13 @@ export function MemberList({
             onClick={() =>
               start(async () => {
                 try {
+                  if (
+                    !confirm(
+                      `Remove ${m.displayName} from this workspace? They may lose access to its boards.`,
+                    )
+                  ) {
+                    return;
+                  }
                   await removeMember({ workspaceId, userId: m.userId });
                 } catch (err) {
                   toast.error((err as Error).message);

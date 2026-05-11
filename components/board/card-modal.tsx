@@ -34,9 +34,11 @@ import { LabelsSection } from "./card/labels-section";
 import { DueSection } from "./card/due-section";
 import { RoadmapDatesSection } from "./card/roadmap-dates-section";
 import { MembersSection } from "./card/members-section";
+import { OwnerSection } from "./card/owner-section";
 import { ChecklistsSection } from "./card/checklists-section";
 import { AttachmentsSection } from "./card/attachments-section";
 import { CommentsSection } from "./card/comments-section";
+import { CardHistorySection } from "./card/history-section";
 import { TypePicker } from "./card/type-picker";
 import { PriorityPicker, type CardPriority } from "./card/priority-picker";
 import { CoverPicker, type CoverKind } from "./card/cover-picker";
@@ -54,6 +56,7 @@ import Link from "next/link";
 import {
   Archive,
   CalendarRange,
+  Check,
   ChevronRight,
   Layers3,
   MoreHorizontal,
@@ -79,6 +82,8 @@ export type CardModalCard = {
   priority?: CardPriority | null;
   coverKind?: CoverKind;
   coverValue?: string | null;
+  dueComplete?: boolean;
+  completedAt?: Date | string | null;
 };
 
 function fmtSavedAt(d: Date) {
@@ -127,12 +132,14 @@ export function CardModal({
   card,
   sprints = [],
   workspaceId,
+  canManageSprints = false,
   asDialog = false,
   children,
 }: {
   card: CardModalCard;
   sprints?: SprintLite[];
   workspaceId?: string;
+  canManageSprints?: boolean;
   asDialog?: boolean;
   children?: React.ReactNode;
 }) {
@@ -156,6 +163,9 @@ export function CardModal({
   // Sibling navigation. Same as before.
   const boardStore = useContext(BoardStoreContext);
   const allCards = useStore(boardStore!, (s) => s.cards);
+  const cardVisible = useStore(boardStore!, (s) =>
+    s.cards.some((c) => c.id === card.id),
+  );
   const siblingNav = useMemo(() => {
     if (!card.listId || !card.boardId) return { prev: null, next: null };
     const siblings = allCards
@@ -170,6 +180,18 @@ export function CardModal({
       next: idx < siblings.length - 1 ? siblings[idx + 1].id : null,
     };
   }, [allCards, card.id, card.listId, card.boardId]);
+
+  useEffect(() => {
+    if (!card.boardId || cardVisible) return;
+    toast.info("This card was removed by another user.");
+    if (asDialog) router.back();
+    else router.replace(`/b/${card.boardId}`);
+  }, [asDialog, card.boardId, cardVisible, router]);
+
+  // Stable ref pointing at the current `handleToggleComplete` so the
+  // keydown effect (registered above the function declaration) can call
+  // the latest closure without re-binding on every render.
+  const toggleRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!card.boardId) return;
@@ -192,6 +214,9 @@ export function CardModal({
         router.replace(`/b/${card.boardId}/c/${siblingNav.next}`, {
           scroll: false,
         });
+      } else if (e.key === "c") {
+        e.preventDefault();
+        toggleRef.current?.();
       }
     }
     window.addEventListener("keydown", onKey);
@@ -236,7 +261,9 @@ export function CardModal({
       return;
     }
     if (trimmed === lastSavedTitle.current) return;
+    const prev = lastSavedTitle.current;
     lastSavedTitle.current = trimmed;
+    updateCardLocal(card.id, { title: trimmed });
     const retry = async () => {
       await updateCard({ id: card.id, title: trimmed });
     };
@@ -244,7 +271,25 @@ export function CardModal({
       try {
         await retry();
         setLastSavedAt(new Date());
+        undoBus.push({
+          message: "Title updated",
+          undo: async () => {
+            setTitle(prev);
+            lastSavedTitle.current = prev;
+            updateCardLocal(card.id, { title: prev });
+            try {
+              await updateCard({ id: card.id, title: prev });
+            } catch (err) {
+              setTitle(trimmed);
+              lastSavedTitle.current = trimmed;
+              updateCardLocal(card.id, { title: trimmed });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
       } catch (err) {
+        lastSavedTitle.current = prev;
+        updateCardLocal(card.id, { title: prev });
         const msg = (err as Error).message;
         toast.error(msg);
         errorBus.push({ message: `Title save failed: ${msg}`, retry });
@@ -257,7 +302,9 @@ export function CardModal({
     if (descTimer.current) clearTimeout(descTimer.current);
     descTimer.current = setTimeout(() => {
       if (next === lastSavedDesc.current) return;
+      const prev = lastSavedDesc.current;
       lastSavedDesc.current = next;
+      updateCardLocal(card.id, { description: next.length === 0 ? null : next });
       const retry = async () => {
         await updateCard({
           id: card.id,
@@ -268,7 +315,34 @@ export function CardModal({
         try {
           await retry();
           setLastSavedAt(new Date());
+          undoBus.push({
+            message: next.length === 0 ? "Description cleared" : "Description updated",
+            undo: async () => {
+              setDescription(prev);
+              lastSavedDesc.current = prev;
+              updateCardLocal(card.id, {
+                description: prev.length === 0 ? null : prev,
+              });
+              try {
+                await updateCard({
+                  id: card.id,
+                  description: prev.length === 0 ? null : prev,
+                });
+              } catch (err) {
+                setDescription(next);
+                lastSavedDesc.current = next;
+                updateCardLocal(card.id, {
+                  description: next.length === 0 ? null : next,
+                });
+                toast.error("Undo failed: " + (err as Error).message);
+              }
+            },
+          });
         } catch (err) {
+          lastSavedDesc.current = prev;
+          updateCardLocal(card.id, {
+            description: prev.length === 0 ? null : prev,
+          });
           const msg = (err as Error).message;
           toast.error(msg);
           errorBus.push({
@@ -291,11 +365,88 @@ export function CardModal({
       ? `Saved · ${fmtSavedAt(lastSavedAt)}`
       : null;
 
+  const updateCardLocal = useStore(boardStore!, (s) => s.updateCard);
+  // Live completion state: prefer the store row (kept current via realtime
+  // and optimistic updates) so the toggle's visual flips immediately.
+  // Fall back to the SSR prop on the standalone card page when the store
+  // hasn't hydrated yet.
+  const liveCard = allCards.find((c) => c.id === card.id) as
+    | (typeof allCards)[number]
+    | undefined;
+  const isCompleted =
+    (liveCard?.completedAt ??
+      (card as { completedAt?: Date | string | null }).completedAt) != null ||
+    Boolean(liveCard?.dueComplete ?? card.dueComplete);
+  const handleToggleComplete = () => {
+    const next = !isCompleted;
+    const prevCompletedAt = liveCard?.completedAt ?? card.completedAt ?? null;
+    const prev = {
+      completedAt:
+        prevCompletedAt instanceof Date
+          ? prevCompletedAt
+          : prevCompletedAt
+            ? new Date(prevCompletedAt)
+            : null,
+      dueComplete: liveCard?.dueComplete ?? card.dueComplete ?? false,
+    };
+    updateCardLocal(card.id, {
+      completedAt: next ? new Date() : null,
+      dueComplete: next,
+    });
+    start(async () => {
+      try {
+        await updateCard({ id: card.id, completed: next });
+        undoBus.push({
+          message: next ? "Marked complete" : "Marked not complete",
+          undo: async () => {
+            updateCardLocal(card.id, prev);
+            try {
+              await updateCard({
+                id: card.id,
+                completed: prev.completedAt != null || prev.dueComplete,
+              });
+            } catch (err) {
+              updateCardLocal(card.id, {
+                completedAt: next ? new Date() : null,
+                dueComplete: next,
+              });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
+      } catch (err) {
+        updateCardLocal(card.id, prev);
+        toast.error((err as Error).message);
+      }
+    });
+  };
+  toggleRef.current = handleToggleComplete;
+
   const body = (
     <div className="space-y-5">
       {/* Hero block: title + meta + save indicator + overflow actions. */}
       <div className="space-y-3">
         <div className="flex items-start gap-3">
+          {/* Prominent complete toggle — visible on every card. Click
+              flips `completed_at` (DB trigger keeps `dueComplete` in
+              sync). The header position keeps it adjacent to the title
+              so the action reads as "mark this card done". */}
+          <button
+            type="button"
+            onClick={handleToggleComplete}
+            disabled={pending}
+            aria-label={isCompleted ? "Mark not complete" : "Mark complete"}
+            aria-pressed={isCompleted}
+            data-testid="card-modal-complete-toggle"
+            data-completed={isCompleted ? "true" : "false"}
+            className={`mt-1 size-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
+              isCompleted
+                ? "bg-[color:var(--accent-lime)] border-[color:var(--accent-lime)] text-bg-deep"
+                : "border-hairline-hi text-transparent hover:border-fg/60 hover:text-fg/40"
+            }`}
+          >
+            <Check className="size-4" strokeWidth={3} />
+          </button>
           <input
             id="card-title"
             value={title}
@@ -305,7 +456,10 @@ export function CardModal({
             minLength={1}
             maxLength={120}
             aria-label="Card title"
-            className="flex-1 min-w-0 bg-transparent font-sans text-2xl md:text-3xl font-bold tracking-tight text-fg leading-tight outline-none focus-visible:ring-1 focus-visible:ring-fg/40 rounded-md px-1 -mx-1 py-0.5"
+            data-completed={isCompleted ? "true" : "false"}
+            className={`flex-1 min-w-0 bg-transparent font-sans text-2xl md:text-3xl font-bold tracking-tight text-fg leading-tight outline-none focus-visible:ring-1 focus-visible:ring-fg/40 rounded-md px-1 -mx-1 py-0.5 ${
+              isCompleted ? "line-through text-fg-muted" : ""
+            }`}
           />
           <div className="flex items-center gap-2 shrink-0 pt-2">
             {saveIndicator && (
@@ -375,6 +529,7 @@ export function CardModal({
                 cardId={card.id}
                 sprintId={card.sprintId ?? null}
                 sprints={sprints}
+                readOnly={!canManageSprints}
               />
               <span aria-hidden className="mx-1 h-4 w-px bg-hairline" />
               <WatchToggle cardId={card.id} />
@@ -474,6 +629,7 @@ export function CardModal({
       <AccordionGroup id="work" title="Work">
         <LabelsSection cardId={card.id} />
         <ComponentCardSection cardId={card.id} />
+        <OwnerSection cardId={card.id} />
         <MembersSection cardId={card.id} />
         <ChecklistsSection cardId={card.id} />
         {card.listId && card.boardId && (
@@ -504,6 +660,11 @@ export function CardModal({
         {children && (
           <div className="border-t border-hairline pt-4">{children}</div>
         )}
+      </AccordionGroup>
+
+      {/* History — collapsed by default; accordion lazy-fetches on open. */}
+      <AccordionGroup id="history" title="History">
+        <CardHistorySection cardId={card.id} />
       </AccordionGroup>
 
       <div className="flex justify-end gap-2 border-t border-hairline pt-4">
@@ -557,7 +718,19 @@ export function CardModal({
         if (!o) close();
       }}
     >
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className={[
+          "sm:max-w-3xl max-h-[90dvh] overflow-y-auto",
+          // <md: anchor to the bottom and take the full width so the card
+          // feels like a bottom sheet (no need for a separate BottomSheet
+          // implementation here — the structure stays a Dialog so card
+          // sub-pickers continue to portal correctly).
+          "max-md:inset-x-0 max-md:bottom-0 max-md:top-auto max-md:left-0 max-md:translate-x-0 max-md:translate-y-0",
+          "max-md:max-w-none max-md:w-full max-md:max-h-[92dvh] max-md:rounded-t-2xl max-md:rounded-b-none",
+          "max-md:slide-in-from-bottom-12 max-md:zoom-in-100",
+          "max-md:pb-[max(env(safe-area-inset-bottom),0.5rem)]",
+        ].join(" ")}
+      >
         <DialogHeader className="sr-only">
           <DialogTitle>Card #{cardCode(card.id)}</DialogTitle>
         </DialogHeader>

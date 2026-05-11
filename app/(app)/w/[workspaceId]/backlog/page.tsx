@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
-import { getWorkspace } from "@/lib/queries/workspaces";
+import { getWorkspace, listMembers } from "@/lib/queries/workspaces";
 import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
 import { BacklogClient } from "@/components/sprint/backlog-client";
@@ -11,7 +11,7 @@ export default async function BacklogPage({
   params: Promise<{ workspaceId: string }>;
 }) {
   const { workspaceId } = await params;
-  await requireUser();
+  const user = await requireUser();
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
@@ -19,10 +19,18 @@ export default async function BacklogPage({
   // the workspace store instead of from server-shaped props. Realtime
   // CDC echoes propagate live across tabs.
   const snapshot = await getWorkspaceSnapshot(token, workspaceId);
+  const members = await listMembers(token, workspaceId);
+  const currentMember = members.find((m) => m.userId === user.id);
+  const canManageSprints =
+    currentMember?.role === "owner" || currentMember?.role === "admin";
 
   return (
     <WorkspaceStoreProvider initial={snapshot}>
-      <BacklogClient workspaceId={workspaceId} workspaceName={ws.name} />
+      <BacklogClient
+        workspaceId={workspaceId}
+        workspaceName={ws.name}
+        canManageSprints={canManageSprints}
+      />
     </WorkspaceStoreProvider>
   );
 }

@@ -1,9 +1,11 @@
 "use client";
+import { useState, useTransition, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarRange, Check, CircleDot, CornerLeftUp, Layers3 } from "lucide-react";
+import { toast } from "sonner";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
@@ -17,7 +19,9 @@ import { StoryPointsChip } from "./card/story-points-chip";
 import { TimeChip } from "./card/time-chip";
 import { PriorityChip, type CardPriority } from "./card/priority-picker";
 import { CardCover } from "./card/cover-picker";
+import { CompleteToggle } from "./card/complete-toggle";
 import { cardCode } from "@/lib/format";
+import { updateCard } from "@/actions/cards";
 
 function fmtShortDate(d: Date | string): string {
   const date = d instanceof Date ? d : new Date(d);
@@ -61,6 +65,75 @@ export function CardTile({
   const anySelected = useBoardStore((s) => s.selectedCardIds.size > 0);
   const toggleSelected = useBoardStore((s) => s.toggleSelected);
   const selectRangeTo = useBoardStore((s) => s.selectRangeTo);
+  const updateCardLocal = useBoardStore((s) => s.updateCard);
+
+  // Inline title edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(card.title);
+  const [, startTransition] = useTransition();
+  // Track whether blur should be ignored after a keyboard-commit/cancel.
+  const commitRef = useRef(false);
+
+  const enterEdit = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditValue(card.title);
+    setIsEditing(true);
+  }, [card.title]);
+
+  const cancelEdit = useCallback(() => {
+    commitRef.current = true;
+    setIsEditing(false);
+    setEditValue(card.title);
+  }, [card.title]);
+
+  const saveEdit = useCallback(() => {
+    commitRef.current = true;
+    const trimmed = editValue.trim();
+    if (!trimmed) {
+      toast.error("Title can't be empty");
+      setIsEditing(false);
+      setEditValue(card.title);
+      return;
+    }
+    if (trimmed === card.title) {
+      setIsEditing(false);
+      return;
+    }
+    const prev = card.title;
+    setIsEditing(false);
+    updateCardLocal(card.id, { title: trimmed });
+    startTransition(async () => {
+      try {
+        await updateCard({ id: card.id, title: trimmed });
+      } catch (err) {
+        updateCardLocal(card.id, { title: prev });
+        setEditValue(prev);
+        toast.error((err as Error).message ?? "Failed to save title");
+      }
+    });
+  }, [editValue, card.title, card.id, updateCardLocal]);
+
+  const handleEditKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        saveEdit();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        cancelEdit();
+      }
+    },
+    [saveEdit, cancelEdit],
+  );
+
+  const handleEditBlur = useCallback(() => {
+    if (commitRef.current) {
+      commitRef.current = false;
+      return;
+    }
+    saveEdit();
+  }, [saveEdit]);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
@@ -109,7 +182,7 @@ export function CardTile({
     toggleSelected(card.id);
   };
 
-  const completed = card.completedAt != null;
+  const completed = card.completedAt != null || card.dueComplete;
 
   return (
     <Link
@@ -118,7 +191,7 @@ export function CardTile({
       scroll={false}
       style={style}
       {...attributes}
-      {...listeners}
+      {...(isEditing ? {} : listeners)}
       onClick={handleClick}
       data-card-id={card.id}
       data-dragging={isDragging ? "true" : undefined}
@@ -180,21 +253,54 @@ export function CardTile({
         </div>
       </div>
 
-      {/* Title row.  Inline complete-toggle is gone — it collided with
-          the bulk-select handle.  Completion is reached via the card
-          modal's due section.  Done-state shows as line-through +
-          muted ink so the visual signal is preserved. */}
-      <div className="px-3 pb-1 pt-1.5">
+      {/* Title row. The round completion control lives beside the title;
+          the square bulk-select handle stays up top so their meanings
+          remain visually distinct. */}
+      <div className="flex items-start gap-2 px-3 pb-1 pt-1.5">
+        <CompleteToggle
+          cardId={card.id}
+          completed={completed}
+          size="sm"
+          className="mt-0.5"
+          onLocalChange={(next) =>
+            updateCardLocal(card.id, {
+              completedAt: next ? new Date() : null,
+              dueComplete: next,
+            })
+          }
+        />
         <span
           data-testid="tile-title"
           data-completed={completed ? "true" : "false"}
-          className={`block text-sm leading-snug font-medium ${
+          className={`block min-w-0 flex-1 text-sm leading-snug font-medium ${
             completed ? "line-through text-fg-muted" : ""
           }`}
         >
-          <span className="hover-underline-signal group-hover/card:hover-underline-signal-active inline">
-            {card.title}
-          </span>
+          {isEditing ? (
+            <input
+              data-testid="tile-title-edit"
+              type="text"
+              value={editValue}
+              maxLength={120}
+              autoFocus
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={handleEditKeyDown}
+              onBlur={handleEditBlur}
+              className={`w-full bg-transparent border-0 outline-none ring-0 p-0 m-0 text-sm leading-snug font-medium focus:underline decoration-fg/40 ${
+                completed ? "line-through text-fg-muted" : ""
+              }`}
+              style={{ fontFamily: "inherit" }}
+            />
+          ) : (
+            <span
+              className="hover-underline-signal group-hover/card:hover-underline-signal-active inline"
+              onDoubleClick={enterEdit}
+            >
+              {card.title}
+            </span>
+          )}
         </span>
       </div>
 
@@ -240,6 +346,26 @@ function CardMetaRow({
   const hasStatus = showStatus && !!statusKind;
   const hasDue = !!card.dueDate;
   const hasPriority = !!card.priority;
+  // Two primitive selectors instead of one returning a new {total, completed}
+  // object — the latter triggered Zustand's "getSnapshot should be cached"
+  // warning and an infinite re-render loop because every selector run
+  // produced a fresh object reference.
+  const subtaskTotal = useBoardStore((s) => {
+    let n = 0;
+    for (const c of s.cards) {
+      if (c.parentCardId === card.id && !c.archived) n += 1;
+    }
+    return n;
+  });
+  const subtaskDone = useBoardStore((s) => {
+    let n = 0;
+    for (const c of s.cards) {
+      if (c.parentCardId === card.id && !c.archived && c.completedAt != null) n += 1;
+    }
+    return n;
+  });
+  const hasSubtasks = subtaskTotal > 0;
+  const allSubtasksDone = hasSubtasks && subtaskDone === subtaskTotal;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2.5 pt-1">
@@ -292,6 +418,20 @@ function CardMetaRow({
       )}
       <StoryPointsChip cardId={card.id} />
       <TimeChip cardId={card.id} />
+      {hasSubtasks && (
+        <span
+          data-testid="tile-subtasks"
+          title={`${subtaskDone} of ${subtaskTotal} sub-tasks done`}
+          className={`chip mono-meta-sm inline-flex items-center gap-1 tabular-nums ${
+            allSubtasksDone
+              ? "text-[color:var(--accent-lime)]"
+              : "text-fg-muted"
+          }`}
+        >
+          {subtaskDone}/{subtaskTotal}
+          <Check className="size-3" aria-hidden />
+        </span>
+      )}
       <TileIndicators cardId={card.id} />
     </div>
   );

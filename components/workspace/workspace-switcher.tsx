@@ -1,10 +1,14 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Plus, Check, Search, Settings, Users } from "lucide-react";
+import { ChevronDown, Plus, Check, Search, Settings } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
-  DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { CreateWorkspaceDialog } from "@/components/workspace/create-workspace-dialog";
@@ -12,33 +16,38 @@ import { useMemo, useState } from "react";
 
 export type WorkspaceLite = { id: string; name: string };
 
-// Plan #16b-γ-D (#39) — when the user belongs to more than 5 workspaces
-// the flat list becomes hard to scan. A search input pinned to the top
-// of the dropdown filters by `name.toLowerCase().includes(q)` so the
-// active workspace is always one or two keystrokes away. We avoid
-// rendering the input below the threshold so users with 1–5 workspaces
-// see no extra noise.
+// At >5 workspaces a flat list becomes hard to scan. A search input
+// pinned to the top filters by `name.toLowerCase().includes(q)` so the
+// active workspace stays one or two keystrokes away.
 const SEARCH_THRESHOLD = 5;
 
+/**
+ * Switch between workspaces, plus create a new one. Settings/members
+ * moved out of this trigger; they live on the workspace-settings page,
+ * surfaced by the command palette ("Manage workspace") and inside the
+ * workspace nav. Keeping this menu narrow lets the bar feel less like
+ * a command center and more like a wayfinding cue.
+ */
 export function WorkspaceSwitcher({
-  workspaces, activeId,
-}: { workspaces: WorkspaceLite[]; activeId?: string }) {
+  workspaces,
+  activeId,
+}: {
+  workspaces: WorkspaceLite[];
+  activeId?: string;
+}) {
   const router = useRouter();
   const [openCreate, setOpenCreate] = useState(false);
   const [q, setQ] = useState("");
-  // Plan #workspace-routing — when the URL doesn't pin a workspace
-  // (e.g. /inbox, /dashboards, personal-scope dashboard), don't fake
-  // "active = workspaces[0]"; the trigger label and the in-list
-  // checkmark would lie about which workspace the user is in. Leave
-  // `active` undefined so the trigger renders the neutral
-  // "Workspaces" label and no item is highlighted.
-  const active = activeId ? workspaces.find(w => w.id === activeId) : undefined;
+  // When the URL doesn't pin a workspace (e.g. /inbox, /dashboards),
+  // don't fake "active = workspaces[0]". The trigger label and the
+  // in-list checkmark would lie about which workspace the user is in.
+  const active = activeId ? workspaces.find((w) => w.id === activeId) : undefined;
 
   const showSearch = workspaces.length > SEARCH_THRESHOLD;
   const filtered = useMemo(() => {
     if (!showSearch || !q.trim()) return workspaces;
     const needle = q.toLowerCase();
-    return workspaces.filter(w => w.name.toLowerCase().includes(needle));
+    return workspaces.filter((w) => w.name.toLowerCase().includes(needle));
   }, [workspaces, q, showSearch]);
 
   return (
@@ -50,31 +59,32 @@ export function WorkspaceSwitcher({
       >
         <DropdownMenuTrigger
           data-testid="workspace-switcher-trigger"
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 max-w-[220px] rounded-md text-sm font-semibold tracking-tight text-fg hover:bg-[rgb(255_255_255/0.06)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+          className="inline-flex items-center gap-1.5 h-8 px-2 max-w-[220px] rounded-md text-sm font-semibold tracking-tight text-fg hover:bg-[rgb(255_255_255/0.06)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
         >
-          <span className="truncate">
-            {active?.name ?? "Workspaces"}
-          </span>
-          <ChevronDown className="size-3.5 text-fg-muted shrink-0" />
+          <span className="truncate">{active?.name ?? "Workspaces"}</span>
+          <ChevronDown className="size-3 text-fg-faint shrink-0" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64">
           <DropdownMenuGroup>
             <DropdownMenuLabel>
-              <span className="mono-meta text-fg-muted">Workspaces</span>
+              <span className="mono-meta-sm tracking-[0.14em] text-fg-faint">
+                WORKSPACES
+              </span>
             </DropdownMenuLabel>
             {showSearch && (
               <div className="px-2 pb-2">
                 <div className="relative">
-                  <Search className="size-3.5 text-fg-faint absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <Search
+                    className="size-3.5 text-fg-faint absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                    aria-hidden
+                  />
                   <input
                     autoFocus
                     type="text"
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                     onKeyDown={(e) => {
-                      // Don't let parent dropdown intercept space/letters.
                       e.stopPropagation();
-                      // Enter selects the first filtered workspace.
                       if (e.key === "Enter") {
                         const first = filtered.find(
                           (w) => w.id !== active?.id,
@@ -86,7 +96,7 @@ export function WorkspaceSwitcher({
                         }
                       }
                     }}
-                    placeholder="Search workspaces…"
+                    placeholder="Filter workspaces…"
                     data-testid="workspace-switcher-search"
                     className="h-8 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] pl-7 pr-2 text-sm outline-none focus-visible:border-[color:var(--accent-cyan)]/60"
                   />
@@ -94,11 +104,11 @@ export function WorkspaceSwitcher({
               </div>
             )}
             {filtered.length === 0 && (
-              <div className="px-3 py-3 text-sm text-fg-faint italic">
+              <div className="px-3 py-3 mono-meta-sm text-fg-faint">
                 No matches.
               </div>
             )}
-            {filtered.map(w => {
+            {filtered.map((w) => {
               const isActive = w.id === active?.id;
               return (
                 <DropdownMenuItem
@@ -109,7 +119,11 @@ export function WorkspaceSwitcher({
                       router.refresh();
                     }
                   }}
-                  className={isActive ? "bg-[color:var(--surface-hi)] text-fg" : undefined}
+                  className={
+                    isActive
+                      ? "bg-[color:var(--surface-hi)] text-fg"
+                      : undefined
+                  }
                 >
                   <span className="flex-1 truncate text-sm">{w.name}</span>
                   {isActive && <Check className="size-3.5 text-fg" />}
@@ -119,28 +133,19 @@ export function WorkspaceSwitcher({
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           {active && (
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                render={<Link href={`/w/${active.id}/settings`} />}
-                data-testid="workspace-switcher-manage"
-              >
-                <Settings className="size-3.5 mr-2 text-fg-muted" />
-                <span className="text-sm">Manage workspace</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                render={<Link href={`/w/${active.id}/settings#members`} />}
-              >
-                <Users className="size-3.5 mr-2 text-fg-muted" />
-                <span className="text-sm">Members</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-            </DropdownMenuGroup>
+            <DropdownMenuItem
+              render={<Link href={`/w/${active.id}/settings`} />}
+              data-testid="workspace-switcher-manage"
+            >
+              <Settings className="size-3.5" />
+              <span className="text-sm">Manage workspace</span>
+            </DropdownMenuItem>
           )}
           <DropdownMenuItem
             data-testid="workspace-switcher-new"
             onClick={() => setOpenCreate(true)}
           >
-            <Plus className="size-3.5 mr-2 text-fg-muted" />
+            <Plus className="size-3.5" />
             <span className="text-sm">New workspace</span>
           </DropdownMenuItem>
         </DropdownMenuContent>

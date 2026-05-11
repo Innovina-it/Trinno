@@ -2,9 +2,14 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { useBoardStore } from "@/stores/board-store";
-import { registerAttachment, deleteAttachment } from "@/actions/attachments";
+import {
+  registerAttachment,
+  deleteAttachment,
+  createAttachmentSignedUrl,
+} from "@/actions/attachments";
 import { toast } from "sonner";
-import { Paperclip, X } from "lucide-react";
+import { Download, ExternalLink, Paperclip, X } from "lucide-react";
+import { undoBus } from "@/lib/undo-bus";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -23,6 +28,8 @@ export function AttachmentsSection({ cardId }: { cardId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
   const [uploading, setUploading] = useState(false);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -53,6 +60,18 @@ export function AttachmentsSection({ cardId }: { cardId: string }) {
       });
       addAttachment(row);
       toast.success("Uploaded");
+      undoBus.push({
+        message: "Attachment uploaded",
+        undo: async () => {
+          removeAttachment(row.id);
+          try {
+            await deleteAttachment({ id: row.id });
+          } catch (err) {
+            addAttachment(row);
+            toast.error("Undo failed: " + (err as Error).message);
+          }
+        },
+      });
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -62,14 +81,40 @@ export function AttachmentsSection({ cardId }: { cardId: string }) {
   }
 
   function remove(id: string) {
+    const snapshot = attachments.find((a) => a.id === id);
+    if (snapshot) removeAttachment(id);
     start(async () => {
       try {
         await deleteAttachment({ id });
-        removeAttachment(id);
       } catch (err) {
+        if (snapshot) addAttachment(snapshot);
         toast.error((err as Error).message);
       }
     });
+  }
+
+  async function openAttachment(id: string) {
+    setOpeningId(id);
+    try {
+      const { url } = await createAttachmentSignedUrl({ id });
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setOpeningId(null);
+    }
+  }
+
+  async function downloadAttachment(id: string) {
+    setDownloadingId(id);
+    try {
+      const { url } = await createAttachmentSignedUrl({ id, download: true });
+      window.location.assign(url);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setDownloadingId(null);
+    }
   }
 
   return (
@@ -89,6 +134,26 @@ export function AttachmentsSection({ cardId }: { cardId: string }) {
             <span className="mono-meta-sm text-fg-muted tabular-nums">
               {formatSize(a.sizeBytes)}
             </span>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              disabled={pending || openingId === a.id || downloadingId === a.id}
+              onClick={() => openAttachment(a.id)}
+              aria-label={`Open ${a.filename}`}
+              title="Open"
+            >
+              <ExternalLink className="size-3" />
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              disabled={pending || openingId === a.id || downloadingId === a.id}
+              onClick={() => downloadAttachment(a.id)}
+              aria-label={`Download ${a.filename}`}
+              title="Download"
+            >
+              <Download className="size-3" />
+            </Button>
             <Button
               size="icon-sm"
               variant="ghost"

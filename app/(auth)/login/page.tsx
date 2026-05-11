@@ -4,7 +4,7 @@ import { LoginForm } from "@/components/auth/login-form";
 
 export default function LoginPage() {
   return (
-    <main className="relative min-h-screen flex flex-col">
+    <main className="relative min-h-dvh flex flex-col">
       <div className="border-b border-hairline">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-3.5">
           <span className="mono-meta text-fg-muted">

@@ -7,6 +7,7 @@ import {
   PriorityChip,
   type CardPriority,
 } from "@/components/board/card/priority-picker";
+import { CompleteToggle } from "@/components/board/card/complete-toggle";
 
 // No `useWorkspaceStore` import — board title and sprint name are passed
 // in by the view (computed once via Map lookup, not per-card subscription).
@@ -37,6 +38,7 @@ export function AllTasksCard({
   sprintName,
   priority,
   dueDate,
+  completedAt,
 }: {
   cardId: string;
   boardId: string;
@@ -47,7 +49,9 @@ export function AllTasksCard({
   sprintName: string | null;
   priority: CardPriority | null;
   dueDate: Date | string | null;
+  completedAt?: Date | string | null;
 }) {
+  const completed = completedAt != null;
   const router = useRouter();
   void sprintId;
   const due = fmtShortDate(dueDate);
@@ -80,7 +84,16 @@ export function AllTasksCard({
       }}
       className="block rounded-md border border-hairline bg-[color:var(--surface)] hover:bg-[rgb(255_255_255/0.04)] transition-colors p-2.5 space-y-2 select-none"
     >
-      <div className="text-sm leading-snug text-fg">{title}</div>
+      <div className="flex items-start gap-2">
+        <CompleteToggle cardId={cardId} completed={completed} size="sm" />
+        <div
+          className={`flex-1 min-w-0 text-sm leading-snug ${
+            completed ? "line-through text-fg-muted" : "text-fg"
+          }`}
+        >
+          {title}
+        </div>
+      </div>
       <div className="flex flex-wrap items-center gap-1.5 mono-meta-sm text-fg-muted">
         {boardTitle && (
           <span

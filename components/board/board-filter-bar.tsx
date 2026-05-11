@@ -24,6 +24,8 @@ import {
   CalendarClock,
   CalendarRange,
   ChevronDown,
+  Eye,
+  EyeOff,
   Filter,
   Layers,
   Tag,
@@ -85,6 +87,9 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
   function toggleScheduled() {
     update({ ...filters, scheduled: !filters.scheduled });
   }
+  function toggleHideCompleted() {
+    update({ ...filters, hideCompleted: !filters.hideCompleted });
+  }
   function clear() {
     update(
       {
@@ -93,6 +98,7 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
         due: null,
         assignedToMe: false,
         scheduled: false,
+        hideCompleted: false,
       },
       "none",
     );
@@ -103,6 +109,7 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
     (filters.assignedToMe ? 1 : 0) +
     (filters.due ? 1 : 0) +
     (filters.scheduled ? 1 : 0) +
+    (filters.hideCompleted ? 1 : 0) +
     filters.types.length +
     filters.labelIds.length;
   const laneLabel =
@@ -226,7 +233,7 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
           {active && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={clear} className="text-fg-muted">
+              <DropdownMenuItem onClick={clear} className="text-fg-muted">
                 <X className="size-3.5" aria-hidden />
                 Clear all
               </DropdownMenuItem>
@@ -234,6 +241,31 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Hide-completed toggle. URL key `done=hide` matches the workload
+          page convention. Default OFF — chip becomes "active" (filled)
+          when completed cards are hidden. */}
+      <button
+        type="button"
+        data-testid="board-hide-completed-toggle"
+        data-active={filters.hideCompleted ? "true" : "false"}
+        aria-pressed={filters.hideCompleted}
+        onClick={toggleHideCompleted}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
+          filters.hideCompleted
+            ? "border-fg/40 bg-fg/10 text-fg"
+            : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
+        }`}
+      >
+        {filters.hideCompleted ? (
+          <EyeOff className="size-3.5" aria-hidden />
+        ) : (
+          <Eye className="size-3.5" aria-hidden />
+        )}
+        <span className="text-fg">
+          {filters.hideCompleted ? "Hide completed" : "Show completed"}
+        </span>
+      </button>
 
       {/* Inline summary of active type filters when small. */}
       {filters.types.length > 0 && filters.types.length <= 3 && (

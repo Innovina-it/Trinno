@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace } from "@/lib/queries/workspaces";
 import { listRoadmapCards } from "@/lib/queries/roadmap";
@@ -24,24 +25,36 @@ export default async function RoadmapPage({
 
   return (
     <WorkspaceStoreProvider initial={snapshot}>
-      <div className="mx-auto max-w-7xl px-6 py-10 space-y-8">
-        <header className="space-y-3 border-b border-hairline pb-6">
-          <span className="chip">{ws.name.toUpperCase()} / ROADMAP</span>
-          <div className="flex items-baseline justify-between gap-4">
-            <h1 className="serif-display text-5xl">Roadmap</h1>
-            <span
-              className="mono-meta text-fg-muted"
-              data-testid="roadmap-card-count"
-            >
-              {cards.length} CARDS
-            </span>
-          </div>
+      <div className="mx-auto max-w-7xl px-3 sm:px-4 md:px-6 pt-3 md:pt-5 pb-6 md:pb-10 space-y-4 md:space-y-6">
+        {/* Operator-console crumb. One line, mono-meta, all the metadata
+            the page header used to need. The actual page IS the gantt; the
+            crumb earns its keep, nothing else does. */}
+        <header
+          className="flex items-center gap-2 text-fg-muted"
+          data-testid="roadmap-crumb"
+        >
           <Link
             href={`/w/${workspaceId}`}
-            className="mono-meta-sm text-fg-muted hover:text-fg"
+            className="inline-flex items-center gap-1 rounded-md min-h-9 px-1 -mx-1 text-fg-muted hover:text-fg transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 [@media(hover:none)_and_(pointer:coarse)]:min-h-11"
+            aria-label="Back to workspace"
+            title={ws.name}
           >
-            ← Back to workspace
+            <ArrowLeft className="size-3.5" aria-hidden />
+            <span className="mono-meta-sm tracking-[0.14em] truncate max-w-[8rem] sm:max-w-[16rem]">
+              {ws.name.toUpperCase()}
+            </span>
           </Link>
+          <span aria-hidden className="mono-meta-sm text-fg-faint">/</span>
+          <span className="mono-meta-sm tracking-[0.14em] text-fg">
+            ROADMAP
+          </span>
+          <span aria-hidden className="mono-meta-sm text-fg-faint">·</span>
+          <span
+            className="mono-meta-sm tracking-[0.14em] text-fg-muted tabular-nums"
+            data-testid="roadmap-card-count"
+          >
+            {cards.length} CARDS
+          </span>
         </header>
         <RoadmapView workspaceId={workspaceId} />
       </div>

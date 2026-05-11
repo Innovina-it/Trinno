@@ -1,31 +1,68 @@
 "use client";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { X, Plus } from "lucide-react";
+import { X, Plus, CalendarRange } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createCard } from "@/actions/cards";
 import { useBoardStore } from "@/stores/board-store";
 
+function toIsoDay(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 export function AddCardForm({ listId }: { listId: string }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
-  const [pending, start] = useTransition();
+  const [withDates, setWithDates] = useState(false);
+  const [start, setStart] = useState("");
+  const [target, setTarget] = useState("");
+  const [pending, startTx] = useTransition();
   const addCard = useBoardStore((s) => s.addCard);
+
+  function reset() {
+    setTitle("");
+    setWithDates(false);
+    setStart("");
+    setTarget("");
+  }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = title.trim();
     if (!trimmed) return;
-    start(async () => {
+    // Both dates required to land on roadmap; one without the other is
+    // ambiguous, so reject early instead of silently dropping.
+    if (withDates && (!start || !target)) {
+      toast.error("Set both start and target, or skip dates");
+      return;
+    }
+    if (withDates && start > target) {
+      toast.error("Start must be on or before target");
+      return;
+    }
+    startTx(async () => {
       try {
-        const card = await createCard({ listId, title: trimmed });
+        const card = await createCard({
+          listId,
+          title: trimmed,
+          startDate: withDates ? new Date(start + "T00:00:00.000Z") : null,
+          targetDate: withDates ? new Date(target + "T00:00:00.000Z") : null,
+        });
         addCard(card);
-        setTitle("");
+        reset();
       } catch (err) {
         toast.error((err as Error).message);
       }
     });
+  }
+
+  function quickWeek() {
+    const today = new Date();
+    const wk = new Date(today.getTime() + 7 * 86_400_000);
+    setStart(toIsoDay(today));
+    setTarget(toIsoDay(wk));
+    setWithDates(true);
   }
 
   if (!open) {
@@ -55,6 +92,55 @@ export function AddCardForm({ listId }: { listId: string }) {
         minLength={1}
         maxLength={120}
       />
+      {withDates ? (
+        <div className="space-y-1.5 rounded-md border border-hairline bg-[color:var(--surface)] p-2">
+          <div className="flex items-center justify-between">
+            <span className="mono-meta-sm text-fg-faint">DATES (LANDS ON ROADMAP)</span>
+            <button
+              type="button"
+              onClick={() => setWithDates(false)}
+              className="mono-meta-sm text-fg-faint hover:text-fg"
+            >
+              skip
+            </button>
+          </div>
+          <div className="flex gap-1.5">
+            <Input
+              type="date"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              aria-label="Start date"
+              data-testid="add-card-start"
+              className="text-xs"
+            />
+            <Input
+              type="date"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              aria-label="Target date"
+              data-testid="add-card-target"
+              className="text-xs"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={quickWeek}
+            className="mono-meta-sm text-fg-muted hover:text-fg"
+          >
+            Today + 7 days
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setWithDates(true)}
+          className="inline-flex items-center gap-1.5 mono-meta-sm text-fg-faint hover:text-fg"
+          data-testid="add-card-dates-toggle"
+        >
+          <CalendarRange className="size-3" />
+          Add to roadmap (optional)
+        </button>
+      )}
       <div className="flex gap-1.5">
         <Button type="submit" size="sm" disabled={pending || !title.trim()}>
           Add
@@ -65,7 +151,7 @@ export function AddCardForm({ listId }: { listId: string }) {
           size="sm"
           onClick={() => {
             setOpen(false);
-            setTitle("");
+            reset();
           }}
         >
           <X className="size-3.5" />

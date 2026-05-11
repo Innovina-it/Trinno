@@ -103,7 +103,29 @@ export function createWorkspaceStore(initial: WorkspaceSnapshot) {
         lists: st.lists.map((l) => (l.id === id ? { ...l, ...patch } : l)),
       })),
     removeList: (id) =>
-      set((st) => ({ lists: st.lists.filter((l) => l.id !== id) })),
+      set((st) => {
+        const removedCardIds = new Set(
+          st.cards.filter((c) => c.listId === id).map((c) => c.id),
+        );
+        return {
+          lists: st.lists.filter((l) => l.id !== id),
+          cards: st.cards.filter((c) => c.listId !== id),
+          cardLinks: st.cardLinks.filter(
+            (l) =>
+              !removedCardIds.has(l.fromCardId) &&
+              !removedCardIds.has(l.toCardId),
+          ),
+          cardMembers: st.cardMembers.filter(
+            (m) => !removedCardIds.has(m.cardId),
+          ),
+          cardComponents: st.cardComponents.filter(
+            (cc) => !removedCardIds.has(cc.cardId),
+          ),
+          cardVersions: st.cardVersions.filter(
+            (cv) => !removedCardIds.has(cv.cardId),
+          ),
+        };
+      }),
 
     upsertCard: (c) =>
       set((st) => ({
@@ -116,7 +138,15 @@ export function createWorkspaceStore(initial: WorkspaceSnapshot) {
         cards: st.cards.map((c) => (c.id === id ? { ...c, ...patch } : c)),
       })),
     removeCard: (id) =>
-      set((st) => ({ cards: st.cards.filter((c) => c.id !== id) })),
+      set((st) => ({
+        cards: st.cards.filter((c) => c.id !== id),
+        cardLinks: st.cardLinks.filter(
+          (l) => l.fromCardId !== id && l.toCardId !== id,
+        ),
+        cardMembers: st.cardMembers.filter((m) => m.cardId !== id),
+        cardComponents: st.cardComponents.filter((cc) => cc.cardId !== id),
+        cardVersions: st.cardVersions.filter((cv) => cv.cardId !== id),
+      })),
 
     upsertSprint: (s) =>
       set((st) => ({

@@ -1,28 +1,4 @@
-import { test, expect, request as pwRequest, type Page } from "@playwright/test";
-
-const MAILPIT = "http://127.0.0.1:54324";
-
-async function fetchConfirmLink(email: string): Promise<string> {
-  const api = await pwRequest.newContext({ baseURL: MAILPIT });
-  for (let i = 0; i < 30; i++) {
-    const list = await api.get(`/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`);
-    if (list.ok()) {
-      const data = await list.json();
-      if (data.messages && data.messages.length > 0) {
-        const id = data.messages[0].ID;
-        const detail = await api.get(`/api/v1/message/${id}`);
-        const msg = await detail.json();
-        const body: string = msg.HTML || msg.Text || "";
-        const m =
-          body.match(/href="([^"]*\/auth\/v1\/verify[^"]*)"/) ??
-          body.match(/(https?:\/\/[^\s"<>]+\/auth\/v1\/verify[^\s"<>]+)/);
-        if (m) return m[1].replace(/&amp;/g, "&");
-      }
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error(`no email arrived for ${email}`);
-}
+import { test, expect, type Page } from "@playwright/test";
 
 async function signupAndCreateBoard(page: Page) {
   const email = `sa-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
@@ -45,9 +21,8 @@ async function signupAndCreateBoard(page: Page) {
   await expect(page).toHaveURL(/\/b\/[0-9a-f-]{36}/);
 }
 
-// FIXME: needs triage after recent UI/seed/onboarding changes (Plan #16b post-rebrand).
 
-test.fixme("search + activity", async ({ page }) => {
+test("search + activity", async ({ page }) => {
   await signupAndCreateBoard(page);
 
   // Add a list
@@ -65,22 +40,26 @@ test.fixme("search + activity", async ({ page }) => {
   await todoCol.getByRole("button", { name: /^add$/i }).click();
   await expect(todoCol.getByText("Investigate widget bug")).toBeVisible();
 
-  // Activity feed should show "created list" + "created card"
+  // Activity feed should show "added list" + the card title (subject is
+  // now rendered inline next to the verb).
   const feed = page.getByTestId("activity-feed");
   await expect(feed).toBeVisible({ timeout: 5000 });
-  await expect(feed).toContainText("created list");
-  await expect(feed).toContainText("created card");
+  await expect(feed).toContainText("added list");
+  await expect(feed).toContainText("Investigate widget bug");
 
   // Reload to make sure activity persists
   await page.reload();
-  await expect(page.getByTestId("activity-feed")).toContainText("created card");
+  await expect(page.getByTestId("activity-feed")).toContainText(
+    "Investigate widget bug",
+  );
 
-  // Search for "widget"
-  await page.getByTestId("search-box").fill("widget");
-  const results = page.getByTestId("search-results");
-  await expect(results).toBeVisible({ timeout: 3000 });
-  await expect(results).toContainText("Investigate widget bug");
+  // Search for "widget" via the command palette.
+  await page.getByTestId("palette-trigger").click();
+  await page.getByTestId("command-palette-input").fill("widget");
+  const list = page.getByTestId("command-palette-list");
+  await expect(list).toBeVisible({ timeout: 3000 });
+  await expect(list).toContainText("Investigate widget bug");
   // Click result → navigate to card
-  await results.getByText("Investigate widget bug").click();
+  await list.getByText("Investigate widget bug").first().click();
   await expect(page).toHaveURL(/\/b\/[0-9a-f-]{36}\/c\/[0-9a-f-]{36}/);
 });

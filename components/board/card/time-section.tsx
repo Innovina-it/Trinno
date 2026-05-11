@@ -8,6 +8,7 @@ import { logWork, deleteWorklog } from "@/actions/worklogs";
 import { updateCard } from "@/actions/cards";
 import { Hourglass, Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { undoBus } from "@/lib/undo-bus";
 
 type WorklogRow = {
   id: string;
@@ -49,13 +50,34 @@ export function TimeSection({
       toast.error("Non-negative integer.");
       return;
     }
+    if (n === estimateMin) return;
+    const prev = estimateMin;
     start(async () => {
       try {
         await updateCard({ id: cardId, estimateMin: n });
         updateCardLocal(cardId, { estimateMin: n } as {
           estimateMin: number | null;
         });
+        undoBus.push({
+          message: n == null ? "Estimate cleared" : "Estimate updated",
+          undo: async () => {
+            setEstimate(prev?.toString() ?? "");
+            updateCardLocal(cardId, { estimateMin: prev } as {
+              estimateMin: number | null;
+            });
+            try {
+              await updateCard({ id: cardId, estimateMin: prev });
+            } catch (err) {
+              setEstimate(n?.toString() ?? "");
+              updateCardLocal(cardId, { estimateMin: n } as {
+                estimateMin: number | null;
+              });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
       } catch (err) {
+        setEstimate(prev?.toString() ?? "");
         toast.error((err as Error).message);
       }
     });

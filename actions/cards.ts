@@ -4,13 +4,22 @@ import { eq, desc, asc, and, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { dbAsUser } from "@/lib/db/client";
 import {
-  cards, cardLinks, cardLabels, lists, boards, workspaces, cardMembers,
+  cards,
+  cardLinks,
+  cardLabels,
+  lists,
+  boards,
+  workspaces,
+  workspaceMembers,
+  boardMembers,
+  cardMembers,
 } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { positionBetween } from "@/lib/ordering";
 import {
   CreateCardInput, UpdateCardInput, MoveCardInput, ArchiveCardInput,
-  CascadeShiftBlockedInput, ReorderRoadmapRowInput, Uuid,
+  CascadeShiftBlockedInput, ReorderRoadmapRowInput, Uuid, CardPriority,
+  BulkSetCompletedInput,
 } from "@/lib/validation";
 import {
   computeNewRank,
@@ -36,6 +45,10 @@ const BulkAddLabelInput = z.object({
   cardIds: z.array(Uuid).min(1).max(50),
   labelId: Uuid,
 });
+const BulkSetPriorityInput = z.object({
+  cardIds: z.array(Uuid).min(1).max(50),
+  priority: CardPriority.nullable(),
+});
 
 // Plan #16b-γ-D (#37) — cross-board move.
 const MoveCardCrossBoardInput = z.object({
@@ -48,7 +61,13 @@ function decodeSub(jwt: string): string {
   return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
 }
 
-export async function createCardImpl(token: string, input: { listId: string; title: string }) {
+export async function createCardImpl(token: string, input: {
+  listId: string;
+  title: string;
+  startDate?: Date | string | null;
+  targetDate?: Date | string | null;
+  parentCardId?: string | null;
+}) {
   const parsed = CreateCardInput.parse(input);
   const creatorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
@@ -57,11 +76,38 @@ export async function createCardImpl(token: string, input: { listId: string; tit
       .orderBy(desc(cards.position))
       .limit(1);
     const pos = positionBetween(last?.position ?? null, null);
+
+    const toDate = (d: Date | string | null | undefined): Date | null => {
+      if (d === null || d === undefined) return null;
+      const dt = d instanceof Date ? d : new Date(d);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    };
+    let startDate = toDate(parsed.startDate);
+    let targetDate = toDate(parsed.targetDate);
+
+    // Subtask date inheritance: if linked to a parent and own dates blank,
+    // copy the parent's span. Lets a child default onto the roadmap inside
+    // its epic without forcing the user to repick dates.
+    if (parsed.parentCardId && (!startDate || !targetDate)) {
+      const [parent] = await tx
+        .select({ startDate: cards.startDate, targetDate: cards.targetDate })
+        .from(cards)
+        .where(eq(cards.id, parsed.parentCardId))
+        .limit(1);
+      if (parent) {
+        if (!startDate && parent.startDate) startDate = parent.startDate;
+        if (!targetDate && parent.targetDate) targetDate = parent.targetDate;
+      }
+    }
+
     const [row] = await tx.insert(cards).values({
       listId: parsed.listId,
       title: parsed.title,
       position: pos,
       boardId: "00000000-0000-0000-0000-000000000000", // overwritten by trigger
+      parentCardId: parsed.parentCardId ?? null,
+      startDate,
+      targetDate,
     }).returning();
     if (!row) throw new Error("Forbidden");
 
@@ -104,8 +150,11 @@ export async function updateCardImpl(token: string, input: {
   priority?: "p0" | "p1" | "p2" | "p3" | "p4" | null;
   coverKind?: "none" | "color" | "image";
   coverValue?: string | null;
+  ownerId?: string | null;
+  completed?: boolean;
 }) {
   const parsed = UpdateCardInput.parse(input);
+  const actorId = decodeSub(token);
   const patch: Record<string, unknown> = {};
   if (parsed.title !== undefined) patch.title = parsed.title;
   if (parsed.description !== undefined) patch.description = parsed.description;
@@ -141,7 +190,123 @@ export async function updateCardImpl(token: string, input: {
   if (parsed.priority !== undefined) patch.priority = parsed.priority;
   if (parsed.coverKind !== undefined) patch.coverKind = parsed.coverKind;
   if (parsed.coverValue !== undefined) patch.coverValue = parsed.coverValue;
+  if (parsed.ownerId !== undefined) patch.ownerId = parsed.ownerId;
+  if (parsed.completed !== undefined) {
+    // Set completedAt directly; the DB trigger mirrors dueComplete.
+    patch.completedAt = parsed.completed ? new Date() : null;
+  }
   return dbAsUser(token, async (tx) => {
+    if (parsed.ownerId !== undefined) {
+      const [cardAccess] = await tx
+        .select({
+          boardId: cards.boardId,
+          ownerId: cards.ownerId,
+          visibility: boards.visibility,
+          workspaceId: boards.workspaceId,
+        })
+        .from(cards)
+        .innerJoin(boards, eq(boards.id, cards.boardId))
+        .where(eq(cards.id, parsed.id))
+        .limit(1);
+      if (!cardAccess) throw new Error("Forbidden");
+
+      const [boardMembership] = await tx
+        .select({ role: boardMembers.role })
+        .from(boardMembers)
+        .where(
+          and(
+            eq(boardMembers.boardId, cardAccess.boardId),
+            eq(boardMembers.userId, actorId),
+          ),
+        )
+        .limit(1);
+      const [workspaceMembership] = await tx
+        .select({ role: workspaceMembers.role })
+        .from(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.workspaceId, cardAccess.workspaceId),
+            eq(workspaceMembers.userId, actorId),
+          ),
+        )
+        .limit(1);
+
+      const isAdmin =
+        boardMembership?.role === "admin" ||
+        workspaceMembership?.role === "owner" ||
+        workspaceMembership?.role === "admin";
+      const isWritableMember =
+        boardMembership?.role === "admin" ||
+        boardMembership?.role === "member" ||
+        (cardAccess.visibility === "workspace" && !!workspaceMembership);
+      const isCurrentOwner = cardAccess.ownerId === actorId;
+      const isClaimingUnowned =
+        cardAccess.ownerId === null && parsed.ownerId === actorId;
+
+      if (!isAdmin && !isCurrentOwner && !(isWritableMember && isClaimingUnowned)) {
+        throw new Error(
+          "Only admins, the current owner, or a member claiming an unowned card can change owner.",
+        );
+      }
+
+      if (parsed.ownerId !== null) {
+        const [targetBoardMember] = await tx
+          .select({ userId: boardMembers.userId })
+          .from(boardMembers)
+          .where(
+            and(
+              eq(boardMembers.boardId, cardAccess.boardId),
+              eq(boardMembers.userId, parsed.ownerId),
+            ),
+          )
+          .limit(1);
+        const [targetWorkspaceMember] = await tx
+          .select({ userId: workspaceMembers.userId })
+          .from(workspaceMembers)
+          .where(
+            and(
+              eq(workspaceMembers.workspaceId, cardAccess.workspaceId),
+              eq(workspaceMembers.userId, parsed.ownerId),
+            ),
+          )
+          .limit(1);
+        const targetCanOwn =
+          !!targetBoardMember ||
+          (cardAccess.visibility === "workspace" && !!targetWorkspaceMember);
+        if (!targetCanOwn) {
+          throw new Error("Owner must be a board or workspace member.");
+        }
+      }
+    }
+
+    // Subtask date inheritance on retroactive parent link: if parentCardId
+    // is being set to a non-null value AND the card has no dates of its
+    // own (and none in this patch), copy parent's span. Mirrors the
+    // create-time inheritance in createCardImpl.
+    if (parsed.parentCardId) {
+      const haveStartInPatch = patch.startDate !== undefined;
+      const haveTargetInPatch = patch.targetDate !== undefined;
+      if (!haveStartInPatch || !haveTargetInPatch) {
+        const [self] = await tx
+          .select({ startDate: cards.startDate, targetDate: cards.targetDate })
+          .from(cards)
+          .where(eq(cards.id, parsed.id))
+          .limit(1);
+        const needStart = !haveStartInPatch && !self?.startDate;
+        const needTarget = !haveTargetInPatch && !self?.targetDate;
+        if (needStart || needTarget) {
+          const [parent] = await tx
+            .select({ startDate: cards.startDate, targetDate: cards.targetDate })
+            .from(cards)
+            .where(eq(cards.id, parsed.parentCardId))
+            .limit(1);
+          if (parent) {
+            if (needStart && parent.startDate) patch.startDate = parent.startDate;
+            if (needTarget && parent.targetDate) patch.targetDate = parent.targetDate;
+          }
+        }
+      }
+    }
     try {
       const [row] = await tx.update(cards).set(patch)
         .where(eq(cards.id, parsed.id)).returning();
@@ -374,6 +539,42 @@ export async function bulkSetSprintImpl(
   });
 }
 
+// Bulk priority assignment. Single UPDATE; RLS drops any id the user
+// can't write so partial application is the honest behavior.
+export async function bulkSetPriorityImpl(
+  token: string,
+  input: { cardIds: string[]; priority: "p0" | "p1" | "p2" | "p3" | "p4" | null },
+): Promise<{ updated: number }> {
+  const p = BulkSetPriorityInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const r = await tx
+      .update(cards)
+      .set({ priority: p.priority })
+      .where(inArray(cards.id, p.cardIds))
+      .returning({ id: cards.id });
+    return { updated: r.length };
+  });
+}
+
+// Bulk mark-complete (or un-complete). Writes `completed_at` only — the
+// DB trigger from migration 0062 mirrors `due_complete` automatically so
+// legacy code paths keep working without dual-writes. RLS drops any id
+// the user can't write so partial application is the honest behavior.
+export async function bulkSetCompletedImpl(
+  token: string,
+  input: { cardIds: string[]; completed: boolean },
+): Promise<{ updated: number }> {
+  const p = BulkSetCompletedInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const r = await tx
+      .update(cards)
+      .set({ completedAt: p.completed ? new Date() : null })
+      .where(inArray(cards.id, p.cardIds))
+      .returning({ id: cards.id });
+    return { updated: r.length };
+  });
+}
+
 // Plan #16b-γ-D (#8) — bulk add label. Idempotent thanks to ON CONFLICT;
 // the cards-must-share-board invariant is enforced by the existing
 // `set_card_label_board_id` trigger which throws when the label's
@@ -509,7 +710,23 @@ export async function bulkAddLabel(
   return bulkAddLabelImpl(t, input);
 }
 
-export async function createCard(input: { listId: string; title: string }) {
+export async function bulkSetPriority(
+  input: { cardIds: string[]; priority: "p0" | "p1" | "p2" | "p3" | "p4" | null },
+) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  return bulkSetPriorityImpl(t, input);
+}
+
+export async function bulkSetCompleted(
+  input: { cardIds: string[]; completed: boolean },
+) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  return bulkSetCompletedImpl(t, input);
+}
+
+export async function createCard(input: Parameters<typeof createCardImpl>[1]) {
   await requireUser();
   const t = (await getSessionToken())!;
   const r = await createCardImpl(t, input);
@@ -670,4 +887,3 @@ export async function reorderRoadmapRow(input: {
     throw new Error(msg === "Forbidden" ? "Forbidden" : `Reorder failed: ${msg}`);
   }
 }
-

@@ -58,6 +58,33 @@ export async function deleteAttachmentImpl(token: string, input: { id: string })
   });
 }
 
+export async function createAttachmentSignedUrlImpl(
+  token: string,
+  input: { id: string; download?: boolean },
+): Promise<{ url: string }> {
+  const parsed = DeleteAttachmentInput.parse(input);
+  const row = await dbAsUser(token, async (tx) => {
+    const [attachment] = await tx
+      .select({
+        storagePath: attachments.storagePath,
+        filename: attachments.filename,
+      })
+      .from(attachments)
+      .where(eq(attachments.id, parsed.id))
+      .limit(1);
+    return attachment;
+  });
+  if (!row) throw new Error("Forbidden");
+
+  const { data, error } = await admin.storage
+    .from("card-attachments")
+    .createSignedUrl(row.storagePath, 60 * 5, {
+      download: input.download ? row.filename : false,
+    });
+  if (error || !data) throw error ?? new Error("Could not create download link");
+  return { url: data.signedUrl };
+}
+
 export async function registerAttachment(input: Parameters<typeof registerAttachmentImpl>[1]) {
   await requireUser();
   const t = (await getSessionToken())!;
@@ -69,4 +96,13 @@ export async function deleteAttachment(input: { id: string }) {
   await requireUser();
   const t = (await getSessionToken())!;
   await deleteAttachmentImpl(t, input);
+}
+
+export async function createAttachmentSignedUrl(input: {
+  id: string;
+  download?: boolean;
+}) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  return createAttachmentSignedUrlImpl(t, input);
 }

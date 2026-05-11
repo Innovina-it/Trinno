@@ -6,6 +6,7 @@ import { comments } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
   CreateCommentInput, EditCommentInput, DeleteCommentInput,
+  ResolveCommentInput,
 } from "@/lib/validation";
 
 function decodeSub(jwt: string): string {
@@ -13,40 +14,109 @@ function decodeSub(jwt: string): string {
   return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
 }
 
-export async function createCommentImpl(token: string, input: { cardId: string; body: string }) {
+type CommentActionRow = typeof comments.$inferSelect;
+
+function mapCommentRow(r: {
+  id: string;
+  card_id: string;
+  board_id: string;
+  author_id: string;
+  parent_comment_id: string | null;
+  body: string;
+  created_at: Date | string;
+  edited_at: Date | string | null;
+  resolved_at: Date | string | null;
+  resolved_by: string | null;
+}): CommentActionRow {
+  return {
+    id: r.id,
+    cardId: r.card_id,
+    boardId: r.board_id,
+    authorId: r.author_id,
+    parentCommentId: r.parent_comment_id ?? null,
+    body: r.body,
+    createdAt: r.created_at instanceof Date ? r.created_at : new Date(r.created_at),
+    editedAt: r.edited_at
+      ? r.edited_at instanceof Date
+        ? r.edited_at
+        : new Date(r.edited_at)
+      : null,
+    resolvedAt: r.resolved_at
+      ? r.resolved_at instanceof Date
+        ? r.resolved_at
+        : new Date(r.resolved_at)
+      : null,
+    resolvedBy: r.resolved_by ?? null,
+  };
+}
+
+export async function createCommentImpl(token: string, input: { cardId: string; body: string; parentCommentId?: string | null }) {
   const parsed = CreateCommentInput.parse(input);
   const authorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
-    const [row] = await tx.insert(comments).values({
-      cardId: parsed.cardId,
-      authorId,
-      body: parsed.body,
-      boardId: "00000000-0000-0000-0000-000000000000",
-    }).returning();
+    if (parsed.parentCommentId) {
+      const rows = await tx.execute(sql`
+        insert into public.comments (card_id, author_id, parent_comment_id, body, board_id)
+        values (${parsed.cardId}, ${authorId}, ${parsed.parentCommentId}, ${parsed.body}, '00000000-0000-0000-0000-000000000000')
+        returning
+          id,
+          card_id,
+          board_id,
+          author_id,
+          nullif(to_jsonb(comments)->>'parent_comment_id', '')::uuid as parent_comment_id,
+          body,
+          created_at,
+          edited_at,
+          nullif(to_jsonb(comments)->>'resolved_at', '')::timestamptz as resolved_at,
+          nullif(to_jsonb(comments)->>'resolved_by', '')::uuid as resolved_by
+      `);
+      const [row] = rows as unknown as Parameters<typeof mapCommentRow>[0][];
+      if (!row) throw new Error("Forbidden");
+      return mapCommentRow(row);
+    }
+    const rows = await tx.execute(sql`
+      insert into public.comments (card_id, author_id, body, board_id)
+      values (${parsed.cardId}, ${authorId}, ${parsed.body}, '00000000-0000-0000-0000-000000000000')
+      returning
+        id,
+        card_id,
+        board_id,
+        author_id,
+        nullif(to_jsonb(comments)->>'parent_comment_id', '')::uuid as parent_comment_id,
+        body,
+        created_at,
+        edited_at,
+        nullif(to_jsonb(comments)->>'resolved_at', '')::timestamptz as resolved_at,
+        nullif(to_jsonb(comments)->>'resolved_by', '')::uuid as resolved_by
+    `);
+    const [row] = rows as unknown as Parameters<typeof mapCommentRow>[0][];
     if (!row) throw new Error("Forbidden");
-    // The before-insert trigger overwrites `board_id` with the card's
-    // real board, but `RETURNING` reflects the pre-trigger value (the
-    // sentinel UUID).  Re-read the row so callers — and
-    // `revalidatePath(/b/<boardId>)` in the wrapper below — see the
-    // actual board the comment belongs to.
-    const [fresh] = await tx
-      .select()
-      .from(comments)
-      .where(eq(comments.id, row.id))
-      .limit(1);
-    return fresh ?? row;
+    return mapCommentRow(row);
   });
 }
 
 export async function editCommentImpl(token: string, input: { id: string; body: string }) {
   const parsed = EditCommentInput.parse(input);
   return dbAsUser(token, async (tx) => {
-    const [row] = await tx.update(comments)
-      .set({ body: parsed.body, editedAt: sql`now()` })
-      .where(eq(comments.id, parsed.id))
-      .returning();
+    const rows = await tx.execute(sql`
+      update public.comments
+      set body = ${parsed.body}, edited_at = now()
+      where id = ${parsed.id}
+      returning
+        id,
+        card_id,
+        board_id,
+        author_id,
+        nullif(to_jsonb(comments)->>'parent_comment_id', '')::uuid as parent_comment_id,
+        body,
+        created_at,
+        edited_at,
+        nullif(to_jsonb(comments)->>'resolved_at', '')::timestamptz as resolved_at,
+        nullif(to_jsonb(comments)->>'resolved_by', '')::uuid as resolved_by
+    `);
+    const [row] = rows as unknown as Parameters<typeof mapCommentRow>[0][];
     if (!row) throw new Error("Forbidden");
-    return row;
+    return mapCommentRow(row);
   });
 }
 
@@ -56,6 +126,27 @@ export async function deleteCommentImpl(token: string, input: { id: string }) {
     const r = await tx.delete(comments).where(eq(comments.id, parsed.id))
       .returning({ id: comments.id });
     if (r.length === 0) throw new Error("Forbidden");
+  });
+}
+
+export async function resolveCommentImpl(
+  token: string,
+  input: { id: string; resolved: boolean },
+) {
+  const parsed = ResolveCommentInput.parse(input);
+  const uid = decodeSub(token);
+  return dbAsUser(token, async (tx) => {
+    const [row] = await tx
+      .update(comments)
+      .set({
+        resolvedAt: parsed.resolved ? sql`now()` : null,
+        resolvedBy: parsed.resolved ? uid : null,
+        editedAt: sql`now()`,
+      })
+      .where(eq(comments.id, parsed.id))
+      .returning();
+    if (!row) throw new Error("Forbidden");
+    return row;
   });
 }
 
@@ -77,4 +168,11 @@ export async function deleteComment(input: { id: string }) {
   await requireUser();
   const t = (await getSessionToken())!;
   await deleteCommentImpl(t, input);
+}
+export async function resolveComment(input: { id: string; resolved: boolean }) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const r = await resolveCommentImpl(t, input);
+  revalidatePath(`/b/${r.boardId}`);
+  return r;
 }

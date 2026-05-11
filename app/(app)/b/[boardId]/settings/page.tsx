@@ -25,7 +25,7 @@ export default async function BoardSettingsPage({
   const favoritedIds = await listFavoriteBoardIds(token);
   const boardMembers = await listBoardMembersFor(token, boardId);
   return (
-    <div className="mx-auto max-w-2xl space-y-6 px-6 py-10">
+    <div className="mx-auto max-w-2xl space-y-6 px-3 sm:px-4 md:px-6 py-6 md:py-10">
       <h1 className="text-2xl font-semibold">{b.title}: Board settings</h1>
       <BoardSettingsForm
         board={{

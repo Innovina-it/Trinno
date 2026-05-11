@@ -6,6 +6,10 @@ export type Viewer = {
   userId: string;
   displayName: string;
   avatarUrl: string | null;
+  location?: "board" | "card";
+  cardId?: string | null;
+  cardTitle?: string | null;
+  lastSeenAt?: string;
 };
 
 export function useBoardPresence(boardId: string, me: Viewer) {
@@ -36,12 +40,24 @@ export function useBoardPresence(boardId: string, me: Viewer) {
           userId: me.userId,
           displayName: me.displayName,
           avatarUrl: me.avatarUrl,
+          location: me.location ?? "board",
+          cardId: me.cardId ?? null,
+          cardTitle: me.cardTitle ?? null,
+          lastSeenAt: new Date().toISOString(),
         });
       }
     });
 
     return () => { supa.removeChannel(channel); };
-  }, [boardId, me.userId, me.displayName, me.avatarUrl]);
+  }, [
+    boardId,
+    me.userId,
+    me.displayName,
+    me.avatarUrl,
+    me.location,
+    me.cardId,
+    me.cardTitle,
+  ]);
 
   return viewers;
 }

@@ -64,11 +64,14 @@ export const BOARD_TEMPLATES: BoardTemplate[] = [
       { title: "Verifying", statusKind: "review" },
       { title: "Closed", statusKind: "done" },
     ],
+    // Severity (P0–P4) is owned by the `priority` enum on the card row, not
+    // labels. These labels are categorical bug-triage tags only.
     labels: [
-      { name: "P0", color: "#fafafa" },
-      { name: "P1", color: "#fafafa" },
-      { name: "P2", color: "#fafafa" },
       { name: "regression", color: "#fafafa" },
+      { name: "crash", color: "#fafafa" },
+      { name: "data-loss", color: "#fafafa" },
+      { name: "ui", color: "#fafafa" },
+      { name: "perf", color: "#fafafa" },
     ],
   },
   {

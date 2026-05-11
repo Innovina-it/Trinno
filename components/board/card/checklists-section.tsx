@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { Plus, X } from "lucide-react";
 import type { ChecklistItemRow } from "@/lib/queries/board-snapshot";
+import { undoBus } from "@/lib/undo-bus";
 
 export function ChecklistsSection({ cardId }: { cardId: string }) {
   const allChecklists = useBoardStore((s) => s.checklists);
@@ -39,6 +40,18 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
         addChecklist(c);
         setNewTitle("");
         setAdding(false);
+        undoBus.push({
+          message: "Checklist added",
+          undo: async () => {
+            removeChecklistStore(c.id);
+            try {
+              await deleteChecklist({ id: c.id });
+            } catch (err) {
+              addChecklist(c);
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
       } catch (err) {
         toast.error((err as Error).message);
       }
@@ -71,9 +84,42 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
                 disabled={pending}
                 onClick={() =>
                   start(async () => {
+                    const snapshotItems = items;
                     try {
                       await deleteChecklist({ id: cl.id });
                       removeChecklistStore(cl.id);
+                      undoBus.push({
+                        message: "Checklist deleted",
+                        undo: async () => {
+                          try {
+                            const restoredChecklist = await createChecklist({
+                              cardId,
+                              title: cl.title,
+                            });
+                            addChecklist(restoredChecklist);
+                            for (const item of snapshotItems) {
+                              const restoredItem = await addChecklistItem({
+                                checklistId: restoredChecklist.id,
+                                text: item.text,
+                              });
+                              addItem(restoredItem);
+                              if (item.completed) {
+                                await toggleChecklistItem({
+                                  id: restoredItem.id,
+                                  completed: true,
+                                });
+                                updateItem(restoredItem.id, {
+                                  completed: true,
+                                });
+                              }
+                            }
+                          } catch (err) {
+                            toast.error(
+                              "Undo failed: " + (err as Error).message,
+                            );
+                          }
+                        },
+                      });
                     } catch (err) {
                       toast.error((err as Error).message);
                     }
@@ -95,12 +141,32 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
                     checked={it.completed}
                     onChange={(e) => {
                       const newCompleted = e.target.checked;
+                      const prevCompleted = it.completed;
                       updateItem(it.id, { completed: newCompleted });
                       start(async () => {
                         try {
                           await toggleChecklistItem({
                             id: it.id,
                             completed: newCompleted,
+                          });
+                          undoBus.push({
+                            message: newCompleted
+                              ? "Checklist item completed"
+                              : "Checklist item reopened",
+                            undo: async () => {
+                              updateItem(it.id, { completed: prevCompleted });
+                              try {
+                                await toggleChecklistItem({
+                                  id: it.id,
+                                  completed: prevCompleted,
+                                });
+                              } catch (err) {
+                                updateItem(it.id, { completed: newCompleted });
+                                toast.error(
+                                  "Undo failed: " + (err as Error).message,
+                                );
+                              }
+                            },
                           });
                         } catch (err) {
                           updateItem(it.id, { completed: !newCompleted });
@@ -126,9 +192,35 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
                     disabled={pending}
                     onClick={() =>
                       start(async () => {
+                        const snapshot = it;
                         try {
                           await removeChecklistItem({ id: it.id });
                           removeItem(it.id);
+                          undoBus.push({
+                            message: "Checklist item deleted",
+                            undo: async () => {
+                              try {
+                                const restored = await addChecklistItem({
+                                  checklistId: snapshot.checklistId,
+                                  text: snapshot.text,
+                                });
+                                addItem(restored);
+                                if (snapshot.completed) {
+                                  await toggleChecklistItem({
+                                    id: restored.id,
+                                    completed: true,
+                                  });
+                                  updateItem(restored.id, {
+                                    completed: true,
+                                  });
+                                }
+                              } catch (err) {
+                                toast.error(
+                                  "Undo failed: " + (err as Error).message,
+                                );
+                              }
+                            },
+                          });
                         } catch (err) {
                           toast.error((err as Error).message);
                         }
@@ -190,6 +282,7 @@ function AddItem({
   checklistId: string;
   onAdd: (i: ChecklistItemRow) => void;
 }) {
+  const removeItem = useBoardStore((s) => s.removeChecklistItem);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [pending, start] = useTransition();
@@ -201,6 +294,18 @@ function AddItem({
         const item = await addChecklistItem({ checklistId, text });
         onAdd(item);
         setText("");
+        undoBus.push({
+          message: "Checklist item added",
+          undo: async () => {
+            removeItem(item.id);
+            try {
+              await removeChecklistItem({ id: item.id });
+            } catch (err) {
+              onAdd(item);
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
       } catch (err) {
         toast.error((err as Error).message);
       }

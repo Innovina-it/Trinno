@@ -1,13 +1,13 @@
 "use client";
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { startSprint, deleteSprint } from "@/actions/sprints";
 import type { SprintConflictCard } from "@/actions/sprints";
 import { CompleteSprintDialog } from "./complete-sprint-dialog";
 import { SprintPicker, type SprintLite } from "./sprint-picker";
 import { SprintDateConflictDialog } from "./sprint-date-conflict-dialog";
-import { Play, Trash2 } from "lucide-react";
+import { Play, Trash2, FileText } from "lucide-react";
 import { toast } from "sonner";
 
 export type SprintCardProps = {
@@ -31,6 +31,7 @@ export type SprintCardProps = {
   allSprints: SprintLite[];
   workspaceId: string;
   activeExists?: boolean;
+  canManageSprints?: boolean;
 };
 
 export function SprintCard({
@@ -39,6 +40,7 @@ export function SprintCard({
   allSprints,
   workspaceId,
   activeExists,
+  canManageSprints = false,
 }: SprintCardProps) {
   const [pending, start] = useTransition();
   const [conflictOpen, setConflictOpen] = useState(false);
@@ -149,36 +151,60 @@ export function SprintCard({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {sprint.state === "planned" && (
-            <Button
-              size="xs"
-              onClick={onStart}
-              disabled={pending || activeExists}
+        {sprint.state === "completed" && (
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href={`/w/${workspaceId}/sprints/${sprint.id}/report`}
+              className={buttonVariants({ size: "xs", variant: "ghost" })}
+              data-testid={`sprint-report-link-${sprint.id}`}
             >
-              <Play className="size-3 mr-1" /> START
-            </Button>
-          )}
-          {isActive && (
-            <CompleteSprintDialog
-              sprintId={sprint.id}
-              otherSprints={allSprints.filter(
-                (s) => s.id !== sprint.id && s.state === "planned",
-              )}
-            />
-          )}
-          {sprint.state !== "active" && (
-            <Button
-              size="xs"
-              variant="ghost"
-              onClick={onDelete}
-              disabled={pending}
-              aria-label="Delete sprint"
-            >
-              <Trash2 className="size-3" />
-            </Button>
-          )}
-        </div>
+              <FileText className="size-3 mr-1" /> VIEW REPORT
+            </Link>
+            {canManageSprints && (
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={onDelete}
+                disabled={pending}
+                aria-label="Delete sprint"
+              >
+                <Trash2 className="size-3" />
+              </Button>
+            )}
+          </div>
+        )}
+        {canManageSprints && sprint.state !== "completed" && (
+          <div className="flex items-center gap-2 shrink-0">
+            {sprint.state === "planned" && (
+              <Button
+                size="xs"
+                onClick={onStart}
+                disabled={pending || activeExists}
+              >
+                <Play className="size-3 mr-1" /> START
+              </Button>
+            )}
+            {isActive && (
+              <CompleteSprintDialog
+                sprintId={sprint.id}
+                otherSprints={allSprints.filter(
+                  (s) => s.id !== sprint.id && s.state === "planned",
+                )}
+              />
+            )}
+            {sprint.state !== "active" && (
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={onDelete}
+                disabled={pending}
+                aria-label="Delete sprint"
+              >
+                <Trash2 className="size-3" />
+              </Button>
+            )}
+          </div>
+        )}
       </header>
       <ul className="divide-y divide-hairline">
         {visibleCards.length === 0 && (
@@ -207,6 +233,7 @@ export function SprintCard({
               cardId={c.id}
               sprintId={c.sprintId ?? null}
               sprints={allSprints}
+              readOnly={!canManageSprints}
             />
           </li>
         ))}

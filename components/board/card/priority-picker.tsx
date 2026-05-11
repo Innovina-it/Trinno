@@ -13,6 +13,7 @@ import { updateCard } from "@/actions/cards";
 import { useBoardStore } from "@/stores/board-store";
 import { toast } from "sonner";
 import { ChevronDown, Flag } from "lucide-react";
+import { undoBus } from "@/lib/undo-bus";
 
 export type CardPriority = "p0" | "p1" | "p2" | "p3" | "p4";
 
@@ -87,6 +88,18 @@ export function PriorityPicker({
     start(async () => {
       try {
         await updateCard({ id: cardId, priority: next });
+        undoBus.push({
+          message: next ? `Priority ${next.toUpperCase()}` : "Priority cleared",
+          undo: async () => {
+            updateCardLocal(cardId, { priority: prev });
+            try {
+              await updateCard({ id: cardId, priority: prev });
+            } catch (err) {
+              updateCardLocal(cardId, { priority: next });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
       } catch (err) {
         updateCardLocal(cardId, { priority: prev });
         toast.error((err as Error).message);

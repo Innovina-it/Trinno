@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { SprintPicker, type SprintLite } from "./sprint-picker";
+import { CompleteToggle } from "@/components/board/card/complete-toggle";
 
 export function BacklogList({
   cards,
   sprints,
+  canManageSprints,
 }: {
   cards: Array<{
     id: string;
@@ -11,8 +13,10 @@ export function BacklogList({
     boardId: string;
     boardTitle: string;
     sprintId: string | null;
+    completedAt?: Date | string | null;
   }>;
   sprints: SprintLite[];
+  canManageSprints: boolean;
 }) {
   if (cards.length === 0) {
     return <p className="text-sm text-fg-faint italic">Backlog is empty.</p>;
@@ -32,21 +36,28 @@ export function BacklogList({
             {group[0].boardTitle}
           </header>
           <ul className="divide-y divide-hairline">
-            {group.map((c) => (
-              <li key={c.id} className="flex items-center gap-3 px-4 py-2">
-                <Link
-                  href={`/b/${c.boardId}/c/${c.id}`}
-                  className="flex-1 min-w-0 truncate hover:underline text-sm"
-                >
-                  {c.title}
-                </Link>
-                <SprintPicker
-                  cardId={c.id}
-                  sprintId={c.sprintId ?? null}
-                  sprints={sprints}
-                />
-              </li>
-            ))}
+            {group.map((c) => {
+              const completed = c.completedAt != null;
+              return (
+                <li key={c.id} className="flex items-center gap-3 px-4 py-2">
+                  <CompleteToggle cardId={c.id} completed={completed} size="sm" />
+                  <Link
+                    href={`/b/${c.boardId}/c/${c.id}`}
+                    className={`flex-1 min-w-0 truncate hover:underline text-sm ${
+                      completed ? "line-through text-fg-muted" : ""
+                    }`}
+                  >
+                    {c.title}
+                  </Link>
+                  <SprintPicker
+                    cardId={c.id}
+                    sprintId={c.sprintId ?? null}
+                    sprints={sprints}
+                    readOnly={!canManageSprints}
+                  />
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}

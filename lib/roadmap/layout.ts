@@ -122,19 +122,32 @@ export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
   // that want to resolve parent metadata; left exported via no public api).
   void cardById;
 
-  if (orphans.length === 0) return epicLanes;
+  // Each non-epic top-level card (story / task / bug without an epic
+  // parent) gets its OWN lane named after itself, mirroring how epics
+  // become lanes. Previously these were collapsed into a single
+  // "Unassigned" pile, which hid them under one ambiguous header — bad
+  // for a multi-card roadmap. Subtasks remain nested under their parent
+  // via `subtaskRowsByParent`.
+  const orphanLanes: Lane<C>[] = orphans
+    .slice()
+    .sort((a, b) => {
+      const ar = a.roadmapOrder ?? null;
+      const br = b.roadmapOrder ?? null;
+      if (ar !== null && br !== null) return ar - br;
+      if (ar !== null) return -1;
+      if (br !== null) return 1;
+      return a.title.localeCompare(b.title);
+    })
+    .map<Lane<C>>((c) => ({
+      id: c.id,
+      title: c.title,
+      kind: "epic",
+      headerCard: c,
+      cards: [],
+      subtaskRowsByParent: subtaskRowsFor([c.id]),
+    }));
 
-  return [
-    ...epicLanes,
-    {
-      id: UNCATEGORIZED_LANE_ID,
-      title: "Unassigned",
-      kind: "uncategorized",
-      headerCard: null,
-      cards: orphans,
-      subtaskRowsByParent: subtaskRowsFor(orphans.map((c) => c.id)),
-    },
-  ];
+  return [...epicLanes, ...orphanLanes];
 }
 
 /**

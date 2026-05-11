@@ -17,7 +17,16 @@ import { profiles, boards, dashboards } from "@/lib/db/schema";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const token = (await getSessionToken())!;
-  const ws = await listWorkspaces(token);
+  let ws: Awaited<ReturnType<typeof listWorkspaces>> = [];
+  let shellError: string | null = null;
+  try {
+    ws = await listWorkspaces(token);
+  } catch (err) {
+    shellError =
+      err instanceof Error
+        ? err.message
+        : "Could not load your workspaces after sign-in.";
+  }
 
   const h = await headers();
   const path = h.get("x-pathname") ?? "";
@@ -83,6 +92,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const showTour = onboardingCompletedAt === null && ws.length > 0;
 
+  if (shellError) {
+    return (
+      <main className="min-h-dvh bg-[color:var(--bg-deep)] px-6 py-16 text-fg">
+        <div className="mx-auto max-w-lg space-y-4 rounded-2xl border border-hairline bg-[color:var(--surface)] p-6">
+          <p className="mono-meta-sm text-fg-faint">SIGNED IN</p>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            The app could not reach the workspace database.
+          </h1>
+          <p className="text-sm leading-relaxed text-fg-muted">
+            Your login worked, but the workspace query failed while loading the
+            app shell. Refresh once after the database frees a connection.
+          </p>
+          <pre className="max-h-40 overflow-auto rounded-lg border border-hairline bg-black/30 p-3 text-xs text-fg-muted">
+            {shellError}
+          </pre>
+        </div>
+      </main>
+    );
+  }
+
   // Plan #16b-γ-C (#4 + #5) — favorites and recents are surfaced in the
   // top nav so the user can jump cross-workspace. Best-effort: any RLS
   // hiccup falls back to an empty list rather than blocking the whole
@@ -107,10 +136,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         userId={user.id}
         workspaces={ws.map(w => ({ id: w.id, name: w.name }))}
         activeWorkspaceId={activeWorkspaceId}
-        favorites={favorites}
-        recents={recents}
       />
-      <main id="main" className="min-h-[calc(100vh-3.5rem)]">{children}</main>
+      <main id="main" className="min-h-[calc(100dvh-3.5rem)]">{children}</main>
       {showTour && <TourOverlay />}
       <ErrorPane />
       <UndoBanner />

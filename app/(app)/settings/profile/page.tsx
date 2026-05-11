@@ -4,7 +4,7 @@ import { requireUser } from "@/lib/auth";
 export default async function ProfileSettingsPage() {
   const user = await requireUser();
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8 space-y-6">
+    <div className="mx-auto max-w-3xl px-3 sm:px-4 md:px-6 py-6 md:py-8 space-y-6">
       <header className="space-y-2 border-b border-hairline pb-4">
         <div className="flex items-center gap-1.5 mono-meta-sm text-fg-faint">
           <Link href="/settings" className="hover:text-fg">SETTINGS</Link>

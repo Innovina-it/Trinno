@@ -19,7 +19,6 @@ function fmtDate(d: Date | string): string {
 
 export function ArchiveView({
   archive,
-  workspaceId: _workspaceId,
 }: {
   archive: WorkspaceArchive;
   workspaceId: string;

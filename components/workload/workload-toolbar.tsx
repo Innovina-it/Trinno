@@ -3,6 +3,7 @@ import { Select } from "@/components/ui/select";
 
 export type RangePreset = "week" | "month" | "quarter";
 export type SortKind = "peak" | "alpha";
+export type LanesMode = "user" | "workspace";
 
 export function WorkloadToolbar({
   workspaces,
@@ -16,6 +17,8 @@ export function WorkloadToolbar({
   setRangePreset,
   sortKind,
   setSortKind,
+  lanesMode,
+  setLanesMode,
 }: {
   workspaces: { id: string; name: string }[];
   sprints: { id: string; name: string }[];
@@ -28,6 +31,8 @@ export function WorkloadToolbar({
   setRangePreset: (v: RangePreset) => void;
   sortKind: SortKind;
   setSortKind: (v: SortKind) => void;
+  lanesMode: LanesMode;
+  setLanesMode: (v: LanesMode) => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline pb-3">
@@ -85,6 +90,19 @@ export function WorkloadToolbar({
             </button>
           ))}
         </div>
+      </Field>
+      <Field label="LANES">
+        <Select
+          value={lanesMode}
+          onValueChange={(v) => setLanesMode(v as LanesMode)}
+          data-testid="workload-lanes-mode"
+          options={[
+            { value: "user", label: "BY USER" },
+            { value: "workspace", label: "BY WORKSPACE" },
+          ]}
+          size="sm"
+          className="min-w-36"
+        />
       </Field>
       <Field label="SORT">
         <Select

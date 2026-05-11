@@ -48,67 +48,52 @@ describe("seedDemoWorkspace", () => {
     expect(wsRows).toHaveLength(1);
     expect(wsRows[0].name).toBe("Demo Workspace");
 
-    // One board, with the okr_sprint template (5 lists).
+    // Default `demo` mode now funnels through the rich seed (see
+    // actions/seed.ts), which creates multiple boards, sprints, and
+    // ~50 cards across types. We assert invariants instead of exact
+    // counts so cosmetic seed tweaks don't churn this test.
     const boardRows = await dbAsUser(u.jwt, async (tx) =>
       tx.select().from(boards).where(eq(boards.workspaceId, workspaceId)),
     );
-    expect(boardRows).toHaveLength(1);
-    const board = boardRows[0];
-    expect(board.title).toBe("Demo board");
+    expect(boardRows.length).toBeGreaterThanOrEqual(1);
+    const okrBoard = boardRows.find((b) => b.title === "Product OKRs") ?? boardRows[0];
 
     const listRows = await dbAsUser(u.jwt, async (tx) =>
-      tx.select().from(lists).where(eq(lists.boardId, board.id)),
+      tx.select().from(lists).where(eq(lists.boardId, okrBoard.id)),
     );
-    expect(listRows).toHaveLength(5);
+    expect(listRows.length).toBeGreaterThanOrEqual(5);
 
-    // 5 demo cards with mixed types.
     const cardRows = await dbAsUser(u.jwt, async (tx) =>
-      tx.select().from(cards).where(eq(cards.boardId, board.id)),
+      tx.select().from(cards).where(eq(cards.boardId, okrBoard.id)),
     );
-    expect(cardRows).toHaveLength(5);
-    const types = cardRows.map((c) => c.type).sort();
-    expect(types).toEqual(["bug", "epic", "story", "subtask", "task"]);
+    expect(cardRows.length).toBeGreaterThanOrEqual(5);
+    const types = new Set(cardRows.map((c) => c.type));
+    expect(types.has("epic")).toBe(true);
+    expect(types.has("story")).toBe(true);
 
-    // One sprint.
     const sprintRows = await dbAsUser(u.jwt, async (tx) =>
       tx.select().from(sprints).where(eq(sprints.workspaceId, workspaceId)),
     );
-    expect(sprintRows).toHaveLength(1);
-    expect(sprintRows[0].name).toBe("Demo Sprint 1");
+    expect(sprintRows.length).toBeGreaterThanOrEqual(1);
 
-    // 4 cards assigned to the sprint (story, subtask, bug, task — epic stays out).
-    const assigned = cardRows.filter(
-      (c) => c.sprintId === sprintRows[0].id,
-    );
-    expect(assigned).toHaveLength(4);
-
-    // One component on the board.
     const compRows = await dbAsUser(u.jwt, async (tx) =>
-      tx.select().from(components).where(eq(components.boardId, board.id)),
+      tx.select().from(components).where(eq(components.boardId, okrBoard.id)),
     );
-    expect(compRows).toHaveLength(1);
-    expect(compRows[0].name).toBe("Frontend");
+    expect(compRows.length).toBeGreaterThanOrEqual(1);
 
-    // One version in the workspace.
     const verRows = await dbAsUser(u.jwt, async (tx) =>
       tx.select().from(versions).where(eq(versions.workspaceId, workspaceId)),
     );
-    expect(verRows).toHaveLength(1);
-    expect(verRows[0].name).toBe("v1.0");
+    expect(verRows.length).toBeGreaterThanOrEqual(1);
 
-    // One personal dashboard with 3 gadgets.
     const dashRows = await dbAsUser(u.jwt, async (tx) =>
       tx.select().from(dashboards).where(eq(dashboards.ownerId, u.id)),
     );
     expect(dashRows.length).toBeGreaterThanOrEqual(1);
-    const demoDash = dashRows.find((d) => d.name === "Demo dashboard");
-    expect(demoDash).toBeTruthy();
-
+    const someDash = dashRows[0];
     const gadgetRows = await dbAsUser(u.jwt, async (tx) =>
-      tx.select().from(gadgets).where(eq(gadgets.dashboardId, demoDash!.id)),
+      tx.select().from(gadgets).where(eq(gadgets.dashboardId, someDash.id)),
     );
-    expect(gadgetRows).toHaveLength(3);
-    const gTypes = gadgetRows.map((g) => g.type).sort();
-    expect(gTypes).toEqual(["count", "markdown_note", "velocity"]);
+    expect(gadgetRows.length).toBeGreaterThanOrEqual(1);
   });
 });

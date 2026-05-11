@@ -18,7 +18,7 @@ const card = (over: Partial<RoadmapCard> = {}): RoadmapCard => ({
 });
 
 describe("groupByEpic", () => {
-  it("creates one lane per epic + Uncategorized for orphan stories", () => {
+  it("creates one lane per epic + a self-lane per orphan story", () => {
     const epic1 = card({
       id: "e1",
       title: "Epic A",
@@ -31,9 +31,10 @@ describe("groupByEpic", () => {
     expect(lanes.find((l) => l.id === "e1")?.cards.map((c) => c.id)).toEqual([
       "s1",
     ]);
-    expect(
-      lanes.find((l) => l.id === "uncategorized")?.cards.map((c) => c.id),
-    ).toEqual(["s2"]);
+    // Orphans now get their OWN lane (id = card id, headerCard = self).
+    const orphanLane = lanes.find((l) => l.id === "s2");
+    expect(orphanLane?.headerCard?.id).toBe("s2");
+    expect(orphanLane?.cards).toEqual([]);
   });
 
   it("includes the epic itself as a header bar (own card if dates set)", () => {
@@ -56,12 +57,12 @@ describe("groupByEpic", () => {
     expect(lane.headerCard?.id).toBe("e1");
   });
 
-  it("orders epic lanes alphabetically by title with Uncategorized last", () => {
+  it("orders epic lanes alphabetically by title with orphan self-lanes last", () => {
     const epicB = card({ id: "eb", title: "Beta", type: "epic" });
     const epicA = card({ id: "ea", title: "Alpha", type: "epic" });
-    const orphan = card({ id: "s1", parentCardId: null });
+    const orphan = card({ id: "s1", title: "Orphan", parentCardId: null });
     const lanes = groupByEpic([orphan, epicB, epicA]);
-    expect(lanes.map((l) => l.id)).toEqual(["ea", "eb", "uncategorized"]);
+    expect(lanes.map((l) => l.id)).toEqual(["ea", "eb", "s1"]);
   });
 
   it("does not emit the Uncategorized lane when there are no orphan stories", () => {
@@ -71,14 +72,14 @@ describe("groupByEpic", () => {
     expect(lanes.map((l) => l.id)).toEqual(["ea"]);
   });
 
-  it("epic lanes have kind=epic and uncategorized has kind=uncategorized", () => {
+  it("epic lanes and orphan self-lanes both use kind=epic", () => {
     const epicA = card({ id: "ea", title: "Alpha", type: "epic" });
     const orphan = card({ id: "s1", parentCardId: null });
     const lanes = groupByEpic([epicA, orphan]);
     expect(lanes.find((l) => l.id === "ea")?.kind).toBe("epic");
-    expect(lanes.find((l) => l.id === "uncategorized")?.kind).toBe(
-      "uncategorized",
-    );
+    // Orphans get their own lane now; same kind so renderer treats them
+    // identically (single-row lane with header bar).
+    expect(lanes.find((l) => l.id === "s1")?.kind).toBe("epic");
   });
 });
 

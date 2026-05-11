@@ -7,6 +7,7 @@ import {
 import { updateCard } from "@/actions/cards";
 import { useBoardStore } from "@/stores/board-store";
 import { toast } from "sonner";
+import { undoBus } from "@/lib/undo-bus";
 import {
   Mountain, BookOpen, Square, CheckSquare, Bug, ChevronDown,
 } from "lucide-react";
@@ -42,9 +43,24 @@ export function TypePicker({ cardId, type, parentCardId }: { cardId: string; typ
       toast.error("Pick a parent first to make this a sub-task.");
       return;
     }
+    const prev = type as CardType;
     updateCardLocal(cardId, { type: next });
     start(async () => {
-      try { await updateCard({ id: cardId, type: next }); }
+      try {
+        await updateCard({ id: cardId, type: next });
+        undoBus.push({
+          message: "Card type updated",
+          undo: async () => {
+            updateCardLocal(cardId, { type: prev });
+            try {
+              await updateCard({ id: cardId, type: prev });
+            } catch (err) {
+              updateCardLocal(cardId, { type: next });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
+      }
       catch (err) {
         updateCardLocal(cardId, { type });
         toast.error((err as Error).message);

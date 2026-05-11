@@ -27,33 +27,7 @@
 // helpers, and Playwright's test discovery doesn't reach across .spec
 // boundaries cleanly.
 
-import { test, expect, request as pwRequest, type Page } from "@playwright/test";
-
-const MAILPIT = "http://127.0.0.1:54324";
-
-async function fetchConfirmLink(email: string): Promise<string> {
-  const api = await pwRequest.newContext({ baseURL: MAILPIT });
-  for (let i = 0; i < 30; i++) {
-    const list = await api.get(
-      `/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
-    );
-    if (list.ok()) {
-      const data = await list.json();
-      if (data.messages && data.messages.length > 0) {
-        const id = data.messages[0].ID;
-        const detail = await api.get(`/api/v1/message/${id}`);
-        const msg = await detail.json();
-        const body: string = msg.HTML || msg.Text || "";
-        const m =
-          body.match(/href="([^"]*\/auth\/v1\/verify[^"]*)"/) ??
-          body.match(/(https?:\/\/[^\s"<>]+\/auth\/v1\/verify[^\s"<>]+)/);
-        if (m) return m[1].replace(/&amp;/g, "&");
-      }
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error(`no email arrived for ${email}`);
-}
+import { test, expect, type Page } from "@playwright/test";
 
 async function signupAndLandOnWorkspace(
   page: Page,
@@ -202,9 +176,8 @@ function addDays(d: Date, n: number): Date {
 // using its row handle, reload, and assert the new lane order persists.
 // ---------------------------------------------------------------------------
 
-// FIXME: needs triage after recent UI/seed/onboarding changes (Plan #16b post-rebrand).
 
-test.fixme("G8.1 row reorder persists across reload", async ({ page }) => {
+test("G8.1 row reorder persists across reload", async ({ page }) => {
   test.setTimeout(120_000);
   const { workspaceId } = await signupAndLandOnWorkspace(page, "g81");
   await (async () => { try { await page.goto(`/w/${workspaceId}/boards`); } catch { await page.goto(`/w/${workspaceId}/boards`, { waitUntil: "domcontentloaded" }).catch(() => {}); } })();
@@ -305,8 +278,7 @@ test.fixme("G8.1 row reorder persists across reload", async ({ page }) => {
 // range.
 // ---------------------------------------------------------------------------
 
-// FIXME: post-rebrand triage (Plan #16b).
-test.fixme("G8.2 reparent across epics via vertical bar drag", async ({ page }) => {
+test("G8.2 reparent across epics via vertical bar drag", async ({ page }) => {
   test.setTimeout(120_000);
   const { workspaceId } = await signupAndLandOnWorkspace(page, "g82");
   await (async () => { try { await page.goto(`/w/${workspaceId}/boards`); } catch { await page.goto(`/w/${workspaceId}/boards`, { waitUntil: "domcontentloaded" }).catch(() => {}); } })();
@@ -419,8 +391,7 @@ test.fixme("G8.2 reparent across epics via vertical bar drag", async ({ page }) 
 // Submit → bar appears in the painted slot.
 // ---------------------------------------------------------------------------
 
-// FIXME: post-rebrand triage (Plan #16b).
-test.fixme("G8.3 drag-paint on empty canvas opens prefilled new-card dialog", async ({
+test("G8.3 drag-paint on empty canvas opens prefilled new-card dialog", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -521,8 +492,7 @@ async function dismissTourIfPresent(page: Page) {
   }
 }
 
-// FIXME: post-rebrand triage (Plan #16b).
-test.fixme("G8.4 dragging bar into priority gutter band sets priority", async ({
+test("G8.4 dragging bar into priority gutter band sets priority", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -622,8 +592,7 @@ test.fixme("G8.4 dragging bar into priority gutter band sets priority", async ({
 // bar's edit-dates dialog (testid `roadmap-bar-dates-start`) post-drag.
 // ---------------------------------------------------------------------------
 
-// FIXME: post-rebrand triage (Plan #16b).
-test.fixme("G8.5 dragging start edge near a blocker target snaps exactly", async ({
+test("G8.5 dragging start edge near a blocker target snaps exactly", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -741,8 +710,7 @@ test.fixme("G8.5 dragging start edge near a blocker target snaps exactly", async
 // (under the target epic's lane).
 // ---------------------------------------------------------------------------
 
-// FIXME: post-rebrand triage (Plan #16b).
-test.fixme("G8.6 dragging the NEW CARD chip onto an epic row creates a child", async ({
+test("G8.6 dragging the NEW CARD chip onto an epic row creates a child", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -848,8 +816,7 @@ test.fixme("G8.6 dragging the NEW CARD chip onto an epic row creates a child", a
 // new-card dialog with no prefill, matching the pre-G7 click behavior.
 // ---------------------------------------------------------------------------
 
-// FIXME: post-rebrand triage (Plan #16b).
-test.fixme("G8.7 chip click without drag opens empty new-card dialog", async ({
+test("G8.7 chip click without drag opens empty new-card dialog", async ({
   page,
 }) => {
   test.setTimeout(60_000);

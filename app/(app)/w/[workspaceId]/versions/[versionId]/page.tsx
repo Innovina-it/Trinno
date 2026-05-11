@@ -54,7 +54,7 @@ export default async function VersionDetailPage({
   });
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10 space-y-10">
+    <div className="mx-auto max-w-5xl px-3 sm:px-4 md:px-6 py-6 md:py-10 space-y-10">
       <header className="space-y-3 border-b border-hairline pb-6">
         <Link
           href={`/w/${workspaceId}/versions`}

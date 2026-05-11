@@ -1,14 +1,41 @@
 "use client";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { WorkloadCard, WorkloadProfile } from "@/lib/queries/workload";
 import { useWorkloadSync } from "@/hooks/use-workload-sync";
+import { Select } from "@/components/ui/select";
+import { bucketsBetween, fillBuckets } from "@/lib/workload/buckets";
 import {
   WorkloadToolbar,
+  type LanesMode,
   type RangePreset,
   type SortKind,
 } from "./workload-toolbar";
 import { WorkloadBar } from "./workload-bar";
+import { useWorkloadDrag } from "./use-workload-drag";
+
+// 40h/week capacity line on the per-lane histogram. Anything above this
+// is treated as over-allocation: the bucket bar tints magenta and the
+// lane label gets an "OVER" chip.
+const WEEKLY_CAPACITY_MIN = 2400;
+const HISTO_HEIGHT = 16;
+
+type PriorityFilter = "all" | "p0" | "p1" | "p2" | "p3" | "p4";
+type CompletedFilter = "hide" | "show";
+
+const PRIORITY_VALUES: PriorityFilter[] = ["all", "p0", "p1", "p2", "p3", "p4"];
+
+function parsePriority(v: string | null): PriorityFilter {
+  if (v && (PRIORITY_VALUES as string[]).includes(v)) return v as PriorityFilter;
+  return "all";
+}
+function parseCompleted(v: string | null): CompletedFilter {
+  return v === "show" ? "show" : "hide";
+}
+function parseLanesMode(v: string | null): LanesMode {
+  return v === "workspace" ? "workspace" : "user";
+}
 
 const MS_DAY = 86_400_000;
 const LANE_LABEL_WIDTH = 200;
@@ -86,11 +113,47 @@ export function WorkloadView({
 }) {
   useWorkloadSync();
 
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [wsFilter, setWsFilter] = useState("");
   const [sprintFilter, setSprintFilter] = useState("");
   const [rangePreset, setRangePreset] = useState<RangePreset>("month");
   const PX_PER_DAY = PX_PER_DAY_BY_RANGE[rangePreset];
   const [sortKind, setSortKind] = useState<SortKind>("peak");
+
+  // Priority + completed filters live in the URL for shareability.
+  const priorityFilter: PriorityFilter = parsePriority(
+    searchParams.get("prio"),
+  );
+  const completedFilter: CompletedFilter = parseCompleted(
+    searchParams.get("done"),
+  );
+  const lanesMode: LanesMode = parseLanesMode(searchParams.get("lanes"));
+
+  const writeSearchParam = useCallback(
+    (key: string, value: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === null || value === "") params.delete(key);
+      else params.set(key, value);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [searchParams, pathname, router],
+  );
+
+  function setPriorityFilter(next: PriorityFilter) {
+    writeSearchParam("prio", next === "all" ? null : next);
+  }
+  function setCompletedFilter(next: CompletedFilter) {
+    // Default = "hide", so only persist when "show".
+    writeSearchParam("done", next === "show" ? "show" : null);
+  }
+  function setLanesMode(next: LanesMode) {
+    // Default = "user", so only persist when "workspace".
+    writeSearchParam("lanes", next === "workspace" ? "workspace" : null);
+  }
 
   const today = useMemo(() => startOfDayUtc(new Date()), []);
   const { start: rangeStart, end: rangeEnd } = useMemo(
@@ -100,15 +163,44 @@ export function WorkloadView({
   const totalDays = dayDiff(rangeEnd, rangeStart) + 1;
   const gridWidth = totalDays * PX_PER_DAY;
 
+  // Drag-to-reschedule. The hook owns pointer listeners + an override
+  // map so the active drag renders optimistically; on pointerup it
+  // calls updateCard() and the realtime echo (useWorkloadSync) will
+  // rerender with the saved span.
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const drag = useWorkloadDrag(scrollerRef, PX_PER_DAY);
+
+  // Apply optimistic overrides on top of server-provided cards so
+  // packing, histogram math, and bar positions all reflect the
+  // in-flight drag.
+  const cardsWithOverrides = useMemo(() => {
+    if (drag.overrides.size === 0) return cards;
+    return cards.map((c) => {
+      const o = drag.overrides.get(c.id);
+      if (!o) return c;
+      return { ...c, startDate: o.startDate, targetDate: o.targetDate };
+    });
+  }, [cards, drag.overrides]);
+
   const filtered = useMemo(() => {
-    return cards.filter((c) => {
+    return cardsWithOverrides.filter((c) => {
       if (wsFilter && c.workspaceId !== wsFilter) return false;
       if (sprintFilter && c.sprintId !== sprintFilter) return false;
+      if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
+      if (completedFilter === "hide" && c.completedAt != null) return false;
       // Visible if span intersects range.
       if (c.targetDate < rangeStart || c.startDate > rangeEnd) return false;
       return true;
     });
-  }, [cards, wsFilter, sprintFilter, rangeStart, rangeEnd]);
+  }, [
+    cardsWithOverrides,
+    wsFilter,
+    sprintFilter,
+    priorityFilter,
+    completedFilter,
+    rangeStart,
+    rangeEnd,
+  ]);
 
   const workspaces = useMemo(() => {
     const m = new Map<string, string>();
@@ -134,35 +226,112 @@ export function WorkloadView({
     return m;
   }, [profiles]);
 
-  const byUser = useMemo(() => {
+  // Group filtered cards by lane key. In user mode each card lands in
+  // exactly the lane it was emitted for (owner / member rows, see
+  // listWorkload). In workspace mode we collapse to one lane per
+  // workspace, deduping per cardId so a card shared by two members
+  // doesn't double-count toward the lane's load or histogram.
+  const grouped = useMemo(() => {
     const m = new Map<string, WorkloadCard[]>();
-    for (const c of filtered) {
-      const arr = m.get(c.userId);
-      if (arr) arr.push(c);
-      else m.set(c.userId, [c]);
+    if (lanesMode === "workspace") {
+      const seen = new Map<string, Set<string>>();
+      for (const c of filtered) {
+        let cardSet = seen.get(c.workspaceId);
+        if (!cardSet) {
+          cardSet = new Set();
+          seen.set(c.workspaceId, cardSet);
+        }
+        if (cardSet.has(c.id)) continue;
+        cardSet.add(c.id);
+        const arr = m.get(c.workspaceId);
+        if (arr) arr.push(c);
+        else m.set(c.workspaceId, [c]);
+      }
+    } else {
+      for (const c of filtered) {
+        const arr = m.get(c.userId);
+        if (arr) arr.push(c);
+        else m.set(c.userId, [c]);
+      }
     }
     return m;
-  }, [filtered]);
+  }, [filtered, lanesMode]);
 
   const lanes = useMemo(() => {
-    const arr = Array.from(byUser.entries()).map(([uid, ucards]) => {
-      const packed = packLanes(ucards);
+    const arr = Array.from(grouped.entries()).map(([key, lcards]) => {
+      const packed = packLanes(lcards);
       const rows = Math.max(1, ...packed.map((p) => p.row + 1));
-      const profile = profileById.get(uid);
+      // Per-lane week buckets across the visible range. Reuses the pure
+      // helpers in lib/workload/buckets.ts.
+      const buckets = fillBuckets(
+        bucketsBetween(rangeStart, rangeEnd),
+        lcards.map((c) => ({
+          id: c.id,
+          startDate: c.startDate,
+          targetDate: c.targetDate,
+          estimateMin: c.estimateMin,
+        })),
+      );
+      // Capacity line is meaningful only when at least one card has a
+      // real estimate. Otherwise the histogram uses synthetic "card-frac"
+      // units that don't correspond to minutes.
+      const hasEstimate = lcards.some((c) => c.estimateMin != null);
+      // Capacity multiplier: in user mode it's 1× the weekly cap; in
+      // workspace mode it scales with the number of distinct users
+      // touching cards in this workspace within the visible range, so a
+      // 5-person workspace gets a 5×40h ceiling.
+      const distinctUsers =
+        lanesMode === "workspace"
+          ? new Set(lcards.map((c) => c.userId)).size
+          : 1;
+      const laneCapacity = WEEKLY_CAPACITY_MIN * Math.max(1, distinctUsers);
+      const isOver = hasEstimate
+        ? buckets.some((b) => b.load > laneCapacity)
+        : false;
+      // Peak load drives histogram bar heights. Floor at the capacity
+      // line so the threshold is always rendered at a sensible y-coord
+      // even when the lane is underloaded.
+      const peakLoad = Math.max(
+        laneCapacity,
+        ...buckets.map((b) => b.load),
+        1,
+      );
+      let name: string;
+      let handle: string | null = null;
+      let avatarUrl: string | null = null;
+      if (lanesMode === "workspace") {
+        // Lane label uses the workspaceName captured on any card in the
+        // group (all cards in a lane share workspaceId, so any will do).
+        name = lcards[0]?.workspaceName ?? "Unknown workspace";
+      } else {
+        const profile = profileById.get(key);
+        name = profile?.displayName ?? "Unknown";
+        handle = profile?.handle ?? null;
+        avatarUrl = profile?.avatarUrl ?? null;
+      }
       return {
-        userId: uid,
-        name: profile?.displayName ?? "Unknown",
-        handle: profile?.handle ?? null,
-        avatarUrl: profile?.avatarUrl ?? null,
-        cards: ucards,
+        laneKey: key,
+        // Keep `userId` for the user-mode owner-link below; in workspace
+        // mode this is unused.
+        userId: lanesMode === "user" ? key : null,
+        name,
+        handle,
+        avatarUrl,
+        cards: lcards,
         packed,
         rows,
+        buckets,
+        hasEstimate,
+        isOver,
+        peakLoad,
+        laneCapacity,
+        distinctUsers,
         peak: Math.max(
-          ...ucards.map((c) =>
+          ...lcards.map((c) =>
             c.estimateMin ?? (c.storyPoints ? c.storyPoints * 60 : 60),
           ),
         ),
-        load: ucards.reduce(
+        load: lcards.reduce(
           (acc, c) =>
             acc +
             (c.estimateMin ?? (c.storyPoints ? c.storyPoints * 60 : 60)),
@@ -173,7 +342,7 @@ export function WorkloadView({
     if (sortKind === "peak") arr.sort((a, b) => b.load - a.load);
     else arr.sort((a, b) => a.name.localeCompare(b.name));
     return arr;
-  }, [byUser, profileById, sortKind]);
+  }, [grouped, profileById, sortKind, rangeStart, rangeEnd, lanesMode]);
 
   function xFor(d: Date): number {
     const clamped = d < rangeStart ? rangeStart : d > rangeEnd ? rangeEnd : d;
@@ -210,7 +379,46 @@ export function WorkloadView({
         setRangePreset={setRangePreset}
         sortKind={sortKind}
         setSortKind={setSortKind}
+        lanesMode={lanesMode}
+        setLanesMode={setLanesMode}
       />
+
+      {/* Filter chip row — priority + completed. Persisted in URL params
+          (?prio, ?done) for shareability. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <label className="flex items-center gap-2">
+          <span className="mono-meta-sm text-fg-faint">PRIORITY</span>
+          <Select
+            value={priorityFilter}
+            onValueChange={(v) => setPriorityFilter(v as PriorityFilter)}
+            data-testid="workload-priority-filter"
+            options={[
+              { value: "all", label: "ALL" },
+              { value: "p0", label: "P0" },
+              { value: "p1", label: "P1" },
+              { value: "p2", label: "P2" },
+              { value: "p3", label: "P3" },
+              { value: "p4", label: "P4" },
+            ]}
+            size="sm"
+            className="min-w-24"
+          />
+        </label>
+        <label className="flex items-center gap-2">
+          <span className="mono-meta-sm text-fg-faint">COMPLETED</span>
+          <Select
+            value={completedFilter}
+            onValueChange={(v) => setCompletedFilter(v as CompletedFilter)}
+            data-testid="workload-completed-filter"
+            options={[
+              { value: "hide", label: "HIDE COMPLETED" },
+              { value: "show", label: "SHOW COMPLETED" },
+            ]}
+            size="sm"
+            className="min-w-40"
+          />
+        </label>
+      </div>
 
       {lanes.length === 0 ? (
         <div className="rounded-xl border border-dashed border-hairline-hi p-12 text-center">
@@ -222,7 +430,11 @@ export function WorkloadView({
         </div>
       ) : (
         <div className="rounded-xl border border-hairline overflow-hidden">
-          <div className="overflow-x-auto" style={{ position: "relative" }}>
+          <div
+            ref={scrollerRef}
+            className="overflow-x-auto"
+            style={{ position: "relative" }}
+          >
             <div style={{ width: LANE_LABEL_WIDTH + gridWidth, minWidth: "100%" }}>
               {/* Month strip */}
               <div
@@ -233,7 +445,7 @@ export function WorkloadView({
                   className="shrink-0 border-r border-hairline px-3 mono-meta-sm text-fg-faint flex items-center"
                   style={{ width: LANE_LABEL_WIDTH }}
                 >
-                  PERSON
+                  {lanesMode === "workspace" ? "WORKSPACE" : "PERSON"}
                 </div>
                 <div className="relative flex-1" style={{ width: gridWidth }}>
                   {monthRuns(dayCells).map((run) => {
@@ -317,43 +529,109 @@ export function WorkloadView({
 
               {/* Lanes */}
               {lanes.map((u) => {
-                const laneHeight =
+                const barsHeight =
                   u.rows * LANE_BAR_HEIGHT + (u.rows - 1) * 4 + LANE_PADDING_Y * 2;
-                return (
-                  <div
-                    key={u.userId}
-                    className="flex border-b border-hairline last:border-b-0 hover:bg-[color:var(--surface)] transition-colors"
-                    data-testid="workload-lane"
-                    data-user-id={u.userId}
-                  >
-                    <Link
-                      href={`/all-tasks?owner=${u.userId}`}
-                      className="shrink-0 border-r border-hairline px-3 py-2 flex items-center gap-2.5 hover:bg-[color:var(--surface-strong)] transition-colors"
-                      style={{ width: LANE_LABEL_WIDTH }}
-                      title={`Open ${u.name}'s tasks`}
+                const laneHeight = HISTO_HEIGHT + barsHeight;
+                // y-coord of the capacity line, measured from the top of
+                // the histogram strip. In user mode this is 40h; in
+                // workspace mode it scales with the number of distinct
+                // users in that workspace touching the timeline.
+                const capacityY =
+                  HISTO_HEIGHT - (u.laneCapacity / u.peakLoad) * HISTO_HEIGHT;
+                // Tooltip surfaces the specific weeks that broke
+                // capacity so the chip becomes a one-glance diagnostic
+                // instead of a generic "you're over" badge. Format
+                // matches the histogram label convention (e.g. W18).
+                const overWeeksLabel = u.buckets
+                  .filter((b) => b.load > u.laneCapacity)
+                  .map((b) => `W${b.isoWeek}`)
+                  .join(", ");
+                const overTitle = (() => {
+                  const base =
+                    lanesMode === "workspace"
+                      ? `At least one week exceeds ${u.distinctUsers}× 40h capacity`
+                      : "At least one week exceeds 40h capacity";
+                  return overWeeksLabel
+                    ? `${base}: ${overWeeksLabel}`
+                    : base;
+                })();
+                const labelInner = (
+                  <>
+                    <span
+                      aria-hidden
+                      className="size-7 shrink-0 rounded-full bg-[color:var(--surface-strong)] border border-hairline-hi text-fg-muted text-[10px] font-mono flex items-center justify-center uppercase tabular-nums"
                     >
-                      <span
-                        aria-hidden
-                        className="size-7 shrink-0 rounded-full bg-[color:var(--surface-strong)] border border-hairline-hi text-fg-muted text-[10px] font-mono flex items-center justify-center uppercase tabular-nums"
-                      >
-                        {u.name
-                          .split(/\s+/)
-                          .map((s) => s[0])
-                          .join("")
-                          .slice(0, 2) || "?"}
-                      </span>
-                      <span className="min-w-0 flex-1">
+                      {u.name
+                        .split(/\s+/)
+                        .map((s) => s[0])
+                        .join("")
+                        .slice(0, 2) || "?"}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 min-w-0">
                         <span className="block text-sm font-medium text-fg truncate">
                           {u.name}
                         </span>
-                        <span className="block mono-meta-sm text-fg-faint truncate">
-                          {u.cards.length}{" "}
-                          {u.cards.length === 1 ? "CARD" : "CARDS"}
-                          {u.load > 0 &&
-                            ` · ${u.load >= 60 ? `${Math.round(u.load / 60)}H` : `${u.load}M`}`}
-                        </span>
+                        {u.isOver && (
+                          <span
+                            data-testid="workload-lane-over-chip"
+                            className="shrink-0 mono-meta-sm px-1 py-px rounded text-[10px] font-medium tracking-wide"
+                            style={{
+                              background:
+                                "color-mix(in oklab, var(--accent-magenta) 28%, transparent)",
+                              color: "var(--accent-magenta)",
+                              border:
+                                "1px solid color-mix(in oklab, var(--accent-magenta) 55%, transparent)",
+                            }}
+                            title={overTitle}
+                          >
+                            OVER
+                          </span>
+                        )}
                       </span>
-                    </Link>
+                      <span className="block mono-meta-sm text-fg-faint truncate">
+                        {u.cards.length}{" "}
+                        {u.cards.length === 1 ? "CARD" : "CARDS"}
+                        {lanesMode === "workspace" && u.distinctUsers > 0 &&
+                          ` · ${u.distinctUsers} ${u.distinctUsers === 1 ? "USER" : "USERS"}`}
+                        {u.load > 0 &&
+                          ` · ${u.load >= 60 ? `${Math.round(u.load / 60)}H` : `${u.load}M`}`}
+                      </span>
+                    </span>
+                  </>
+                );
+                return (
+                  <div
+                    key={u.laneKey}
+                    className="flex border-b border-hairline last:border-b-0 hover:bg-[color:var(--surface)] transition-colors"
+                    data-testid="workload-lane"
+                    data-lane-mode={lanesMode}
+                    data-lane-key={u.laneKey}
+                    data-user-id={u.userId ?? undefined}
+                    data-workspace-id={
+                      lanesMode === "workspace" ? u.laneKey : undefined
+                    }
+                    data-over-capacity={u.isOver ? "true" : "false"}
+                  >
+                    {lanesMode === "workspace" ? (
+                      <Link
+                        href={`/w/${u.laneKey}/all-tasks`}
+                        className="shrink-0 border-r border-hairline px-3 py-2 flex items-center gap-2.5 hover:bg-[color:var(--surface-strong)] transition-colors"
+                        style={{ width: LANE_LABEL_WIDTH }}
+                        title={`Open ${u.name}'s tasks`}
+                      >
+                        {labelInner}
+                      </Link>
+                    ) : (
+                      <Link
+                        href={`/all-tasks?owner=${u.userId}`}
+                        className="shrink-0 border-r border-hairline px-3 py-2 flex items-center gap-2.5 hover:bg-[color:var(--surface-strong)] transition-colors"
+                        style={{ width: LANE_LABEL_WIDTH }}
+                        title={`Open ${u.name}'s tasks`}
+                      >
+                        {labelInner}
+                      </Link>
+                    )}
                     <div
                       className="relative flex-1"
                       style={{ width: gridWidth, height: laneHeight }}
@@ -390,18 +668,112 @@ export function WorkloadView({
                           />
                         );
                       })}
-                      {u.packed.map(({ card, row }) => (
-                        <WorkloadBar
-                          key={`${card.id}-${card.userId}`}
-                          card={card}
-                          x={xFor(card.startDate)}
-                          width={widthFor(card)}
-                          top={
-                            LANE_PADDING_Y + row * (LANE_BAR_HEIGHT + 4)
-                          }
-                          height={LANE_BAR_HEIGHT}
-                        />
-                      ))}
+                      {/* Per-lane histogram strip — sits atop the bars and
+                          shows weekly load. Bars tint magenta when they
+                          exceed 40h, otherwise violet. */}
+                      <div
+                        className="absolute inset-x-0 top-0 border-b border-hairline/50"
+                        style={{ height: HISTO_HEIGHT }}
+                        data-testid="workload-lane-histogram"
+                      >
+                        {u.buckets.map((b) => {
+                          const left =
+                            ((b.start.getTime() - rangeStart.getTime()) /
+                              MS_DAY) *
+                            PX_PER_DAY;
+                          const width = 7 * PX_PER_DAY;
+                          if (b.load <= 0) return null;
+                          const h = Math.max(
+                            1,
+                            (b.load / u.peakLoad) * (HISTO_HEIGHT - 2),
+                          );
+                          const isBucketOver =
+                            u.hasEstimate && b.load > u.laneCapacity;
+                          return (
+                            <span
+                              key={`${u.laneKey}-${b.isoYear}-${b.isoWeek}`}
+                              aria-hidden
+                              data-over={isBucketOver ? "true" : "false"}
+                              className="absolute bottom-0"
+                              style={{
+                                left: left + 1,
+                                width: Math.max(2, width - 2),
+                                height: h,
+                                background: isBucketOver
+                                  ? "color-mix(in oklab, var(--accent-magenta) 55%, transparent)"
+                                  : "color-mix(in oklab, var(--accent-violet) 45%, transparent)",
+                              }}
+                              title={`Week ${b.isoWeek}: ${
+                                u.hasEstimate
+                                  ? `${Math.round(b.load)}m (${(b.load / 60).toFixed(1)}h)`
+                                  : `${b.load.toFixed(2)} card-frac`
+                              }`}
+                            />
+                          );
+                        })}
+                        {/* 40h capacity line — only drawn when at least
+                            one card in the lane has an estimate, since
+                            otherwise the histogram is in synthetic units
+                            and the threshold isn't comparable. */}
+                        {u.hasEstimate && capacityY >= 0 && (
+                          <span
+                            aria-hidden
+                            data-testid="workload-lane-capacity-line"
+                            className="absolute left-0 right-0 pointer-events-none"
+                            style={{
+                              top: capacityY,
+                              height: 1,
+                              borderTop:
+                                "1px dashed color-mix(in oklab, var(--accent-magenta) 60%, transparent)",
+                            }}
+                          />
+                        )}
+                      </div>
+                      {/* Card bars sit below the histogram strip. */}
+                      {u.packed.map(({ card, row }) => {
+                        const barTop =
+                          HISTO_HEIGHT +
+                          LANE_PADDING_Y +
+                          row * (LANE_BAR_HEIGHT + 4);
+                        const isActive =
+                          drag.activeTick !== null &&
+                          drag.activeTick.cardId === card.id;
+                        return (
+                          <Fragment key={`${card.id}-${card.userId}`}>
+                            <WorkloadBar
+                              card={card}
+                              x={xFor(card.startDate)}
+                              width={widthFor(card)}
+                              top={barTop}
+                              height={LANE_BAR_HEIGHT}
+                              onBeginDrag={(mode, e) =>
+                                drag.beginDrag(mode, e, card.id, {
+                                  startDate: card.startDate,
+                                  targetDate: card.targetDate,
+                                })
+                              }
+                              isDraggingActive={isActive}
+                              isAnyDragInFlight={drag.isDragging}
+                            />
+                            {isActive && drag.activeTick && (
+                              <span
+                                aria-hidden
+                                data-testid="workload-drag-tick"
+                                className="absolute pointer-events-none mono-meta-sm text-fg-faint tabular-nums whitespace-nowrap"
+                                style={{
+                                  left: xFor(card.startDate),
+                                  top: barTop + LANE_BAR_HEIGHT + 2,
+                                  zIndex: 26,
+                                }}
+                              >
+                                {drag.activeTick.startISO}
+                                {" → "}
+                                {drag.activeTick.targetISO}
+                              </span>
+                            )}
+                          </Fragment>
+                        );
+                      })}
                       {u.cards.length === 0 && (
                         <span className="absolute inset-0 flex items-center justify-center mono-meta-sm text-fg-faint">
                           NO LOAD THIS RANGE

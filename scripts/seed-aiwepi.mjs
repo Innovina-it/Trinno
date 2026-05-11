@@ -13,12 +13,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: join(__dirname, "..", ".env.local") });
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !anon || !service) throw new Error("missing supabase env");
+if (!url || !service) throw new Error("missing supabase env");
 
 const admin = createClient(url, service, { auth: { persistSession: false } });
-const browser = createClient(url, anon);
 
 const EMAIL = "aiwepi@local";
 const PASSWORD = "aiwepi-seed-2026";
@@ -58,14 +56,6 @@ async function update(table, id, patch) {
   const { data, error } = await admin.from(table).update(patch).eq("id", id).select();
   if (error) throw new Error(`UPDATE ${table}: ${error.message}`);
   return data;
-}
-
-function frac(prev, next) {
-  // Minimal fractional-indexing helper. We only ever append, so
-  // generating "a0", "a1", "a2"... is enough. Sequential calls within a
-  // list use string sort order.
-  const c = String.fromCharCode(97 + (frac.i = (frac.i ?? -1) + 1));
-  return `a${c}`;
 }
 
 const STATUS_LISTS = [

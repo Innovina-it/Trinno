@@ -1,5 +1,5 @@
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Instrument_Serif, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -34,6 +34,12 @@ export const metadata: Metadata = {
   description: "Internal workspace for boards, roadmap, and dashboards.",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -44,7 +50,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${jetbrainsMono.variable} ${instrumentSerif.variable}`}
     >
-      <body className="min-h-screen bg-background text-foreground antialiased font-sans">
+      <body className="min-h-dvh bg-background text-foreground antialiased font-sans">
         {children}
         <Toaster richColors />
       </body>

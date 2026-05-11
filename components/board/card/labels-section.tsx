@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useBoardStore } from "@/stores/board-store";
 import { createLabel, toggleCardLabel } from "@/actions/labels";
+import { undoBus } from "@/lib/undo-bus";
 
 const PALETTE = [
   "#61bd4f", // green
@@ -57,6 +58,8 @@ export function LabelsSection({ cardId }: { cardId: string }) {
 
   function onToggle(labelId: string) {
     const wasAttached = attachedIds.has(labelId);
+    const labelName =
+      labels.find((l) => l.id === labelId)?.name || "Label";
     // optimistic
     if (wasAttached) {
       removeCardLabel(cardId, labelId);
@@ -66,6 +69,20 @@ export function LabelsSection({ cardId }: { cardId: string }) {
     start(async () => {
       try {
         await toggleCardLabel({ cardId, labelId });
+        undoBus.push({
+          message: wasAttached ? `Removed ${labelName}` : `Added ${labelName}`,
+          undo: async () => {
+            if (wasAttached) addCardLabel({ cardId, labelId });
+            else removeCardLabel(cardId, labelId);
+            try {
+              await toggleCardLabel({ cardId, labelId });
+            } catch (err) {
+              if (wasAttached) removeCardLabel(cardId, labelId);
+              else addCardLabel({ cardId, labelId });
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
       } catch (err) {
         // rollback
         if (wasAttached) addCardLabel({ cardId, labelId });
