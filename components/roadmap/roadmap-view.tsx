@@ -588,12 +588,12 @@ export function RoadmapView({
   // For "fit" we compute it so 180 days fill the available canvas width.
   const effectivePpd = useMemo(() => {
     if (zoom !== "fit") return pixelsPerDay(zoom);
-    if (containerWidth === 0) return 8; // pre-mount fallback (matches quarter density)
-    // Subtract the lane-label panel width. LANE_LABEL_WIDTH_CSS is a CSS clamp
-    // expression, so we use 200px as a conservative runtime estimate (the actual
-    // rendered width is close to 18vw, always in [140, 240]).
-    const laneLabelW = 200;
-    return Math.max(2, (containerWidth - laneLabelW) / 180);
+    if (containerWidth === 0) return 8; // pre-mount fallback
+    // scrollerRef is `flex-1` after the lane-label panel, so its clientWidth
+    // already excludes the label panel. Divide directly by 180 days; no
+    // further subtraction needed (previous code double-subtracted, leaving
+    // ~200px empty on the right).
+    return Math.max(2, containerWidth / 180);
   }, [zoom, containerWidth]);
 
   const now = useMemo(() => new Date(), []);
