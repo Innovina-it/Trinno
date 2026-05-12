@@ -122,10 +122,6 @@ export function CardQuickView({
           >
             {card.title}
           </DialogTitle>
-          <p className="text-xs text-fg-faint">
-            {completed ? "Completed" : "Open"}. Read-only summary; use advanced
-            for edits.
-          </p>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -159,9 +155,8 @@ export function CardQuickView({
             </div>
           </div>
 
-          {/* PRIORITY + STATUS — two-column secondary row when present. */}
-          {(card.priority || true) && (
-            <div className="grid grid-cols-2 gap-3 text-xs">
+          {/* PRIORITY + STATUS — two-column row, always rendered. */}
+          <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="space-y-1">
                 <span className="mono-meta-sm text-fg-faint">PRIORITY</span>
                 <div className="flex h-[34px] items-center rounded-md border border-hairline bg-transparent px-2">
@@ -199,7 +194,6 @@ export function CardQuickView({
                 </div>
               </div>
             </div>
-          )}
 
           {/* START / TARGET — two-column date row, parallels new-card dialog. */}
           {(card.startDate || card.targetDate) && (
@@ -243,15 +237,15 @@ export function CardQuickView({
             className="space-y-1.5 rounded-md border border-hairline bg-[color:var(--surface)] p-2"
             data-testid="card-quick-view-assignees"
           >
-            <span className="mono-meta-sm text-fg-faint inline-flex items-center gap-1.5">
-              <Users className="size-3" aria-hidden />
-              ASSIGNEES
+            <div className="flex items-center gap-1.5">
+              <Users className="size-3 text-fg-faint" aria-hidden />
+              <span className="mono-meta-sm text-fg-faint">ASSIGNEES</span>
               {memberProfiles.length > 0 && (
-                <span className="text-fg-muted tabular-nums">
+                <span className="mono-meta-sm text-fg-muted tabular-nums">
                   ({memberProfiles.length})
                 </span>
               )}
-            </span>
+            </div>
             {memberProfiles.length > 0 ? (
               <ul className="flex flex-wrap gap-1">
                 {memberProfiles.map((p) => (
@@ -276,7 +270,7 @@ export function CardQuickView({
                 ))}
               </ul>
             ) : (
-              <span className="mono-meta-sm text-fg-faint">Unassigned</span>
+              <p className="mono-meta-sm text-fg-faint">Unassigned</p>
             )}
           </div>
 
