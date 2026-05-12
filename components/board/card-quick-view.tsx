@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Bug, CalendarClock, CircleDot, ListTodo, Mountain, Square, Users } from "lucide-react";
+import { BookOpen, Bug, CalendarClock, CircleDot, ListTodo, Mountain, Square } from "lucide-react";
+import { AssigneePicker } from "./assignee-picker";
 import {
   Dialog,
   DialogContent,
@@ -574,59 +575,23 @@ function CardQuickViewBody({
           </div>
         )}
 
-        {/* ASSIGNEES — toggleable chips when editing; otherwise the
-            assigned-only chip list. */}
-        <div
-          className="space-y-1.5 rounded-md border border-hairline bg-[color:var(--surface)] p-2"
-          data-testid="card-quick-view-assignees"
-        >
-          <div className="flex items-center gap-1.5">
-            <Users className="size-3 text-fg-faint" aria-hidden />
-            <span className="mono-meta-sm text-fg-faint">ASSIGNEES</span>
-            {memberProfiles.length > 0 && (
-              <span className="mono-meta-sm text-fg-muted tabular-nums">
-                ({memberProfiles.length})
-              </span>
-            )}
-          </div>
+        {/* ASSIGNEES — dropdown multi-select when editable; read-only chip
+            list otherwise. */}
+        <div className="space-y-1 text-xs">
+          <span className="mono-meta-sm text-fg-faint">ASSIGNEES</span>
           {membersEditable && memberPool.length > 0 ? (
-            <ul className="flex flex-wrap gap-1">
-              {memberPool.map((p) => {
-                const on = assignedIds.has(p.id);
-                return (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      onClick={() => void onToggleMember?.(p.id)}
-                      aria-pressed={on}
-                      data-user-id={p.id}
-                      data-assigned={on}
-                      data-testid="card-quick-view-member"
-                      className={[
-                        "inline-flex items-center gap-1.5 rounded-full border px-1.5 py-0.5 text-[10px] transition-colors",
-                        on
-                          ? "border-fg/40 bg-fg/10 text-fg"
-                          : "border-hairline bg-transparent text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)]",
-                      ].join(" ")}
-                    >
-                      <Avatar
-                        size="sm"
-                        className="rounded-none border border-current size-4"
-                      >
-                        <AvatarFallback className="rounded-none bg-transparent text-current text-[9px] tracking-widest">
-                          {p.displayName.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="normal-case tracking-normal">
-                        {p.displayName}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            <AssigneePicker
+              members={memberPool.map((p) => ({
+                id: p.id,
+                displayName: p.displayName,
+                avatarUrl: p.avatarUrl,
+              }))}
+              selected={assignedIds}
+              onToggle={(id) => void onToggleMember?.(id)}
+              testId="card-quick-view-assignees"
+            />
           ) : memberProfiles.length > 0 ? (
-            <ul className="flex flex-wrap gap-1">
+            <ul className="flex flex-wrap gap-1" data-testid="card-quick-view-assignees">
               {memberProfiles.map((p) => (
                 <li key={p.id}>
                   <span
@@ -649,7 +614,12 @@ function CardQuickViewBody({
               ))}
             </ul>
           ) : (
-            <p className="mono-meta-sm text-fg-faint">Unassigned</p>
+            <p
+              className="mono-meta-sm text-fg-faint"
+              data-testid="card-quick-view-assignees"
+            >
+              Unassigned
+            </p>
           )}
         </div>
 
@@ -699,7 +669,14 @@ function CardQuickViewBody({
         )}
       </div>
 
-      <DialogFooter>
+      <DialogFooter className="flex w-full items-center justify-between gap-2 sm:justify-between">
+        <Button
+          type="button"
+          onClick={openAdvanced}
+          data-testid="card-quick-view-open-advanced"
+        >
+          Open advanced settings
+        </Button>
         <Button
           type="button"
           variant="outline"
@@ -707,13 +684,6 @@ function CardQuickViewBody({
           data-testid="card-quick-view-close"
         >
           Close
-        </Button>
-        <Button
-          type="button"
-          onClick={openAdvanced}
-          data-testid="card-quick-view-open-advanced"
-        >
-          Open advanced settings
         </Button>
       </DialogFooter>
     </>

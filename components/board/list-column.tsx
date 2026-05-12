@@ -7,7 +7,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Archive, Trash2, MoreVertical, Check } from "lucide-react";
+import { Archive, Trash2, MoreVertical, Check, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { ListRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
@@ -22,7 +22,7 @@ import {
 import { undoBus } from "@/lib/undo-bus";
 import { errorBus } from "@/lib/errors/error-bus";
 import { CardTile } from "./card-tile";
-import { AddCardForm } from "./add-card-form";
+import { NewCardDialog } from "./new-card-dialog";
 
 // Plan #16b-γ-C (#3) — opt-in virtualization. We render at most this
 // many tiles up front; cards beyond fold behind a "Show all (+N)" chip
@@ -84,6 +84,7 @@ export function ListColumn({
 
   // Cap rendered tiles at VIRTUALIZE_THRESHOLD until the user opts in.
   const [showAll, setShowAll] = useState(false);
+  const [addCardOpen, setAddCardOpen] = useState(false);
   const overflowing = filtered.length > VIRTUALIZE_THRESHOLD && !showAll;
   const visibleCards = overflowing
     ? filtered.slice(0, VIRTUALIZE_THRESHOLD)
@@ -361,8 +362,22 @@ export function ListColumn({
         )}
       </div>
       <div className="border-t border-hairline px-2.5 py-2">
-        <AddCardForm listId={list.id} />
+        <button
+          type="button"
+          onClick={() => setAddCardOpen(true)}
+          data-testid="list-add-card"
+          className="w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-hairline bg-transparent px-2 py-1.5 mono-meta-sm text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)]"
+        >
+          <Plus className="size-3.5" aria-hidden />
+          Add card
+        </button>
       </div>
+      <NewCardDialog
+        open={addCardOpen}
+        onOpenChange={setAddCardOpen}
+        defaultBoard={boardId}
+        defaultList={list.id}
+      />
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { BookOpen, Bug, Mountain, Square, Users } from "lucide-react";
+import { BookOpen, Bug, Mountain, Square } from "lucide-react";
+import { AssigneePicker } from "./assignee-picker";
 import { createCard, updateCard } from "@/actions/cards";
 import { toggleCardMember } from "@/actions/card-members";
 import { useWorkspaceStore } from "@/stores/workspace-store";
@@ -14,7 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 
@@ -65,7 +65,7 @@ const TYPE_OPTIONS: TypeOption[] = [
   },
 ];
 
-export function RoadmapNewCardDialog({
+export function NewCardDialog({
   open,
   onOpenChange,
   defaultStart,
@@ -360,58 +360,20 @@ export function RoadmapNewCardDialog({
               />
             </label>
           </div>
-          {/* Assignee row — mirrors kanban add-card-form chip styling.
-              Stays collapsed when the workspace has no profiles to show; never
-              blocks card creation. Dense, clinical, no avatar gradients. */}
+          {/* Assignee row — dropdown multi-select. Collapses to a single
+              trigger button; users open it to check/uncheck members. */}
           {workspaceProfiles.length > 0 && (
-            <div
-              className="space-y-1.5 rounded-md border border-hairline bg-[color:var(--surface)] p-2"
-              data-testid="roadmap-new-card-assignees"
-            >
-              <div className="flex items-center gap-1.5">
-                <Users className="size-3 text-fg-faint" aria-hidden />
-                <span className="mono-meta-sm text-fg-faint">ASSIGNEES</span>
-                {assignees.size > 0 && (
-                  <span className="mono-meta-sm text-fg-muted tabular-nums">
-                    ({assignees.size})
-                  </span>
-                )}
-              </div>
-              <ul className="flex flex-wrap gap-1">
-                {workspaceProfiles.map((p) => {
-                  const on = assignees.has(p.id);
-                  return (
-                    <li key={p.id}>
-                      <button
-                        type="button"
-                        onClick={() => toggleAssignee(p.id)}
-                        aria-pressed={on}
-                        data-user-id={p.id}
-                        data-assigned={on}
-                        data-testid="roadmap-new-card-member"
-                        className={[
-                          "inline-flex items-center gap-1.5 rounded-full border px-1.5 py-0.5 text-[10px] transition-colors",
-                          on
-                            ? "border-fg/40 bg-fg/10 text-fg"
-                            : "border-hairline bg-transparent text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)]",
-                        ].join(" ")}
-                      >
-                        <Avatar
-                          size="sm"
-                          className="rounded-none border border-current size-4"
-                        >
-                          <AvatarFallback className="rounded-none bg-transparent text-current text-[9px] tracking-widest">
-                            {p.displayName.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="normal-case tracking-normal">
-                          {p.displayName}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+            <div className="space-y-1 text-xs">
+              <span className="mono-meta-sm text-fg-faint">ASSIGNEES</span>
+              <AssigneePicker
+                members={workspaceProfiles.map((p) => ({
+                  id: p.id,
+                  displayName: p.displayName,
+                }))}
+                selected={assignees}
+                onToggle={toggleAssignee}
+                testId="roadmap-new-card-assignees"
+              />
             </div>
           )}
         </div>

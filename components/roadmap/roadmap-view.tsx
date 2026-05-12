@@ -48,7 +48,7 @@ import {
   type CascadeAffectedCard,
 } from "./cascade-confirm-dialog";
 import { SprintOverlay } from "./sprint-overlay";
-import { RoadmapNewCardDialog } from "./new-card-dialog";
+import { NewCardDialog as RoadmapNewCardDialog } from "@/components/board/new-card-dialog";
 import { RoadmapFilterBar } from "./roadmap-filter-bar";
 import { RoadmapMiniMap } from "./mini-map";
 import { RoadmapRowHandle } from "./roadmap-row-handle";
