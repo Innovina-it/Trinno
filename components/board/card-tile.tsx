@@ -395,6 +395,8 @@ export function CardTile({
           completedAt: card.completedAt,
           type: card.type,
           priority: card.priority,
+          startDate: card.startDate,
+          targetDate: card.targetDate,
         }}
         memberProfiles={quickViewMemberIds
           .map((id) => quickViewProfilesRaw.find((p) => p.id === id))

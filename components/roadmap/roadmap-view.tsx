@@ -1965,6 +1965,8 @@ export function RoadmapView({
                 completedAt: quickViewStoreCard.completedAt,
                 type: quickViewStoreCard.type,
                 priority: quickViewStoreCard.priority,
+                startDate: quickViewStoreCard.startDate,
+                targetDate: quickViewStoreCard.targetDate,
               }
             : null
         }

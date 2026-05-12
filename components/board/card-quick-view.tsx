@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { CalendarClock, CircleDot, ListTodo } from "lucide-react";
+import { CalendarClock, CircleDot, ListTodo, Users } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +43,8 @@ export type QuickViewCard = {
   completedAt: Date | string | null;
   type: string | null;
   priority: string | null;
+  startDate: Date | string | null;
+  targetDate: Date | string | null;
 };
 
 function fmtShortDate(d: Date | string): string {
@@ -112,7 +114,7 @@ export function CardQuickView({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="card-quick-view" className="sm:max-w-lg">
+      <DialogContent data-testid="card-quick-view" className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle
             data-testid="card-quick-view-title"
@@ -120,51 +122,137 @@ export function CardQuickView({
           >
             {card.title}
           </DialogTitle>
+          <p className="text-xs text-fg-faint">
+            {completed ? "Completed" : "Open"}. Read-only summary; use advanced
+            for edits.
+          </p>
         </DialogHeader>
 
         <div className="space-y-3">
-          {/* Type + priority + completion dot. All read-only. */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {card.type && card.type !== "task" && (
-              <span
-                data-testid="card-quick-view-type"
-                className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted"
-              >
-                <TypeIcon type={card.type} className="size-3" />
-                {card.type.toUpperCase()}
-              </span>
-            )}
-            {card.priority && (
-              <span data-testid="card-quick-view-priority">
-                <PriorityChip priority={card.priority as CardPriority} />
-              </span>
-            )}
-            <span
-              data-testid="card-quick-view-completion"
-              data-completed={completed ? "true" : "false"}
-              className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted"
-              title={completed ? "Completed" : "Not completed"}
-            >
-              <CircleDot
-                className={
-                  "size-3 " +
-                  (completed
-                    ? "text-[color:var(--accent-lime)]"
-                    : "text-fg-faint")
-                }
-                aria-hidden
-              />
-              {completed ? "DONE" : "OPEN"}
-            </span>
+          {/* TYPE row — mirrors the new-card pill row, one slot active. */}
+          <div className="space-y-1 text-xs">
+            <span className="mono-meta-sm text-fg-faint">TYPE</span>
+            <div className="grid grid-cols-4 gap-1.5" aria-label="Card type">
+              {(["task", "story", "bug", "epic"] as const).map((t) => {
+                const selected = (card.type ?? "task") === t;
+                return (
+                  <span
+                    key={t}
+                    data-selected={selected ? "true" : undefined}
+                    data-testid={
+                      selected ? "card-quick-view-type" : undefined
+                    }
+                    className={[
+                      "inline-flex items-center justify-center gap-1.5",
+                      "rounded-full border border-hairline px-2.5 py-1.5",
+                      "mono-meta-sm",
+                      selected
+                        ? "bg-[rgb(255_255_255/0.10)] ring-1 ring-fg/40 border-transparent text-fg"
+                        : "text-fg-faint",
+                    ].join(" ")}
+                  >
+                    <TypeIcon type={t} className="size-3.5" />
+                    <span>{t.toUpperCase()}</span>
+                  </span>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Assignees — small read-only avatar chips. */}
-          {memberProfiles.length > 0 && (
-            <div
-              className="space-y-1.5 rounded-md border border-hairline bg-[color:var(--surface)] p-2"
-              data-testid="card-quick-view-assignees"
-            >
-              <span className="mono-meta-sm text-fg-faint">ASSIGNEES</span>
+          {/* PRIORITY + STATUS — two-column secondary row when present. */}
+          {(card.priority || true) && (
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="space-y-1">
+                <span className="mono-meta-sm text-fg-faint">PRIORITY</span>
+                <div className="flex h-[34px] items-center rounded-md border border-hairline bg-transparent px-2">
+                  {card.priority ? (
+                    <PriorityChip priority={card.priority as CardPriority} />
+                  ) : (
+                    <span className="mono-meta-sm text-fg-faint">—</span>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <span className="mono-meta-sm text-fg-faint">STATUS</span>
+                <div
+                  data-testid="card-quick-view-completion"
+                  data-completed={completed ? "true" : "false"}
+                  className="flex h-[34px] items-center gap-1.5 rounded-md border border-hairline bg-transparent px-2"
+                >
+                  <CircleDot
+                    className={
+                      "size-3 " +
+                      (completed
+                        ? "text-[color:var(--accent-lime)]"
+                        : "text-fg-faint")
+                    }
+                    aria-hidden
+                  />
+                  <span
+                    className={
+                      "mono-meta-sm " +
+                      (completed ? "text-fg" : "text-fg-muted")
+                    }
+                  >
+                    {completed ? "DONE" : "OPEN"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* START / TARGET — two-column date row, parallels new-card dialog. */}
+          {(card.startDate || card.targetDate) && (
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="space-y-1">
+                <span className="mono-meta-sm text-fg-faint">START</span>
+                <div className="flex h-[34px] items-center rounded-md border border-hairline bg-transparent px-2 text-fg tabular-nums">
+                  {card.startDate ? fmtShortDate(card.startDate) : "—"}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <span className="mono-meta-sm text-fg-faint">TARGET</span>
+                <div className="flex h-[34px] items-center rounded-md border border-hairline bg-transparent px-2 text-fg tabular-nums">
+                  {card.targetDate ? fmtShortDate(card.targetDate) : "—"}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* DUE — single row, only when set (separate concept from start/target). */}
+          {card.dueDate && (
+            <div className="space-y-1 text-xs">
+              <span className="mono-meta-sm text-fg-faint">DUE</span>
+              <div
+                data-testid="card-quick-view-due"
+                className="flex h-[34px] items-center gap-1.5 rounded-md border border-hairline bg-transparent px-2"
+              >
+                <CalendarClock
+                  className="size-3 text-fg-faint"
+                  aria-hidden
+                />
+                <span className="text-fg tabular-nums">
+                  {fmtShortDate(card.dueDate)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* ASSIGNEES — chip row matching new-card-dialog aesthetic. */}
+          <div
+            className="space-y-1.5 rounded-md border border-hairline bg-[color:var(--surface)] p-2"
+            data-testid="card-quick-view-assignees"
+          >
+            <span className="mono-meta-sm text-fg-faint inline-flex items-center gap-1.5">
+              <Users className="size-3" aria-hidden />
+              ASSIGNEES
+              {memberProfiles.length > 0 && (
+                <span className="text-fg-muted tabular-nums">
+                  ({memberProfiles.length})
+                </span>
+              )}
+            </span>
+            {memberProfiles.length > 0 ? (
               <ul className="flex flex-wrap gap-1">
                 {memberProfiles.map((p) => (
                   <li key={p.id}>
@@ -187,47 +275,39 @@ export function CardQuickView({
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
+            ) : (
+              <span className="mono-meta-sm text-fg-faint">Unassigned</span>
+            )}
+          </div>
 
-          {/* Due date — single line, omitted entirely when null. */}
-          {card.dueDate && (
-            <div
-              className="flex items-center gap-1.5 rounded-md border border-hairline bg-[color:var(--surface)] p-2"
-              data-testid="card-quick-view-due"
-            >
-              <CalendarClock className="size-3 text-fg-faint" aria-hidden />
-              <span className="mono-meta-sm text-fg-faint">DUE</span>
-              <span className="ml-auto text-xs text-fg tabular-nums">
-                {fmtShortDate(card.dueDate)}
-              </span>
-            </div>
-          )}
-
-          {/* Description preview — 240 chars + ellipsis. Hidden when blank. */}
-          {descPreview && (
-            <div
-              className="space-y-1 rounded-md border border-hairline bg-[color:var(--surface)] p-2"
-              data-testid="card-quick-view-description"
-            >
-              <span className="mono-meta-sm text-fg-faint">DESCRIPTION</span>
-              <p className="text-xs leading-relaxed text-fg-muted whitespace-pre-wrap break-words">
-                {descPreview}
-              </p>
-            </div>
-          )}
-
-          {/* Subtask count — read-only summary. */}
+          {/* SUBTASKS — one-row summary. */}
           {subtaskTotal > 0 && (
-            <div
-              className="flex items-center gap-1.5 rounded-md border border-hairline bg-[color:var(--surface)] p-2"
-              data-testid="card-quick-view-subtasks"
-            >
-              <ListTodo className="size-3 text-fg-faint" aria-hidden />
+            <div className="space-y-1 text-xs">
               <span className="mono-meta-sm text-fg-faint">SUBTASKS</span>
-              <span className="ml-auto text-xs text-fg tabular-nums">
-                {subtaskDone}/{subtaskTotal}
-              </span>
+              <div
+                data-testid="card-quick-view-subtasks"
+                className="flex h-[34px] items-center gap-1.5 rounded-md border border-hairline bg-transparent px-2"
+              >
+                <ListTodo className="size-3 text-fg-faint" aria-hidden />
+                <span className="text-fg tabular-nums">
+                  {subtaskDone}/{subtaskTotal}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* DESCRIPTION — only when populated. */}
+          {descPreview && (
+            <div className="space-y-1 text-xs">
+              <span className="mono-meta-sm text-fg-faint">DESCRIPTION</span>
+              <div
+                data-testid="card-quick-view-description"
+                className="rounded-md border border-hairline bg-transparent px-2 py-1.5"
+              >
+                <p className="text-xs leading-relaxed text-fg-muted whitespace-pre-wrap break-words">
+                  {descPreview}
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -253,3 +333,4 @@ export function CardQuickView({
     </Dialog>
   );
 }
+
