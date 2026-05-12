@@ -35,6 +35,16 @@ export const LANE_MODE_LABEL: Record<LaneMode, string> = {
   assignee: "By assignee",
   component: "By component",
 };
+// Task 6 — primary view-mode toggle. "gantt" is the historical bar
+// timeline; "list" is the new flat hierarchical view ordered by
+// startDate ASC. URL parameter `?view=list` activates it; default stays
+// absent from the URL so existing deep-links keep working.
+export type ViewMode = "gantt" | "list";
+export const VIEW_MODES: ViewMode[] = ["gantt", "list"];
+export const VIEW_MODE_LABEL: Record<ViewMode, string> = {
+  gantt: "Gantt",
+  list: "List",
+};
 const ZOOM_LABEL: Record<Zoom, string> = {
   week: "Week",
   month: "Month",
@@ -50,6 +60,8 @@ export function RoadmapHeader({
   onSetZoom,
   laneMode,
   onSetLaneMode,
+  viewMode,
+  onSetViewMode,
   subscribed,
   showCriticalPath,
   onToggleCriticalPath,
@@ -71,6 +83,10 @@ export function RoadmapHeader({
   onSetZoom: (z: Zoom) => void;
   laneMode: LaneMode;
   onSetLaneMode: (m: LaneMode) => void;
+  // Task 6 — primary view mode (gantt | list). Owned by RoadmapView and
+  // URL-synced via `?view=list`.
+  viewMode: ViewMode;
+  onSetViewMode: (m: ViewMode) => void;
   subscribed: boolean;
   showCriticalPath: boolean;
   onToggleCriticalPath: () => void;
@@ -218,6 +234,22 @@ export function RoadmapHeader({
         description="Zoom, lane grouping, view options, and date jump."
       >
         <div className="space-y-5">
+          {/* Task 6 — view mode (gantt | list) lives at the top of the
+              mobile Display sheet for parity with desktop. */}
+          <section>
+            <p className="mono-meta-sm text-fg-faint tracking-[0.14em] px-3 pb-1">
+              VIEW
+            </p>
+            <SheetRadioRow
+              name="View mode"
+              value={viewMode}
+              options={VIEW_MODES.map((m) => ({
+                value: m,
+                label: VIEW_MODE_LABEL[m],
+              }))}
+              onChange={(next) => onSetViewMode(next)}
+            />
+          </section>
           <section>
             <p className="mono-meta-sm text-fg-faint tracking-[0.14em] px-3 pb-1">
               ZOOM
@@ -306,6 +338,40 @@ export function RoadmapHeader({
 
       {/* DESKTOP LEFT — view controls (≥md) */}
       <div className="hidden md:flex items-center gap-1.5">
+        {/* Task 6 — gantt / list segmented switch. Keeps the timeline as
+            the default; List is a flat, date-ordered alternative for users
+            who need a scannable tree rather than a horizontal canvas. */}
+        <div
+          role="group"
+          aria-label="Roadmap view mode"
+          data-testid="roadmap-view-mode"
+          className="inline-flex items-stretch rounded-full border border-hairline bg-[color:var(--surface)] overflow-hidden text-xs"
+        >
+          {VIEW_MODES.map((m) => {
+            const active = viewMode === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => {
+                  if (!active) onSetViewMode(m);
+                }}
+                data-testid={`roadmap-view-mode-${m}`}
+                data-active={active ? "true" : "false"}
+                className={cn(
+                  "px-3 py-1.5 transition-colors",
+                  active
+                    ? "bg-fg text-bg-deep"
+                    : "text-fg-muted hover:bg-[rgb(255_255_255/0.08)] hover:text-fg",
+                )}
+              >
+                {VIEW_MODE_LABEL[m]}
+              </button>
+            );
+          })}
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger
             data-testid="roadmap-zoom"

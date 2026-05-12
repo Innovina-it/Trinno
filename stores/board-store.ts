@@ -137,6 +137,8 @@ function sortByCreatedAt<T extends { createdAt: Date }>(rows: T[]): T[] {
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
 
+const MAX_COMMENTS_PER_CARD = 200;
+
 export function createBoardStore(initial: BoardSnapshotInit) {
   return createStore<BoardState>((set) => ({
     boardId: initial.boardId,
@@ -441,11 +443,22 @@ export function createBoardStore(initial: BoardSnapshotInit) {
       })),
 
     addComment: (c) =>
-      set((state) =>
-        state.comments.some((x) => x.id === c.id)
-          ? state
-          : { comments: sortByCreatedAt([...state.comments, c]) },
-      ),
+      set((state) => {
+        if (state.comments.some((x) => x.id === c.id)) return state;
+        const merged = sortByCreatedAt([...state.comments, c]);
+        // Cap per-card to the MAX_COMMENTS_PER_CARD newest entries.
+        const cardComments = merged.filter((x) => x.cardId === c.cardId);
+        const overflow = cardComments.length - MAX_COMMENTS_PER_CARD;
+        const comments =
+          overflow > 0
+            ? merged.filter(
+                (x) =>
+                  x.cardId !== c.cardId ||
+                  !cardComments.slice(0, overflow).some((o) => o.id === x.id),
+              )
+            : merged;
+        return { comments };
+      }),
 
     updateComment: (id, patch) =>
       set((state) => ({

@@ -1,10 +1,12 @@
 "use client";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { X, Plus, CalendarRange } from "lucide-react";
+import { X, Plus, CalendarRange, CalendarClock, Users } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createCard } from "@/actions/cards";
+import { createCard, updateCard } from "@/actions/cards";
+import { toggleCardMember } from "@/actions/card-members";
 import { useBoardStore } from "@/stores/board-store";
 
 function toIsoDay(d: Date): string {
@@ -17,14 +19,32 @@ export function AddCardForm({ listId }: { listId: string }) {
   const [withDates, setWithDates] = useState(false);
   const [start, setStart] = useState("");
   const [target, setTarget] = useState("");
+  // Task 5 — parity with edit-card. Creators can set a due date and
+  // pre-assign members up front so the card lands on the board with the
+  // same minimum metadata the edit modal surfaces.
+  const [due, setDue] = useState("");
+  const [assignees, setAssignees] = useState<Set<string>>(() => new Set());
   const [pending, startTx] = useTransition();
   const addCard = useBoardStore((s) => s.addCard);
+  const addCardMember = useBoardStore((s) => s.addCardMember);
+  const boardProfiles = useBoardStore((s) => s.boardProfiles);
 
   function reset() {
     setTitle("");
     setWithDates(false);
     setStart("");
     setTarget("");
+    setDue("");
+    setAssignees(new Set());
+  }
+
+  function toggleAssignee(userId: string) {
+    setAssignees((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
   }
 
   function submit(e: React.FormEvent) {
@@ -50,6 +70,28 @@ export function AddCardForm({ listId }: { listId: string }) {
           targetDate: withDates ? new Date(target + "T00:00:00.000Z") : null,
         });
         addCard(card);
+        // Post-create patches — due date is on `cards`, member assignments
+        // live on `card_members`. Fire-and-forget per assignee so the
+        // form closes promptly; per-call errors surface as toasts but the
+        // card itself is already saved.
+        if (due) {
+          try {
+            await updateCard({
+              id: card.id,
+              dueDate: new Date(due + "T00:00:00.000Z"),
+            });
+          } catch (err) {
+            toast.error("Saved card, but due date failed: " + (err as Error).message);
+          }
+        }
+        for (const userId of assignees) {
+          try {
+            await toggleCardMember({ cardId: card.id, userId });
+            addCardMember({ cardId: card.id, userId });
+          } catch (err) {
+            toast.error("Saved card, but assignee failed: " + (err as Error).message);
+          }
+        }
         reset();
       } catch (err) {
         toast.error((err as Error).message);
@@ -82,6 +124,7 @@ export function AddCardForm({ listId }: { listId: string }) {
     <form
       onSubmit={submit}
       className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-150"
+      data-testid="add-card-form"
     >
       <Input
         autoFocus
@@ -92,6 +135,77 @@ export function AddCardForm({ listId }: { listId: string }) {
         minLength={1}
         maxLength={120}
       />
+
+      {/* Task 5 — assignee row: minimal chips of board profiles. Stays
+          collapsed inside the form; never blocks card creation when the
+          board has no other members. */}
+      {boardProfiles.length > 0 && (
+        <div className="space-y-1.5 rounded-md border border-hairline bg-[color:var(--surface)] p-2">
+          <div className="flex items-center gap-1.5">
+            <Users className="size-3 text-fg-faint" aria-hidden />
+            <span className="mono-meta-sm text-fg-faint">ASSIGNEES</span>
+            {assignees.size > 0 && (
+              <span className="mono-meta-sm text-fg-muted tabular-nums">
+                ({assignees.size})
+              </span>
+            )}
+          </div>
+          <ul className="flex flex-wrap gap-1">
+            {boardProfiles.map((p) => {
+              const on = assignees.has(p.id);
+              return (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggleAssignee(p.id)}
+                    aria-pressed={on}
+                    data-user-id={p.id}
+                    data-assigned={on}
+                    data-testid="add-card-member"
+                    className={[
+                      "inline-flex items-center gap-1.5 rounded-full border px-1.5 py-0.5 text-[10px] transition-colors",
+                      on
+                        ? "border-fg/40 bg-fg/10 text-fg"
+                        : "border-hairline bg-transparent text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)]",
+                    ].join(" ")}
+                  >
+                    <Avatar
+                      size="sm"
+                      className="rounded-none border border-current size-4"
+                    >
+                      <AvatarFallback className="rounded-none bg-transparent text-current text-[9px] tracking-widest">
+                        {p.displayName.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="normal-case tracking-normal">
+                      {p.displayName}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {/* Due date — single field, separate from the roadmap span. Optional;
+          empty input persists null. */}
+      <label
+        className="flex items-center gap-1.5 rounded-md border border-hairline bg-[color:var(--surface)] p-2"
+        data-testid="add-card-due-row"
+      >
+        <CalendarClock className="size-3 text-fg-faint" aria-hidden />
+        <span className="mono-meta-sm text-fg-faint">DUE</span>
+        <Input
+          type="date"
+          value={due}
+          onChange={(e) => setDue(e.target.value)}
+          aria-label="Due date"
+          data-testid="add-card-due"
+          className="text-xs ml-auto w-[10rem]"
+        />
+      </label>
+
       {withDates ? (
         <div className="space-y-1.5 rounded-md border border-hairline bg-[color:var(--surface)] p-2">
           <div className="flex items-center justify-between">

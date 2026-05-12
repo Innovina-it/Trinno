@@ -14,7 +14,7 @@ export default async function RoadmapPage({
   params: Promise<{ workspaceId: string }>;
 }) {
   const { workspaceId } = await params;
-  await requireUser();
+  const user = await requireUser();
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
@@ -56,7 +56,7 @@ export default async function RoadmapPage({
             {cards.length} CARDS
           </span>
         </header>
-        <RoadmapView workspaceId={workspaceId} />
+        <RoadmapView workspaceId={workspaceId} viewerId={user.id} />
       </div>
     </WorkspaceStoreProvider>
   );

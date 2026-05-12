@@ -20,6 +20,8 @@ import {
   type AggregateColumnId,
   type AggregateScope,
 } from "@/lib/aggregate-kanban/group";
+import { AssigneeSegment } from "@/components/filters/assignee-segment";
+import type { AssigneeMode } from "@/lib/board-filters";
 import { AllTasksColumn } from "./all-tasks-column";
 import { AllTasksCard } from "./all-tasks-card";
 import { AllTasksEmptyState } from "./all-tasks-empty-state";
@@ -44,18 +46,33 @@ export function AllTasksView({
   const router = useRouter();
   const pathname = usePathname();
 
-  const scope: AggregateScope = SCOPES.includes(
-    (sp.get("scope") ?? "mine") as AggregateScope,
-  )
-    ? ((sp.get("scope") ?? "mine") as AggregateScope)
+  const rawScope = sp.get("scope") ?? "mine";
+  const scope: AggregateScope = SCOPES.includes(rawScope as AggregateScope)
+    ? (rawScope as AggregateScope)
     : "mine";
+  // assignee=none means unassigned filter (no scope change, separate filter)
+  const unassignedFilter = sp.get("assignee") === "none";
+  // Derive the 3-state segment value from scope + assignee param
+  const assigneeMode: AssigneeMode = unassignedFilter
+    ? "none"
+    : scope === "mine"
+      ? "me"
+      : "all";
   const queryDraft = sp.get("q") ?? "";
   const sprintFilter = sp.get("sprint") ?? "";
 
-  const setScope = (next: AggregateScope) => {
+  const setAssigneeMode = (next: AssigneeMode) => {
     const params = new URLSearchParams(sp.toString());
-    if (next === "mine") params.delete("scope");
-    else params.set("scope", next);
+    params.delete("assignee");
+    if (next === "me") {
+      params.delete("scope"); // "mine" is default
+    } else if (next === "all") {
+      params.set("scope", "all");
+    } else {
+      // unassigned: scope=all so no member filter, assignee=none for unassigned
+      params.set("scope", "all");
+      params.set("assignee", "none");
+    }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
@@ -91,28 +108,38 @@ export function AllTasksView({
     [lists],
   );
 
-  const filtered = useMemo(
-    () =>
-      cards.filter((c) =>
-        cardMatchesFilter(
-          {
-            id: c.id,
-            title: c.title,
-            priority: c.priority as CardPriority | null,
-            sprintId: c.sprintId,
-            dueDate: c.dueDate,
-          },
-          {
-            scope,
-            viewerId,
-            members: cardMembers,
-            query: queryDraft,
-            sprintId: sprintFilter || undefined,
-          },
-        ),
-      ),
-    [cards, cardMembers, scope, viewerId, queryDraft, sprintFilter],
-  );
+  const filtered = useMemo(() => {
+    // Build memberByCard once for the unassigned check.
+    const memberByCard = new Map<string, boolean>();
+    for (const m of cardMembers) memberByCard.set(m.cardId, true);
+    return cards.filter((c) => {
+      if (!cardMatchesFilter(
+        {
+          id: c.id,
+          title: c.title,
+          priority: c.priority as CardPriority | null,
+          sprintId: c.sprintId,
+          dueDate: c.dueDate,
+        },
+        {
+          // For unassigned filter, use scope=all so cardMatchesFilter
+          // doesn't restrict by member; we apply the unassigned check below.
+          scope: unassignedFilter ? "all" : scope,
+          viewerId,
+          members: cardMembers,
+          query: queryDraft,
+          sprintId: sprintFilter || undefined,
+        },
+      )) return false;
+      if (unassignedFilter) {
+        // No cardMembers AND no owner
+        const hasMembers = memberByCard.get(c.id) ?? false;
+        const hasOwner = Boolean((c as { ownerId?: string | null }).ownerId);
+        if (hasMembers || hasOwner) return false;
+      }
+      return true;
+    });
+  }, [cards, cardMembers, scope, unassignedFilter, viewerId, queryDraft, sprintFilter]);
   const grouped = useMemo(
     () => groupByStatus(filtered, sortedLists),
     [filtered, sortedLists],
@@ -214,19 +241,7 @@ export function AllTasksView({
   return (
     <div className="space-y-4" data-testid="all-tasks-view">
       <div className="flex items-center gap-2 flex-wrap">
-        {SCOPES.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setScope(s)}
-            data-testid="all-tasks-scope-toggle"
-            data-scope={s}
-            data-active={scope === s ? "true" : "false"}
-            className={`chip mono-meta-sm ${scope === s ? "ring-1 ring-fg/40 bg-fg/10" : ""}`}
-          >
-            {s === "mine" ? "MINE" : "ALL WORKSPACE"}
-          </button>
-        ))}
+        <AssigneeSegment value={assigneeMode} onChange={setAssigneeMode} />
         <input
           type="search"
           value={queryDraft}

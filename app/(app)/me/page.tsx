@@ -1,3 +1,5 @@
+import Link from "next/link";
+// Kept per user decision 2026-05-12: this view is the per-user dashboard across all workspaces.
 import { requireUser, getSessionToken } from "@/lib/auth";
 import {
   listMyOpenCards,
@@ -63,7 +65,20 @@ export default async function MeHomePage() {
     <div className="mx-auto max-w-7xl px-3 sm:px-4 md:px-6 py-6 md:py-10 space-y-8">
       <header className="space-y-3 border-b border-hairline pb-6">
         <span className="chip">HOME / {user.email?.toUpperCase()}</span>
-        <h1 className="serif-display text-5xl">Today</h1>
+        <div className="flex items-baseline justify-between gap-4 flex-wrap">
+          <h1 className="serif-display text-5xl">Today</h1>
+          <Link
+            href="/me/timeline"
+            className="mono-meta-sm text-fg-muted hover:text-fg transition-colors"
+            data-testid="me-timeline-link"
+          >
+            My timeline →
+          </Link>
+        </div>
+        <p className="text-sm text-fg-muted max-w-2xl">
+          Your personal dashboard showing open cards, sprint activity, and
+          inbox items across <strong>all workspaces</strong> you belong to.
+        </p>
       </header>
 
       <MeTodayStrip

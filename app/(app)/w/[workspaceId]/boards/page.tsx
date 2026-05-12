@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
-import { getWorkspace, listBoardsInWorkspace } from "@/lib/queries/workspaces";
+import { getWorkspace, listBoardsInWorkspace, listEpicsInWorkspace } from "@/lib/queries/workspaces";
 import { BoardGrid } from "@/components/workspace/board-grid";
 import { CreateBoardButton } from "@/components/workspace/create-board-dialog";
 import { Button } from "@/components/ui/button";
@@ -16,10 +16,13 @@ export default async function WorkspacePage({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
-  const boards = await listBoardsInWorkspace(token, workspaceId);
+  const [boards, epics, favoritedIds] = await Promise.all([
+    listBoardsInWorkspace(token, workspaceId),
+    listEpicsInWorkspace(token, workspaceId),
+    listFavoriteBoardIds(token),
+  ]);
   const visibleCount = boards.filter((b) => !b.archived).length;
   const today = shortDate(new Date());
-  const favoritedIds = await listFavoriteBoardIds(token);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-3 sm:px-4 md:px-6 py-6 md:py-8">
@@ -47,7 +50,7 @@ export default async function WorkspacePage({
         </div>
       </header>
 
-      <BoardGrid boards={boards} favoritedIds={favoritedIds} />
+      <BoardGrid boards={boards} epics={epics} favoritedIds={favoritedIds} />
     </div>
   );
 }

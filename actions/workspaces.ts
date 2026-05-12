@@ -18,7 +18,7 @@ function decodeSub(jwt: string): string {
 
 export async function createWorkspaceImpl(
   token: string,
-  input: { name: string },
+  input: { name: string; memberIds?: string[] },
 ) {
   const parsed = CreateWorkspaceInput.parse(input);
   const ownerId = decodeSub(token);
@@ -27,9 +27,17 @@ export async function createWorkspaceImpl(
       .insert(workspaces)
       .values({ name: parsed.name, ownerId })
       .returning();
-    await tx
-      .insert(workspaceMembers)
-      .values({ workspaceId: ws.id, userId: ownerId, role: "owner" });
+    // Always insert the creator as owner.
+    const memberRows: { workspaceId: string; userId: string; role: "owner" | "admin" | "member" }[] = [
+      { workspaceId: ws.id, userId: ownerId, role: "owner" },
+    ];
+    // Append selected members (skip if they are the creator to avoid dupe).
+    for (const uid of parsed.memberIds) {
+      if (uid !== ownerId) {
+        memberRows.push({ workspaceId: ws.id, userId: uid, role: "member" });
+      }
+    }
+    await tx.insert(workspaceMembers).values(memberRows);
     return ws;
   });
 }
@@ -64,7 +72,7 @@ export async function deleteWorkspaceImpl(
   });
 }
 
-export async function createWorkspace(input: { name: string }) {
+export async function createWorkspace(input: { name: string; memberIds?: string[] }) {
   await requireUser();
   const token = (await getSessionToken())!;
   const ws = await createWorkspaceImpl(token, input);

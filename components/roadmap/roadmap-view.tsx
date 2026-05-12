@@ -51,12 +51,19 @@ import { RoadmapNewCardDialog } from "./new-card-dialog";
 import { RoadmapFilterBar } from "./roadmap-filter-bar";
 import { RoadmapMiniMap } from "./mini-map";
 import { RoadmapRowHandle } from "./roadmap-row-handle";
+import { MilestoneMarkers } from "./milestone-markers";
+import type { MilestoneRow } from "./milestone-dialog";
+import { MilestoneDialog } from "./milestone-dialog";
+import { listMilestones } from "@/actions/milestones";
 import {
   RoadmapHeader,
   ZOOMS,
   LANE_MODES,
+  VIEW_MODES,
   type LaneMode,
+  type ViewMode,
 } from "./roadmap-header";
+import { RoadmapListView } from "./roadmap-list-view";
 import { parseFilters } from "@/lib/board-filters";
 import { useRoadmapDragHarness } from "./use-roadmap-drag-harness";
 
@@ -68,7 +75,11 @@ const LANE_GAP = 12;
 // the 4px stripe. Splitting these prevents the previous label collision
 // where both rendered into the same 36px slot.
 const HEADER_STRIP_HEIGHT = 56;
-const LANE_LABEL_WIDTH = 200;
+// Task 9 — responsive lane label panel. Width is driven by a CSS variable
+// (`--lane-label-w`) so the panel shrinks on narrow viewports without
+// crowding the canvas. The clamp keeps a usable minimum tap-target on
+// phones while letting larger screens give the label room to breathe.
+const LANE_LABEL_WIDTH_CSS = "clamp(140px, 18vw, 240px)";
 
 function fmtHeader(d: Date, zoom: Zoom): string {
   const monthShort = d.toLocaleString("en-US", {
@@ -136,8 +147,11 @@ function buildHeaderTicks(
 
 export function RoadmapView({
   workspaceId,
+  viewerId,
 }: {
   workspaceId: string;
+  /** Used for assignee/unassigned filter. Pass null/undefined for anonymous. */
+  viewerId?: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -150,6 +164,10 @@ export function RoadmapView({
   const laneMode: LaneMode = (LANE_MODES as string[]).includes(lanesParam ?? "")
     ? (lanesParam as LaneMode)
     : "epic";
+  const viewParam = sp.get("view");
+  const viewMode: ViewMode = (VIEW_MODES as string[]).includes(viewParam ?? "")
+    ? (viewParam as ViewMode)
+    : "gantt";
   const focusParam = sp.get("focus");
   const queryParam = sp.get("q") ?? "";
   // Plan #16b-γ-G G4 — priority-gutter URL toggle. Default off (param
@@ -359,6 +377,20 @@ export function RoadmapView({
 
   const { subscribed } = useWorkspaceRealtime(workspaceId);
 
+  // === MILESTONE MARKERS START ===
+  const [storedMilestones, setStoredMilestones] = useState<MilestoneRow[]>([]);
+  const [showMilestones, setShowMilestones] = useState(true);
+  const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false);
+  const [editingMilestone, setEditingMilestone] = useState<MilestoneRow | null>(null);
+
+  useEffect(() => {
+    listMilestones(workspaceId).then((rows) => {
+      setStoredMilestones(rows as MilestoneRow[]);
+    }).catch(() => {/* non-critical */});
+  }, [workspaceId]);
+  // === MILESTONE MARKERS END (state) ===
+
+
   // Read cards directly from the workspace store, projecting to the
   // RoadmapCard shape the layout helpers expect.
   const storeCards = useWorkspaceStore((s) => s.cards);
@@ -399,7 +431,22 @@ export function RoadmapView({
 
   const cards = useMemo<RoadmapCard[]>(() => {
     const boardTitleById = new Map(storeBoards.map((b) => [b.id, b.title]));
+    // Build memberByCard index for assignee filters.
+    const memberByCard = new Map<string, Set<string>>();
+    for (const cm of storeCardMembers) {
+      const s = memberByCard.get(cm.cardId) ?? new Set<string>();
+      s.add(cm.userId);
+      memberByCard.set(cm.cardId, s);
+    }
     const now = new Date();
+    // Task 11 — split the type filter so the "Subtask" toggle never
+    // hides parent rows. Parents are gated by the parent-eligible types
+    // only; the subtask toggle is the gate for subtask rows. An empty
+    // filter is the identity pass-through.
+    const selectedTypes = filters.types;
+    const subtaskAllowed =
+      selectedTypes.length === 0 || selectedTypes.includes("subtask");
+    const parentTypes = selectedTypes.filter((t) => t !== "subtask");
     return storeCards
       .filter((c) => {
         if (c.archived) return false;
@@ -407,8 +454,15 @@ export function RoadmapView({
         if (queryNorm && !c.title.toLowerCase().includes(queryNorm)) {
           return false;
         }
-        if (filters.types.length && !filters.types.includes(c.type)) {
-          return false;
+        if (selectedTypes.length) {
+          if (c.type === "subtask") {
+            if (!subtaskAllowed) return false;
+          } else if (parentTypes.length && !parentTypes.includes(c.type)) {
+            // Non-subtask card: drop only when the user picked parent
+            // types that don't include this one. If they only picked
+            // "subtask", parentTypes is empty → every parent passes.
+            return false;
+          }
         }
         if (sprintFilter && c.sprintId !== sprintFilter) return false;
         if (filters.due === "overdue") {
@@ -419,9 +473,19 @@ export function RoadmapView({
             : null;
           if (!due || due > now || c.dueComplete) return false;
         }
-        // Note: filters.labelIds, filters.assignedToMe currently no-op on
-        // the roadmap because the workspace snapshot does not yet carry
-        // labels / cardMembers. Tracked for the B-batch wrap-up.
+        // Assignee filter: assignedToMe shows only cards where viewerId is
+        // in cardMembers; unassigned shows cards with no members and no owner.
+        if (filters.assignedToMe) {
+          if (!viewerId) return false;
+          const mems = memberByCard.get(c.id);
+          if (!mems || !mems.has(viewerId)) return false;
+        }
+        if (filters.unassigned) {
+          const mems = memberByCard.get(c.id);
+          const hasMembers = mems && mems.size > 0;
+          const hasOwner = Boolean(c.ownerId);
+          if (hasMembers || hasOwner) return false;
+        }
         return true;
       })
       .map((c) => ({
@@ -446,7 +510,7 @@ export function RoadmapView({
               : new Date(c.completedAt)
             : null,
       }));
-  }, [storeCards, storeBoards, queryNorm, filters, sprintFilter]);
+  }, [storeCards, storeBoards, storeCardMembers, queryNorm, filters, sprintFilter, viewerId]);
 
   // Plan #16b-β — count of subtasks per parent that have NO dates set,
   // so we can render an "+N undated subtasks" chip next to the parent bar.
@@ -655,6 +719,13 @@ export function RoadmapView({
   );
 
   // ---- Zoom toggle (URL-synced) ----
+  function setViewMode(next: ViewMode) {
+    const params = new URLSearchParams(sp.toString());
+    if (next === "gantt") params.delete("view");
+    else params.set("view", next);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
   function setZoom(next: Zoom) {
     const params = new URLSearchParams(sp.toString());
     params.set("zoom", next);
@@ -1029,6 +1100,8 @@ export function RoadmapView({
         onSetZoom={setZoom}
         laneMode={laneMode}
         onSetLaneMode={setLaneMode}
+        viewMode={viewMode}
+        onSetViewMode={setViewMode}
         subscribed={subscribed}
         showCriticalPath={showCriticalPath}
         onToggleCriticalPath={() => setShowCriticalPath((p) => !p)}
@@ -1046,9 +1119,37 @@ export function RoadmapView({
         gridStart={gridStart}
         gridEnd={gridEnd}
       />
-      <RoadmapFilterBar />
+      {/* === MILESTONE MARKERS START (toolbar) === */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <RoadmapFilterBar />
+        <button
+          type="button"
+          onClick={() => setShowMilestones((v) => !v)}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] ${
+            !showMilestones
+              ? "border-fg/40 bg-fg/10 text-fg"
+              : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
+          }`}
+          data-testid="roadmap-toggle-milestones"
+        >
+          {showMilestones ? "Hide milestones" : "Show milestones"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setEditingMilestone(null);
+            setMilestoneDialogOpen(true);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
+          data-testid="roadmap-add-milestone"
+        >
+          + Add milestone
+        </button>
+      </div>
+      {/* === MILESTONE MARKERS END (toolbar) === */}
 
-      {cards.length > 0 && (
+
+      {viewMode === "gantt" && cards.length > 0 && (
         <div className="hidden md:block">
           <RoadmapMiniMap
             cards={cards}
@@ -1060,7 +1161,12 @@ export function RoadmapView({
         </div>
       )}
 
-      {cards.length === 0 ? (
+      {/* Task 6 — flat list alternative. Renders epic → task → subtask
+          ordered by startDate ASC. Uses the same store data the gantt
+          consumes; no extra queries. */}
+      {viewMode === "list" ? (
+        <RoadmapListView workspaceId={workspaceId} />
+      ) : cards.length === 0 ? (
         // Plan #16b-γ-C (#7) — explicit empty-state with editorial
         // CTA copy. We layer it inside the same data-testid="roadmap-view"
         // wrapper so existing E2E selectors still match.
@@ -1109,11 +1215,15 @@ export function RoadmapView({
               hoveredBand={drag.hoveredGutterBand}
             />
           )}
-          {/* Lane labels (sticky) */}
+          {/* Lane labels (sticky) — width driven by `--lane-label-w` so the
+              panel can collapse on narrow viewports (Task 9). */}
           <div
             ref={labelPanelRef}
             className="shrink-0 border-r border-hairline bg-[color:var(--surface)] relative"
-            style={{ width: LANE_LABEL_WIDTH }}
+            style={{
+              width: "var(--lane-label-w)",
+              "--lane-label-w": LANE_LABEL_WIDTH_CSS,
+            } as React.CSSProperties}
           >
             <div
               className="border-b border-hairline mono-meta-sm text-fg-faint flex items-end px-3 pb-1"
@@ -1153,14 +1263,22 @@ export function RoadmapView({
                   {epicHeader ? (
                     <Link
                       href={`/w/${workspaceId}/e/${epicHeader.id}`}
-                      className="mono-meta text-fg truncate hover:underline focus:outline-none focus:underline"
+                      // Task 8 — wrap to two lines instead of truncating to
+                      // a single ellipsis. `line-clamp-2` keeps a tight
+                      // visual rhythm and the `title` attribute restores
+                      // the full text on hover for narrow panels.
+                      className="mono-meta text-fg line-clamp-2 break-words hover:underline focus:outline-none focus:underline"
                       data-testid="lane-epic-header-link"
                       data-card-id={epicHeader.id}
+                      title={ll.lane.title}
                     >
                       {ll.lane.title}
                     </Link>
                   ) : (
-                    <span className="mono-meta text-fg truncate">
+                    <span
+                      className="mono-meta text-fg line-clamp-2 break-words"
+                      title={ll.lane.title}
+                    >
                       {ll.lane.title}
                     </span>
                   )}
@@ -1405,6 +1523,26 @@ export function RoadmapView({
                 gridEnd={gridEnd}
                 headerHeight={HEADER_STRIP_HEIGHT}
               />
+              {/* === MILESTONE MARKERS START === */}
+              {showMilestones && storedMilestones.length > 0 && (
+                <MilestoneMarkers
+                  milestones={storedMilestones}
+                  zoom={zoom}
+                  gridStart={gridStart}
+                  gridEnd={gridEnd}
+                  canvasHeight={totalHeight + HEADER_STRIP_HEIGHT}
+                  headerHeight={HEADER_STRIP_HEIGHT}
+                  canAdmin={true}
+                  onEdit={(m) => {
+                    setEditingMilestone(m);
+                    setMilestoneDialogOpen(true);
+                  }}
+                  onDeleted={(id) =>
+                    setStoredMilestones((prev) => prev.filter((m) => m.id !== id))
+                  }
+                />
+              )}
+              {/* === MILESTONE MARKERS END === */}
               {/* Bars per lane */}
               {laneLayout.map((ll) => {
                 const barRowsTop = ll.top + LANE_HEADER_HEIGHT;
@@ -1712,6 +1850,28 @@ export function RoadmapView({
         open={shortcutsOpen}
         onOpenChange={setShortcutsOpen}
       />
+      {/* === MILESTONE MARKERS START (dialog) === */}
+      <MilestoneDialog
+        open={milestoneDialogOpen}
+        onOpenChange={(v) => {
+          setMilestoneDialogOpen(v);
+          if (!v) setEditingMilestone(null);
+        }}
+        workspaceId={workspaceId}
+        milestone={editingMilestone}
+        onSaved={(row) => {
+          setStoredMilestones((prev) => {
+            const idx = prev.findIndex((m) => m.id === row.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = row;
+              return next;
+            }
+            return [...prev, row];
+          });
+        }}
+      />
+      {/* === MILESTONE MARKERS END (dialog) === */}
     </div>
   );
 }

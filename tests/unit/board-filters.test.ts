@@ -101,6 +101,7 @@ describe("hideCompleted filter", () => {
     labelIds: [],
     due: null,
     assignedToMe: false,
+    unassigned: false,
     scheduled: false,
   };
 

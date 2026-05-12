@@ -1,53 +1,58 @@
 #!/usr/bin/env node
-// Seed an AIWEPI / Switch project workspace from the project plan PDF.
-// 5 work packages (epics) + 11 tasks (stories) + 11 deliverables (subtasks)
-// + 5 milestones (versions). Dates anchored to PROJECT_START as M1.
+// Seed an AIWEPI / Switch project workspace for an EXISTING user.
+// Reads SEED_EMAIL (required), NEXT_PUBLIC_SUPABASE_URL, and
+// SUPABASE_SERVICE_ROLE_KEY from env. Does NOT touch the password.
 //
-// Owner = aiwepi@local / password aiwepi-seed-2026 (created if missing).
+// Mapping (per the project plan PDF):
+//   6 epics (WP1.1..WP1.6)
+//   11 stories (T1.1..T5.2)
+//   11 subtasks (D1.1.1..D1.5.2)
+//   5 versions (M1.1..M1.5)
+// Dates anchored to PROJECT_START as M1. Each WP carries start/target_date
+// on the epic so the roadmap renders bars immediately.
 
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: join(__dirname, "..", ".env.local") });
+// Shell-passed env wins over file-loaded env. Only override when the
+// caller explicitly points us at an env file via SEED_ENV — that's the
+// "deliberate file" path.
+if (process.env.SEED_ENV) {
+  config({ path: join(__dirname, "..", process.env.SEED_ENV), override: true });
+} else if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  config({ path: join(__dirname, "..", ".env.local") });
+}
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !service) throw new Error("missing supabase env");
+const email = process.env.SEED_EMAIL;
+if (!url || !service) throw new Error("missing supabase env (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)");
+if (!email) throw new Error("missing SEED_EMAIL env");
 
 const admin = createClient(url, service, { auth: { persistSession: false } });
 
-const EMAIL = "aiwepi@local";
-const PASSWORD = "aiwepi-seed-2026";
 const WORKSPACE_NAME = "AIWEPI - Switch";
 const BOARD_TITLE = "AIWEPI - Project Plan";
 
 const DAY_MS = 86_400_000;
 const PROJECT_START = new Date('2025-10-15T09:00:00Z');
 const monthStart = (m) => new Date(PROJECT_START.getTime() + (m - 1) * 30 * DAY_MS);
+const isoDate = (d) => d.toISOString().slice(0, 10);
 
-async function ensureUser() {
-  const { data: list } = await admin.auth.admin.listUsers();
-  let existing = list.users.find((u) => u.email === EMAIL);
-  if (!existing) {
-    const { data, error } = await admin.auth.admin.createUser({
-      email: EMAIL,
-      password: PASSWORD,
-      email_confirm: true,
-    });
-    if (error) throw error;
-    existing = data.user;
-    console.log(`Created user ${EMAIL}`);
-  } else {
-    await admin.auth.admin.updateUserById(existing.id, { password: PASSWORD });
-  }
-  return existing.id;
+async function findUser() {
+  // listUsers paginates; the team only has a handful so page 1 suffices.
+  const { data, error } = await admin.auth.admin.listUsers({ perPage: 200 });
+  if (error) throw error;
+  const u = data.users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+  if (!u) throw new Error(`user ${email} not found in auth.users`);
+  return u.id;
 }
 
 async function call(table, body) {
   const { data, error } = await admin.from(table).insert(body).select();
-  if (error) throw new Error(`INSERT ${table}: ${error.message} ${JSON.stringify(body)}`);
+  if (error) throw new Error(`INSERT ${table}: ${error.message} body=${JSON.stringify(body)}`);
   return data;
 }
 
@@ -58,11 +63,11 @@ async function update(table, id, patch) {
 }
 
 const STATUS_LISTS = [
-  { title: "Backlog", statusKind: "todo" },
-  { title: "In progress", statusKind: "in_progress" },
-  { title: "Review", statusKind: "review" },
-  { title: "Done", statusKind: "done" },
-  { title: "Blocked", statusKind: "blocked" },
+  { title: "Backlog",      statusKind: "todo" },
+  { title: "In progress",  statusKind: "in_progress" },
+  { title: "Review",       statusKind: "review" },
+  { title: "Done",         statusKind: "done" },
+  { title: "Blocked",      statusKind: "blocked" },
 ];
 
 const WPS = [
@@ -236,19 +241,29 @@ const WPS = [
       },
     ],
   },
+  {
+    code: "WP1.6",
+    title: "WP1.6 — Dissemination Activities",
+    kind: "Dissemination",
+    startMonth: 25, endMonth: 30,
+    description:
+      "Dissemination of AIWEPI project results through publications, workshops, conference contributions, communication materials, and networking with sector stakeholders.",
+    tasks: [],
+    deliverables: [],
+  },
 ];
 
 const MILESTONES = [
-  { code: "M1.1", title: "Market Analysis Complete", endMonth: 3 },
-  { code: "M1.2", title: "Architectural and Functional Requirements Complete", endMonth: 6 },
-  { code: "M1.3", title: "Sub-Component Specification and Design Complete", endMonth: 12 },
-  { code: "M1.4", title: "System Implementation and Integration Complete", endMonth: 19 },
-  { code: "M1.5", title: "TRL5", endMonth: 24 },
+  { code: "M1.1", title: "Market Analysis Complete",                                        endMonth: 3 },
+  { code: "M1.2", title: "Architectural and Functional Requirements Complete",               endMonth: 6 },
+  { code: "M1.3", title: "Sub-Component Specification and Design Complete",                  endMonth: 12 },
+  { code: "M1.4", title: "System Implementation and Integration Complete",                   endMonth: 19 },
+  { code: "M1.5", title: "TRL5",                                                             endMonth: 24 },
 ];
 
 async function seed() {
-  const userId = await ensureUser();
-  console.log(`User: ${userId}`);
+  const userId = await findUser();
+  console.log(`User: ${email} (${userId})`);
 
   const [ws] = await call("workspaces", { name: WORKSPACE_NAME, owner_id: userId });
   console.log(`Workspace: ${ws.id}`);
@@ -274,7 +289,6 @@ async function seed() {
   });
   console.log(`Board: ${board.id}`);
 
-  // Lists with status mapping
   const lists = {};
   for (const [i, l] of STATUS_LISTS.entries()) {
     const [row] = await call("lists", {
@@ -287,19 +301,17 @@ async function seed() {
   }
   console.log(`Lists: ${Object.keys(lists).join(", ")}`);
 
-  // Versions = milestones
   const versions = {};
   for (const m of MILESTONES) {
     const [row] = await call("versions", {
       workspace_id: ws.id,
       name: `${m.code} ${m.title}`,
-      description: `Milestone target: M${m.endMonth} (${monthStart(m.endMonth).toISOString().slice(0, 10)})`,
+      description: `Milestone target: M${m.endMonth} (${isoDate(monthStart(m.endMonth))})`,
     });
     versions[m.code] = row.id;
   }
   console.log(`Versions: ${Object.keys(versions).length}`);
 
-  // Epics + tasks + deliverables
   let cardPos = 0;
   const nextPos = () => `a${(cardPos++).toString(36).padStart(3, "0")}`;
 
@@ -313,8 +325,8 @@ async function seed() {
     await update("cards", epic.id, {
       type: "epic",
       description: `**${wp.kind}** · M${wp.startMonth}–M${wp.endMonth}\n\n${wp.description}`,
-      start_date: monthStart(wp.startMonth).toISOString().slice(0, 10),
-      target_date: monthStart(wp.endMonth).toISOString().slice(0, 10),
+      start_date: isoDate(monthStart(wp.startMonth)),
+      target_date: isoDate(monthStart(wp.endMonth)),
     });
     console.log(`Epic ${wp.code}: ${epic.id}`);
 
@@ -330,8 +342,8 @@ async function seed() {
         type: "story",
         description: t.description,
         parent_card_id: epic.id,
-        start_date: monthStart(wp.startMonth).toISOString().slice(0, 10),
-        target_date: monthStart(wp.endMonth).toISOString().slice(0, 10),
+        start_date: isoDate(monthStart(wp.startMonth)),
+        target_date: isoDate(monthStart(wp.endMonth)),
       });
       taskCards.push(card);
     }
@@ -347,14 +359,14 @@ async function seed() {
         type: "subtask",
         description: d.description,
         parent_card_id: taskCards[0]?.id ?? epic.id,
-        target_date: monthStart(wp.endMonth).toISOString().slice(0, 10),
+        target_date: isoDate(monthStart(wp.endMonth)),
       });
     }
   }
 
-  console.log(`\n✓ Done. Login: ${EMAIL} / ${PASSWORD}`);
-  console.log(`  Workspace: http://192.168.68.58:3000/w/${ws.id}`);
-  console.log(`  Board: http://192.168.68.58:3000/b/${board.id}`);
+  console.log(`\n✓ Seeded AIWEPI workspace for ${email}`);
+  console.log(`  Workspace ID: ${ws.id}`);
+  console.log(`  Board ID:     ${board.id}`);
 }
 
 seed().catch((e) => {

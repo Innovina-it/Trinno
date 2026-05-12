@@ -4,7 +4,7 @@ export const Title = z.string().trim().min(1, "Required").max(120);
 export const Email = z.string().trim().email().max(254);
 export const Uuid = z.string().uuid();
 
-export const CreateWorkspaceInput = z.object({ name: Title });
+export const CreateWorkspaceInput = z.object({ name: Title, memberIds: z.array(Uuid).optional().default([]) });
 export const RenameWorkspaceInput = z.object({ id: Uuid, name: Title });
 export const DeleteWorkspaceInput = z.object({ id: Uuid });
 export const SetWorkspaceAutoAssignCreatorInput = z.object({
@@ -509,3 +509,24 @@ export const ToggleFavoriteBoardInput = z.object({ boardId: Uuid });
 // freshest board to the top. Fired best-effort on every board page
 // render — failures are swallowed.
 export const RecordBoardViewInput = z.object({ boardId: Uuid });
+
+// Milestones
+export const CreateMilestoneInput = z.object({
+  workspaceId: Uuid,
+  boardId: Uuid.nullable().optional(),
+  name: z.string().trim().min(1).max(120),
+  date: z.union([z.string(), z.date()]),
+  description: z.string().trim().max(2000).nullable().optional(),
+  color: z.string().trim().max(20).optional(),
+  icon: z.string().trim().max(50).nullable().optional(),
+});
+export const UpdateMilestoneInput = z.object({
+  id: Uuid,
+  name: z.string().trim().min(1).max(120).optional(),
+  boardId: Uuid.nullable().optional(),
+  date: z.union([z.string(), z.date()]).optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  color: z.string().trim().max(20).nullable().optional(),
+  icon: z.string().trim().max(50).nullable().optional(),
+});
+export const DeleteMilestoneInput = z.object({ id: Uuid });

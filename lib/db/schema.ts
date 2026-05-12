@@ -570,3 +570,20 @@ export const gadgets = pgTable("gadgets", {
     .notNull()
     .defaultNow(),
 });
+
+// Milestones — first-class roadmap markers. Distinct from `versions`.
+// Each milestone anchors to a specific date and optionally to a board.
+export const milestones = pgTable("milestones", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull(),
+  boardId: uuid("board_id"),
+  name: text("name").notNull(),
+  date: timestamp("date", { withTimezone: true }).notNull(),
+  description: text("description"),
+  color: text("color").notNull().default("#6366f1"),
+  icon: text("icon"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  createdBy: uuid("created_by").notNull(),
+});

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { BookOpen, Bug, Mountain, Square } from "lucide-react";
 import { createCard, updateCard } from "@/actions/cards";
 import { useWorkspaceStore } from "@/stores/workspace-store";
+import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import {
   Dialog,
   DialogContent,
@@ -89,6 +90,21 @@ export function RoadmapNewCardDialog({
   const [start, setStart] = useState(defaultStart ?? todayISO());
   const [target, setTarget] = useState(defaultTarget ?? plus14ISO());
   const [pending, startTransition] = useTransition();
+  // Task 10 — capture the signed-in user so freshly-created roadmap cards
+  // own themselves out of the box (matches kanban inline create which
+  // already auto-claims via the workspace `autoAssignCreator` flag).
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    createSupabaseBrowser()
+      .auth.getUser()
+      .then(({ data }) => {
+        if (!cancelled) setCurrentUserId(data.user?.id ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const boards = useWorkspaceStore((s) => s.boards);
   const lists = useWorkspaceStore((s) => s.lists);
@@ -97,9 +113,20 @@ export function RoadmapNewCardDialog({
     () => boards.filter((b) => !b.archived),
     [boards],
   );
+  // Task 10 — board's todo list is the preferred landing slot for any new
+  // gantt card. Falling back on the first list (by position) when no
+  // mapped todo column exists keeps creation unblocked on legacy boards.
   const listsForBoard = useMemo(
-    () => lists.filter((l) => l.boardId === boardId),
+    () =>
+      lists
+        .filter((l) => l.boardId === boardId)
+        .slice()
+        .sort((a, b) => (a.position < b.position ? -1 : 1)),
     [lists, boardId],
+  );
+  const todoListId = useMemo(
+    () => listsForBoard.find((l) => l.statusKind === "todo")?.id ?? null,
+    [listsForBoard],
   );
 
   // When the dialog opens, seed boardId/listId from the provided defaults
@@ -125,9 +152,11 @@ export function RoadmapNewCardDialog({
     }
     if (!boardId) return;
     if (listsForBoard.find((l) => l.id === listId)) return;
-    setListId(listsForBoard[0]?.id ?? "");
+    // Task 10 — prefer the board's todo list; only fall back to first
+    // list (by position) if no list is mapped to status_kind=todo.
+    setListId(todoListId ?? listsForBoard[0]?.id ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, defaultList, boardId, listsForBoard]);
+  }, [open, defaultList, boardId, listsForBoard, todoListId]);
 
   function reset() {
     setTitle("");
@@ -170,6 +199,11 @@ export function RoadmapNewCardDialog({
           // Only thread parentCardId through when the caller asked for it;
           // omit otherwise so the action treats it as "leave unchanged".
           ...(parentId ? { parentCardId: parentId } : {}),
+          // Task 10 — claim ownership for the creator. Best-effort: when
+          // `currentUserId` is unknown the field is omitted, and the
+          // action layer's owner-claim guard handles the auth check (the
+          // creator is the only viable claimant on an unowned card).
+          ...(currentUserId ? { ownerId: currentUserId } : {}),
         });
         toast.success(`Created ${type === "epic" ? "epic" : "card"} "${t}"`);
         onOpenChange(false);

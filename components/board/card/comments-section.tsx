@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useShallow } from "zustand/shallow";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useBoardStore } from "@/stores/board-store";
@@ -24,7 +25,7 @@ function fmt(d: Date | string) {
 }
 
 export function CommentsSection({ cardId }: { cardId: string }) {
-  const comments = useBoardStore((s) => s.comments);
+  const comments = useBoardStore(useShallow((s) => s.comments.filter((c) => c.cardId === cardId)));
   const profiles = useBoardStore((s) => s.boardProfiles);
   const boardMembers = useBoardStore((s) => s.boardMembers);
   const boardId = useBoardStore((s) => s.boardId);
@@ -55,10 +56,8 @@ export function CommentsSection({ cardId }: { cardId: string }) {
     };
   }, []);
 
-  const cardComments = useMemo(
-    () => comments.filter((c) => c.cardId === cardId),
-    [comments, cardId],
-  );
+  // Selector already filters to this card's comments (shallow equality).
+  const cardComments = comments;
   const profileById = useMemo(() => {
     const m = new Map<string, string>();
     for (const p of profiles) m.set(p.id, p.displayName);

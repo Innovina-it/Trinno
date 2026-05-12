@@ -63,6 +63,12 @@ export function useWorkspaceRealtime(workspaceId: string) {
   const boards = useWorkspaceStore((s) => s.boards);
   const [subscribed, setSubscribed] = useState(false);
 
+  // Stable string signature derived from board IDs — avoids re-subscribing
+  // on every render when the boards array reference changes but the IDs haven't.
+  // The effect body reads `boards` via closure; boardIds is the dep to gate
+  // re-subscription on ID changes only (not reference identity).
+  const boardIds = boards.map((b) => b.id).sort().join(",");
+
   useEffect(() => {
     if (boards.length === 0) {
       setSubscribed(false);
@@ -346,9 +352,10 @@ export function useWorkspaceRealtime(workspaceId: string) {
       setSubscribed(false);
       if (channel) supa.removeChannel(channel);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- boards intentionally omitted; boardIds gates re-subscription on ID-change only
   }, [
     workspaceId,
-    boards,
+    boardIds,
     upsertCard,
     removeCard,
     upsertList,

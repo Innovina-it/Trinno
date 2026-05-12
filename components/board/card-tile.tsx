@@ -1,6 +1,5 @@
 "use client";
 import { useState, useTransition, useRef, useCallback } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -22,6 +21,7 @@ import { CardCover } from "./card/cover-picker";
 import { CompleteToggle } from "./card/complete-toggle";
 import { cardCode } from "@/lib/format";
 import { updateCard } from "@/actions/cards";
+import { SubtaskBadge } from "./card-tile-subtask-badge";
 
 function fmtShortDate(d: Date | string): string {
   const date = d instanceof Date ? d : new Date(d);
@@ -174,6 +174,15 @@ export function CardTile({
       toggleSelected(card.id);
       return;
     }
+    // Soft client-side navigation — avoids Next.js hard-nav from <Link>.
+    router.push(`/b/${boardId}/c/${card.id}`, { scroll: false });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      router.push(`/b/${boardId}/c/${card.id}`, { scroll: false });
+    }
   };
 
   const handleSelectClick = (e: React.MouseEvent) => {
@@ -185,14 +194,15 @@ export function CardTile({
   const completed = card.completedAt != null || card.dueComplete;
 
   return (
-    <Link
+    <div
       ref={setNodeRef}
-      href={`/b/${boardId}/c/${card.id}`}
-      scroll={false}
       style={style}
       {...attributes}
       {...(isEditing ? {} : listeners)}
+      role="button"
+      tabIndex={0}
       onClick={handleClick}
+      onKeyDown={handleKeyDown}
       data-card-id={card.id}
       data-dragging={isDragging ? "true" : undefined}
       data-selected={isSelected ? "true" : undefined}
@@ -320,7 +330,7 @@ export function CardTile({
         }}
         fmtShortDate={fmtShortDate}
       />
-    </Link>
+    </div>
   );
 }
 
@@ -350,22 +360,7 @@ function CardMetaRow({
   // object — the latter triggered Zustand's "getSnapshot should be cached"
   // warning and an infinite re-render loop because every selector run
   // produced a fresh object reference.
-  const subtaskTotal = useBoardStore((s) => {
-    let n = 0;
-    for (const c of s.cards) {
-      if (c.parentCardId === card.id && !c.archived) n += 1;
-    }
-    return n;
-  });
-  const subtaskDone = useBoardStore((s) => {
-    let n = 0;
-    for (const c of s.cards) {
-      if (c.parentCardId === card.id && !c.archived && c.completedAt != null) n += 1;
-    }
-    return n;
-  });
-  const hasSubtasks = subtaskTotal > 0;
-  const allSubtasksDone = hasSubtasks && subtaskDone === subtaskTotal;
+  // Subtask progress is now handled by SubtaskBadge (card-tile-subtask-badge.tsx).
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2.5 pt-1">
@@ -418,20 +413,7 @@ function CardMetaRow({
       )}
       <StoryPointsChip cardId={card.id} />
       <TimeChip cardId={card.id} />
-      {hasSubtasks && (
-        <span
-          data-testid="tile-subtasks"
-          title={`${subtaskDone} of ${subtaskTotal} sub-tasks done`}
-          className={`chip mono-meta-sm inline-flex items-center gap-1 tabular-nums ${
-            allSubtasksDone
-              ? "text-[color:var(--accent-lime)]"
-              : "text-fg-muted"
-          }`}
-        >
-          {subtaskDone}/{subtaskTotal}
-          <Check className="size-3" aria-hidden />
-        </span>
-      )}
+      <SubtaskBadge cardId={card.id} />
       <TileIndicators cardId={card.id} />
     </div>
   );

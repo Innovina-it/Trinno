@@ -292,6 +292,51 @@ export function groupByComponent<C extends RoadmapCard>(
   return lanes;
 }
 
+/**
+ * Task 11 — Subtask filter must not hide parent tasks.
+ *
+ * The Roadmap renders each parent (epic / story / task / bug) as its own
+ * lane and nests its subtasks under the parent's row via
+ * `subtaskRowsByParent`. Earlier the type filter was applied uniformly to
+ * BOTH parents and subtasks, so the user-facing "Subtask" checkbox would
+ * hide every parent that wasn't itself a subtask — exactly the opposite
+ * of what the affordance implies.
+ *
+ * This helper splits the type filter:
+ *
+ *   • Parents pass based on the non-subtask types in `selectedTypes`.
+ *     If the user only ticked "Subtask", the parent-level filter is
+ *     effectively empty → every parent stays visible so its subtasks
+ *     have a row to render under.
+ *
+ *   • Subtasks pass only when "subtask" is explicitly selected. If
+ *     "subtask" is unticked, subtasks are removed but parents survive.
+ *
+ *   • An empty `selectedTypes` (no type filter at all) is the identity
+ *     pass-through — every card stays.
+ *
+ * The function is pure so the filter rule is easy to unit-test alongside
+ * the rest of the layout helpers.
+ */
+export function filterRoadmapCardsByType<C extends RoadmapCard>(
+  cards: C[],
+  selectedTypes: readonly string[],
+): C[] {
+  if (selectedTypes.length === 0) return cards;
+  const selected = new Set(selectedTypes);
+  const subtaskAllowed = selected.has("subtask");
+  // Parent-level types = everything the user picked, minus "subtask".
+  const parentTypes = new Set<string>();
+  for (const t of selected) if (t !== "subtask") parentTypes.add(t);
+  return cards.filter((c) => {
+    if (c.type === "subtask") return subtaskAllowed;
+    // No parent-level types picked means the user only constrained
+    // subtasks — every parent passes so its nested subtasks have a home.
+    if (parentTypes.size === 0) return true;
+    return parentTypes.has(c.type);
+  });
+}
+
 export type PlacedCard<C extends RoadmapCard = RoadmapCard> = {
   card: C;
   row: number;

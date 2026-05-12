@@ -6,7 +6,10 @@ import {
   parseFilters,
   serializeFilters,
   isFilterActive,
+  getAssigneeMode,
+  withAssigneeMode,
   type LaneMode,
+  type AssigneeMode,
 } from "@/lib/board-filters";
 import {
   DropdownMenu,
@@ -29,9 +32,9 @@ import {
   Filter,
   Layers,
   Tag,
-  User,
   X,
 } from "lucide-react";
+import { AssigneeSegment } from "@/components/filters/assignee-segment";
 
 const LANE_OPTIONS: { id: LaneMode; label: string }[] = [
   { id: "none", label: "No swimlanes" },
@@ -81,8 +84,8 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
   function setDue(d: typeof filters.due) {
     update({ ...filters, due: filters.due === d ? null : d });
   }
-  function toggleMe() {
-    update({ ...filters, assignedToMe: !filters.assignedToMe });
+  function setAssigneeMode(mode: AssigneeMode) {
+    update(withAssigneeMode(filters, mode));
   }
   function toggleScheduled() {
     update({ ...filters, scheduled: !filters.scheduled });
@@ -97,6 +100,7 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
         labelIds: [],
         due: null,
         assignedToMe: false,
+        unassigned: false,
         scheduled: false,
         hideCompleted: false,
       },
@@ -105,8 +109,9 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
   }
 
   const active = isFilterActive(filters) || lanes !== "none";
+  const assigneeMode = getAssigneeMode(filters);
   const filterCount =
-    (filters.assignedToMe ? 1 : 0) +
+    (assigneeMode !== "all" ? 1 : 0) +
     (filters.due ? 1 : 0) +
     (filters.scheduled ? 1 : 0) +
     (filters.hideCompleted ? 1 : 0) +
@@ -141,6 +146,9 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {/* Assignee 3-way segment */}
+      <AssigneeSegment value={assigneeMode} onChange={setAssigneeMode} />
+
       {/* Filters */}
       <DropdownMenu>
         <DropdownMenuTrigger
@@ -167,13 +175,6 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
         <DropdownMenuContent align="start" className="w-64">
           <DropdownMenuGroup>
             <DropdownMenuLabel>Scope</DropdownMenuLabel>
-            <DropdownMenuCheckboxItem
-              checked={filters.assignedToMe}
-              onCheckedChange={toggleMe}
-            >
-              <User className="size-3.5" aria-hidden />
-              Assigned to me
-            </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem
               checked={filters.due === "overdue"}
               onCheckedChange={() => setDue("overdue")}

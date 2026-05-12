@@ -29,6 +29,8 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { updateCard, archiveCard } from "@/actions/cards";
+import { toggleCardMember } from "@/actions/card-members";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { undoBus } from "@/lib/undo-bus";
 import { LabelsSection } from "./card/labels-section";
 import { DueSection } from "./card/due-section";
@@ -82,6 +84,7 @@ export type CardModalCard = {
   priority?: CardPriority | null;
   coverKind?: CoverKind;
   coverValue?: string | null;
+  dueDate?: Date | string | null;
   dueComplete?: boolean;
   completedAt?: Date | string | null;
 };
@@ -125,6 +128,161 @@ function AccordionGroup({
       </summary>
       <div className="px-3 pb-3 pt-1 space-y-4">{children}</div>
     </details>
+  );
+}
+
+function toIsoDay(d: Date | string | null | undefined): string {
+  if (!d) return "";
+  const dt = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * Task 5 — Quick-edit strip surfaced in the card-modal header so the
+ * three minimum-set fields (title, members, due date) are always reachable
+ * without scrolling into the Planning / Work accordions. Title lives in
+ * the hero just above; this strip handles members + due date inline.
+ *
+ * Optimistic local writes mirror the dedicated DueSection / MembersSection
+ * patterns; we don't reuse those components verbatim because they render
+ * full panels with helper copy, which would defeat the "visible without
+ * scrolling" goal of the quick-edit strip.
+ */
+function QuickEditStrip({
+  cardId,
+  currentDueDate,
+}: {
+  cardId: string;
+  currentDueDate: Date | string | null;
+}) {
+  const boardStore = useContext(BoardStoreContext);
+  const profiles = useStore(boardStore!, (s) => s.boardProfiles);
+  const cardMembers = useStore(boardStore!, (s) => s.cardMembers);
+  const addCardMember = useStore(boardStore!, (s) => s.addCardMember);
+  const removeCardMember = useStore(boardStore!, (s) => s.removeCardMember);
+  const updateCardLocal = useStore(boardStore!, (s) => s.updateCard);
+  // Live card view so optimistic dueDate writes (and external realtime
+  // updates) propagate without remounting the modal.
+  const liveDue = useStore(boardStore!, (s) => {
+    const c = s.cards.find((c) => c.id === cardId);
+    return c?.dueDate ?? null;
+  });
+  const [pending, start] = useTransition();
+
+  const assigned = new Set(
+    cardMembers.filter((m) => m.cardId === cardId).map((m) => m.userId),
+  );
+  const due = toIsoDay(liveDue ?? currentDueDate);
+
+  function toggle(userId: string) {
+    const wasAssigned = assigned.has(userId);
+    if (wasAssigned) removeCardMember(cardId, userId);
+    else addCardMember({ cardId, userId });
+    start(async () => {
+      try {
+        await toggleCardMember({ cardId, userId });
+      } catch (err) {
+        // Roll back optimistic state on failure.
+        if (wasAssigned) addCardMember({ cardId, userId });
+        else removeCardMember(cardId, userId);
+        toast.error((err as Error).message);
+      }
+    });
+  }
+
+  function setDue(next: string) {
+    const dueDate = next
+      ? new Date(`${next}T12:00:00.000Z`) // noon UTC — matches DueSection
+      : null;
+    const patch = dueDate
+      ? { dueDate }
+      : { dueDate: null, dueComplete: false };
+    updateCardLocal(cardId, patch);
+    start(async () => {
+      try {
+        await updateCard({ id: cardId, ...patch });
+      } catch (err) {
+        toast.error((err as Error).message);
+      }
+    });
+  }
+
+  if (profiles.length === 0) {
+    // No collaborators to show — just surface due date inline.
+    return (
+      <section
+        data-testid="card-modal-quick-edit"
+        className="flex items-center gap-2 rounded-xl border border-hairline bg-[color:var(--surface)] px-3 py-2"
+      >
+        <span className="mono-meta-sm text-fg-faint">DUE</span>
+        <input
+          type="date"
+          value={due}
+          onChange={(e) => setDue(e.target.value)}
+          aria-label="Due date"
+          data-testid="card-modal-quick-due"
+          disabled={pending}
+          className="ml-auto bg-transparent text-xs text-fg rounded-md border border-hairline px-2 py-1 outline-none focus:border-fg/40"
+        />
+      </section>
+    );
+  }
+
+  return (
+    <section
+      data-testid="card-modal-quick-edit"
+      className="flex flex-wrap items-center gap-2 rounded-xl border border-hairline bg-[color:var(--surface)] px-3 py-2"
+    >
+      <div className="flex items-center gap-1.5 flex-1 min-w-[12rem] flex-wrap">
+        <span className="mono-meta-sm text-fg-faint">ASSIGNEES</span>
+        {profiles.map((p) => {
+          const on = assigned.has(p.id);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => toggle(p.id)}
+              aria-pressed={on}
+              data-user-id={p.id}
+              data-assigned={on}
+              data-testid="card-modal-quick-member"
+              disabled={pending}
+              className={[
+                "inline-flex items-center gap-1.5 rounded-full border px-1.5 py-0.5 text-[10px] transition-colors",
+                on
+                  ? "border-fg/40 bg-fg/10 text-fg"
+                  : "border-hairline bg-transparent text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)]",
+              ].join(" ")}
+            >
+              <Avatar
+                size="sm"
+                className="rounded-none border border-current size-4"
+              >
+                <AvatarFallback className="rounded-none bg-transparent text-current text-[9px] tracking-widest">
+                  {p.displayName.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <span className="normal-case tracking-normal">
+                {p.displayName}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <label className="flex items-center gap-1.5 shrink-0">
+        <span className="mono-meta-sm text-fg-faint">DUE</span>
+        <input
+          type="date"
+          value={due}
+          onChange={(e) => setDue(e.target.value)}
+          aria-label="Due date"
+          data-testid="card-modal-quick-due"
+          disabled={pending}
+          className="bg-transparent text-xs text-fg rounded-md border border-hairline px-2 py-1 outline-none focus:border-fg/40"
+        />
+      </label>
+    </section>
   );
 }
 
@@ -560,6 +718,15 @@ export function CardModal({
           )}
         </div>
       </div>
+
+      {/* Task 5 — quick-edit strip. Surfaces the three minimum-set fields
+          (title is in the hero above; assignee + due date go here) so the
+          operator can flip the dials parity-matched with AddCardForm
+          without scrolling into the Planning/Work accordions. */}
+      <QuickEditStrip
+        cardId={card.id}
+        currentDueDate={card.dueDate ?? null}
+      />
 
       {/* Notes — markdown render in view mode, click to edit. Cmd/Ctrl+Enter
           or blur saves. Empty state invites a click. */}

@@ -66,3 +66,31 @@ export async function searchMentionables(
     return rows;
   });
 }
+
+// Search profiles visible to the caller by display name or handle prefix.
+// Used by the workspace-creation member picker.
+export async function searchProfiles(
+  query: string,
+): Promise<{ id: string; handle: string | null; displayName: string }[]> {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  const q = query.trim().toLowerCase();
+  return dbAsUser(token, async (tx) => {
+    const where = q
+      ? or(
+          ilike(profiles.handle, `${q}%`),
+          ilike(profiles.displayName, `%${q}%`),
+        )
+      : undefined;
+    const rows = await tx
+      .select({
+        id: profiles.id,
+        handle: profiles.handle,
+        displayName: profiles.displayName,
+      })
+      .from(profiles)
+      .where(where)
+      .limit(12);
+    return rows;
+  });
+}

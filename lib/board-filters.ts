@@ -1,10 +1,19 @@
 export type LaneMode = "none" | "assignee" | "parent" | "label" | "sprint" | "type";
 
+/** Three-state assignee filter:
+ *  - null / "all"   → no filter
+ *  - "me"           → assignedToMe (URL: assignee=me)
+ *  - "none"         → unassigned   (URL: assignee=none)
+ */
+export type AssigneeMode = "all" | "me" | "none";
+
 export type Filters = {
   types: string[];
   labelIds: string[];
   due: "overdue" | "this-week" | null;
   assignedToMe: boolean;
+  /** When true, show only cards with no members AND no owner. */
+  unassigned: boolean;
   scheduled: boolean;
   hideCompleted: boolean;
 };
@@ -19,6 +28,8 @@ type FilterCard = {
   sprintId?: string | null;
   startDate?: Date | string | null;
   targetDate?: Date | string | null;
+  /** ownerId is used by the unassigned filter. Optional for backwards compat. */
+  ownerId?: string | null;
 };
 
 export function parseFilters(sp: URLSearchParams): Filters {
@@ -26,8 +37,10 @@ export function parseFilters(sp: URLSearchParams): Filters {
   const labelIds = (sp.get("label") || "").split(",").map((s) => s.trim()).filter(Boolean);
   const due = sp.get("due") as Filters["due"];
   // Canonical query key is `assignee=me` (matches Jira convention).
-  // `me=1` is NOT supported.
-  const assignedToMe = sp.get("assignee") === "me";
+  // `assignee=none` means unassigned filter.
+  const assigneeParam = sp.get("assignee");
+  const assignedToMe = assigneeParam === "me";
+  const unassigned = assigneeParam === "none";
   const scheduled = sp.get("scheduled") === "1";
   // `done=hide` matches the URL key used by the workload page (see
   // components/workload/workload-view.tsx). On the board the default is
@@ -38,6 +51,7 @@ export function parseFilters(sp: URLSearchParams): Filters {
     labelIds,
     due: due === "overdue" || due === "this-week" ? due : null,
     assignedToMe,
+    unassigned,
     scheduled,
     hideCompleted,
   };
@@ -49,9 +63,26 @@ export function serializeFilters(f: Filters): URLSearchParams {
   if (f.labelIds.length) sp.set("label", f.labelIds.join(","));
   if (f.due) sp.set("due", f.due);
   if (f.assignedToMe) sp.set("assignee", "me");
+  else if (f.unassigned) sp.set("assignee", "none");
   if (f.scheduled) sp.set("scheduled", "1");
   if (f.hideCompleted) sp.set("done", "hide");
   return sp;
+}
+
+/** Derive the 3-state assignee mode from the filters object. */
+export function getAssigneeMode(f: Filters): AssigneeMode {
+  if (f.assignedToMe) return "me";
+  if (f.unassigned) return "none";
+  return "all";
+}
+
+/** Return a new Filters with assignee mode applied (mutually exclusive). */
+export function withAssigneeMode(f: Filters, mode: AssigneeMode): Filters {
+  return {
+    ...f,
+    assignedToMe: mode === "me",
+    unassigned: mode === "none",
+  };
 }
 
 export function isFilterActive(f: Filters): boolean {
@@ -59,6 +90,7 @@ export function isFilterActive(f: Filters): boolean {
     || f.labelIds.length > 0
     || f.due !== null
     || f.assignedToMe
+    || f.unassigned
     || f.scheduled
     || f.hideCompleted;
 }
@@ -108,6 +140,13 @@ export function applyFilters<T extends FilterCard>(
       if (!ctx.currentUserId) return false;
       const mems = memberByCard.get(c.id);
       if (!mems || !mems.has(ctx.currentUserId)) return false;
+    }
+    if (f.unassigned) {
+      // No members AND no owner.
+      const mems = memberByCard.get(c.id);
+      const hasMembers = mems && mems.size > 0;
+      const hasOwner = Boolean(c.ownerId);
+      if (hasMembers || hasOwner) return false;
     }
     if (f.scheduled) {
       if (!c.startDate && !c.targetDate) return false;
