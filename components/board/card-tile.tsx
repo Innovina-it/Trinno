@@ -79,14 +79,12 @@ export function CardTile({
       s.cardMembers.filter((m) => m.cardId === card.id).map((m) => m.userId),
     ),
   );
-  const quickViewProfiles = useBoardStore(
-    useShallow((s) =>
-      s.boardProfiles.map((p) => ({
-        id: p.id,
-        displayName: p.displayName,
-        avatarUrl: p.avatarUrl,
-      })),
-    ),
+  // Return raw store array — useShallow caches by reference equality of
+  // items. Mapping to a new {id,displayName,avatarUrl} object inside the
+  // selector created fresh objects each call, so shallow always saw new
+  // items and the cache never hit → snapshot loop.
+  const quickViewProfilesRaw = useBoardStore(
+    useShallow((s) => s.boardProfiles),
   );
   // Two primitive scalar selectors — returning {total, done} as one object
   // would trip Zustand's snapshot warning. See CardMetaRow / SubtaskBadge
@@ -399,11 +397,13 @@ export function CardTile({
           priority: card.priority,
         }}
         memberProfiles={quickViewMemberIds
-          .map((id) => quickViewProfiles.find((p) => p.id === id))
-          .filter(
-            (p): p is { id: string; displayName: string; avatarUrl: string | null } =>
-              !!p,
-          )}
+          .map((id) => quickViewProfilesRaw.find((p) => p.id === id))
+          .filter((p): p is (typeof quickViewProfilesRaw)[number] => !!p)
+          .map((p) => ({
+            id: p.id,
+            displayName: p.displayName,
+            avatarUrl: p.avatarUrl,
+          }))}
         subtaskTotal={quickViewSubtaskTotal}
         subtaskDone={quickViewSubtaskDone}
         boardId={boardId}

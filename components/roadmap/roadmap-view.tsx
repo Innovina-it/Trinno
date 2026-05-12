@@ -822,17 +822,11 @@ export function RoadmapView({
         : ([] as string[]),
     ),
   );
-  const quickViewProfiles = useWorkspaceStore(
-    useShallow((s) =>
-      s.workspaceProfiles.map((p) => ({
-        id: p.id,
-        displayName: p.displayName,
-        // workspaceProfiles only carries {id, displayName} — surface a
-        // null avatar so QuickViewProfile's shape is satisfied without
-        // re-querying the board profiles.
-        avatarUrl: null as string | null,
-      })),
-    ),
+  // Return raw store array. useShallow caches by item-reference, so mapping
+  // to fresh {id,displayName,avatarUrl} objects inside the selector breaks
+  // the cache → snapshot loop. The transform now happens in useMemo below.
+  const quickViewProfilesRaw = useWorkspaceStore(
+    useShallow((s) => s.workspaceProfiles),
   );
   // Two primitive scalar selectors — same {total, done} object would
   // trip Zustand's snapshot-cache warning. Pattern mirrors
@@ -862,14 +856,16 @@ export function RoadmapView({
   const quickViewMemberProfiles = useMemo(
     () =>
       quickViewMemberIds
-        .map((id) => quickViewProfiles.find((p) => p.id === id))
-        .filter(
-          (
-            p,
-          ): p is { id: string; displayName: string; avatarUrl: string | null } =>
-            !!p,
-        ),
-    [quickViewMemberIds, quickViewProfiles],
+        .map((id) => quickViewProfilesRaw.find((p) => p.id === id))
+        .filter((p): p is (typeof quickViewProfilesRaw)[number] => !!p)
+        .map((p) => ({
+          id: p.id,
+          displayName: p.displayName,
+          // workspaceProfiles carries only {id, displayName}; surface a null
+          // avatar so QuickViewProfile's shape is satisfied.
+          avatarUrl: null as string | null,
+        })),
+    [quickViewMemberIds, quickViewProfilesRaw],
   );
 
   const drag = useRoadmapDragHarness({
