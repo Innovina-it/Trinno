@@ -1,5 +1,6 @@
 "use client";
 import { Check } from "lucide-react";
+import { useShallow } from "zustand/shallow";
 import { useBoardStore } from "@/stores/board-store";
 
 // Standalone subtask progress badge for use in card tiles.
@@ -20,11 +21,13 @@ export function SubtaskBadge({ cardId }: { cardId: string }) {
     }
     return n;
   });
-  const subtaskTitles = useBoardStore((s) =>
-    s.cards
-      .filter((c) => c.parentCardId === cardId && !c.archived)
-      .slice(0, 6)
-      .map((c) => c.title),
+  const subtaskTitles = useBoardStore(
+    useShallow((s) =>
+      s.cards
+        .filter((c) => c.parentCardId === cardId && !c.archived)
+        .slice(0, 6)
+        .map((c) => c.title),
+    ),
   );
 
   if (subtaskTotal === 0) return null;
