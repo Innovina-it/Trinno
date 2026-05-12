@@ -103,7 +103,7 @@ function fmtHeader(d: Date, zoom: Zoom): string {
       ? `${weekday} ${monthShort} ${d.getUTCDate()}`
       : `${weekday} ${d.getUTCDate()}`;
   }
-  if (zoom === "month") {
+  if (zoom === "month" || zoom === "fit") {
     return `${monthShort} ${d.getUTCFullYear()}`;
   }
   // quarter
@@ -115,8 +115,8 @@ function buildHeaderTicks(
   gridStart: Date,
   gridEnd: Date,
   zoom: Zoom,
+  ppd: number,
 ): { date: Date; x: number }[] {
-  const ppd = pixelsPerDay(zoom);
   const ticks: { date: Date; x: number }[] = [];
   if (zoom === "week") {
     let cur = gridStart;
@@ -124,7 +124,7 @@ function buildHeaderTicks(
       ticks.push({ date: cur, x: xForDate(cur, gridStart, ppd) });
       cur = addDays(cur, 1);
     }
-  } else if (zoom === "month") {
+  } else if (zoom === "month" || zoom === "fit") {
     let cur = new Date(
       Date.UTC(gridStart.getUTCFullYear(), gridStart.getUTCMonth(), 1),
     );
@@ -167,7 +167,7 @@ export function RoadmapView({
   const zoomParam = sp.get("zoom");
   const zoom: Zoom = (ZOOMS as string[]).includes(zoomParam ?? "")
     ? (zoomParam as Zoom)
-    : "month";
+    : "fit";
   const lanesParam = sp.get("lanes");
   const laneMode: LaneMode = (LANE_MODES as string[]).includes(lanesParam ?? "")
     ? (lanesParam as LaneMode)
@@ -568,7 +568,34 @@ export function RoadmapView({
   const gutterOnRef = useRef(gutterOn);
   gutterOnRef.current = gutterOn;
 
-  const ppd = pixelsPerDay(zoom);
+  // --- Fit zoom: measure canvas container width for responsive effectivePpd ---
+  const [containerWidth, setContainerWidth] = useState(0);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    // Set initial size
+    setContainerWidth(el.clientWidth);
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setContainerWidth(entry.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []); // scrollerRef is stable; no deps needed
+
+  // Resolve effective pixels-per-day.
+  // For fixed zoom levels this is the static value from pixelsPerDay().
+  // For "fit" we compute it so 180 days fill the available canvas width.
+  const effectivePpd = useMemo(() => {
+    if (zoom !== "fit") return pixelsPerDay(zoom);
+    if (containerWidth === 0) return 8; // pre-mount fallback (matches quarter density)
+    // Subtract the lane-label panel width. LANE_LABEL_WIDTH_CSS is a CSS clamp
+    // expression, so we use 200px as a conservative runtime estimate (the actual
+    // rendered width is close to 18vw, always in [140, 240]).
+    const laneLabelW = 200;
+    return Math.max(2, (containerWidth - laneLabelW) / 180);
+  }, [zoom, containerWidth]);
+
   const now = useMemo(() => new Date(), []);
   // Base origin = current period (week/month/quarter). If any card starts
   // before that, walk the origin back to cover it (snapped to the same
@@ -593,7 +620,7 @@ export function RoadmapView({
     return new Date(maxTarget);
   }, [cards, gridStart, zoom]);
   const totalDays = Math.max(1, dayDiff(gridStart, gridEnd));
-  const width = totalDays * ppd;
+  const width = totalDays * effectivePpd;
 
   // Plan #16b-β — expanded parent state lifted into RoadmapView.
   const [expandedParents, setExpandedParents] = useState<Set<string>>(
@@ -705,9 +732,9 @@ export function RoadmapView({
       const barRowsTop = ll.top + LANE_HEADER_HEIGHT;
       if (ll.lane.headerCard) {
         const c = ll.lane.headerCard;
-        const x = xForDate(startOfDay(c.startDate), gridStart, ppd);
+        const x = xForDate(startOfDay(c.startDate), gridStart, effectivePpd);
         const w =
-          xForDate(startOfDay(c.targetDate), gridStart, ppd) - x + ppd;
+          xForDate(startOfDay(c.targetDate), gridStart, effectivePpd) - x + effectivePpd;
         map.set(c.id, {
           x,
           y: barRowsTop + 4 + 14, // top + bar offset + half-height (28/2)
@@ -718,9 +745,9 @@ export function RoadmapView({
       const bodyTop = barRowsTop + (ll.lane.headerCard ? ROW_HEIGHT : 0);
       for (const p of ll.placed) {
         const c = p.card;
-        const x = xForDate(startOfDay(c.startDate), gridStart, ppd);
+        const x = xForDate(startOfDay(c.startDate), gridStart, effectivePpd);
         const w =
-          xForDate(startOfDay(c.targetDate), gridStart, ppd) - x + ppd;
+          xForDate(startOfDay(c.targetDate), gridStart, effectivePpd) - x + effectivePpd;
         map.set(c.id, {
           x,
           y: bodyTop + p.row * ROW_HEIGHT + 4 + 14,
@@ -729,11 +756,11 @@ export function RoadmapView({
       }
     }
     return map;
-  }, [laneLayout, gridStart, ppd]);
+  }, [laneLayout, gridStart, effectivePpd]);
 
   const ticks = useMemo(
-    () => buildHeaderTicks(gridStart, gridEnd, zoom),
-    [gridStart, gridEnd, zoom],
+    () => buildHeaderTicks(gridStart, gridEnd, zoom, effectivePpd),
+    [gridStart, gridEnd, zoom, effectivePpd],
   );
 
   // ---- Zoom toggle (URL-synced) ----
@@ -973,7 +1000,7 @@ export function RoadmapView({
   );
 
   const drag = useRoadmapDragHarness({
-    ppd,
+    ppd: effectivePpd,
     gridStart,
     LANE_HEADER_HEIGHT,
     ROW_HEIGHT,
@@ -1024,13 +1051,13 @@ export function RoadmapView({
     (target: Date) => {
       const scroller = scrollerRef.current;
       if (!scroller) return;
-      const x = xForDate(startOfDay(target), gridStart, ppd);
+      const x = xForDate(startOfDay(target), gridStart, effectivePpd);
       const desired = x - scroller.clientWidth / 2;
       const max = scroller.scrollWidth - scroller.clientWidth;
       const left = Math.max(0, Math.min(max, desired));
       scroller.scrollTo({ left, behavior: "smooth" });
     },
-    [gridStart, ppd],
+    [gridStart, effectivePpd],
   );
 
 
@@ -1074,7 +1101,7 @@ export function RoadmapView({
       requestAnimationFrame(() => {
         const sc = scrollerRef.current;
         if (!sc) return;
-        const x = xForDate(startOfDay(now), gridStart, ppd);
+        const x = xForDate(startOfDay(now), gridStart, effectivePpd);
         const desired = x - sc.clientWidth / 4;
         const max = sc.scrollWidth - sc.clientWidth;
         sc.scrollLeft = Math.max(0, Math.min(max, desired));
@@ -1526,7 +1553,7 @@ export function RoadmapView({
                     className="absolute top-0 flex items-start pt-1 pl-1.5"
                     style={{
                       left: t.x,
-                      width: zoom === "week" ? ppd : 1,
+                      width: zoom === "week" ? effectivePpd : 1,
                       height: 24,
                     }}
                   >
@@ -1549,7 +1576,7 @@ export function RoadmapView({
                   beneath bars (z-default) so a bar covering today still
                   shows the line through hairline transparency. */}
               {(() => {
-                const todayX = xForDate(startOfDay(now), gridStart, ppd);
+                const todayX = xForDate(startOfDay(now), gridStart, effectivePpd);
                 if (todayX < 0 || todayX > width) return null;
                 return (
                   <div
@@ -1621,7 +1648,7 @@ export function RoadmapView({
                   const daysToFirstSat = (6 - startDay + 7) % 7;
                   let cur = addDays(gridStart, daysToFirstSat);
                   while (cur.getTime() < gridEnd.getTime()) {
-                    const x = xForDate(cur, gridStart, ppd);
+                    const x = xForDate(cur, gridStart, effectivePpd);
                     stripes.push(
                       <div
                         key={`we-${cur.toISOString()}`}
@@ -1632,7 +1659,7 @@ export function RoadmapView({
                           left: x,
                           top: HEADER_STRIP_HEIGHT,
                           bottom: 0,
-                          width: 2 * ppd,
+                          width: 2 * effectivePpd,
                         }}
                       />,
                     );
@@ -1644,7 +1671,7 @@ export function RoadmapView({
               {(() => {
                 const today = startOfDay(new Date());
                 if (today < gridStart || today > gridEnd) return null;
-                const todayX = xForDate(today, gridStart, ppd);
+                const todayX = xForDate(today, gridStart, effectivePpd);
                 return (
                   <div
                     data-testid="roadmap-today-line"
@@ -1668,7 +1695,7 @@ export function RoadmapView({
                   stripes but below dragged bars. */}
               {drag.snapPreview &&
                 (() => {
-                  const x = xForDate(drag.snapPreview.date, gridStart, ppd);
+                  const x = xForDate(drag.snapPreview.date, gridStart, effectivePpd);
                   return (
                     <>
                       <div
@@ -1761,16 +1788,16 @@ export function RoadmapView({
                           const sx = xForDate(
                             startOfDay(sc.startDate),
                             gridStart,
-                            ppd,
+                            effectivePpd,
                           );
                           const sw =
                             xForDate(
                               startOfDay(sc.targetDate),
                               gridStart,
-                              ppd,
+                              effectivePpd,
                             ) -
                             sx +
-                            ppd;
+                            effectivePpd;
                           return (
                             <div
                               key={sc.id}
@@ -1814,11 +1841,11 @@ export function RoadmapView({
                   isHeader: boolean,
                 ) => {
                   const c = parentCard;
-                  const x = xForDate(startOfDay(c.startDate), gridStart, ppd);
+                  const x = xForDate(startOfDay(c.startDate), gridStart, effectivePpd);
                   const w =
-                    xForDate(startOfDay(c.targetDate), gridStart, ppd) -
+                    xForDate(startOfDay(c.targetDate), gridStart, effectivePpd) -
                     x +
-                    ppd;
+                    effectivePpd;
                   const expanded = expandedParents.has(c.id);
                   const subRows =
                     ll.lane.subtaskRowsByParent[c.id] ?? [];

@@ -5,7 +5,7 @@
 
 const MS_PER_DAY = 86_400_000;
 
-export type Zoom = "week" | "month" | "quarter";
+export type Zoom = "fit" | "week" | "month" | "quarter";
 
 /** Strip the time portion (UTC) — returns a new Date at 00:00:00.000Z. */
 export function startOfDay(d: Date): Date {
@@ -25,9 +25,13 @@ export function dayDiff(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / MS_PER_DAY);
 }
 
-/** Pixels-per-day for each zoom level. Tuned for readability + density. */
+/** Pixels-per-day for each zoom level. Tuned for readability + density.
+ *  Returns 0 for "fit" — the actual ppd is computed at runtime from the
+ *  container width in RoadmapView. */
 export function pixelsPerDay(zoom: Zoom): number {
   switch (zoom) {
+    case "fit":
+      return 0; // sentinel — resolved to effectivePpd in RoadmapView
     case "week":
       return 60;
     case "month":
@@ -45,7 +49,7 @@ export function gridStartFor(now: Date, zoom: Zoom): Date {
     const sinceMonday = (d.getUTCDay() + 6) % 7;
     return addDays(d, -sinceMonday);
   }
-  if (zoom === "month") {
+  if (zoom === "month" || zoom === "fit") {
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
   }
   // quarter — snap to first day of Jan / Apr / Jul / Oct.

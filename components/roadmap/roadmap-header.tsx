@@ -28,7 +28,7 @@ import {
 import type { Zoom } from "@/lib/roadmap/dates";
 import { formatDate } from "@/lib/format-date";
 
-export const ZOOMS: Zoom[] = ["week", "month", "quarter"];
+export const ZOOMS: Zoom[] = ["fit", "week", "month", "quarter"];
 export type LaneMode = "epic" | "assignee" | "component";
 export const LANE_MODES: LaneMode[] = ["epic", "assignee", "component"];
 export const LANE_MODE_LABEL: Record<LaneMode, string> = {
@@ -47,6 +47,7 @@ export const VIEW_MODE_LABEL: Record<ViewMode, string> = {
   list: "List",
 };
 const ZOOM_LABEL: Record<Zoom, string> = {
+  fit: "Fit",
   week: "Week",
   month: "Month",
   quarter: "Quarter",
