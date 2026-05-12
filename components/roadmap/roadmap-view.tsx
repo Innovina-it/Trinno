@@ -56,6 +56,9 @@ import { MilestoneMarkers } from "./milestone-markers";
 import type { MilestoneRow } from "./milestone-dialog";
 import { MilestoneDialog } from "./milestone-dialog";
 import { listMilestones } from "@/actions/milestones";
+import { updateCard } from "@/actions/cards";
+import { toggleCardMember } from "@/actions/card-members";
+import { toast } from "sonner";
 import {
   RoadmapHeader,
   ZOOMS,
@@ -65,7 +68,10 @@ import {
   type ViewMode,
 } from "./roadmap-header";
 import { RoadmapListView } from "./roadmap-list-view";
-import { CardQuickView } from "@/components/board/card-quick-view";
+import {
+  CardQuickView,
+  type PatchInput as QuickViewPatchInput,
+} from "@/components/board/card-quick-view";
 import { parseFilters } from "@/lib/board-filters";
 import { useRoadmapDragHarness } from "./use-roadmap-drag-harness";
 
@@ -866,6 +872,104 @@ export function RoadmapView({
           avatarUrl: null as string | null,
         })),
     [quickViewMemberIds, quickViewProfilesRaw],
+  );
+  // Mirror of the assigned-only list, but built from the full workspace
+  // profile pool so users can add anyone in the workspace. `avatarUrl`
+  // is null because workspaceProfiles doesn't carry one.
+  const quickViewAvailableMembers = useMemo(
+    () =>
+      quickViewProfilesRaw.map((p) => ({
+        id: p.id,
+        displayName: p.displayName,
+        avatarUrl: null as string | null,
+      })),
+    [quickViewProfilesRaw],
+  );
+
+  // === Quick-view edit wiring ==========================================
+  // Optimistic local mutation via the workspace store, then server action.
+  // We keep the local store + server action as the source of truth; failure
+  // path just toasts (CDC will eventually reconcile).
+  const upsertCardMemberLocal = useWorkspaceStore((s) => s.upsertCardMember);
+  const removeCardMemberLocal = useWorkspaceStore((s) => s.removeCardMember);
+  const quickViewCardIdRef = quickViewCardId;
+  const onQuickPatch = useCallback(
+    async (patch: QuickViewPatchInput) => {
+      if (!quickViewCardIdRef) return;
+      const id = quickViewCardIdRef;
+      const localPatch: Record<string, unknown> = {};
+      if (patch.title !== undefined) localPatch.title = patch.title;
+      if (patch.description !== undefined)
+        localPatch.description = patch.description;
+      if (patch.dueDate !== undefined) {
+        localPatch.dueDate =
+          patch.dueDate === null
+            ? null
+            : patch.dueDate instanceof Date
+              ? patch.dueDate
+              : new Date(patch.dueDate);
+      }
+      if (patch.dueComplete !== undefined)
+        localPatch.dueComplete = patch.dueComplete;
+      if (patch.type !== undefined) localPatch.type = patch.type;
+      if (patch.priority !== undefined) localPatch.priority = patch.priority;
+      if (patch.startDate !== undefined) {
+        localPatch.startDate =
+          patch.startDate === null
+            ? null
+            : patch.startDate instanceof Date
+              ? patch.startDate
+              : new Date(patch.startDate);
+      }
+      if (patch.targetDate !== undefined) {
+        localPatch.targetDate =
+          patch.targetDate === null
+            ? null
+            : patch.targetDate instanceof Date
+              ? patch.targetDate
+              : new Date(patch.targetDate);
+      }
+      if (patch.completed !== undefined) {
+        localPatch.completedAt = patch.completed ? new Date() : null;
+        localPatch.dueComplete = patch.completed;
+      }
+      patchCardInStore(
+        id,
+        localPatch as Parameters<typeof patchCardInStore>[1],
+      );
+      try {
+        await updateCard({ id, ...patch });
+      } catch (err) {
+        toast.error((err as Error).message ?? "Failed to save");
+      }
+    },
+    [patchCardInStore, quickViewCardIdRef],
+  );
+
+  const onQuickToggleMember = useCallback(
+    async (userId: string) => {
+      if (!quickViewCardIdRef) return;
+      const id = quickViewCardIdRef;
+      const isAssigned = quickViewMemberIds.includes(userId);
+      if (isAssigned) {
+        removeCardMemberLocal(id, userId);
+      } else {
+        // cardMembers in the workspace snapshot is {cardId, userId} — no
+        // boardId field on the runtime row (the trigger derives it).
+        upsertCardMemberLocal({ cardId: id, userId });
+      }
+      try {
+        await toggleCardMember({ cardId: id, userId });
+      } catch (err) {
+        toast.error((err as Error).message ?? "Failed to update assignees");
+      }
+    },
+    [
+      quickViewCardIdRef,
+      quickViewMemberIds,
+      upsertCardMemberLocal,
+      removeCardMemberLocal,
+    ],
   );
 
   const drag = useRoadmapDragHarness({
@@ -1971,6 +2075,7 @@ export function RoadmapView({
             : null
         }
         memberProfiles={quickViewMemberProfiles}
+        availableMembers={quickViewAvailableMembers}
         subtaskTotal={quickViewSubtaskTotal}
         subtaskDone={quickViewSubtaskDone}
         boardId={quickViewCard?.boardId ?? ""}
@@ -1978,6 +2083,8 @@ export function RoadmapView({
         onOpenChange={(next) => {
           if (!next) setQuickViewCard(null);
         }}
+        onPatch={onQuickPatch}
+        onToggleMember={onQuickToggleMember}
       />
     </div>
   );

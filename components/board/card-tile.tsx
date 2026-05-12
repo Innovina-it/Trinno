@@ -22,8 +22,9 @@ import { CardCover } from "./card/cover-picker";
 import { CompleteToggle } from "./card/complete-toggle";
 import { cardCode } from "@/lib/format";
 import { updateCard } from "@/actions/cards";
+import { toggleCardMember } from "@/actions/card-members";
 import { SubtaskBadge } from "./card-tile-subtask-badge";
-import { CardQuickView } from "./card-quick-view";
+import { CardQuickView, type PatchInput } from "./card-quick-view";
 
 function fmtShortDate(d: Date | string): string {
   const date = d instanceof Date ? d : new Date(d);
@@ -68,6 +69,8 @@ export function CardTile({
   const toggleSelected = useBoardStore((s) => s.toggleSelected);
   const selectRangeTo = useBoardStore((s) => s.selectRangeTo);
   const updateCardLocal = useBoardStore((s) => s.updateCard);
+  const storeAddMember = useBoardStore((s) => s.addCardMember);
+  const storeRemoveMember = useBoardStore((s) => s.removeCardMember);
 
   // Quick-view data — previously selected inside CardQuickView itself.
   // Lifted here so the component is store-agnostic and can be reused
@@ -105,6 +108,76 @@ export function CardTile({
     }
     return n;
   });
+
+  // === Quick-view edit wiring ===========================================
+  // onPatch: optimistic local mutation + server action. Failure path just
+  // toasts; we don't unwind state (CDC echo will eventually correct any
+  // drift). Maps `completed` → {completedAt, dueComplete} for the local
+  // store; server action accepts `completed` directly.
+  const onQuickPatch = useCallback(
+    async (patch: PatchInput) => {
+      const localPatch: Parameters<typeof updateCardLocal>[1] = {};
+      if (patch.title !== undefined) localPatch.title = patch.title;
+      if (patch.description !== undefined)
+        localPatch.description = patch.description;
+      if (patch.dueDate !== undefined) {
+        localPatch.dueDate =
+          patch.dueDate === null
+            ? null
+            : patch.dueDate instanceof Date
+              ? patch.dueDate
+              : new Date(patch.dueDate);
+      }
+      if (patch.dueComplete !== undefined)
+        localPatch.dueComplete = patch.dueComplete;
+      if (patch.type !== undefined) localPatch.type = patch.type;
+      if (patch.priority !== undefined) localPatch.priority = patch.priority;
+      if (patch.startDate !== undefined) {
+        localPatch.startDate =
+          patch.startDate === null
+            ? null
+            : patch.startDate instanceof Date
+              ? patch.startDate
+              : new Date(patch.startDate);
+      }
+      if (patch.targetDate !== undefined) {
+        localPatch.targetDate =
+          patch.targetDate === null
+            ? null
+            : patch.targetDate instanceof Date
+              ? patch.targetDate
+              : new Date(patch.targetDate);
+      }
+      if (patch.completed !== undefined) {
+        localPatch.completedAt = patch.completed ? new Date() : null;
+        localPatch.dueComplete = patch.completed;
+      }
+      updateCardLocal(card.id, localPatch);
+      try {
+        await updateCard({ id: card.id, ...patch });
+      } catch (err) {
+        toast.error((err as Error).message ?? "Failed to save");
+      }
+    },
+    [card.id, updateCardLocal],
+  );
+
+  const onQuickToggleMember = useCallback(
+    async (userId: string) => {
+      const isAssigned = quickViewMemberIds.includes(userId);
+      if (isAssigned) {
+        storeRemoveMember(card.id, userId);
+      } else {
+        storeAddMember({ cardId: card.id, userId });
+      }
+      try {
+        await toggleCardMember({ cardId: card.id, userId });
+      } catch (err) {
+        toast.error((err as Error).message ?? "Failed to update assignees");
+      }
+    },
+    [card.id, quickViewMemberIds, storeAddMember, storeRemoveMember],
+  );
 
   // Inline title edit state
   const [isEditing, setIsEditing] = useState(false);
@@ -406,11 +479,18 @@ export function CardTile({
             displayName: p.displayName,
             avatarUrl: p.avatarUrl,
           }))}
+        availableMembers={quickViewProfilesRaw.map((p) => ({
+          id: p.id,
+          displayName: p.displayName,
+          avatarUrl: p.avatarUrl,
+        }))}
         subtaskTotal={quickViewSubtaskTotal}
         subtaskDone={quickViewSubtaskDone}
         boardId={boardId}
         open={quickViewOpen}
         onOpenChange={setQuickViewOpen}
+        onPatch={onQuickPatch}
+        onToggleMember={onQuickToggleMember}
       />
     </div>
   );
