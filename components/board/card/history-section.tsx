@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { History, ArrowRight } from "lucide-react";
 import type { CardHistoryRow } from "@/lib/queries/card-history";
+import { formatDate } from "@/lib/format-date";
 
 // Card history feed. Lazy-fetches via /api/card-history?cardId=… so the
 // initial card-modal payload stays small for cards with hundreds of
@@ -31,7 +32,7 @@ function fmtRel(d: Date): string {
   if (h < 24) return `${h}h ago`;
   const days = Math.round(h / 24);
   if (days < 30) return `${days}d ago`;
-  return d.toLocaleDateString();
+  return formatDate(d);
 }
 
 function shortId(v: string | null): string {

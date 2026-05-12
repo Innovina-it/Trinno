@@ -18,11 +18,7 @@ import {
 } from "@/components/board/card/mention-popover";
 import type { CommentRow } from "@/lib/queries/board-snapshot";
 import { undoBus } from "@/lib/undo-bus";
-
-function fmt(d: Date | string) {
-  const dt = d instanceof Date ? d : new Date(d);
-  return dt.toLocaleString();
-}
+import { formatDateTime } from "@/lib/format-date";
 
 export function CommentsSection({ cardId }: { cardId: string }) {
   const comments = useBoardStore(useShallow((s) => s.comments.filter((c) => c.cardId === cardId)));
@@ -392,7 +388,7 @@ export function CommentsSection({ cardId }: { cardId: string }) {
           </span>
           <div className="flex items-center gap-2">
             <time className="mono-meta-sm text-fg-faint">
-              {fmt(c.createdAt)}
+              {formatDateTime(c.createdAt)}
               {c.editedAt && <span className="ml-1 text-fg-faint">· edited</span>}
             </time>
             {!isEditing && (

@@ -1,10 +1,7 @@
 import Link from "next/link";
+import { formatDate as _fmtDate } from "@/lib/format-date";
 
-function fmtDate(d: Date | string | null) {
-  if (!d) return null;
-  const t = typeof d === "string" ? new Date(d) : d;
-  return t.toISOString().slice(0, 10);
-}
+function fmtDate(d: Date | string | null) { return _fmtDate(d) || null; }
 
 export function GadgetAssignedToMe({
   rows,

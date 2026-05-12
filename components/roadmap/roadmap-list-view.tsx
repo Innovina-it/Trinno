@@ -25,18 +25,9 @@ import {
 } from "@/stores/workspace-store";
 import { PRIORITY_TINT, type CardPriority } from "@/components/board/card/priority-picker";
 
-type StoreCard = WorkspaceState["cards"][number];
+import { formatDate } from "@/lib/format-date";
 
-function fmtDay(d: Date | string | null): string {
-  if (!d) return "—";
-  const dt = d instanceof Date ? d : new Date(d);
-  if (Number.isNaN(dt.getTime())) return "—";
-  return dt.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
+type StoreCard = WorkspaceState["cards"][number];
 
 function timeOf(d: Date | string | null): number {
   if (!d) return Number.POSITIVE_INFINITY; // NULLS LAST in ASC sort
@@ -242,10 +233,10 @@ export function RoadmapListView({
                 </span>
               </div>
               <span className="text-right text-xs text-fg-muted tabular-nums">
-                {fmtDay(card.startDate)}
+                {formatDate(card.startDate) || "—"}
               </span>
               <span className="text-right text-xs text-fg-muted tabular-nums">
-                {fmtDay(card.targetDate)}
+                {formatDate(card.targetDate) || "—"}
               </span>
               <span className="flex items-center justify-center">
                 <OwnerAvatar displayName={owner} />

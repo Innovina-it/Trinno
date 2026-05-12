@@ -9,6 +9,7 @@ import { SprintPicker, type SprintLite } from "./sprint-picker";
 import { SprintDateConflictDialog } from "./sprint-date-conflict-dialog";
 import { Play, Trash2, FileText } from "lucide-react";
 import { toast } from "sonner";
+import { formatDate } from "@/lib/format-date";
 
 export type SprintCardProps = {
   sprint: {
@@ -120,11 +121,11 @@ export function SprintCard({
           {(sprint.startDate || sprint.endDate) && (
             <p className="mono-meta-sm text-fg-faint tabular-nums">
               {sprint.startDate
-                ? new Date(sprint.startDate).toLocaleDateString()
+                ? formatDate(sprint.startDate)
                 : "?"}
               {" → "}
               {sprint.endDate
-                ? new Date(sprint.endDate).toLocaleDateString()
+                ? formatDate(sprint.endDate)
                 : "?"}
             </p>
           )}

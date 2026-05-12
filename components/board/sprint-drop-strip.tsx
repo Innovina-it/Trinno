@@ -2,6 +2,7 @@
 import { useMemo } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { useWorkspaceStore } from "@/stores/workspace-store";
+import { formatDate } from "@/lib/format-date";
 
 // Plan #16b-γ-Master-D D1 — horizontal "sprint drop strip" mounted above the
 // Kanban lists. Each band is a `useDroppable` target keyed
@@ -14,16 +15,6 @@ import { useWorkspaceStore } from "@/stores/workspace-store";
 // The mini-map is roadmap-specific (viewport indicator + scroller tracking),
 // so reusing it on Kanban would conflate roles. This is a standalone
 // component that achieves the same UX without the mini-map complications.
-
-function fmtShortDate(d: Date | string | null): string {
-  if (!d) return "?";
-  const date = d instanceof Date ? d : new Date(d);
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
 
 function SprintBand({
   sprintId,
@@ -62,7 +53,7 @@ function SprintBand({
         )}
       </div>
       <div className="mono-meta-sm text-fg-faint mt-1">
-        {fmtShortDate(startDate)} {"→"} {fmtShortDate(endDate)}
+        {formatDate(startDate) || "?"} {"→"} {formatDate(endDate) || "?"}
       </div>
     </div>
   );

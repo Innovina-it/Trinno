@@ -1,5 +1,6 @@
 import type { MyActiveSprint } from "@/lib/queries/me-sprints";
 import type { BurndownPoint } from "@/lib/queries/sprints-stats";
+import { formatDate } from "@/lib/format-date";
 
 interface Props {
   sprints: MyActiveSprint[];
@@ -13,14 +14,6 @@ function daysRemaining(endDate: Date | null): number {
   const end = new Date(endDate);
   end.setUTCHours(0, 0, 0, 0);
   return Math.max(0, Math.round((end.getTime() - now.getTime()) / 86_400_000));
-}
-
-function formatDate(d: Date | null): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
 }
 
 function SparklineSVG({ points }: { points: BurndownPoint[] }) {
@@ -149,7 +142,7 @@ export function MeActiveSprints({ sprints, burndowns }: Props) {
               {/* Date range + days remaining */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, opacity: 0.6, marginBottom: 8 }}>
                 <span>
-                  {formatDate(sprint.startDate)} – {formatDate(sprint.endDate)}
+                  {formatDate(sprint.startDate) || "—"} – {formatDate(sprint.endDate) || "—"}
                 </span>
                 {sprint.endDate && (
                   <span

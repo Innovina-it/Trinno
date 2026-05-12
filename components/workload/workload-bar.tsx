@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect, useTransition } from "react";
 import Link from "next/link";
+import { formatDate } from "@/lib/format-date";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Calendar, X, ExternalLink } from "lucide-react";
@@ -25,14 +26,6 @@ const PRIORITY_STRIPE: Record<string, string> = {
   p3: "var(--hairline-hi)",
   p4: "var(--hairline)",
 };
-
-function fmt(d: Date): string {
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
 
 function spanDays(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1;
@@ -285,7 +278,7 @@ export function WorkloadBar({
             {card.title}
           </p>
           <p className="mono-meta-sm text-fg-muted mt-1 tabular-nums">
-            {fmt(card.startDate)} → {fmt(card.targetDate)} ·{" "}
+            {formatDate(card.startDate)} → {formatDate(card.targetDate)} ·{" "}
             {days < 7 ? `${days}d` : `${Math.round(days / 7)}w`}
           </p>
           <p className="mono-meta-sm text-fg-faint mt-1.5 truncate">

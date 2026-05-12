@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { formatDate } from "@/lib/format-date";
 import { Calendar, CalendarRange, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 // Studio-Console date range picker. Replaces the native <input type="date">
@@ -26,9 +27,6 @@ function isSameDay(a: Date, b: Date): boolean {
 }
 function fmtMonth(d: Date): string {
   return d.toLocaleDateString(undefined, { month: "short", year: "numeric", timeZone: "UTC" });
-}
-function fmtChip(d: Date): string {
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 }
 function diffDays(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / MS_DAY);
@@ -163,10 +161,10 @@ export function DateRangePopover({
   const triggerText = (() => {
     if (value.start && value.target) {
       const d = diffDays(value.start, value.target);
-      return `${fmtChip(value.start)} — ${fmtChip(value.target)} · ${fmtDuration(d)}`;
+      return `${formatDate(value.start)} — ${formatDate(value.target)} · ${fmtDuration(d)}`;
     }
-    if (value.start) return `${fmtChip(value.start)} —`;
-    if (value.target) return `— ${fmtChip(value.target)}`;
+    if (value.start) return `${formatDate(value.start)} —`;
+    if (value.target) return `— ${formatDate(value.target)}`;
     return triggerLabel;
   })();
 
@@ -348,7 +346,7 @@ export function DatePopover({
   const cells = buildMonth(anchor);
   const cellsNext = buildMonth(addMonths(anchor, 1));
 
-  const triggerText = value ? fmtChip(value) : triggerLabel;
+  const triggerText = value ? formatDate(value) : triggerLabel;
   const isEmpty = !value;
 
   const wrapRef = useRef<HTMLDivElement | null>(null);

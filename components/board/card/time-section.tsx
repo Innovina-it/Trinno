@@ -9,6 +9,7 @@ import { updateCard } from "@/actions/cards";
 import { Hourglass, Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { undoBus } from "@/lib/undo-bus";
+import { formatDate } from "@/lib/format-date";
 
 type WorklogRow = {
   id: string;
@@ -209,7 +210,7 @@ export function TimeSection({
                 {w.userName ?? "—"}
               </span>
               <span className="mono-meta-sm text-fg-faint">
-                {new Date(w.startedAt).toLocaleDateString()}
+                {formatDate(w.startedAt)}
               </span>
               <Button
                 type="button"

@@ -7,6 +7,7 @@ import {
   type CardPriority,
 } from "@/components/board/card/priority-picker";
 import type { MyCard } from "@/lib/queries/me-cards";
+import { formatDate } from "@/lib/format-date";
 
 export type { MyCard };
 
@@ -84,10 +85,7 @@ function CardRow({ card }: CardRowProps) {
             className={`mono-meta-sm shrink-0 tabular-nums ${overdue ? "text-[color:var(--accent-magenta)]" : ""}`}
           >
             ·{" "}
-            {new Date(card.dueDate).toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            })}
+            {formatDate(card.dueDate)}
           </span>
         )}
       </div>

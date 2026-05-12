@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, CircleDot, ListTodo, Users } from "lucide-react";
+import { BookOpen, Bug, CalendarClock, CircleDot, ListTodo, Mountain, Square, Users } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { TypeIcon } from "./card/type-picker";
 import { PriorityChip, type CardPriority } from "./card/priority-picker";
+import { formatDate } from "@/lib/format-date";
 
 // Plan: Quick card view on double-click. Editable summary surfaced from the
 // board / workspace store. All fields are inline-editable when the parent
@@ -67,7 +67,40 @@ export type PatchInput = {
   targetDate?: Date | string | null;
 };
 
-const TYPES: readonly QuickViewCardType[] = ["task", "story", "bug", "epic"];
+type TypeOption = {
+  value: QuickViewCardType;
+  label: string;
+  Icon: typeof Square;
+  text: string;
+  ringSelected: string;
+  bgSelected: string;
+};
+const TYPE_OPTIONS: TypeOption[] = [
+  {
+    value: "task", label: "Task", Icon: Square,
+    text: "text-fg-muted",
+    ringSelected: "ring-fg/40",
+    bgSelected: "bg-[rgb(255_255_255/0.10)]",
+  },
+  {
+    value: "story", label: "Story", Icon: BookOpen,
+    text: "text-emerald-300",
+    ringSelected: "ring-emerald-400/60",
+    bgSelected: "bg-emerald-500/15",
+  },
+  {
+    value: "bug", label: "Bug", Icon: Bug,
+    text: "text-rose-300",
+    ringSelected: "ring-rose-400/60",
+    bgSelected: "bg-rose-500/15",
+  },
+  {
+    value: "epic", label: "Epic", Icon: Mountain,
+    text: "text-violet-300",
+    ringSelected: "ring-violet-400/60",
+    bgSelected: "bg-violet-500/15",
+  },
+];
 const PRIORITY_OPTIONS: readonly (CardPriority | "")[] = [
   "",
   "p0",
@@ -76,16 +109,6 @@ const PRIORITY_OPTIONS: readonly (CardPriority | "")[] = [
   "p3",
   "p4",
 ];
-
-function fmtShortDate(d: Date | string): string {
-  const date = d instanceof Date ? d : new Date(d);
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
 
 // Convert a stored date (Date | string | null) into the YYYY-MM-DD string
 // that <input type="date"> expects.  Empty string when null/invalid.
@@ -358,33 +381,34 @@ function CardQuickViewBody({
         <div className="space-y-1 text-xs">
           <span className="mono-meta-sm text-fg-faint">TYPE</span>
           <div className="grid grid-cols-4 gap-1.5" aria-label="Card type">
-            {TYPES.map((t) => {
-              const selected = cardType === t;
+            {TYPE_OPTIONS.map((opt) => {
+              const selected = cardType === opt.value;
               return (
                 <button
-                  key={t}
+                  key={opt.value}
                   type="button"
                   disabled={!editable}
                   data-selected={selected ? "true" : undefined}
                   data-testid={
                     selected ? "card-quick-view-type" : undefined
                   }
-                  onClick={() => setType(t)}
+                  onClick={() => setType(opt.value)}
                   className={[
                     "inline-flex items-center justify-center gap-1.5",
-                    "rounded-full border border-hairline px-2.5 py-1.5",
+                    "rounded-full border px-2.5 py-1.5",
                     "mono-meta-sm transition-colors",
+                    opt.text,
                     selected
-                      ? "bg-[rgb(255_255_255/0.10)] ring-1 ring-fg/40 border-transparent text-fg"
-                      : "text-fg-faint",
+                      ? `ring-1 ${opt.ringSelected} ${opt.bgSelected} border-transparent`
+                      : "border-hairline",
                     editable && !selected
-                      ? "hover:text-fg hover:bg-[rgb(255_255_255/0.06)]"
+                      ? "hover:opacity-80"
                       : "",
                     editable ? "cursor-pointer" : "cursor-default",
                   ].join(" ")}
                 >
-                  <TypeIcon type={t} className="size-3.5" />
-                  <span>{t.toUpperCase()}</span>
+                  <opt.Icon className="size-3.5" aria-hidden />
+                  <span>{opt.label.toUpperCase()}</span>
                 </button>
               );
             })}
@@ -486,7 +510,7 @@ function CardQuickViewBody({
                 />
               ) : (
                 <div className="flex h-[34px] items-center rounded-md border border-hairline bg-transparent px-2 text-fg tabular-nums">
-                  {card.startDate ? fmtShortDate(card.startDate) : "—"}
+                  {card.startDate ? formatDate(card.startDate) : "—"}
                 </div>
               )}
             </div>
@@ -503,7 +527,7 @@ function CardQuickViewBody({
                 />
               ) : (
                 <div className="flex h-[34px] items-center rounded-md border border-hairline bg-transparent px-2 text-fg tabular-nums">
-                  {card.targetDate ? fmtShortDate(card.targetDate) : "—"}
+                  {card.targetDate ? formatDate(card.targetDate) : "—"}
                 </div>
               )}
             </div>
@@ -543,7 +567,7 @@ function CardQuickViewBody({
                   aria-hidden
                 />
                 <span className="text-fg tabular-nums">
-                  {card.dueDate ? fmtShortDate(card.dueDate) : "—"}
+                  {card.dueDate ? formatDate(card.dueDate) : "—"}
                 </span>
               </div>
             )}

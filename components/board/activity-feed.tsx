@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { listActivityForBoard } from "@/lib/queries/activity";
+import { formatDate } from "@/lib/format-date";
 import { getSessionToken } from "@/lib/auth";
 
 // Each event maps to a glyph + structured verb. Verb is past-tense, terse,
@@ -60,13 +61,7 @@ function bucketLabel(d: Date, now: Date): string {
       .toLocaleString("en-US", { weekday: "short", timeZone: "UTC" })
       .toUpperCase();
   }
-  return d
-    .toLocaleString("en-US", {
-      day: "2-digit",
-      month: "short",
-      timeZone: "UTC",
-    })
-    .toUpperCase();
+  return formatDate(d);
 }
 
 function fmtTime(d: Date): string {

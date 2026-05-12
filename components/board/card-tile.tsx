@@ -24,16 +24,8 @@ import { cardCode } from "@/lib/format";
 import { updateCard } from "@/actions/cards";
 import { toggleCardMember } from "@/actions/card-members";
 import { SubtaskBadge } from "./card-tile-subtask-badge";
+import { formatDate } from "@/lib/format-date";
 import { CardQuickView, type PatchInput } from "./card-quick-view";
-
-function fmtShortDate(d: Date | string): string {
-  const date = d instanceof Date ? d : new Date(d);
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
 
 export function CardTile({
   card,
@@ -290,14 +282,14 @@ export function CardTile({
       toggleSelected(card.id);
       return;
     }
-    // Soft client-side navigation — avoids Next.js hard-nav from <Link>.
-    router.push(`/b/${boardId}/c/${card.id}`, { scroll: false });
+    // Open the quick view popup; the advanced settings button routes from there.
+    setQuickViewOpen(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      router.push(`/b/${boardId}/c/${card.id}`, { scroll: false });
+      setQuickViewOpen(true);
     }
   };
 
@@ -318,14 +310,6 @@ export function CardTile({
       role="button"
       tabIndex={0}
       onClick={handleClick}
-      onDoubleClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        // Suppress while dragging or in multi-select mode — both modes
-        // already own primary click handling.
-        if (isDragging || anySelected) return;
-        setQuickViewOpen(true);
-      }}
       onKeyDown={handleKeyDown}
       data-card-id={card.id}
       data-dragging={isDragging ? "true" : undefined}
@@ -452,7 +436,7 @@ export function CardTile({
             router.push(`/w/${workspaceId}/roadmap?focus=${card.id}`);
           }
         }}
-        fmtShortDate={fmtShortDate}
+        fmtShortDate={formatDate}
       />
       {/* Quick view dialog — portaled, so position inside the tile doesn't
           affect layout. Opened by double-click on the tile body. Card data

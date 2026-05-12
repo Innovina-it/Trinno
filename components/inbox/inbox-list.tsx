@@ -24,6 +24,7 @@ import {
   markAllRead,
 } from "@/actions/notifications";
 import { undoBus } from "@/lib/undo-bus";
+import { formatDate } from "@/lib/format-date";
 import { toast } from "sonner";
 
 const FILTERS = [
@@ -75,9 +76,7 @@ function rel(d: Date | string): string {
   if (sec < 3600) return `${Math.round(sec / 60)}m`;
   if (sec < 86400) return `${Math.round(sec / 3600)}h`;
   if (sec < 86400 * 30) return `${Math.round(sec / 86400)}d`;
-  return t
-    .toLocaleDateString(undefined, { month: "short", day: "numeric" })
-    .toUpperCase();
+  return formatDate(t);
 }
 
 function dayBucket(d: Date | string): string {

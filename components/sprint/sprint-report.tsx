@@ -3,6 +3,10 @@ import { BurndownChart } from "@/components/sprint/burndown-chart";
 import { VelocityStrip } from "@/components/sprint/velocity-strip";
 import { CopyPermalinkButton } from "@/components/sprint/copy-permalink-button";
 import type { BurndownPoint } from "@/lib/queries/sprints-stats";
+import { formatDate as _formatDate, formatDateTime as _formatDateTime } from "@/lib/format-date";
+
+function formatDate(iso: string | null): string { return _formatDate(iso) || "—"; }
+function formatDateTime(iso: string | null): string { return _formatDateTime(iso) || "—"; }
 
 export type SprintReportCard = {
   id: string;
@@ -46,16 +50,6 @@ export type SprintReportProps = {
   }>;
   cards: SprintReportCard[];
 };
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString();
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString();
-}
 
 export function SprintReport({
   workspaceId,

@@ -8,19 +8,10 @@ import {
   type CardPriority,
 } from "@/components/board/card/priority-picker";
 import { CompleteToggle } from "@/components/board/card/complete-toggle";
+import { formatDate } from "@/lib/format-date";
 
 // No `useWorkspaceStore` import — board title and sprint name are passed
 // in by the view (computed once via Map lookup, not per-card subscription).
-
-function fmtShortDate(d: Date | string | null): string | null {
-  if (!d) return null;
-  const date = d instanceof Date ? d : new Date(d);
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
 
 // `DRAG_THRESHOLD` is documented for clarity; the real enforcement lives
 // on the dnd-kit PointerSensor `activationConstraint.distance` configured
@@ -54,7 +45,7 @@ export function AllTasksCard({
   const completed = completedAt != null;
   const router = useRouter();
   void sprintId;
-  const due = fmtShortDate(dueDate);
+  const due = formatDate(dueDate) || null;
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: `card:${cardId}`,

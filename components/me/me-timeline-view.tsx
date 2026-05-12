@@ -10,6 +10,7 @@
  */
 import { useMemo } from "react";
 import type { CrossWorkspaceCard } from "@/lib/queries/cards";
+import { formatDate } from "@/lib/format-date";
 
 type Props = {
   cards: CrossWorkspaceCard[];
@@ -31,10 +32,6 @@ const PRIORITY_COLORS: Record<string, string> = {
   p3: "bg-blue-400",
   p4: "bg-fg/20",
 };
-
-function formatDate(d: Date): string {
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
 
 export function MeTimelineView({ cards }: Omit<Props, 'viewerId'> & { viewerId?: string }) {
   // Group into lanes: workspaceId+boardId combos.

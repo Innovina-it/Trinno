@@ -2,14 +2,8 @@
 import Link from "next/link";
 import { CalendarRange, Map as MapIcon } from "lucide-react";
 import { cardCode } from "@/lib/format";
+import { formatDate } from "@/lib/format-date";
 import type { CardRow } from "@/lib/queries/board-snapshot";
-
-function fmtShortDate(d: Date | string): string {
-  const date = d instanceof Date ? d : new Date(d);
-  return date.toLocaleString("en-US", {
-    month: "short", day: "numeric", timeZone: "UTC",
-  });
-}
 
 export function EpicHeader({
   epic, workspaceId, childCount, doneCount,
@@ -49,9 +43,9 @@ export function EpicHeader({
             {(epic.startDate || epic.targetDate) && (
               <span className="inline-flex items-center gap-1">
                 <CalendarRange className="size-3" aria-hidden />
-                {epic.startDate ? fmtShortDate(epic.startDate) : "?"}
+                {epic.startDate ? formatDate(epic.startDate) : "?"}
                 {" → "}
-                {epic.targetDate ? fmtShortDate(epic.targetDate) : "?"}
+                {epic.targetDate ? formatDate(epic.targetDate) : "?"}
               </span>
             )}
             <span>

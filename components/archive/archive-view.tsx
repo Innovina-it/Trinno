@@ -7,15 +7,7 @@ import { archiveCard } from "@/actions/cards";
 import { archiveList } from "@/actions/lists";
 import { setBoardArchived } from "@/actions/boards";
 import type { WorkspaceArchive } from "@/lib/queries/archived";
-
-function fmtDate(d: Date | string): string {
-  const date = d instanceof Date ? d : new Date(d);
-  return date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+import { formatDate } from "@/lib/format-date";
 
 export function ArchiveView({
   archive,
@@ -94,7 +86,7 @@ export function ArchiveView({
                 <div className="flex-1 min-w-0">
                   <div className="text-fg truncate">{c.title}</div>
                   <div className="mono-meta-sm text-fg-faint truncate">
-                    {c.boardTitle} · {c.listTitle} · {fmtDate(c.createdAt)}
+                    {c.boardTitle} · {c.listTitle} · {formatDate(c.createdAt)}
                   </div>
                 </div>
                 <Link
@@ -135,7 +127,7 @@ export function ArchiveView({
                 <div className="flex-1 min-w-0">
                   <div className="text-fg truncate">{l.title}</div>
                   <div className="mono-meta-sm text-fg-faint truncate">
-                    {l.boardTitle} · {fmtDate(l.createdAt)}
+                    {l.boardTitle} · {formatDate(l.createdAt)}
                   </div>
                 </div>
                 <Link
@@ -176,7 +168,7 @@ export function ArchiveView({
                 <div className="flex-1 min-w-0">
                   <div className="text-fg truncate">{b.title}</div>
                   <div className="mono-meta-sm text-fg-faint">
-                    {fmtDate(b.createdAt)}
+                    {formatDate(b.createdAt)}
                   </div>
                 </div>
                 <button

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { MyWeekCard } from "@/lib/queries/me-week";
+import { formatDate } from "@/lib/format-date";
 import {
   PRIORITY_TINT,
   type CardPriority,
@@ -33,10 +34,6 @@ function dailyLoads(cards: MyWeekCard[], windowStart: Date): number[] {
 }
 
 // ── date helpers ──────────────────────────────────────────────────────────
-const MONTH_ABBREVS = [
-  "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec",
-];
-
 function utcMidnight(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
@@ -49,10 +46,6 @@ function clampDate(d: Date, lo: Date, hi: Date): Date {
 
 function diffDays(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / 86_400_000);
-}
-
-function formatDateShort(d: Date): string {
-  return `${MONTH_ABBREVS[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 
 // ── priority bar colour ───────────────────────────────────────────────────
@@ -79,7 +72,7 @@ export function MeWeekGantt({ cards }: { cards: MyWeekCard[] }) {
     const dow = d.getUTCDay(); // 0=Sun
     const isMonday = dow === 1;
     const label = isMonday
-      ? `${MONTH_ABBREVS[d.getUTCMonth()]} ${d.getUTCDate()}`
+      ? `${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")}`
       : String(d.getUTCDate());
     days.push({ label, date: d });
   }
@@ -180,7 +173,7 @@ export function MeWeekGantt({ cards }: { cards: MyWeekCard[] }) {
             const tooltip = [
               card.title,
               `${card.workspaceName} / ${card.boardTitle}`,
-              `${formatDateShort(card.startDate)}→${formatDateShort(card.targetDate)}`,
+              `${formatDate(card.startDate)}→${formatDate(card.targetDate)}`,
             ].join(" · ");
 
             return (

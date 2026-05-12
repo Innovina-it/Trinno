@@ -26,6 +26,7 @@ import {
   ZoomIn,
 } from "lucide-react";
 import type { Zoom } from "@/lib/roadmap/dates";
+import { formatDate } from "@/lib/format-date";
 
 export const ZOOMS: Zoom[] = ["week", "month", "quarter"];
 export type LaneMode = "epic" | "assignee" | "component";
@@ -50,10 +51,6 @@ const ZOOM_LABEL: Record<Zoom, string> = {
   month: "Month",
   quarter: "Quarter",
 };
-
-function fmtDate(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
 
 export function RoadmapHeader({
   zoom,
@@ -581,7 +578,7 @@ export function RoadmapHeader({
         </span>
         <span className="inline-flex items-center gap-1.5 mono-meta-sm tabular-nums">
           <CalendarClock className="size-3" aria-hidden />
-          {fmtDate(gridStart)} → {fmtDate(gridEnd)}
+          {formatDate(gridStart)} → {formatDate(gridEnd)}
         </span>
       </div>
     </div>

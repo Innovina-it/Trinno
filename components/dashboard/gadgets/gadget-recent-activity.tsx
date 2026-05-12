@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/format-date";
 function formatRelative(d: Date | string): string {
   const t = typeof d === "string" ? new Date(d) : d;
   const diffMs = Date.now() - t.getTime();
@@ -38,13 +39,7 @@ function dayBucket(d: Date | string): string {
   tDay.setHours(0, 0, 0, 0);
   if (tDay.getTime() === today.getTime()) return "TODAY";
   if (tDay.getTime() === yest.getTime()) return "YESTERDAY";
-  return tDay
-    .toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    })
-    .toUpperCase();
+  return formatDate(tDay);
 }
 
 export function GadgetRecentActivity({
