@@ -1,6 +1,5 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useShallow } from "zustand/shallow";
 import { CalendarClock, CircleDot, ListTodo } from "lucide-react";
 import {
   Dialog,
@@ -11,7 +10,6 @@ import {
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { useBoardStore } from "@/stores/board-store";
 import { TypeIcon } from "./card/type-picker";
 import { PriorityChip, type CardPriority } from "./card/priority-picker";
 
@@ -19,8 +17,33 @@ import { PriorityChip, type CardPriority } from "./card/priority-picker";
 // the board store; the only mutating action is "Open advanced settings"
 // which navigates to the full card modal route. Mirrors the clinical,
 // dense kanban aesthetic — tinted neutrals, no decorative gradients.
+//
+// Refactor: this component is now store-agnostic — it accepts already-
+// resolved card data + member profiles via props. The board surface
+// (card-tile.tsx) and the roadmap surface (roadmap-view.tsx) each
+// compute the props from their own zustand store. This keeps the
+// component reusable across parent layouts where the parallel-route
+// modal intercept does NOT cross (e.g. /w/[workspaceId]/roadmap ↔
+// /b/[boardId]/c/[cardId]).
 
 const DESCRIPTION_MAX = 240;
+
+export type QuickViewProfile = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+};
+
+export type QuickViewCard = {
+  id: string;
+  title: string;
+  description: string | null;
+  dueDate: Date | string | null;
+  dueComplete: boolean;
+  completedAt: Date | string | null;
+  type: string | null;
+  priority: string | null;
+};
 
 function fmtShortDate(d: Date | string): string {
   const date = d instanceof Date ? d : new Date(d);
@@ -33,58 +56,23 @@ function fmtShortDate(d: Date | string): string {
 }
 
 export function CardQuickView({
-  cardId,
+  card,
+  memberProfiles,
+  subtaskTotal,
+  subtaskDone,
   boardId,
   open,
   onOpenChange,
 }: {
-  cardId: string;
+  card: QuickViewCard | null;
+  memberProfiles: QuickViewProfile[];
+  subtaskTotal: number;
+  subtaskDone: number;
   boardId: string;
   open: boolean;
   onOpenChange: (next: boolean) => void;
 }) {
   const router = useRouter();
-
-  // Primitive selector — fine to return the card object directly: zustand's
-  // default equality is reference, and `s.cards.find` returns the same
-  // reference until the array mutates. Returning `null | CardRow` is stable.
-  const card = useBoardStore((s) => s.cards.find((c) => c.id === cardId) ?? null);
-
-  // Array selectors MUST use useShallow to avoid the snapshot loop bug.
-  const memberIds = useBoardStore(
-    useShallow((s) =>
-      s.cardMembers.filter((m) => m.cardId === cardId).map((m) => m.userId),
-    ),
-  );
-  const profiles = useBoardStore(
-    useShallow((s) =>
-      s.boardProfiles.map((p) => ({
-        id: p.id,
-        displayName: p.displayName,
-        avatarUrl: p.avatarUrl,
-      })),
-    ),
-  );
-
-  // Two primitive scalar selectors — see card-tile's CardMetaRow comment.
-  // Returning a fresh `{total, completed}` object would trip Zustand's
-  // "getSnapshot should be cached" warning.
-  const subtaskTotal = useBoardStore((s) => {
-    let n = 0;
-    for (const c of s.cards) {
-      if (c.parentCardId === cardId && !c.archived) n += 1;
-    }
-    return n;
-  });
-  const subtaskDone = useBoardStore((s) => {
-    let n = 0;
-    for (const c of s.cards) {
-      if (c.parentCardId === cardId && !c.archived && c.completedAt != null) {
-        n += 1;
-      }
-    }
-    return n;
-  });
 
   if (!card) {
     // Defensive: card was removed between the tile rendering and the
@@ -116,13 +104,10 @@ export function CardQuickView({
     desc.length > DESCRIPTION_MAX
       ? desc.slice(0, DESCRIPTION_MAX).trimEnd() + "…"
       : desc;
-  const memberProfiles = memberIds
-    .map((id) => profiles.find((p) => p.id === id))
-    .filter((p): p is { id: string; displayName: string; avatarUrl: string | null } => !!p);
 
   function openAdvanced() {
     onOpenChange(false);
-    router.push(`/b/${boardId}/c/${cardId}`, { scroll: false });
+    router.push(`/b/${boardId}/c/${card!.id}`, { scroll: false });
   }
 
   return (

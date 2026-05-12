@@ -1,6 +1,7 @@
 "use client";
 import { useState, useTransition, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useShallow } from "zustand/shallow";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarRange, Check, CircleDot, CornerLeftUp, Layers3 } from "lucide-react";
@@ -67,6 +68,45 @@ export function CardTile({
   const toggleSelected = useBoardStore((s) => s.toggleSelected);
   const selectRangeTo = useBoardStore((s) => s.selectRangeTo);
   const updateCardLocal = useBoardStore((s) => s.updateCard);
+
+  // Quick-view data — previously selected inside CardQuickView itself.
+  // Lifted here so the component is store-agnostic and can be reused
+  // from the roadmap (which reads useWorkspaceStore instead).
+  // Array selectors MUST use useShallow to avoid Zustand's
+  // "getSnapshot should be cached" snapshot-loop bug.
+  const quickViewMemberIds = useBoardStore(
+    useShallow((s) =>
+      s.cardMembers.filter((m) => m.cardId === card.id).map((m) => m.userId),
+    ),
+  );
+  const quickViewProfiles = useBoardStore(
+    useShallow((s) =>
+      s.boardProfiles.map((p) => ({
+        id: p.id,
+        displayName: p.displayName,
+        avatarUrl: p.avatarUrl,
+      })),
+    ),
+  );
+  // Two primitive scalar selectors — returning {total, done} as one object
+  // would trip Zustand's snapshot warning. See CardMetaRow / SubtaskBadge
+  // for the same pattern.
+  const quickViewSubtaskTotal = useBoardStore((s) => {
+    let n = 0;
+    for (const c of s.cards) {
+      if (c.parentCardId === card.id && !c.archived) n += 1;
+    }
+    return n;
+  });
+  const quickViewSubtaskDone = useBoardStore((s) => {
+    let n = 0;
+    for (const c of s.cards) {
+      if (c.parentCardId === card.id && !c.archived && c.completedAt != null) {
+        n += 1;
+      }
+    }
+    return n;
+  });
 
   // Inline title edit state
   const [isEditing, setIsEditing] = useState(false);
@@ -344,9 +384,28 @@ export function CardTile({
         fmtShortDate={fmtShortDate}
       />
       {/* Quick view dialog — portaled, so position inside the tile doesn't
-          affect layout. Opened by double-click on the tile body. */}
+          affect layout. Opened by double-click on the tile body. Card data
+          + member profiles + subtask counts are computed above from
+          useBoardStore and passed as props (component is store-agnostic). */}
       <CardQuickView
-        cardId={card.id}
+        card={{
+          id: card.id,
+          title: card.title,
+          description: card.description,
+          dueDate: card.dueDate,
+          dueComplete: card.dueComplete,
+          completedAt: card.completedAt,
+          type: card.type,
+          priority: card.priority,
+        }}
+        memberProfiles={quickViewMemberIds
+          .map((id) => quickViewProfiles.find((p) => p.id === id))
+          .filter(
+            (p): p is { id: string; displayName: string; avatarUrl: string | null } =>
+              !!p,
+          )}
+        subtaskTotal={quickViewSubtaskTotal}
+        subtaskDone={quickViewSubtaskDone}
         boardId={boardId}
         open={quickViewOpen}
         onOpenChange={setQuickViewOpen}

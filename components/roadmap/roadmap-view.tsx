@@ -8,6 +8,7 @@ import {
 } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useShallow } from "zustand/shallow";
 import {
   Dialog,
   DialogContent,
@@ -64,6 +65,7 @@ import {
   type ViewMode,
 } from "./roadmap-header";
 import { RoadmapListView } from "./roadmap-list-view";
+import { CardQuickView } from "@/components/board/card-quick-view";
 import { parseFilters } from "@/lib/board-filters";
 import { useRoadmapDragHarness } from "./use-roadmap-drag-harness";
 
@@ -216,6 +218,16 @@ export function RoadmapView({
     target?: string;
     board?: string;
     parent?: string | null;
+  } | null>(null);
+  // Quick-view popup state. The roadmap lives under
+  // /w/[workspaceId]/roadmap while card modals live under /b/[boardId]/c/
+  // [cardId] — the parallel-route modal intercept does NOT fire across
+  // those parent layouts, so navigating would yield a full page nav.
+  // Instead we open the same QuickCardView popup the board uses; its
+  // "Open advanced settings" button still navigates to the full route.
+  const [quickViewCard, setQuickViewCard] = useState<{
+    cardId: string;
+    boardId: string;
   } | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -783,11 +795,81 @@ export function RoadmapView({
     },
     [],
   );
+  // Open the QuickCardView popup IN-PLACE rather than navigating to the
+  // full card route. The popup's "Open advanced settings" button still
+  // jumps to /b/[boardId]/c/[cardId] when the user wants the full editor.
   const onOpenCard = useCallback(
     (cardId: string, boardId: string) => {
-      router.push(`/b/${boardId}/c/${cardId}`);
+      setQuickViewCard({ cardId, boardId });
     },
-    [router],
+    [],
+  );
+
+  // Quick-view data — resolved against the workspace store. The selectors
+  // run on every render but stay cheap because they short-circuit when
+  // no card is open. Array selectors are wrapped in useShallow to dodge
+  // the snapshot-loop bug we previously patched on the board surface.
+  const quickViewCardId = quickViewCard?.cardId ?? null;
+  const quickViewStoreCard = useWorkspaceStore((s) =>
+    quickViewCardId ? (s.cards.find((c) => c.id === quickViewCardId) ?? null) : null,
+  );
+  const quickViewMemberIds = useWorkspaceStore(
+    useShallow((s) =>
+      quickViewCardId
+        ? s.cardMembers
+            .filter((m) => m.cardId === quickViewCardId)
+            .map((m) => m.userId)
+        : ([] as string[]),
+    ),
+  );
+  const quickViewProfiles = useWorkspaceStore(
+    useShallow((s) =>
+      s.workspaceProfiles.map((p) => ({
+        id: p.id,
+        displayName: p.displayName,
+        // workspaceProfiles only carries {id, displayName} — surface a
+        // null avatar so QuickViewProfile's shape is satisfied without
+        // re-querying the board profiles.
+        avatarUrl: null as string | null,
+      })),
+    ),
+  );
+  // Two primitive scalar selectors — same {total, done} object would
+  // trip Zustand's snapshot-cache warning. Pattern mirrors
+  // card-tile-subtask-badge.tsx.
+  const quickViewSubtaskTotal = useWorkspaceStore((s) => {
+    if (!quickViewCardId) return 0;
+    let n = 0;
+    for (const c of s.cards) {
+      if (c.parentCardId === quickViewCardId && !c.archived) n += 1;
+    }
+    return n;
+  });
+  const quickViewSubtaskDone = useWorkspaceStore((s) => {
+    if (!quickViewCardId) return 0;
+    let n = 0;
+    for (const c of s.cards) {
+      if (
+        c.parentCardId === quickViewCardId &&
+        !c.archived &&
+        c.completedAt != null
+      ) {
+        n += 1;
+      }
+    }
+    return n;
+  });
+  const quickViewMemberProfiles = useMemo(
+    () =>
+      quickViewMemberIds
+        .map((id) => quickViewProfiles.find((p) => p.id === id))
+        .filter(
+          (
+            p,
+          ): p is { id: string; displayName: string; avatarUrl: string | null } =>
+            !!p,
+        ),
+    [quickViewMemberIds, quickViewProfiles],
   );
 
   const drag = useRoadmapDragHarness({
@@ -1872,6 +1954,33 @@ export function RoadmapView({
         }}
       />
       {/* === MILESTONE MARKERS END (dialog) === */}
+      {/* Roadmap quick-view popup. Opened in-place by RoadmapBar clicks
+          (onOpenCard); avoids cross-layout navigation that would
+          otherwise bypass the parallel-route modal intercept. */}
+      <CardQuickView
+        card={
+          quickViewStoreCard
+            ? {
+                id: quickViewStoreCard.id,
+                title: quickViewStoreCard.title,
+                description: quickViewStoreCard.description,
+                dueDate: quickViewStoreCard.dueDate,
+                dueComplete: quickViewStoreCard.dueComplete,
+                completedAt: quickViewStoreCard.completedAt,
+                type: quickViewStoreCard.type,
+                priority: quickViewStoreCard.priority,
+              }
+            : null
+        }
+        memberProfiles={quickViewMemberProfiles}
+        subtaskTotal={quickViewSubtaskTotal}
+        subtaskDone={quickViewSubtaskDone}
+        boardId={quickViewCard?.boardId ?? ""}
+        open={quickViewCard != null}
+        onOpenChange={(next) => {
+          if (!next) setQuickViewCard(null);
+        }}
+      />
     </div>
   );
 }
