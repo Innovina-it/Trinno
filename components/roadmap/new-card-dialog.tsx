@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { BookOpen, Bug, Mountain, Square } from "lucide-react";
+import { BookOpen, Bug, Mountain, Square, Users } from "lucide-react";
 import { createCard, updateCard } from "@/actions/cards";
+import { toggleCardMember } from "@/actions/card-members";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import {
@@ -13,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 
@@ -89,6 +91,9 @@ export function RoadmapNewCardDialog({
   const [listId, setListId] = useState(defaultList ?? "");
   const [start, setStart] = useState(defaultStart ?? todayISO());
   const [target, setTarget] = useState(defaultTarget ?? plus14ISO());
+  // Task — assignee picker parity with kanban add-card-form: pre-assign
+  // members up front so the roadmap card lands with full minimum metadata.
+  const [assignees, setAssignees] = useState<Set<string>>(() => new Set());
   const [pending, startTransition] = useTransition();
   // Task 10 — capture the signed-in user so freshly-created roadmap cards
   // own themselves out of the box (matches kanban inline create which
@@ -108,6 +113,22 @@ export function RoadmapNewCardDialog({
 
   const boards = useWorkspaceStore((s) => s.boards);
   const lists = useWorkspaceStore((s) => s.lists);
+  // Profile list at workspace scope mirrors `boardProfiles` on the board
+  // snapshot but covers every member who's reachable from any board in
+  // the workspace. Sufficient for the roadmap create dialog — the user
+  // can already pick any board/list, so any workspace member is a valid
+  // assignee.
+  const workspaceProfiles = useWorkspaceStore((s) => s.workspaceProfiles);
+  const upsertCardMember = useWorkspaceStore((s) => s.upsertCardMember);
+
+  function toggleAssignee(userId: string) {
+    setAssignees((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }
 
   const visibleBoards = useMemo(
     () => boards.filter((b) => !b.archived),
@@ -163,6 +184,7 @@ export function RoadmapNewCardDialog({
     setType("task");
     setStart(defaultStart ?? todayISO());
     setTarget(defaultTarget ?? plus14ISO());
+    setAssignees(new Set());
     // Note: we intentionally do NOT carry the prior defaultParent forward —
     // the parent is a per-open prop. RoadmapView clears its newCardDefaults
     // state on close so the next open re-derives it cleanly.
@@ -205,6 +227,18 @@ export function RoadmapNewCardDialog({
           // creator is the only viable claimant on an unowned card).
           ...(currentUserId ? { ownerId: currentUserId } : {}),
         });
+        // Pre-assign members. Fire each one sequentially so per-call
+        // errors surface as toasts, but the card itself is already saved.
+        for (const userId of assignees) {
+          try {
+            await toggleCardMember({ cardId: created.id, userId });
+            upsertCardMember({ cardId: created.id, userId });
+          } catch (err) {
+            toast.error(
+              "Saved card, but assignee failed: " + (err as Error).message,
+            );
+          }
+        }
         toast.success(`Created ${type === "epic" ? "epic" : "card"} "${t}"`);
         onOpenChange(false);
         reset();
@@ -326,6 +360,60 @@ export function RoadmapNewCardDialog({
               />
             </label>
           </div>
+          {/* Assignee row — mirrors kanban add-card-form chip styling.
+              Stays collapsed when the workspace has no profiles to show; never
+              blocks card creation. Dense, clinical, no avatar gradients. */}
+          {workspaceProfiles.length > 0 && (
+            <div
+              className="space-y-1.5 rounded-md border border-hairline bg-[color:var(--surface)] p-2"
+              data-testid="roadmap-new-card-assignees"
+            >
+              <div className="flex items-center gap-1.5">
+                <Users className="size-3 text-fg-faint" aria-hidden />
+                <span className="mono-meta-sm text-fg-faint">ASSIGNEES</span>
+                {assignees.size > 0 && (
+                  <span className="mono-meta-sm text-fg-muted tabular-nums">
+                    ({assignees.size})
+                  </span>
+                )}
+              </div>
+              <ul className="flex flex-wrap gap-1">
+                {workspaceProfiles.map((p) => {
+                  const on = assignees.has(p.id);
+                  return (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        onClick={() => toggleAssignee(p.id)}
+                        aria-pressed={on}
+                        data-user-id={p.id}
+                        data-assigned={on}
+                        data-testid="roadmap-new-card-member"
+                        className={[
+                          "inline-flex items-center gap-1.5 rounded-full border px-1.5 py-0.5 text-[10px] transition-colors",
+                          on
+                            ? "border-fg/40 bg-fg/10 text-fg"
+                            : "border-hairline bg-transparent text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)]",
+                        ].join(" ")}
+                      >
+                        <Avatar
+                          size="sm"
+                          className="rounded-none border border-current size-4"
+                        >
+                          <AvatarFallback className="rounded-none bg-transparent text-current text-[9px] tracking-widest">
+                            {p.displayName.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="normal-case tracking-normal">
+                          {p.displayName}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button

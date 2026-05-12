@@ -22,6 +22,7 @@ import { CompleteToggle } from "./card/complete-toggle";
 import { cardCode } from "@/lib/format";
 import { updateCard } from "@/actions/cards";
 import { SubtaskBadge } from "./card-tile-subtask-badge";
+import { CardQuickView } from "./card-quick-view";
 
 function fmtShortDate(d: Date | string): string {
   const date = d instanceof Date ? d : new Date(d);
@@ -70,6 +71,10 @@ export function CardTile({
   // Inline title edit state
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(card.title);
+  // Quick-view dialog state. Independent of inline title editing so the
+  // title's onDoubleClick (enterEdit) keeps working — the title stops
+  // propagation, so the tile's onDoubleClick won't double-trigger.
+  const [quickViewOpen, setQuickViewOpen] = useState(false);
   const [, startTransition] = useTransition();
   // Track whether blur should be ignored after a keyboard-commit/cancel.
   const commitRef = useRef(false);
@@ -202,6 +207,14 @@ export function CardTile({
       role="button"
       tabIndex={0}
       onClick={handleClick}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Suppress while dragging or in multi-select mode — both modes
+        // already own primary click handling.
+        if (isDragging || anySelected) return;
+        setQuickViewOpen(true);
+      }}
       onKeyDown={handleKeyDown}
       data-card-id={card.id}
       data-dragging={isDragging ? "true" : undefined}
@@ -329,6 +342,14 @@ export function CardTile({
           }
         }}
         fmtShortDate={fmtShortDate}
+      />
+      {/* Quick view dialog — portaled, so position inside the tile doesn't
+          affect layout. Opened by double-click on the tile body. */}
+      <CardQuickView
+        cardId={card.id}
+        boardId={boardId}
+        open={quickViewOpen}
+        onOpenChange={setQuickViewOpen}
       />
     </div>
   );
