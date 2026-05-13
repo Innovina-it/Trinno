@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition, useCallback, useRef } from "react";
+import { useEffect, useState, useTransition, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -26,14 +26,13 @@ export function CreateWorkspaceDialog({
   const router = useRouter();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleMemberInput = useCallback((value: string) => {
-    setMemberQuery(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!value.trim()) { setSuggestions([]); return; }
-    debounceRef.current = setTimeout(async () => {
+  // Shared loader — empty query → top 12 profiles. Used by initial open
+  // and by the input handler (debounced).
+  const loadSuggestions = useCallback(
+    async (q: string) => {
       setSearching(true);
       try {
-        const results = await searchProfiles(value);
+        const results = await searchProfiles(q);
         const selectedIds = new Set(selected.map((p) => p.id));
         setSuggestions(results.filter((p) => !selectedIds.has(p.id)));
       } catch {
@@ -41,8 +40,28 @@ export function CreateWorkspaceDialog({
       } finally {
         setSearching(false);
       }
+    },
+    [selected],
+  );
+
+  // Preload the default suggestion list when the dialog opens. Reset
+  // input + selections so the next open is clean.
+  useEffect(() => {
+    if (!open) return;
+    setMemberQuery("");
+    void loadSuggestions("");
+    // intentionally exclude loadSuggestions from deps — its identity
+    // depends on `selected`, which we don't want to re-trigger on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const handleMemberInput = useCallback((value: string) => {
+    setMemberQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      void loadSuggestions(value);
     }, 220);
-  }, [selected]);
+  }, [loadSuggestions]);
 
   function addMember(profile: Profile) {
     setSelected((prev) => {
