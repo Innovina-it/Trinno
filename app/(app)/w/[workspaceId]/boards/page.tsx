@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
-import { getWorkspace, listBoardsInWorkspace, listEpicsInWorkspace } from "@/lib/queries/workspaces";
+import { getWorkspace, getWorkspaceRole, listBoardsInWorkspace, listEpicsInWorkspace } from "@/lib/queries/workspaces";
 import { BoardGrid } from "@/components/workspace/board-grid";
 import { CreateBoardButton } from "@/components/workspace/create-board-dialog";
 import { Button } from "@/components/ui/button";
@@ -12,15 +12,17 @@ export default async function WorkspacePage({
   params,
 }: { params: Promise<{ workspaceId: string }> }) {
   const { workspaceId } = await params;
-  await requireUser();
+  const user = await requireUser();
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
-  const [boards, epics, favoritedIds] = await Promise.all([
+  const [boards, epics, favoritedIds, role] = await Promise.all([
     listBoardsInWorkspace(token, workspaceId),
     listEpicsInWorkspace(token, workspaceId),
     listFavoriteBoardIds(token),
+    getWorkspaceRole(token, workspaceId, user.id),
   ]);
+  const canCreateBoards = role === "owner" || role === "admin";
   const visibleCount = boards.filter((b) => !b.archived).length;
   const today = shortDate(new Date());
 
@@ -46,7 +48,9 @@ export default async function WorkspacePage({
           >
             Settings
           </Button>
-          <CreateBoardButton workspaceId={workspaceId} />
+          {canCreateBoards ? (
+            <CreateBoardButton workspaceId={workspaceId} />
+          ) : null}
         </div>
       </header>
 

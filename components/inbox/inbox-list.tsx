@@ -113,6 +113,15 @@ function previewFor(n: N): string | null {
     : null;
 }
 
+// Snapshot fields baked into payload at emit time (see migration 0097).
+// Read these only when the join didn't resolve — they survive RLS hides
+// and target deletions.
+function payloadStr(n: N, key: "actor_name" | "board_title"): string | null {
+  const p = n.payload as Record<string, unknown> | null | undefined;
+  const v = p?.[key];
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
 export function InboxList({
   items,
   activeFilter,
@@ -330,7 +339,9 @@ export function InboxList({
                           <div className="flex-1 min-w-0">
                             <div className="text-sm leading-snug">
                               <span className="font-medium text-fg">
-                                {n.actorName ?? "Someone"}
+                                {n.actorName ??
+                                  payloadStr(n, "actor_name") ??
+                                  "Someone"}
                               </span>
                               <span className="text-fg-muted"> {meta.verb}</span>
                               <span className="font-medium text-fg">
@@ -345,15 +356,18 @@ export function InboxList({
                                     return `${p.count} cards`;
                                   }
                                   return (
-                                    n.cardTitle ?? n.boardTitle ?? "(item)"
+                                    n.cardTitle ??
+                                    n.boardTitle ??
+                                    payloadStr(n, "board_title") ??
+                                    "(item)"
                                   );
                                 })()}
                               </span>
                             </div>
                             <div className="mono-meta-sm text-fg-faint mt-0.5 flex items-center gap-2 tabular-nums">
-                              {n.boardTitle && (
+                              {(n.boardTitle ?? payloadStr(n, "board_title")) && (
                                 <span className="truncate max-w-[14rem]">
-                                  {n.boardTitle}
+                                  {n.boardTitle ?? payloadStr(n, "board_title")}
                                 </span>
                               )}
                               <span>·</span>

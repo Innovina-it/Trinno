@@ -21,6 +21,8 @@ import {
 } from "@/lib/board-templates";
 import { createListImpl, setListStatusKindImpl } from "@/actions/lists";
 import { createLabelImpl } from "@/actions/labels";
+import { workspaceMembers } from "@/lib/db/schema";
+import { and } from "drizzle-orm";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -39,6 +41,28 @@ export async function createBoardImpl(
   const parsed = CreateBoardInput.parse(input);
   const createdBy = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    // Pre-check role: only owner/admin can create boards in a workspace
+    // (boards_admin_write RLS, migration 0003). Without this the RLS
+    // violation surfaces as a generic 500 to the client — confusing UX
+    // when the caller is a workspace `member` who shouldn't have been
+    // offered the action in the first place.
+    const [membership] = await tx
+      .select({ role: workspaceMembers.role })
+      .from(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, parsed.workspaceId),
+          eq(workspaceMembers.userId, createdBy),
+        ),
+      );
+    if (
+      !membership ||
+      (membership.role !== "owner" && membership.role !== "admin")
+    ) {
+      throw new Error(
+        "Only workspace owners and admins can create boards in this workspace.",
+      );
+    }
     const [b] = await tx
       .insert(boards)
       .values({

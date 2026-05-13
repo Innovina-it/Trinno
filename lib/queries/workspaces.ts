@@ -1,4 +1,4 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import {
   workspaces,
@@ -6,6 +6,28 @@ import {
   boards,
   profiles,
 } from "@/lib/db/schema";
+
+// Returns the caller's role in the given workspace, or null if not a member.
+// Used by UI to gate admin-only entry points (e.g. "New board") and by
+// server actions to short-circuit RLS-violation 500s with a friendlier error.
+export async function getWorkspaceRole(
+  token: string,
+  workspaceId: string,
+  userId: string,
+): Promise<"owner" | "admin" | "member" | null> {
+  return dbAsUser(token, async (tx) => {
+    const [row] = await tx
+      .select({ role: workspaceMembers.role })
+      .from(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          eq(workspaceMembers.userId, userId),
+        ),
+      );
+    return (row?.role as "owner" | "admin" | "member" | undefined) ?? null;
+  });
+}
 
 export async function listWorkspaces(token: string) {
   return dbAsUser(token, async (tx) =>

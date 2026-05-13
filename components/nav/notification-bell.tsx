@@ -53,6 +53,17 @@ function preview(payload: Record<string, unknown>): string | null {
   return typeof p === "string" && p.trim() ? p.trim() : null;
 }
 
+// Snapshot fields stored on payload at emit time (migration 0097). Used as
+// a fallback when the actor/board join resolves to null (target deleted,
+// RLS hides it, or actor was inserted without an auth context).
+function payloadStr(
+  payload: Record<string, unknown>,
+  key: "actor_name" | "board_title",
+): string | null {
+  const v = payload?.[key];
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
 export function NotificationBell({ userId }: { userId: string }) {
   const [items, setItems] = useState<N[]>([]);
   const [unread, setUnread] = useState(0);
@@ -188,18 +199,25 @@ export function NotificationBell({ userId }: { userId: string }) {
               >
                 <div className="text-sm">
                   <span className="font-medium">
-                    {n.actorName ?? "Someone"}
+                    {n.actorName ??
+                      payloadStr(n.payload, "actor_name") ??
+                      "Someone"}
                   </span>
                   <span className="text-fg-muted">
                     {" "}
                     {KIND_LABEL[n.kind] ?? n.kind}{" "}
                   </span>
                   <span className="font-medium">
-                    {n.cardTitle ?? n.boardTitle ?? "—"}
+                    {n.cardTitle ??
+                      n.boardTitle ??
+                      payloadStr(n.payload, "board_title") ??
+                      "—"}
                   </span>
                 </div>
                 <div className="mono-meta-sm text-fg-faint mt-0.5 flex justify-between">
-                  <span>{n.boardTitle ?? ""}</span>
+                  <span>
+                    {n.boardTitle ?? payloadStr(n.payload, "board_title") ?? ""}
+                  </span>
                   <span>{rel(n.createdAt)}</span>
                 </div>
                 {preview(n.payload) && (
