@@ -130,6 +130,15 @@ export function NewCardDialog({
     () => boards.filter((b) => !b.archived),
     [boards],
   );
+  // Boards that have a list mapped to status_kind="todo". Used to pick a
+  // sane default when the caller did not specify a board — gantt new-card
+  // should always land in a todo column.
+  const boardsWithTodo = useMemo(() => {
+    const ids = new Set(
+      lists.filter((l) => l.statusKind === "todo").map((l) => l.boardId),
+    );
+    return visibleBoards.filter((b) => ids.has(b.id));
+  }, [lists, visibleBoards]);
   // Task 10 — board's todo list is the preferred landing slot for any new
   // gantt card. Falling back on the first list (by position) when no
   // mapped todo column exists keeps creation unblocked on legacy boards.
@@ -156,11 +165,14 @@ export function NewCardDialog({
       if (boardId !== defaultBoard) setBoardId(defaultBoard);
       return;
     }
-    if (!boardId && visibleBoards[0]) setBoardId(visibleBoards[0].id);
+    if (!boardId) {
+      const pick = boardsWithTodo[0] ?? visibleBoards[0];
+      if (pick) setBoardId(pick.id);
+    }
     // boardId is intentionally omitted from deps — we only re-seed on open
     // or when the defaults change, not on every internal boardId edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, defaultBoard, visibleBoards]);
+  }, [open, defaultBoard, visibleBoards, boardsWithTodo]);
   useEffect(() => {
     if (!open) return;
     if (defaultList) {
@@ -205,24 +217,22 @@ export function NewCardDialog({
     const parentId = defaultParent ?? null;
     startTransition(async () => {
       try {
-        const created = await createCard({ listId, title: t });
-        await updateCard({
-          id: created.id,
+        const created = await createCard({
+          listId,
+          title: t,
           startDate: startISO,
           targetDate: targetISO,
-          // Only thread `type` when the user picked something other than
-          // the default — keeps the patch minimal and avoids overwriting
-          // a smarter default the action layer might apply later.
-          ...(type !== "task" ? { type } : {}),
-          // Only thread parentCardId through when the caller asked for it;
-          // omit otherwise so the action treats it as "leave unchanged".
-          ...(parentId ? { parentCardId: parentId } : {}),
-          // Task 10 — claim ownership for the creator. Best-effort: when
-          // `currentUserId` is unknown the field is omitted, and the
-          // action layer's owner-claim guard handles the auth check (the
-          // creator is the only viable claimant on an unowned card).
+          // Owner set at INSERT so it skips the owner-change trigger; the
+          // creator is by definition a valid claimant.
           ...(currentUserId ? { ownerId: currentUserId } : {}),
+          ...(parentId ? { parentCardId: parentId } : {}),
         });
+        // `type` still needs a post-create patch — createCardImpl doesn't
+        // accept it. Only thread when the user picked something other than
+        // the default to keep the patch minimal.
+        if (type !== "task") {
+          await updateCard({ id: created.id, type });
+        }
         // Pre-assign members. Fire each one sequentially so per-call
         // errors surface as toasts, but the card itself is already saved.
         for (const userId of assignees) {

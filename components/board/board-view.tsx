@@ -38,7 +38,6 @@ import { ListColumn } from "./list-column";
 import { AddListForm } from "./add-list-form";
 import { BoardFilterBar } from "./board-filter-bar";
 import { AssigneeFilterRow } from "@/components/filters/assignee-filter-row";
-import { EpicStrip } from "./epic-strip";
 import { SwimlaneRow } from "./swimlane-row";
 import { SprintDropStrip } from "./sprint-drop-strip";
 import { useBoardRealtime } from "@/hooks/use-board-realtime";
@@ -50,6 +49,7 @@ import {
   parseFilters,
   applyFilters,
   partitionLanes,
+  getAssigneeMode,
   type LaneMode,
 } from "@/lib/board-filters";
 
@@ -143,32 +143,24 @@ export function BoardView({
     () => parseFilters(new URLSearchParams(sp.toString())),
     [sp],
   );
+  // Assignee filter is treated as "user-applied" only when the user has
+  // narrowed below the default "Mine + Unassigned" union. The default
+  // mode (assignedToMe && unassigned) should not light up the "filter
+  // active" affordances.
+  const isAssigneeFilterActive =
+    getAssigneeMode(filters) !== "me+none" &&
+    (filters.assignedToMe || filters.unassigned);
   const laneMode = ((sp.get("lanes") as LaneMode | null) ?? "none") as LaneMode;
 
-  const activeEpicId = sp.get("epic") ?? "";
-
-  const visibleCards = useMemo(() => {
-    const filtered = applyFilters(
-      cards,
-      { cardLabels, cardMembers, currentUserId: currentUser.userId },
-      filters,
-    );
-    if (!activeEpicId) return filtered;
-    // Restrict to the chosen epic's descendant tree. Walks parentCardId
-    // up to the root for each card so subtasks of a story nested under
-    // the active epic still pass.
-    const cardById = new Map(cards.map((c) => [c.id, c]));
-    function inActiveEpic(id: string): boolean {
-      let cur = cardById.get(id);
-      while (cur) {
-        if (cur.id === activeEpicId) return true;
-        if (!cur.parentCardId) return false;
-        cur = cardById.get(cur.parentCardId);
-      }
-      return false;
-    }
-    return filtered.filter((c) => inActiveEpic(c.id));
-  }, [cards, cardLabels, cardMembers, currentUser.userId, filters, activeEpicId]);
+  const visibleCards = useMemo(
+    () =>
+      applyFilters(
+        cards,
+        { cardLabels, cardMembers, currentUserId: currentUser.userId },
+        filters,
+      ),
+    [cards, cardLabels, cardMembers, currentUser.userId, filters],
+  );
 
   const lanesPartitioned = useMemo(
     () =>
@@ -452,8 +444,6 @@ export function BoardView({
         </div>
       </div>
 
-      <EpicStrip />
-
       <div className="relative flex flex-1 items-start gap-4 p-2 sm:p-3 md:p-4">
         <div className="flex-1 min-w-0">
           <DndContext
@@ -473,7 +463,7 @@ export function BoardView({
                 filters.types.length > 0 ||
                 filters.labelIds.length > 0 ||
                 filters.due !== null ||
-                filters.assignedToMe ||
+                isAssigneeFilterActive ||
                 filters.scheduled;
               const hiddenByFilters =
                 filterActive && cards.length > 0 && visibleCards.length === 0;
@@ -539,7 +529,7 @@ export function BoardView({
                         filters.types.length ||
                         filters.labelIds.length ||
                         filters.due ||
-                        filters.assignedToMe ||
+                        isAssigneeFilterActive ||
                         filters.scheduled
                           ? new Set(visibleCards.map((c) => c.id))
                           : undefined
