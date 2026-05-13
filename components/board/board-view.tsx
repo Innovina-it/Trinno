@@ -38,6 +38,7 @@ import { ListColumn } from "./list-column";
 import { AddListForm } from "./add-list-form";
 import { BoardFilterBar } from "./board-filter-bar";
 import { AssigneeFilterRow } from "@/components/filters/assignee-filter-row";
+import { EpicStrip } from "./epic-strip";
 import { SwimlaneRow } from "./swimlane-row";
 import { SprintDropStrip } from "./sprint-drop-strip";
 import { useBoardRealtime } from "@/hooks/use-board-realtime";
@@ -144,15 +145,30 @@ export function BoardView({
   );
   const laneMode = ((sp.get("lanes") as LaneMode | null) ?? "none") as LaneMode;
 
-  const visibleCards = useMemo(
-    () =>
-      applyFilters(
-        cards,
-        { cardLabels, cardMembers, currentUserId: currentUser.userId },
-        filters,
-      ),
-    [cards, cardLabels, cardMembers, currentUser.userId, filters],
-  );
+  const activeEpicId = sp.get("epic") ?? "";
+
+  const visibleCards = useMemo(() => {
+    const filtered = applyFilters(
+      cards,
+      { cardLabels, cardMembers, currentUserId: currentUser.userId },
+      filters,
+    );
+    if (!activeEpicId) return filtered;
+    // Restrict to the chosen epic's descendant tree. Walks parentCardId
+    // up to the root for each card so subtasks of a story nested under
+    // the active epic still pass.
+    const cardById = new Map(cards.map((c) => [c.id, c]));
+    function inActiveEpic(id: string): boolean {
+      let cur = cardById.get(id);
+      while (cur) {
+        if (cur.id === activeEpicId) return true;
+        if (!cur.parentCardId) return false;
+        cur = cardById.get(cur.parentCardId);
+      }
+      return false;
+    }
+    return filtered.filter((c) => inActiveEpic(c.id));
+  }, [cards, cardLabels, cardMembers, currentUser.userId, filters, activeEpicId]);
 
   const lanesPartitioned = useMemo(
     () =>
@@ -435,6 +451,8 @@ export function BoardView({
           </div>
         </div>
       </div>
+
+      <EpicStrip />
 
       <div className="relative flex flex-1 items-start gap-4 p-2 sm:p-3 md:p-4">
         <div className="flex-1 min-w-0">
