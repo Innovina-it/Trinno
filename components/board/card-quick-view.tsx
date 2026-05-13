@@ -340,10 +340,10 @@ function CardQuickViewBody({
 
   return (
     <>
-      <DialogHeader>
+      <DialogHeader className="min-w-0 pr-10 overflow-hidden">
         <DialogTitle
           data-testid="card-quick-view-title"
-          className={completed ? "line-through text-fg-muted" : ""}
+          className={`min-w-0 max-w-full ${completed ? "line-through text-fg-muted" : ""}`}
         >
           {editable && titleEditing ? (
             <input
@@ -375,7 +375,9 @@ function CardQuickViewBody({
           ) : (
             <span
               onClick={() => editable && setTitleEditing(true)}
-              className={editable ? "cursor-text" : undefined}
+              title={card.title}
+              className={`block min-w-0 max-w-full truncate ${editable ? "cursor-text" : ""}`}
+              style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
             >
               {card.title}
             </span>
@@ -668,7 +670,15 @@ function CardQuickViewBody({
         )}
       </div>
 
-      <DialogFooter>
+      <DialogFooter className="flex w-full items-center justify-between gap-2 sm:justify-between">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
+          data-testid="card-quick-view-close"
+        >
+          Close
+        </Button>
         <Button
           type="button"
           onClick={openAdvanced}
