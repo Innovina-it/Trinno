@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { ListColumn } from "./list-column";
 import { AddListForm } from "./add-list-form";
 import { BoardFilterBar } from "./board-filter-bar";
+import { AssigneeFilterRow } from "@/components/filters/assignee-filter-row";
 import { SwimlaneRow } from "./swimlane-row";
 import { SprintDropStrip } from "./sprint-drop-strip";
 import { useBoardRealtime } from "@/hooks/use-board-realtime";
@@ -453,6 +454,10 @@ export function BoardView({
             </Button>
           </div>
         </div>
+      </div>
+
+      <div className="border-b border-hairline px-3 sm:px-4 md:px-6 py-2 bg-[color:var(--bg-1)]">
+        <AssigneeFilterRow />
       </div>
 
       <div className="relative flex flex-1 items-start gap-4 p-2 sm:p-3 md:p-4">

@@ -37,9 +37,12 @@ export function parseFilters(sp: URLSearchParams): Filters {
   const labelIds = (sp.get("label") || "").split(",").map((s) => s.trim()).filter(Boolean);
   const due = sp.get("due") as Filters["due"];
   // Canonical query key is `assignee=me` (matches Jira convention).
-  // `assignee=none` means unassigned filter.
+  // `assignee=none` means unassigned filter. When the param is absent we
+  // default to "me" so the user lands on their own work first; explicit
+  // `?assignee=all` opts back to the unfiltered view. The serializer
+  // always writes the key so toggles round-trip cleanly through the URL.
   const assigneeParam = sp.get("assignee");
-  const assignedToMe = assigneeParam === "me";
+  const assignedToMe = assigneeParam === null || assigneeParam === "me";
   const unassigned = assigneeParam === "none";
   const scheduled = sp.get("scheduled") === "1";
   // `done=hide` matches the URL key used by the workload page (see
@@ -64,6 +67,7 @@ export function serializeFilters(f: Filters): URLSearchParams {
   if (f.due) sp.set("due", f.due);
   if (f.assignedToMe) sp.set("assignee", "me");
   else if (f.unassigned) sp.set("assignee", "none");
+  else sp.set("assignee", "all"); // explicit "All" — round-trips through URL
   if (f.scheduled) sp.set("scheduled", "1");
   if (f.hideCompleted) sp.set("done", "hide");
   return sp;

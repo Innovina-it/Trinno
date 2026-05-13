@@ -27,12 +27,8 @@ import {
   isFilterActive,
   parseFilters,
   serializeFilters,
-  getAssigneeMode,
-  withAssigneeMode,
-  type AssigneeMode,
 } from "@/lib/board-filters";
 import { useWorkspaceStore } from "@/stores/workspace-store";
-import { AssigneeSegment } from "@/components/filters/assignee-segment";
 
 const TYPE_OPTIONS = ["epic", "story", "task", "subtask", "bug"] as const;
 type Type = (typeof TYPE_OPTIONS)[number];
@@ -80,9 +76,6 @@ export function RoadmapFilterBar() {
   function setSprint(id: string) {
     update(filters, id);
   }
-  function setAssigneeMode(mode: AssigneeMode) {
-    update(withAssigneeMode(filters, mode));
-  }
   function clearAll() {
     update(
       {
@@ -103,19 +96,14 @@ export function RoadmapFilterBar() {
       ? "Any sprint"
       : sprints.find((s) => s.id === sprintParam)?.name ?? "Sprint";
 
-  const assigneeMode = getAssigneeMode(filters);
   const active = isFilterActive(filters) || sprintParam !== "";
   const activeCount =
     filters.types.length +
     (filters.due === "overdue" ? 1 : 0) +
-    (assigneeMode !== "all" ? 1 : 0) +
     (sprintParam ? 1 : 0);
 
   return (
     <div className="flex items-center gap-1.5" data-testid="roadmap-filter-bar">
-      {/* Assignee 3-way segment */}
-      <AssigneeSegment value={assigneeMode} onChange={setAssigneeMode} />
-
       <DropdownMenu>
         <DropdownMenuTrigger
           data-testid="roadmap-filter-trigger"

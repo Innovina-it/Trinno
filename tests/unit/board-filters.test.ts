@@ -28,12 +28,21 @@ describe("parseFilters", () => {
     expect(f.assignedToMe).toBe(true);
   });
 
-  it("handles empty", () => {
+  it("defaults to assignedToMe when no assignee param is present", () => {
+    // Empty URL now resolves to assigneeMode=me (canonical default per
+    // 2026-05-13 UX change). Explicit ?assignee=all opts back to All.
     const f = parseFilters(new URLSearchParams(""));
     expect(f.types).toEqual([]);
     expect(f.labelIds).toEqual([]);
     expect(f.due).toBeNull();
+    expect(f.assignedToMe).toBe(true);
+    expect(f.unassigned).toBe(false);
+  });
+
+  it("explicit assignee=all turns off assignedToMe", () => {
+    const f = parseFilters(new URLSearchParams("assignee=all"));
     expect(f.assignedToMe).toBe(false);
+    expect(f.unassigned).toBe(false);
   });
 });
 
@@ -45,13 +54,15 @@ describe("applyFilters", () => {
   });
 
   it("filters by label intersection (AND across selected)", () => {
-    const f = parseFilters(new URLSearchParams("label=lab2"));
+    // assignee=all opts out of the new "default to me" behavior so we can
+    // assert the pure label filter.
+    const f = parseFilters(new URLSearchParams("assignee=all&label=lab2"));
     const out = applyFilters(cards, { cardLabels, cardMembers, currentUserId: "u1" }, f);
     expect(out.map((c) => c.id)).toEqual(["c3"]);
   });
 
   it("filters overdue", () => {
-    const f = parseFilters(new URLSearchParams("due=overdue"));
+    const f = parseFilters(new URLSearchParams("assignee=all&due=overdue"));
     const out = applyFilters(cards, { cardLabels, cardMembers, currentUserId: "u1" }, f);
     expect(out.map((c) => c.id)).toEqual(["c2"]);
   });

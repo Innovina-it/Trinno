@@ -6,10 +6,7 @@ import {
   parseFilters,
   serializeFilters,
   isFilterActive,
-  getAssigneeMode,
-  withAssigneeMode,
   type LaneMode,
-  type AssigneeMode,
 } from "@/lib/board-filters";
 import {
   DropdownMenu,
@@ -34,7 +31,6 @@ import {
   Tag,
   X,
 } from "lucide-react";
-import { AssigneeSegment } from "@/components/filters/assignee-segment";
 
 const LANE_OPTIONS: { id: LaneMode; label: string }[] = [
   { id: "none", label: "No swimlanes" },
@@ -84,9 +80,6 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
   function setDue(d: typeof filters.due) {
     update({ ...filters, due: filters.due === d ? null : d });
   }
-  function setAssigneeMode(mode: AssigneeMode) {
-    update(withAssigneeMode(filters, mode));
-  }
   function toggleScheduled() {
     update({ ...filters, scheduled: !filters.scheduled });
   }
@@ -109,9 +102,7 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
   }
 
   const active = isFilterActive(filters) || lanes !== "none";
-  const assigneeMode = getAssigneeMode(filters);
   const filterCount =
-    (assigneeMode !== "all" ? 1 : 0) +
     (filters.due ? 1 : 0) +
     (filters.scheduled ? 1 : 0) +
     (filters.hideCompleted ? 1 : 0) +
@@ -145,9 +136,6 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* Assignee 3-way segment */}
-      <AssigneeSegment value={assigneeMode} onChange={setAssigneeMode} />
 
       {/* Filters */}
       <DropdownMenu>

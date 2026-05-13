@@ -240,8 +240,11 @@ export function AllTasksView({
 
   return (
     <div className="space-y-4" data-testid="all-tasks-view">
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2">
+        <span className="mono-meta-sm text-fg-faint">SHOWING</span>
         <AssigneeSegment value={assigneeMode} onChange={setAssigneeMode} />
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
         <input
           type="search"
           value={queryDraft}

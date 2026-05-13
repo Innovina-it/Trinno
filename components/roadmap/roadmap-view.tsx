@@ -50,6 +50,7 @@ import {
 import { SprintOverlay } from "./sprint-overlay";
 import { NewCardDialog as RoadmapNewCardDialog } from "@/components/board/new-card-dialog";
 import { RoadmapFilterBar } from "./roadmap-filter-bar";
+import { AssigneeFilterRow } from "@/components/filters/assignee-filter-row";
 import { RoadmapMiniMap } from "./mini-map";
 import { RoadmapRowHandle } from "./roadmap-row-handle";
 import { MilestoneMarkers } from "./milestone-markers";
@@ -1328,6 +1329,7 @@ export function RoadmapView({
         gridStart={gridStart}
         gridEnd={gridEnd}
       />
+      <AssigneeFilterRow />
       {/* === MILESTONE MARKERS START (toolbar) === */}
       <div className="flex items-center gap-2 flex-wrap">
         <RoadmapFilterBar />
