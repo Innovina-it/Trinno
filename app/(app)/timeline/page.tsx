@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { requireUser, getSessionToken } from "@/lib/auth";
-import { listWorkspaces } from "@/lib/queries/workspaces";
 import { listAllAcrossWorkspaces } from "@/lib/queries/cards";
 import { MeTimelineWorkspaceFilter } from "@/components/me/me-timeline-workspace-filter";
 import { MeTimelineView } from "@/components/me/me-timeline-view";
@@ -22,13 +21,22 @@ export default async function CommonTimelinePage({
   const wsParam = typeof sp.ws === "string" ? sp.ws : "";
   const selectedWsIds = wsParam ? wsParam.split(",").filter(Boolean) : [];
 
-  const [workspaces, cards] = await Promise.all([
-    listWorkspaces(token),
-    listAllAcrossWorkspaces(
-      token,
-      selectedWsIds.length > 0 ? selectedWsIds : undefined,
-    ),
-  ]);
+  // Fetch unfiltered once so we can both (a) populate the workspace
+  // filter dropdown with every workspace that has visible cards, and
+  // (b) apply the selection in memory. listWorkspaces is intentionally
+  // not used here — its RLS path hides workspaces the user only reaches
+  // through board membership (no workspace_members row), which would
+  // bury those workspaces in the filter.
+  const allCards = await listAllAcrossWorkspaces(token);
+  const wsById = new Map<string, string>();
+  for (const c of allCards) wsById.set(c.workspaceId, c.workspaceName);
+  const workspaces = [...wsById.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const cards =
+    selectedWsIds.length > 0
+      ? allCards.filter((c) => selectedWsIds.includes(c.workspaceId))
+      : allCards;
 
   return (
     <div className="mx-auto max-w-7xl px-3 sm:px-4 md:px-6 py-6 md:py-10 space-y-6">
@@ -53,7 +61,7 @@ export default async function CommonTimelinePage({
       </header>
 
       <MeTimelineWorkspaceFilter
-        workspaces={workspaces.map((w) => ({ id: w.id, name: w.name }))}
+        workspaces={workspaces}
         selected={selectedWsIds}
       />
 
