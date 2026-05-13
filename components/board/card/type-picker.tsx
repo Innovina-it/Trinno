@@ -12,6 +12,9 @@ import {
   Mountain, BookOpen, Square, CheckSquare, Bug, ChevronDown,
 } from "lucide-react";
 
+// Story kept here for visual-only resolution of legacy cards (TypeIcon
+// still maps type='story' to BookOpen). Excluded from PICKABLE_TYPES so
+// it never appears in the dropdown.
 const TYPES = [
   { id: "epic",    label: "Epic",     Icon: Mountain     },
   { id: "story",   label: "Story",    Icon: BookOpen     },
@@ -19,6 +22,8 @@ const TYPES = [
   { id: "subtask", label: "Sub-task", Icon: CheckSquare  },
   { id: "bug",     label: "Bug",      Icon: Bug          },
 ] as const;
+
+const PICKABLE_TYPES = TYPES.filter((t) => t.id !== "story");
 
 export type CardType = typeof TYPES[number]["id"];
 
@@ -80,7 +85,7 @@ export function TypePicker({ cardId, type, parentCardId }: { cardId: string; typ
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuRadioGroup value={type} onValueChange={(v) => set(v as CardType)}>
-          {TYPES.map((t) => (
+          {PICKABLE_TYPES.map((t) => (
             <DropdownMenuRadioItem key={t.id} value={t.id} className="gap-2">
               <t.Icon className="size-3.5" /> {t.label}
             </DropdownMenuRadioItem>

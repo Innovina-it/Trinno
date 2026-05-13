@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Bug, CalendarClock, CircleDot, ListTodo, Mountain, Square } from "lucide-react";
+import { Bug, CalendarClock, CircleDot, ListTodo, Mountain, Square } from "lucide-react";
 import { AssigneePicker } from "./assignee-picker";
 import {
   Dialog,
@@ -76,18 +76,14 @@ type TypeOption = {
   ringSelected: string;
   bgSelected: string;
 };
+// Story hidden from the picker (UX simplification, 2026-05-13). Legacy
+// story-typed cards keep their stored type and render as such elsewhere.
 const TYPE_OPTIONS: TypeOption[] = [
   {
     value: "task", label: "Task", Icon: Square,
     text: "text-fg-muted",
     ringSelected: "ring-fg/40",
     bgSelected: "bg-[rgb(255_255_255/0.10)]",
-  },
-  {
-    value: "story", label: "Story", Icon: BookOpen,
-    text: "text-emerald-300",
-    ringSelected: "ring-emerald-400/60",
-    bgSelected: "bg-emerald-500/15",
   },
   {
     value: "bug", label: "Bug", Icon: Bug,

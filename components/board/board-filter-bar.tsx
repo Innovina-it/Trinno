@@ -28,7 +28,7 @@ import {
   X,
 } from "lucide-react";
 
-const TYPE_OPTIONS = ["epic", "story", "task", "subtask", "bug"] as const;
+const TYPE_OPTIONS = ["epic", "task", "subtask", "bug"] as const;
 
 export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
   const router = useRouter();

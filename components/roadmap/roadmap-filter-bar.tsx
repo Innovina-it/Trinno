@@ -30,7 +30,7 @@ import {
 } from "@/lib/board-filters";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 
-const TYPE_OPTIONS = ["epic", "story", "task", "subtask", "bug"] as const;
+const TYPE_OPTIONS = ["epic", "task", "subtask", "bug"] as const;
 type Type = (typeof TYPE_OPTIONS)[number];
 
 export function RoadmapFilterBar() {
