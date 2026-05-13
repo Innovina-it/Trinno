@@ -70,7 +70,11 @@ export default async function CommonTimelinePage({
         selected={selectedWsIds}
       />
 
-      <MeTimelineView cards={cards} viewerId={user.id} />
+      <MeTimelineView
+        cards={cards}
+        viewerId={user.id}
+        allWorkspaces={workspaces}
+      />
     </div>
   );
 }

@@ -20,6 +20,9 @@ import {
 type Props = {
   cards: CrossWorkspaceCard[];
   viewerId: string;
+  /** Workspaces the user can see, even when they have no scheduled cards.
+   *  Rendered as empty collapsible sections so users know they exist. */
+  allWorkspaces?: Array<{ id: string; name: string }>;
 };
 
 type BoardLane = {
@@ -117,11 +120,24 @@ function buildRows(cards: CrossWorkspaceCard[]): Row[] {
 
 export function MeTimelineView({
   cards,
+  allWorkspaces,
 }: Omit<Props, "viewerId"> & { viewerId?: string }) {
   const router = useRouter();
 
   const groups = useMemo<WorkspaceGroup[]>(() => {
     const byWs = new Map<string, WorkspaceGroup>();
+    // Seed empty sections for every workspace the parent claimed exists,
+    // so the user can see workspaces without scheduled cards too.
+    if (allWorkspaces) {
+      for (const w of allWorkspaces) {
+        byWs.set(w.id, {
+          workspaceId: w.id,
+          workspaceName: w.name,
+          totalCards: 0,
+          boards: [],
+        });
+      }
+    }
     for (const c of cards) {
       let ws = byWs.get(c.workspaceId);
       if (!ws) {
@@ -147,7 +163,7 @@ export function MeTimelineView({
     }
     out.sort((a, b) => a.workspaceName.localeCompare(b.workspaceName));
     return out;
-  }, [cards]);
+  }, [cards, allWorkspaces]);
 
   const [openWs, setOpenWs] = useState<Set<string>>(() => new Set());
 
@@ -160,7 +176,7 @@ export function MeTimelineView({
     });
   }
 
-  if (cards.length === 0) {
+  if (groups.length === 0) {
     return (
       <div
         className="rounded-xl border border-hairline p-10 text-center text-fg-muted"
@@ -205,7 +221,12 @@ export function MeTimelineView({
               </span>
             </button>
 
-            {open && (
+            {open && ws.boards.length === 0 && (
+              <p className="px-3 sm:px-4 py-4 text-xs text-fg-faint border-t border-hairline">
+                No cards with both a start and target date yet.
+              </p>
+            )}
+            {open && ws.boards.length > 0 && (
               <div className="space-y-4 px-3 sm:px-4 pb-4 pt-3 border-t border-hairline">
                 {ws.boards.map((lane) => {
                   const rows = buildRows(lane.cards);
