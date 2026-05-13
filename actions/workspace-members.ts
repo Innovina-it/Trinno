@@ -68,23 +68,35 @@ export async function removeMemberImpl(
   });
 }
 
+// Workspace roster changes affect every page that hosts the
+// WorkspaceStoreProvider: /w/<id>/*, /b/<bid>/* (board layout loads the
+// workspace snapshot too), and /dashboards/<did>. Revalidate broadly so
+// the fresh `workspaceProfiles` flows into the store on next render.
+// Realtime CDC (subscribed inside WorkspaceStoreProvider) handles
+// already-open tabs.
+function revalidateWorkspace(workspaceId: string) {
+  revalidatePath(`/w/${workspaceId}`, "layout");
+  revalidatePath("/b", "layout");
+  revalidatePath("/dashboards", "layout");
+}
+
 export async function inviteMember(input: Parameters<typeof inviteMemberImpl>[1]) {
   await requireUser();
   const token = (await getSessionToken())!;
   const r = await inviteMemberImpl(token, input);
-  revalidatePath(`/w/${input.workspaceId}/settings`);
+  revalidateWorkspace(input.workspaceId);
   return r;
 }
 export async function changeMemberRole(input: Parameters<typeof changeMemberRoleImpl>[1]) {
   await requireUser();
   const token = (await getSessionToken())!;
   const r = await changeMemberRoleImpl(token, input);
-  revalidatePath(`/w/${input.workspaceId}/settings`);
+  revalidateWorkspace(input.workspaceId);
   return r;
 }
 export async function removeMember(input: Parameters<typeof removeMemberImpl>[1]) {
   await requireUser();
   const token = (await getSessionToken())!;
   await removeMemberImpl(token, input);
-  revalidatePath(`/w/${input.workspaceId}/settings`);
+  revalidateWorkspace(input.workspaceId);
 }

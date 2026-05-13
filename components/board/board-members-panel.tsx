@@ -1,28 +1,34 @@
 "use client";
-import { useEffect, useState, useTransition } from "react";
-import { lookupProfileByEmail } from "@/actions/profile-lookup";
+import { useMemo, useState, useTransition } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  inviteBoardMember,
+  addBoardMembersByIds,
   changeBoardMemberRole,
   removeBoardMember,
 } from "@/actions/board-members";
 import { useBoardMembershipSync } from "@/hooks/use-board-membership-sync";
+import {
+  PeoplePicker,
+  type PickerSelected,
+} from "@/components/people/people-picker";
 
+type Role = "admin" | "member" | "observer";
 type Member = {
   userId: string;
-  role: "admin" | "member" | "observer";
+  role: Role;
   displayName: string;
   avatarUrl: string | null;
 };
 
-type Role = "admin" | "member" | "observer";
+const ROLE_OPTIONS = [
+  { value: "observer", label: "Observer" },
+  { value: "member", label: "Member" },
+  { value: "admin", label: "Admin" },
+];
 
 export function BoardMembersPanel({
   boardId,
@@ -31,61 +37,31 @@ export function BoardMembersPanel({
   boardId: string;
   members: Member[];
 }) {
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<Role>("member");
+  const [selected, setSelected] = useState<PickerSelected<Role>[]>([]);
   const [pending, start] = useTransition();
   // Live updates so a concurrent admin's role change / removal in
   // another tab is reflected here without a hard reload.
   useBoardMembershipSync(boardId);
 
-  type Preview =
-    | { state: "idle" }
-    | { state: "checking" }
-    | { state: "found"; displayName: string; handle: string | null }
-    | { state: "exists" }
-    | { state: "missing" };
-  const [preview, setPreview] = useState<Preview>({ state: "idle" });
+  const existingIds = useMemo(
+    () => new Set(members.map((m) => m.userId)),
+    [members],
+  );
 
-  useEffect(() => {
-    const trimmed = email.trim();
-    if (!trimmed.includes("@") || trimmed.length < 3) {
-      setPreview({ state: "idle" });
-      return;
-    }
-    setPreview({ state: "checking" });
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      try {
-        const r = await lookupProfileByEmail(trimmed);
-        if (cancelled) return;
-        if (r.kind === "found") {
-          setPreview({
-            state: "found",
-            displayName: r.displayName,
-            handle: r.handle,
-          });
-        } else if (r.kind === "exists") {
-          setPreview({ state: "exists" });
-        } else {
-          setPreview({ state: "missing" });
-        }
-      } catch {
-        if (!cancelled) setPreview({ state: "idle" });
-      }
-    }, 350);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [email]);
-
-  function invite(e: React.FormEvent) {
-    e.preventDefault();
+  function add() {
+    if (selected.length === 0) return;
     start(async () => {
       try {
-        await inviteBoardMember({ boardId, email, role });
-        setEmail("");
-        toast.success("Member added to board");
+        await addBoardMembersByIds({
+          boardId,
+          members: selected.map((p) => ({ userId: p.id, role: p.role })),
+        });
+        setSelected([]);
+        toast.success(
+          selected.length === 1
+            ? "Member added to board"
+            : `${selected.length} members added to board`,
+        );
       } catch (err) {
         toast.error((err as Error).message);
       }
@@ -94,57 +70,31 @@ export function BoardMembersPanel({
 
   return (
     <div className="space-y-4">
-      <form onSubmit={invite} className="flex items-end gap-2">
-        <div className="space-y-1.5 flex-1">
-          <Label htmlFor="board-invite-email">Email</Label>
-          <Input
-            id="board-invite-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            placeholder="user@company.com"
-            aria-describedby="board-invite-preview"
-          />
-          <div
-            id="board-invite-preview"
-            className="mono-meta-sm text-fg-faint min-h-4"
-            aria-live="polite"
-          >
-            {preview.state === "checking" && "CHECKING…"}
-            {preview.state === "found" && (
-              <>
-                <span className="text-fg">{preview.displayName}</span>
-                {preview.handle && (
-                  <span className="text-fg-muted"> · @{preview.handle}</span>
-                )}
-              </>
-            )}
-            {preview.state === "exists" && "ACCOUNT EXISTS · ADDING WILL GRANT BOARD ACCESS"}
-            {preview.state === "missing" && (
-              <span className="text-[color:var(--status-blocked)]">
-                NO USER WITH THAT EMAIL
-              </span>
-            )}
-          </div>
-        </div>
-        <Select
-          value={role}
-          onValueChange={(v) => setRole(v as Role)}
-          options={[
-            { value: "observer", label: "Observer" },
-            { value: "member", label: "Member" },
-            { value: "admin", label: "Admin" },
-          ]}
-          className="w-32"
+      <div className="space-y-3">
+        <PeoplePicker<Role>
+          selected={selected}
+          onSelectedChange={setSelected}
+          roleOptions={ROLE_OPTIONS}
+          defaultRole="member"
+          excludeIds={existingIds}
+          label="Add to board"
+          placeholder="Search by name, handle, or email…"
+          inputTestId="board-invite-input"
         />
-        <Button
-          type="submit"
-          disabled={pending || !email || preview.state === "missing"}
-        >
-          {pending ? "Adding…" : "Add"}
-        </Button>
-      </form>
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            disabled={pending || selected.length === 0}
+            onClick={add}
+          >
+            {pending
+              ? "Adding…"
+              : selected.length > 1
+              ? `Add ${selected.length}`
+              : "Add"}
+          </Button>
+        </div>
+      </div>
 
       <ul className="divide-y divide-hairline rounded-xl border border-hairline">
         {members.map((m) => (
@@ -184,11 +134,7 @@ export function BoardMembersPanel({
                   }
                 })
               }
-              options={[
-                { value: "observer", label: "Observer" },
-                { value: "member", label: "Member" },
-                { value: "admin", label: "Admin" },
-              ]}
+              options={ROLE_OPTIONS}
               size="sm"
               className="w-28"
             />

@@ -557,6 +557,85 @@ export function RoadmapView({
       }));
   }, [storeCards, storeBoards, storeCardMembers, queryNorm, filters, sprintFilter, viewerId]);
 
+  // Same user-filter predicate the Gantt applies, but without the
+  // "needs start+target date" gate — the list view shows undated rows
+  // too. Returns null when no filter is active so the ListView can skip
+  // the membership check entirely.
+  const listFilteredCardIds = useMemo<Set<string> | null>(() => {
+    const hasFilter =
+      queryNorm !== "" ||
+      filters.types.length > 0 ||
+      sprintFilter !== "" ||
+      filters.due === "overdue" ||
+      filters.assignedToMe ||
+      filters.unassigned;
+    if (!hasFilter) return null;
+
+    const memberByCard = new Map<string, Set<string>>();
+    for (const cm of storeCardMembers) {
+      const s = memberByCard.get(cm.cardId) ?? new Set<string>();
+      s.add(cm.userId);
+      memberByCard.set(cm.cardId, s);
+    }
+    const now = new Date();
+    const selectedTypes = filters.types;
+    const subtaskAllowed =
+      selectedTypes.length === 0 || selectedTypes.includes("subtask");
+    const parentTypes = selectedTypes.filter((t) => t !== "subtask");
+
+    const passes = (c: typeof storeCards[number]) => {
+      if (c.archived) return false;
+      if (queryNorm && !c.title.toLowerCase().includes(queryNorm)) return false;
+      if (selectedTypes.length) {
+        if (c.type === "subtask") {
+          if (!subtaskAllowed) return false;
+        } else if (parentTypes.length && !parentTypes.includes(c.type)) {
+          return false;
+        }
+      }
+      if (sprintFilter && c.sprintId !== sprintFilter) return false;
+      if (filters.due === "overdue") {
+        const due = c.dueDate
+          ? c.dueDate instanceof Date
+            ? c.dueDate
+            : new Date(c.dueDate)
+          : null;
+        if (!due || due > now || c.dueComplete) return false;
+      }
+      if (filters.assignedToMe) {
+        if (!viewerId) return false;
+        const mems = memberByCard.get(c.id);
+        if (!mems || !mems.has(viewerId)) return false;
+      }
+      if (filters.unassigned) {
+        const mems = memberByCard.get(c.id);
+        const hasMembers = mems && mems.size > 0;
+        const hasOwner = Boolean(c.ownerId);
+        if (hasMembers || hasOwner) return false;
+      }
+      return true;
+    };
+
+    const cardById = new Map<string, typeof storeCards[number]>();
+    for (const c of storeCards) cardById.set(c.id, c);
+    const out = new Set<string>();
+    for (const c of storeCards) {
+      if (passes(c)) out.add(c.id);
+    }
+    // Pull ancestors so a matching subtask/task keeps its parent visible.
+    for (const id of [...out]) {
+      let cur = cardById.get(id);
+      while (cur?.parentCardId) {
+        const parent = cardById.get(cur.parentCardId);
+        if (!parent || parent.archived) break;
+        if (out.has(parent.id)) break;
+        out.add(parent.id);
+        cur = parent;
+      }
+    }
+    return out;
+  }, [storeCards, storeCardMembers, queryNorm, filters, sprintFilter, viewerId]);
+
   // Plan #16b-β — count of subtasks per parent that have NO dates set,
   // so we can render an "+N undated subtasks" chip next to the parent bar.
   const undatedSubtaskCountByParent = useMemo(() => {
@@ -1402,7 +1481,10 @@ export function RoadmapView({
           ordered by startDate ASC. Uses the same store data the gantt
           consumes; no extra queries. */}
       {viewMode === "list" ? (
-        <RoadmapListView workspaceId={workspaceId} />
+        <RoadmapListView
+          workspaceId={workspaceId}
+          filteredCardIds={listFilteredCardIds}
+        />
       ) : cards.length === 0 ? (
         // Plan #16b-γ-C (#7) — explicit empty-state with editorial
         // CTA copy. We layer it inside the same data-testid="roadmap-view"

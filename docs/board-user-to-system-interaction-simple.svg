@@ -1,0 +1,278 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1260" viewBox="0 0 1800 1260" role="img" aria-labelledby="title desc">
+  <title id="title">Board User-to-System Interaction Diagram - User Action Simplifications</title>
+  <desc id="desc">Board user-to-system diagram focused on concrete simplifications: hover editing, auto-closing add card, fewer dropdowns, label-to-add-card flow, richer add card options, and quick add for multiple tasks.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#cbd5e1"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#34d399"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#fb7185"/>
+    </marker>
+    <style>
+      .title { font: 800 34px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #f8fafc; }
+      .subtitle { font: 500 15px Inter, ui-sans-serif, system-ui, sans-serif; fill: #cbd5e1; }
+      .section { font: 800 13px Inter, ui-sans-serif, system-ui, sans-serif; fill: #e2e8f0; letter-spacing: .11em; }
+      .col-title { font: 800 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #f8fafc; letter-spacing: .08em; }
+      .card-title { font: 800 15px Inter, ui-sans-serif, system-ui, sans-serif; fill: #f8fafc; }
+      .text { font: 500 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #dbeafe; }
+      .muted { font: 500 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #cbd5e1; }
+      .lane { fill: rgba(15, 23, 42, .78); stroke: rgba(148, 163, 184, .25); stroke-width: 1.2; }
+      .problem { fill: #450a0a; stroke: #fb7185; stroke-width: 1.3; filter: url(#shadow); }
+      .user { fill: #172554; stroke: #60a5fa; stroke-width: 1.3; filter: url(#shadow); }
+      .ui { fill: #164e63; stroke: #38bdf8; stroke-width: 1.3; filter: url(#shadow); }
+      .server { fill: #3b0764; stroke: #c084fc; stroke-width: 1.3; filter: url(#shadow); }
+      .feedback { fill: #7c2d12; stroke: #fb923c; stroke-width: 1.3; filter: url(#shadow); }
+      .rule { fill: #111827; stroke: #475569; stroke-width: 1.2; filter: url(#shadow); }
+      .chip { fill: #0f172a; stroke: #334155; stroke-width: 1; }
+      .line { stroke: #334155; stroke-width: 1; }
+      .flow { fill: none; stroke: #cbd5e1; stroke-width: 2; marker-end: url(#arrow); }
+      .flow-blue { fill: none; stroke: #38bdf8; stroke-width: 2.2; marker-end: url(#arrowBlue); }
+      .flow-green { fill: none; stroke: #34d399; stroke-width: 2.2; marker-end: url(#arrowGreen); }
+      .flow-red { fill: none; stroke: #fb7185; stroke-width: 2; marker-end: url(#arrowRed); }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1260" fill="url(#bg)"/>
+
+  <text x="52" y="58" class="title">Board User-to-System Interaction</text>
+  <text x="52" y="88" class="subtitle">Simplification target: reduce repeated clicks, dropdowns, modal openings, and slow task entry from the board page.</text>
+
+  <rect x="52" y="118" width="1304" height="52" rx="14" class="lane"/>
+  <text x="78" y="150" class="section">USER ACTION SIMPLIFICATION MATRIX</text>
+  <text x="252" y="150" class="col-title">CURRENT FRICTION</text>
+  <text x="492" y="150" class="col-title">SIMPLIFIED ACTION</text>
+  <text x="740" y="150" class="col-title">UI BEHAVIOR</text>
+  <text x="980" y="150" class="col-title">SYSTEM SUPPORT</text>
+  <text x="1210" y="150" class="col-title">USER BENEFIT</text>
+
+  <!-- Row 1 -->
+  <rect x="52" y="196" width="1304" height="124" rx="18" class="lane"/>
+  <text x="76" y="226" class="section">1. USE HOVER INSTEAD OF EXTRA CLICKS</text>
+  <rect x="222" y="244" width="190" height="58" rx="12" class="problem"/>
+  <text x="242" y="268" class="card-title">Too many clicks</text>
+  <text x="242" y="288" class="text">open card for small edits</text>
+  <rect x="470" y="234" width="190" height="78" rx="12" class="user"/>
+  <text x="490" y="260" class="card-title">Hover to modify</text>
+  <text x="490" y="282" class="text">calendar and card fields</text>
+  <text x="490" y="300" class="text">directly from the board</text>
+  <rect x="718" y="234" width="190" height="78" rx="12" class="ui"/>
+  <text x="738" y="260" class="card-title">Hover controls</text>
+  <text x="738" y="282" class="text">date picker, notes,</text>
+  <text x="738" y="300" class="text">priority quick edit</text>
+  <rect x="966" y="234" width="174" height="78" rx="12" class="server"/>
+  <text x="986" y="260" class="card-title">Inline save</text>
+  <text x="986" y="282" class="text">save changed field</text>
+  <text x="986" y="300" class="text">show error if needed</text>
+  <rect x="1190" y="234" width="126" height="78" rx="12" class="feedback"/>
+  <text x="1210" y="260" class="card-title">Faster edits</text>
+  <text x="1210" y="282" class="text">less modal</text>
+  <text x="1210" y="300" class="text">opening</text>
+  <path d="M412 273 H470" class="flow-red"/>
+  <path d="M660 273 H718" class="flow-blue"/>
+  <path d="M908 273 H966" class="flow"/>
+  <path d="M1140 273 H1190" class="flow"/>
+
+  <!-- Row 2 -->
+  <rect x="52" y="344" width="1304" height="124" rx="18" class="lane"/>
+  <text x="76" y="374" class="section">2. AUTO-CLOSE ADD NEW CARD</text>
+  <rect x="222" y="392" width="190" height="58" rx="12" class="problem"/>
+  <text x="242" y="416" class="card-title">Add stays open</text>
+  <text x="242" y="436" class="text">after Add New Card</text>
+  <rect x="470" y="382" width="190" height="78" rx="12" class="user"/>
+  <text x="490" y="408" class="card-title">Add once</text>
+  <text x="490" y="430" class="text">enter card details</text>
+  <text x="490" y="448" class="text">then submit</text>
+  <rect x="718" y="382" width="190" height="78" rx="12" class="ui"/>
+  <text x="738" y="408" class="card-title">Close automatically</text>
+  <text x="738" y="430" class="text">close on success</text>
+  <text x="738" y="448" class="text">keep open only if pinned</text>
+  <rect x="966" y="382" width="174" height="78" rx="12" class="server"/>
+  <text x="986" y="408" class="card-title">Create card</text>
+  <text x="986" y="430" class="text">validate title</text>
+  <text x="986" y="448" class="text">save or show error</text>
+  <rect x="1190" y="382" width="126" height="78" rx="12" class="feedback"/>
+  <text x="1210" y="408" class="card-title">Cleaner flow</text>
+  <text x="1210" y="430" class="text">no manual</text>
+  <text x="1210" y="448" class="text">closing</text>
+  <path d="M412 421 H470" class="flow-red"/>
+  <path d="M660 421 H718" class="flow-blue"/>
+  <path d="M908 421 H966" class="flow"/>
+  <path d="M1140 421 H1190" class="flow"/>
+
+  <!-- Row 3 -->
+  <rect x="52" y="492" width="1304" height="124" rx="18" class="lane"/>
+  <text x="76" y="522" class="section">3. REPLACE TOO MANY DROPDOWNS WITH ONE TABLE</text>
+  <rect x="222" y="540" width="190" height="58" rx="12" class="problem"/>
+  <text x="242" y="564" class="card-title">Too many dropdowns</text>
+  <text x="242" y="584" class="text">fields are split apart</text>
+  <rect x="470" y="530" width="190" height="78" rx="12" class="user"/>
+  <text x="490" y="556" class="card-title">Edit in one table</text>
+  <text x="490" y="578" class="text">calendar, notes, dates,</text>
+  <text x="490" y="596" class="text">priority in one row</text>
+  <rect x="718" y="530" width="190" height="78" rx="12" class="ui"/>
+  <text x="738" y="556" class="card-title">Well-designed table</text>
+  <text x="738" y="578" class="text">inline cells and</text>
+  <text x="738" y="596" class="text">compact editors</text>
+  <rect x="966" y="530" width="174" height="78" rx="12" class="server"/>
+  <text x="986" y="556" class="card-title">Cell autosave</text>
+  <text x="986" y="578" class="text">validate per field</text>
+  <text x="986" y="596" class="text">rollback on error</text>
+  <rect x="1190" y="530" width="126" height="78" rx="12" class="feedback"/>
+  <text x="1210" y="556" class="card-title">Less hunting</text>
+  <text x="1210" y="578" class="text">fewer</text>
+  <text x="1210" y="596" class="text">menus</text>
+  <path d="M412 569 H470" class="flow-red"/>
+  <path d="M660 569 H718" class="flow-blue"/>
+  <path d="M908 569 H966" class="flow"/>
+  <path d="M1140 569 H1190" class="flow"/>
+
+  <!-- Row 4 -->
+  <rect x="52" y="640" width="1304" height="124" rx="18" class="lane"/>
+  <text x="76" y="670" class="section">4. CONNECT NEW LABEL CREATION TO ADD CARD</text>
+  <rect x="222" y="688" width="190" height="58" rx="12" class="problem"/>
+  <text x="242" y="712" class="card-title">Label flow is separate</text>
+  <text x="242" y="732" class="text">user creates label first</text>
+  <rect x="470" y="678" width="190" height="78" rx="12" class="user"/>
+  <text x="490" y="704" class="card-title">Create label once</text>
+  <text x="490" y="726" class="text">then continue inside</text>
+  <text x="490" y="744" class="text">Add Card functions</text>
+  <rect x="718" y="678" width="190" height="78" rx="12" class="ui"/>
+  <text x="738" y="704" class="card-title">Open Add Card tools</text>
+  <text x="738" y="726" class="text">auto-open label,</text>
+  <text x="738" y="744" class="text">priority, date options</text>
+  <rect x="966" y="678" width="174" height="78" rx="12" class="server"/>
+  <text x="986" y="704" class="card-title">Sync label</text>
+  <text x="986" y="726" class="text">save label and</text>
+  <text x="986" y="744" class="text">attach to new card</text>
+  <rect x="1190" y="678" width="126" height="78" rx="12" class="feedback"/>
+  <text x="1210" y="704" class="card-title">One flow</text>
+  <text x="1210" y="726" class="text">less</text>
+  <text x="1210" y="744" class="text">context switch</text>
+  <path d="M412 717 H470" class="flow-red"/>
+  <path d="M660 717 H718" class="flow-blue"/>
+  <path d="M908 717 H966" class="flow"/>
+  <path d="M1140 717 H1190" class="flow"/>
+
+  <!-- Row 5 -->
+  <rect x="52" y="788" width="1304" height="124" rx="18" class="lane"/>
+  <text x="76" y="818" class="section">5. ADD MORE OPTIONS INSIDE ADD A CARD</text>
+  <rect x="222" y="836" width="190" height="58" rx="12" class="problem"/>
+  <text x="242" y="860" class="card-title">Add Card is limited</text>
+  <text x="242" y="880" class="text">details require later edits</text>
+  <rect x="470" y="826" width="190" height="78" rx="12" class="user"/>
+  <text x="490" y="852" class="card-title">Add with options</text>
+  <text x="490" y="874" class="text">set dates, priority,</text>
+  <text x="490" y="892" class="text">labels, notes, owner</text>
+  <rect x="718" y="826" width="190" height="78" rx="12" class="ui"/>
+  <text x="738" y="852" class="card-title">Expanded add form</text>
+  <text x="738" y="874" class="text">compact optional fields</text>
+  <text x="738" y="892" class="text">shown when needed</text>
+  <rect x="966" y="826" width="174" height="78" rx="12" class="server"/>
+  <text x="986" y="852" class="card-title">Create full card</text>
+  <text x="986" y="874" class="text">validate all fields</text>
+  <text x="986" y="892" class="text">save in one action</text>
+  <rect x="1190" y="826" width="126" height="78" rx="12" class="feedback"/>
+  <text x="1210" y="852" class="card-title">Less rework</text>
+  <text x="1210" y="874" class="text">card starts</text>
+  <text x="1210" y="892" class="text">complete</text>
+  <path d="M412 865 H470" class="flow-red"/>
+  <path d="M660 865 H718" class="flow-blue"/>
+  <path d="M908 865 H966" class="flow"/>
+  <path d="M1140 865 H1190" class="flow"/>
+
+  <!-- Row 6 -->
+  <rect x="52" y="936" width="1304" height="124" rx="18" class="lane"/>
+  <text x="76" y="966" class="section">6. QUICK ADD MULTIPLE TASKS</text>
+  <rect x="222" y="984" width="190" height="58" rx="12" class="problem"/>
+  <text x="242" y="1008" class="card-title">Slow task entry</text>
+  <text x="242" y="1028" class="text">one card at a time</text>
+  <rect x="470" y="974" width="190" height="78" rx="12" class="user"/>
+  <text x="490" y="1000" class="card-title">Use Quick Add</text>
+  <text x="490" y="1022" class="text">paste or type many</text>
+  <text x="490" y="1040" class="text">tasks quickly</text>
+  <rect x="718" y="974" width="190" height="78" rx="12" class="ui"/>
+  <text x="738" y="1000" class="card-title">Multi-task input</text>
+  <text x="738" y="1022" class="text">one line per task</text>
+  <text x="738" y="1040" class="text">preview before create</text>
+  <rect x="966" y="974" width="174" height="78" rx="12" class="server"/>
+  <text x="986" y="1000" class="card-title">Bulk create</text>
+  <text x="986" y="1022" class="text">validate each task</text>
+  <text x="986" y="1040" class="text">create accepted cards</text>
+  <rect x="1190" y="974" width="126" height="78" rx="12" class="feedback"/>
+  <text x="1210" y="1000" class="card-title">Fast setup</text>
+  <text x="1210" y="1022" class="text">many tasks</text>
+  <text x="1210" y="1040" class="text">in seconds</text>
+  <path d="M412 1013 H470" class="flow-red"/>
+  <path d="M660 1013 H718" class="flow-blue"/>
+  <path d="M908 1013 H966" class="flow"/>
+  <path d="M1140 1013 H1190" class="flow"/>
+
+  <!-- Right side rules panel -->
+  <rect x="1390" y="118" width="358" height="942" rx="18" class="rule"/>
+  <text x="1420" y="150" class="section">SIMPLIFICATION RULES</text>
+  <line x1="1420" y1="174" x2="1718" y2="174" class="line"/>
+
+  <rect x="1420" y="202" width="298" height="96" rx="10" class="chip"/>
+  <text x="1440" y="228" class="card-title">Reduce clicks</text>
+  <text x="1440" y="250" class="muted">Use hover controls for calendar,</text>
+  <text x="1440" y="268" class="muted">notes, priority, and common card</text>
+  <text x="1440" y="286" class="muted">fields before opening the modal.</text>
+
+  <rect x="1420" y="326" width="298" height="96" rx="10" class="chip"/>
+  <text x="1440" y="352" class="card-title">Finish add cleanly</text>
+  <text x="1440" y="374" class="muted">After Add New Card succeeds, close</text>
+  <text x="1440" y="392" class="muted">the form automatically unless the</text>
+  <text x="1440" y="410" class="muted">user chooses continuous add mode.</text>
+
+  <rect x="1420" y="450" width="298" height="116" rx="10" class="chip"/>
+  <text x="1440" y="476" class="card-title">Replace dropdown hunting</text>
+  <text x="1440" y="498" class="muted">Use one well-designed table for</text>
+  <text x="1440" y="516" class="muted">calendar, notes, dates, priorities,</text>
+  <text x="1440" y="534" class="muted">owners, status, labels, and sprint</text>
+  <text x="1440" y="552" class="muted">instead of scattered dropdowns.</text>
+
+  <rect x="1420" y="594" width="298" height="96" rx="10" class="chip"/>
+  <text x="1440" y="620" class="card-title">Connect related flows</text>
+  <text x="1440" y="642" class="muted">Creating a new label should open</text>
+  <text x="1440" y="660" class="muted">or return to Add Card functions so</text>
+  <text x="1440" y="678" class="muted">the user continues in one flow.</text>
+
+  <rect x="1420" y="718" width="298" height="96" rx="10" class="chip"/>
+  <text x="1440" y="744" class="card-title">Add more at creation</text>
+  <text x="1440" y="766" class="muted">Add Card should support optional</text>
+  <text x="1440" y="784" class="muted">fields so the user does not need</text>
+  <text x="1440" y="802" class="muted">to reopen the card immediately.</text>
+
+  <rect x="1420" y="842" width="298" height="96" rx="10" class="chip"/>
+  <text x="1440" y="868" class="card-title">Support fast task entry</text>
+  <text x="1440" y="890" class="muted">Quick Add should create multiple</text>
+  <text x="1440" y="908" class="muted">tasks from pasted or typed lines</text>
+  <text x="1440" y="926" class="muted">with preview and validation.</text>
+
+  <!-- Legend -->
+  <rect x="52" y="1118" width="742" height="54" rx="12" class="lane"/>
+  <rect x="74" y="1136" width="18" height="18" rx="4" fill="#450a0a" stroke="#fb7185"/>
+  <text x="102" y="1150" class="muted">Current friction</text>
+  <rect x="224" y="1136" width="18" height="18" rx="4" fill="#172554" stroke="#60a5fa"/>
+  <text x="252" y="1150" class="muted">Simplified action</text>
+  <rect x="386" y="1136" width="18" height="18" rx="4" fill="#164e63" stroke="#38bdf8"/>
+  <text x="414" y="1150" class="muted">UI behavior</text>
+  <rect x="520" y="1136" width="18" height="18" rx="4" fill="#3b0764" stroke="#c084fc"/>
+  <text x="548" y="1150" class="muted">System support</text>
+  <rect x="674" y="1136" width="18" height="18" rx="4" fill="#7c2d12" stroke="#fb923c"/>
+  <text x="702" y="1150" class="muted">Benefit</text>
+</svg>

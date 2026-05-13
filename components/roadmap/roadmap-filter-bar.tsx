@@ -55,7 +55,7 @@ export function RoadmapFilterBar() {
 
   function update(next: typeof filters, sprintNext: string = sprintParam) {
     const params = serializeFilters(next);
-    for (const k of ["zoom", "q", "focus"]) {
+    for (const k of ["zoom", "q", "focus", "view"]) {
       const v = sp.get(k);
       if (v) params.set(k, v);
     }

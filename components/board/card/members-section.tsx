@@ -8,22 +8,42 @@ import { toast } from "sonner";
 import { undoBus } from "@/lib/undo-bus";
 
 export function MembersSection({ cardId }: { cardId: string }) {
-  const profiles = useBoardStore((s) => s.boardProfiles);
+  const boardProfiles = useBoardStore((s) => s.boardProfiles);
+  const workspaceProfiles = useBoardStore((s) => s.workspaceProfiles);
   const cardMembers = useBoardStore((s) => s.cardMembers);
   const addCardMember = useBoardStore((s) => s.addCardMember);
   const removeCardMember = useBoardStore((s) => s.removeCardMember);
+  const upsertBoardMember = useBoardStore((s) => s.upsertBoardMember);
   const [pending, start] = useTransition();
 
+  const boardMemberIds = new Set(boardProfiles.map((p) => p.id));
   const assigned = new Set(
     cardMembers.filter((m) => m.cardId === cardId).map((m) => m.userId),
   );
 
+  // Show board members first, then any remaining workspace members.
+  // Assigning a workspace-only person promotes them to board_member
+  // server-side (trigger 0098). We optimistically mirror that locally so
+  // the avatar bar and member roster update without waiting for a snapshot
+  // refetch.
+  const all = [
+    ...boardProfiles,
+    ...workspaceProfiles.filter((p) => !boardMemberIds.has(p.id)),
+  ];
+
   function toggle(userId: string) {
     const wasAssigned = assigned.has(userId);
-    const memberName =
-      profiles.find((p) => p.id === userId)?.displayName ?? "Member";
+    const profile = all.find((p) => p.id === userId);
+    const memberName = profile?.displayName ?? "Member";
+    const willPromoteToBoard = !wasAssigned && !boardMemberIds.has(userId);
+
     if (wasAssigned) removeCardMember(cardId, userId);
-    else addCardMember({ cardId, userId });
+    else {
+      addCardMember({ cardId, userId });
+      if (willPromoteToBoard && profile) {
+        upsertBoardMember({ userId, role: "member" }, profile);
+      }
+    }
     start(async () => {
       try {
         await toggleCardMember({ cardId, userId });
@@ -51,19 +71,20 @@ export function MembersSection({ cardId }: { cardId: string }) {
     });
   }
 
-  if (profiles.length === 0) return null;
+  if (all.length === 0) return null;
   return (
     <section className="space-y-3" data-testid="members-section">
       <div className="flex items-baseline justify-between border-b border-hairline pb-1">
         <h3 className="mono-meta text-fg-muted">Members</h3>
       </div>
       <p className="text-xs leading-snug text-fg-muted">
-        Collaborators helping with the work. Assigned members are auto-watched
-        for future comments and changes.
+        Collaborators helping with the work. Assigning a workspace member
+        adds them to this board automatically.
       </p>
       <ul className="flex flex-wrap gap-1.5">
-        {profiles.map((p) => {
+        {all.map((p) => {
           const on = assigned.has(p.id);
+          const notOnBoard = !boardMemberIds.has(p.id);
           return (
             <li key={p.id}>
               <Button
@@ -74,7 +95,12 @@ export function MembersSection({ cardId }: { cardId: string }) {
                 onClick={() => toggle(p.id)}
                 data-user-id={p.id}
                 data-assigned={on}
-                className="gap-1.5 normal-case tracking-normal"
+                data-not-board-member={notOnBoard ? "true" : undefined}
+                title={notOnBoard ? "From workspace — assigning will add to board" : undefined}
+                className={
+                  "gap-1.5 normal-case tracking-normal" +
+                  (notOnBoard && !on ? " border-dashed text-fg-muted" : "")
+                }
               >
                 <Avatar size="sm" className="rounded-none border border-current">
                   <AvatarFallback className="rounded-none bg-transparent text-current text-[10px] tracking-widest">

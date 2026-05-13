@@ -186,6 +186,17 @@ export function NewCardDialog({
     setListId(todoListId ?? listsForBoard[0]?.id ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultList, boardId, listsForBoard, todoListId]);
+  // Dialog stays mounted across opens, so useState initializers run once
+  // at first render — meaning the start/target defaults from a roadmap
+  // drag-paint were captured only on initial mount. Re-seed dates on every
+  // open (and whenever the defaults change while open), matching the
+  // board/list seeding above. Without this, a paint of any rectangle
+  // length still opened the dialog at today / today+14.
+  useEffect(() => {
+    if (!open) return;
+    setStart(defaultStart ?? todayISO());
+    setTarget(defaultTarget ?? plus14ISO());
+  }, [open, defaultStart, defaultTarget]);
 
   function reset() {
     setTitle("");

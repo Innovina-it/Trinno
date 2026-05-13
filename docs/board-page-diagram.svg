@@ -1,0 +1,274 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1840" height="1120" viewBox="0 0 1840 1120" role="img" aria-labelledby="title desc">
+  <title id="title">Board Page Architecture Diagram</title>
+  <desc id="desc">A simplified, ordered diagram of the board page architecture and rules.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1120"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#cbd5e1"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#93c5fd"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#86efac"/>
+    </marker>
+    <style>
+      .page-title { font: 800 34px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #f8fafc; }
+      .page-subtitle { font: 500 15px Inter, ui-sans-serif, system-ui, sans-serif; fill: #cbd5e1; }
+      .lane-title { font: 800 14px Inter, ui-sans-serif, system-ui, sans-serif; fill: #e2e8f0; letter-spacing: .12em; }
+      .card-title { font: 800 16px Inter, ui-sans-serif, system-ui, sans-serif; fill: #f8fafc; }
+      .card-text { font: 500 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #dbeafe; }
+      .muted { font: 500 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #cbd5e1; }
+      .small { font: 700 11px Inter, ui-sans-serif, system-ui, sans-serif; fill: #cbd5e1; }
+      .tiny { font: 700 10px Inter, ui-sans-serif, system-ui, sans-serif; fill: #94a3b8; letter-spacing: .06em; }
+      .lane { fill: rgba(15, 23, 42, .74); stroke: rgba(148, 163, 184, .28); stroke-width: 1.2; }
+      .server { fill: #172554; stroke: #60a5fa; stroke-width: 1.3; filter: url(#shadow); }
+      .client { fill: #064e3b; stroke: #34d399; stroke-width: 1.3; filter: url(#shadow); }
+      .action { fill: #3b0764; stroke: #d8b4fe; stroke-width: 1.3; filter: url(#shadow); }
+      .data { fill: #7c2d12; stroke: #fb923c; stroke-width: 1.3; filter: url(#shadow); }
+      .neutral { fill: #111827; stroke: #64748b; stroke-width: 1.3; filter: url(#shadow); }
+      .danger { fill: #450a0a; stroke: #f87171; stroke-width: 1.3; filter: url(#shadow); }
+      .flow { fill: none; stroke: #cbd5e1; stroke-width: 2.1; marker-end: url(#arrow); }
+      .flow-blue { fill: none; stroke: #93c5fd; stroke-width: 2.3; marker-end: url(#arrowBlue); }
+      .flow-green { fill: none; stroke: #86efac; stroke-width: 2.3; marker-end: url(#arrowGreen); }
+      .flow-dashed { fill: none; stroke: #cbd5e1; stroke-width: 2; stroke-dasharray: 7 7; marker-end: url(#arrow); }
+      .num { font: 800 13px Inter, ui-sans-serif, system-ui, sans-serif; fill: #020617; }
+      .num-circle { fill: #e2e8f0; }
+      .table-line { stroke: #334155; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1840" height="1120" fill="url(#bg)"/>
+  <circle cx="140" cy="92" r="180" fill="#1d4ed8" opacity=".11"/>
+  <circle cx="1560" cy="940" r="250" fill="#059669" opacity=".10"/>
+
+  <text x="56" y="58" class="page-title">Board Page Architecture</text>
+  <text x="56" y="88" class="page-subtitle">Clean flow: server loads the board, client renders it, actions mutate it, database and realtime keep it synchronized.</text>
+
+  <!-- Lane 1: Server load -->
+  <rect x="48" y="126" width="1328" height="180" rx="18" class="lane"/>
+  <text x="72" y="156" class="lane-title">1. SERVER LOAD</text>
+
+  <rect x="80" y="194" width="180" height="74" rx="12" class="server"/>
+  <circle cx="104" cy="218" r="13" class="num-circle"/><text x="100" y="223" class="num">1</text>
+  <text x="126" y="220" class="card-title">Route</text>
+  <text x="126" y="244" class="card-text">/b/:boardId</text>
+
+  <rect x="304" y="194" width="190" height="74" rx="12" class="server"/>
+  <circle cx="328" cy="218" r="13" class="num-circle"/><text x="324" y="223" class="num">2</text>
+  <text x="350" y="220" class="card-title">Auth</text>
+  <text x="350" y="244" class="card-text">requireUser + JWT</text>
+
+  <rect x="538" y="194" width="220" height="74" rx="12" class="server"/>
+  <circle cx="562" cy="218" r="13" class="num-circle"/><text x="558" y="223" class="num">3</text>
+  <text x="584" y="220" class="card-title">Board Snapshot</text>
+  <text x="584" y="244" class="card-text">dbAsUser + RLS</text>
+
+  <path d="M812 194 L900 231 L812 268 L724 231 Z" fill="#312e81" stroke="#a5b4fc" stroke-width="1.3" filter="url(#shadow)"/>
+  <text x="776" y="226" class="card-title">Access?</text>
+  <text x="765" y="248" class="muted">visible by RLS</text>
+
+  <rect x="964" y="168" width="170" height="58" rx="12" class="danger"/>
+  <text x="988" y="192" class="card-title">No Access</text>
+  <text x="988" y="212" class="muted">redirect / notice</text>
+
+  <rect x="964" y="244" width="250" height="58" rx="12" class="server"/>
+  <circle cx="988" cy="267" r="13" class="num-circle"/><text x="984" y="272" class="num">4</text>
+  <text x="1010" y="269" class="card-title">Providers</text>
+  <text x="1010" y="290" class="card-text">Workspace + Board stores</text>
+
+  <path d="M260 231 H304" class="flow-blue"/>
+  <path d="M494 231 H538" class="flow-blue"/>
+  <path d="M758 231 H724" class="flow-blue"/>
+  <path d="M900 231 C930 231 935 197 964 197" class="flow"/>
+  <path d="M900 231 C930 231 935 273 964 273" class="flow-blue"/>
+  <text x="920" y="184" class="tiny">NULL</text>
+  <text x="920" y="264" class="tiny">OK</text>
+
+  <!-- Lane 2: Client render -->
+  <rect x="48" y="340" width="1328" height="242" rx="18" class="lane"/>
+  <text x="72" y="370" class="lane-title">2. CLIENT RENDER</text>
+
+  <rect x="80" y="424" width="190" height="78" rx="12" class="client"/>
+  <circle cx="104" cy="449" r="13" class="num-circle"/><text x="100" y="454" class="num">5</text>
+  <text x="126" y="452" class="card-title">BoardView</text>
+  <text x="126" y="476" class="card-text">main board UI</text>
+
+  <rect x="326" y="388" width="200" height="76" rx="12" class="client"/>
+  <circle cx="350" cy="412" r="13" class="num-circle"/><text x="346" y="417" class="num">6</text>
+  <text x="372" y="414" class="card-title">Zustand Store</text>
+  <text x="372" y="438" class="card-text">lists, cards, labels...</text>
+
+  <rect x="326" y="490" width="200" height="76" rx="12" class="client"/>
+  <circle cx="350" cy="514" r="13" class="num-circle"/><text x="346" y="519" class="num">7</text>
+  <text x="372" y="516" class="card-title">Realtime Hooks</text>
+  <text x="372" y="540" class="card-text">board + workspace</text>
+
+  <rect x="588" y="388" width="202" height="76" rx="12" class="client"/>
+  <circle cx="612" cy="412" r="13" class="num-circle"/><text x="608" y="417" class="num">8</text>
+  <text x="634" y="414" class="card-title">ListColumn</text>
+  <text x="634" y="438" class="card-text">columns, WIP, add card</text>
+
+  <rect x="588" y="490" width="202" height="76" rx="12" class="client"/>
+  <circle cx="612" cy="514" r="13" class="num-circle"/><text x="608" y="519" class="num">9</text>
+  <text x="634" y="516" class="card-title">CardTile</text>
+  <text x="634" y="540" class="card-text">open, edit, select, drag</text>
+
+  <rect x="854" y="388" width="204" height="76" rx="12" class="client"/>
+  <circle cx="878" cy="412" r="13" class="num-circle"/><text x="874" y="417" class="num">10</text>
+  <text x="904" y="414" class="card-title">CardModal</text>
+  <text x="904" y="438" class="card-text">/b/:boardId/c/:cardId</text>
+
+  <rect x="854" y="490" width="204" height="76" rx="12" class="client"/>
+  <circle cx="878" cy="514" r="13" class="num-circle"/><text x="874" y="519" class="num">11</text>
+  <text x="904" y="516" class="card-title">Activity + Presence</text>
+  <text x="904" y="540" class="card-text">feed and live viewers</text>
+
+  <path d="M1088 302 C1088 330 175 360 175 424" class="flow-green"/>
+  <path d="M270 463 H326" class="flow-green"/>
+  <path d="M526 426 H588" class="flow-green"/>
+  <path d="M526 528 H588" class="flow-green"/>
+  <path d="M790 528 C815 528 826 426 854 426" class="flow-green"/>
+  <path d="M790 528 H854" class="flow-green"/>
+
+  <!-- Lane 3: User actions -->
+  <rect x="48" y="616" width="1328" height="200" rx="18" class="lane"/>
+  <text x="72" y="646" class="lane-title">3. USER ACTIONS</text>
+
+  <rect x="80" y="690" width="218" height="78" rx="12" class="action"/>
+  <circle cx="104" cy="715" r="13" class="num-circle"/><text x="100" y="720" class="num">12</text>
+  <text x="130" y="718" class="card-title">Filters / Swimlanes</text>
+  <text x="130" y="742" class="card-text">URL controls visibility</text>
+
+  <rect x="352" y="690" width="218" height="78" rx="12" class="action"/>
+  <circle cx="376" cy="715" r="13" class="num-circle"/><text x="372" y="720" class="num">13</text>
+  <text x="402" y="718" class="card-title">Drag and Drop</text>
+  <text x="402" y="742" class="card-text">lists, cards, sprint strip</text>
+
+  <rect x="624" y="690" width="218" height="78" rx="12" class="action"/>
+  <circle cx="648" cy="715" r="13" class="num-circle"/><text x="644" y="720" class="num">14</text>
+  <text x="674" y="718" class="card-title">Selection State</text>
+  <text x="674" y="742" class="card-text">selectedCardIds</text>
+
+  <rect x="896" y="690" width="218" height="78" rx="12" class="action"/>
+  <circle cx="920" cy="715" r="13" class="num-circle"/><text x="916" y="720" class="num">15</text>
+  <text x="946" y="718" class="card-title">BulkActionBar</text>
+  <text x="946" y="742" class="card-text">move, label, assign...</text>
+
+  <path d="M270 502 C250 570 189 620 189 690" class="flow"/>
+  <path d="M689 566 C655 616 461 630 461 690" class="flow"/>
+  <path d="M689 566 C710 616 733 630 733 690" class="flow-green"/>
+  <path d="M842 729 H896" class="flow-green"/>
+
+  <!-- Lane 4: Persistence -->
+  <rect x="48" y="850" width="1328" height="190" rx="18" class="lane"/>
+  <text x="72" y="880" class="lane-title">4. PERSISTENCE AND SYNC</text>
+
+  <rect x="120" y="930" width="224" height="76" rx="12" class="neutral"/>
+  <circle cx="144" cy="954" r="13" class="num-circle"/><text x="140" y="959" class="num">16</text>
+  <text x="170" y="956" class="card-title">Optimistic Update</text>
+  <text x="170" y="980" class="muted">store changes first</text>
+
+  <rect x="420" y="930" width="224" height="76" rx="12" class="server"/>
+  <circle cx="444" cy="954" r="13" class="num-circle"/><text x="440" y="959" class="num">17</text>
+  <text x="470" y="956" class="card-title">Server Actions</text>
+  <text x="470" y="980" class="card-text">Zod validation</text>
+
+  <rect x="720" y="930" width="224" height="76" rx="12" class="data"/>
+  <circle cx="744" cy="954" r="13" class="num-circle"/><text x="740" y="959" class="num">18</text>
+  <text x="770" y="956" class="card-title">Postgres + RLS</text>
+  <text x="770" y="980" class="card-text">permissions + triggers</text>
+
+  <rect x="1020" y="930" width="224" height="76" rx="12" class="data"/>
+  <circle cx="1044" cy="954" r="13" class="num-circle"/><text x="1040" y="959" class="num">19</text>
+  <text x="1070" y="956" class="card-title">Supabase Realtime</text>
+  <text x="1070" y="980" class="card-text">CDC back to store</text>
+
+  <path d="M461 768 C461 838 232 860 232 930" class="flow"/>
+  <path d="M1005 768 C1005 838 532 860 532 930" class="flow"/>
+  <path d="M344 968 H420" class="flow"/>
+  <path d="M644 968 H720" class="flow-blue"/>
+  <path d="M944 968 H1020" class="flow"/>
+  <path d="M1132 930 C1132 835 426 690 426 464" class="flow-dashed"/>
+  <text x="1018" y="852" class="tiny">REALTIME RECONCILES ZUSTAND</text>
+
+  <!-- Right rules table -->
+  <rect x="1424" y="126" width="360" height="914" rx="18" class="lane"/>
+  <text x="1450" y="156" class="lane-title">BOARD RULES</text>
+  <text x="1450" y="184" class="page-subtitle">The important rules in plain English.</text>
+
+  <g transform="translate(1450 214)">
+    <rect x="0" y="0" width="308" height="44" rx="9" fill="#0f172a" stroke="#64748b"/>
+    <text x="14" y="28" class="small">Rule</text>
+    <text x="112" y="28" class="small">Meaning</text>
+
+    <rect x="0" y="54" width="308" height="78" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="80" class="card-title">Access</text>
+    <text x="112" y="76" class="muted">If RLS hides the board,</text>
+    <text x="112" y="96" class="muted">the user is redirected.</text>
+    <text x="112" y="116" class="muted">No client bypass exists.</text>
+
+    <rect x="0" y="144" width="308" height="78" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="170" class="card-title">Snapshot</text>
+    <text x="112" y="166" class="muted">The page starts from one</text>
+    <text x="112" y="186" class="muted">server-loaded board state.</text>
+    <text x="112" y="206" class="muted">Archived rows stay hidden.</text>
+
+    <rect x="0" y="234" width="308" height="78" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="260" class="card-title">Ordering</text>
+    <text x="112" y="256" class="muted">Lists and cards are ordered</text>
+    <text x="112" y="276" class="muted">by fractional position keys.</text>
+    <text x="112" y="296" class="muted">Drag writes a new position.</text>
+
+    <rect x="0" y="324" width="308" height="78" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="350" class="card-title">Writes</text>
+    <text x="112" y="346" class="muted">All writes use Server Actions,</text>
+    <text x="112" y="366" class="muted">Zod validation, dbAsUser,</text>
+    <text x="112" y="386" class="muted">and Postgres RLS.</text>
+
+    <rect x="0" y="414" width="308" height="78" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="440" class="card-title">Roles</text>
+    <text x="112" y="436" class="muted">admin/member can edit.</text>
+    <text x="112" y="456" class="muted">observer is read-only on</text>
+    <text x="112" y="476" class="muted">private boards.</text>
+
+    <rect x="0" y="504" width="308" height="78" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="530" class="card-title">Bulk</text>
+    <text x="112" y="526" class="muted">CardTile writes selection.</text>
+    <text x="112" y="546" class="muted">BulkActionBar reads it and</text>
+    <text x="112" y="566" class="muted">runs actions on selected cards.</text>
+
+    <rect x="0" y="594" width="308" height="78" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="620" class="card-title">Filters</text>
+    <text x="112" y="616" class="muted">Filters live in the URL,</text>
+    <text x="112" y="636" class="muted">so view state is shareable</text>
+    <text x="112" y="656" class="muted">and browser-friendly.</text>
+
+    <rect x="0" y="684" width="308" height="78" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="710" class="card-title">Realtime</text>
+    <text x="112" y="706" class="muted">Database changes emit CDC.</text>
+    <text x="112" y="726" class="muted">The client store updates for</text>
+    <text x="112" y="746" class="muted">all connected users.</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(58 1084)">
+    <rect x="0" y="-14" width="14" height="14" rx="3" fill="#172554" stroke="#60a5fa"/>
+    <text x="22" y="-3" class="small">Server</text>
+    <rect x="104" y="-14" width="14" height="14" rx="3" fill="#064e3b" stroke="#34d399"/>
+    <text x="126" y="-3" class="small">Client</text>
+    <rect x="210" y="-14" width="14" height="14" rx="3" fill="#3b0764" stroke="#d8b4fe"/>
+    <text x="232" y="-3" class="small">User action</text>
+    <rect x="356" y="-14" width="14" height="14" rx="3" fill="#7c2d12" stroke="#fb923c"/>
+    <text x="378" y="-3" class="small">Database / realtime</text>
+    <line x1="560" y1="-7" x2="610" y2="-7" class="flow-dashed"/>
+    <text x="624" y="-3" class="small">Realtime reconciliation</text>
+  </g>
+</svg>

@@ -58,6 +58,19 @@ export const ChangeBoardMemberRoleInput = z.object({
 });
 export const RemoveBoardMemberInput = z.object({ boardId: Uuid, userId: Uuid });
 
+export const AddBoardMembersByIdsInput = z.object({
+  boardId: Uuid,
+  members: z
+    .array(
+      z.object({
+        userId: Uuid,
+        role: z.enum(["admin", "member", "observer"]),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+
 export const CreateBoardInput = z.object({
   workspaceId: Uuid,
   title: Title,

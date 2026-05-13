@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace, getWorkspaceRole, listBoardsInWorkspace, listEpicsInWorkspace } from "@/lib/queries/workspaces";
 import { BoardGrid } from "@/components/workspace/board-grid";
+import { BoardListRealtime } from "@/components/workspace/board-list-realtime";
 import { CreateBoardButton } from "@/components/workspace/create-board-dialog";
 import { Button } from "@/components/ui/button";
 import { shortDate } from "@/lib/format";
@@ -55,6 +56,7 @@ export default async function WorkspacePage({
       </header>
 
       <BoardGrid boards={boards} epics={epics} favoritedIds={favoritedIds} />
+      <BoardListRealtime workspaceId={workspaceId} />
     </div>
   );
 }

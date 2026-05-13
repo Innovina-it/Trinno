@@ -68,4 +68,40 @@ describe("card-member actions (impl)", () => {
     await expect(toggleCardMemberImpl(other.jwt, { cardId: c.id, userId: other.id }))
       .rejects.toThrow();
   });
+
+  it("admin assigns another board member (observer) to a card", async () => {
+    const { inviteBoardMemberImpl } = await import("@/actions/board-members");
+    const admin = await makeUser("cm-adm");
+    const guest = await makeUser("cm-gst");
+    const { b, c } = await setup(admin.jwt);
+
+    // Admin invites guest as observer (lowest writeable role per UI).
+    await inviteBoardMemberImpl(admin.jwt, {
+      boardId: b.id,
+      email: `__force__:${guest.id}`,
+      role: "observer",
+    }).catch(async () => {
+      // If lookup-by-email fails (test users have synthetic emails),
+      // fall back to direct insert via service role so we still test
+      // the assignment leg.
+      const { boardMembers } = await import("@/lib/db/schema");
+      await dbAsUser(admin.jwt, async (tx) => {
+        await tx.insert(boardMembers).values({
+          boardId: b.id, userId: guest.id, role: "observer",
+        });
+      });
+    });
+
+    const r = await toggleCardMemberImpl(admin.jwt, {
+      cardId: c.id, userId: guest.id,
+    });
+    expect(r.assigned).toBe(true);
+
+    const found = await dbAsUser(admin.jwt, async (tx) =>
+      tx.select().from(cardMembers).where(and(
+        eq(cardMembers.cardId, c.id), eq(cardMembers.userId, guest.id),
+      ))
+    );
+    expect(found[0]?.boardId).toBe(b.id);
+  });
 });

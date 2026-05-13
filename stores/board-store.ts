@@ -4,6 +4,7 @@ import {
   createContext,
   createElement,
   useContext,
+  useEffect,
   useRef,
   type ReactNode,
 } from "react";
@@ -42,6 +43,7 @@ export type BoardSnapshotInit = {
   cardVersions: CardVersionRow[];
   boardProfiles: BoardProfile[];
   boardMembers: BoardMemberRole[];
+  workspaceProfiles: BoardProfile[];
 };
 
 export type BoardState = {
@@ -61,6 +63,7 @@ export type BoardState = {
   cardVersions: CardVersionRow[];
   boardProfiles: BoardProfile[];
   boardMembers: BoardMemberRole[];
+  workspaceProfiles: BoardProfile[];
 
   // Plan #16b-γ-D (#8) — ephemeral multi-select state. Lives only on the
   // current board view; cleared on navigation by the consumer remounting
@@ -93,6 +96,9 @@ export type BoardState = {
 
   addCardMember: (x: CardMemberRow) => void;
   removeCardMember: (cardId: string, userId: string) => void;
+
+  upsertBoardMember: (m: BoardMemberRole, profile?: BoardProfile) => void;
+  removeBoardMember: (userId: string) => void;
 
   addChecklist: (c: ChecklistRow) => void;
   updateChecklist: (id: string, patch: Partial<ChecklistRow>) => void;
@@ -157,6 +163,7 @@ export function createBoardStore(initial: BoardSnapshotInit) {
     cardVersions: initial.cardVersions,
     boardProfiles: initial.boardProfiles,
     boardMembers: initial.boardMembers,
+    workspaceProfiles: initial.workspaceProfiles,
 
     selectedCardIds: new Set<string>(),
     lastSelectedCardId: null,
@@ -222,6 +229,8 @@ export function createBoardStore(initial: BoardSnapshotInit) {
         cardComponents: s.cardComponents,
         cardVersions: s.cardVersions,
         boardProfiles: s.boardProfiles,
+        boardMembers: s.boardMembers,
+        workspaceProfiles: s.workspaceProfiles,
       }),
 
     addList: (list) =>
@@ -395,6 +404,30 @@ export function createBoardStore(initial: BoardSnapshotInit) {
         cardMembers: state.cardMembers.filter(
           (cm) => !(cm.cardId === cardId && cm.userId === userId),
         ),
+      })),
+
+    upsertBoardMember: (m, profile) =>
+      set((state) => {
+        const idx = state.boardMembers.findIndex((b) => b.userId === m.userId);
+        const nextMembers =
+          idx === -1
+            ? [...state.boardMembers, m]
+            : state.boardMembers.map((b) => (b.userId === m.userId ? m : b));
+        if (!profile) return { boardMembers: nextMembers };
+        const pIdx = state.boardProfiles.findIndex((p) => p.id === profile.id);
+        const nextProfiles =
+          pIdx === -1
+            ? [...state.boardProfiles, profile]
+            : state.boardProfiles.map((p) =>
+                p.id === profile.id ? profile : p,
+              );
+        return { boardMembers: nextMembers, boardProfiles: nextProfiles };
+      }),
+
+    removeBoardMember: (userId) =>
+      set((state) => ({
+        boardMembers: state.boardMembers.filter((b) => b.userId !== userId),
+        boardProfiles: state.boardProfiles.filter((p) => p.id !== userId),
       })),
 
     addChecklist: (c) =>
@@ -583,6 +616,40 @@ export function BoardStoreProvider({
       store: createBoardStore(initial),
     };
   }
+  // After a server-side mutation triggers revalidatePath, Next.js
+  // re-renders this provider with a fresh `initial`. The ref-keyed
+  // store survives that re-render (good — preserves optimistic local
+  // edits), but membership rosters can fall out of sync. Reconcile
+  // boardProfiles / boardMembers on every render: they're authoritative
+  // on the server, never edited optimistically client-side outside
+  // realtime, and small enough that a shallow compare is cheap.
+  useEffect(() => {
+    const s = ref.current?.store;
+    if (!s) return;
+    const cur = s.getState();
+    const profilesChanged =
+      cur.boardProfiles.length !== initial.boardProfiles.length ||
+      cur.boardProfiles.some((p, i) => p.id !== initial.boardProfiles[i]?.id);
+    const membersChanged =
+      cur.boardMembers.length !== initial.boardMembers.length ||
+      cur.boardMembers.some(
+        (m, i) =>
+          m.userId !== initial.boardMembers[i]?.userId ||
+          m.role !== initial.boardMembers[i]?.role,
+      );
+    const wsProfilesChanged =
+      cur.workspaceProfiles.length !== initial.workspaceProfiles.length ||
+      cur.workspaceProfiles.some(
+        (p, i) => p.id !== initial.workspaceProfiles[i]?.id,
+      );
+    if (profilesChanged || membersChanged || wsProfilesChanged) {
+      s.setState({
+        boardProfiles: initial.boardProfiles,
+        boardMembers: initial.boardMembers,
+        workspaceProfiles: initial.workspaceProfiles,
+      });
+    }
+  }, [initial.boardProfiles, initial.boardMembers, initial.workspaceProfiles]);
   return createElement(
     BoardStoreContext.Provider,
     { value: ref.current.store },

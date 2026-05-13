@@ -1,0 +1,330 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1260" viewBox="0 0 1800 1260" role="img" aria-labelledby="title desc">
+  <title id="title">Board User-to-System Interaction Diagram</title>
+  <desc id="desc">Product interaction flow for how a user acts on the board page and how the system guides, validates, confirms, and recovers.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#cbd5e1"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#34d399"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#fb7185"/>
+    </marker>
+    <style>
+      .title { font: 800 34px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #f8fafc; }
+      .subtitle { font: 500 15px Inter, ui-sans-serif, system-ui, sans-serif; fill: #cbd5e1; }
+      .section { font: 800 13px Inter, ui-sans-serif, system-ui, sans-serif; fill: #e2e8f0; letter-spacing: .11em; }
+      .col-title { font: 800 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #f8fafc; letter-spacing: .08em; }
+      .card-title { font: 800 15px Inter, ui-sans-serif, system-ui, sans-serif; fill: #f8fafc; }
+      .text { font: 500 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #dbeafe; }
+      .muted { font: 500 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #cbd5e1; }
+      .tiny { font: 800 10px Inter, ui-sans-serif, system-ui, sans-serif; fill: #94a3b8; letter-spacing: .08em; }
+      .lane { fill: rgba(15, 23, 42, .78); stroke: rgba(148, 163, 184, .25); stroke-width: 1.2; }
+      .user { fill: #172554; stroke: #60a5fa; stroke-width: 1.3; filter: url(#shadow); }
+      .ui { fill: #164e63; stroke: #38bdf8; stroke-width: 1.3; filter: url(#shadow); }
+      .local { fill: #064e3b; stroke: #34d399; stroke-width: 1.3; filter: url(#shadow); }
+      .server { fill: #3b0764; stroke: #c084fc; stroke-width: 1.3; filter: url(#shadow); }
+      .feedback { fill: #7c2d12; stroke: #fb923c; stroke-width: 1.3; filter: url(#shadow); }
+      .recovery { fill: #450a0a; stroke: #fb7185; stroke-width: 1.3; filter: url(#shadow); }
+      .rule { fill: #111827; stroke: #475569; stroke-width: 1.2; filter: url(#shadow); }
+      .flow { fill: none; stroke: #cbd5e1; stroke-width: 2; marker-end: url(#arrow); }
+      .flow-blue { fill: none; stroke: #38bdf8; stroke-width: 2.2; marker-end: url(#arrowBlue); }
+      .flow-green { fill: none; stroke: #34d399; stroke-width: 2.2; marker-end: url(#arrowGreen); }
+      .flow-red { fill: none; stroke: #fb7185; stroke-width: 2; marker-end: url(#arrowRed); }
+      .dash { stroke-dasharray: 7 7; }
+      .chip { fill: #0f172a; stroke: #334155; stroke-width: 1; }
+      .line { stroke: #334155; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1260" fill="url(#bg)"/>
+
+  <text x="52" y="58" class="title">Board User-to-System Interaction</text>
+  <text x="52" y="88" class="subtitle">How the board UI guides one user's actions: focus, create, move, bulk edit, open details, validate, undo, and recover.</text>
+
+  <rect x="52" y="118" width="1304" height="52" rx="14" class="lane"/>
+  <text x="78" y="150" class="section">INTERACTION FLOW MATRIX</text>
+  <text x="336" y="150" class="col-title">USER ACTS</text>
+  <text x="552" y="150" class="col-title">SYSTEM GUIDES</text>
+  <text x="792" y="150" class="col-title">LOCAL RESPONSE</text>
+  <text x="1030" y="150" class="col-title">VALIDATE / SAVE</text>
+  <text x="1248" y="150" class="col-title">FEEDBACK / RECOVERY</text>
+
+  <!-- Row 1 -->
+  <rect x="52" y="198" width="1304" height="150" rx="18" class="lane"/>
+  <text x="76" y="228" class="section">1. FOCUS THE BOARD</text>
+
+  <rect x="300" y="236" width="172" height="72" rx="12" class="user"/>
+  <text x="320" y="262" class="card-title">Choose scope</text>
+  <text x="320" y="284" class="text">filters, lanes,</text>
+  <text x="320" y="302" class="text">hide completed</text>
+
+  <rect x="520" y="226" width="190" height="92" rx="12" class="ui"/>
+  <text x="540" y="252" class="card-title">Filter controls</text>
+  <text x="540" y="274" class="text">active count badge</text>
+  <text x="540" y="292" class="text">filled toggle state</text>
+  <text x="540" y="310" class="text">swimlane labels</text>
+
+  <rect x="760" y="226" width="190" height="92" rx="12" class="local"/>
+  <text x="780" y="252" class="card-title">Board narrows</text>
+  <text x="780" y="274" class="text">visible cards update</text>
+  <text x="780" y="292" class="text">columns keep counts</text>
+  <text x="780" y="310" class="text">empty lists stay clear</text>
+
+  <rect x="1000" y="236" width="174" height="72" rx="12" class="server"/>
+  <text x="1020" y="262" class="card-title">URL is truth</text>
+  <text x="1020" y="284" class="text">query string stores</text>
+  <text x="1020" y="302" class="text">selected filters</text>
+
+  <rect x="1224" y="226" width="102" height="92" rx="12" class="feedback"/>
+  <text x="1242" y="252" class="card-title">If zero</text>
+  <text x="1242" y="274" class="text">"hidden by</text>
+  <text x="1242" y="292" class="text">filters"</text>
+  <text x="1242" y="310" class="text">clear action</text>
+
+  <path d="M472 272 H520" class="flow-blue"/>
+  <path d="M710 272 H760" class="flow-green"/>
+  <path d="M950 272 H1000" class="flow"/>
+  <path d="M1174 272 H1224" class="flow"/>
+
+  <!-- Row 2 -->
+  <rect x="52" y="376" width="1304" height="150" rx="18" class="lane"/>
+  <text x="76" y="406" class="section">2. CREATE OR EDIT WORK</text>
+
+  <rect x="300" y="414" width="172" height="72" rx="12" class="user"/>
+  <text x="320" y="440" class="card-title">Add / edit</text>
+  <text x="320" y="462" class="text">list, card title,</text>
+  <text x="320" y="480" class="text">notes, dates</text>
+
+  <rect x="520" y="404" width="190" height="92" rx="12" class="ui"/>
+  <text x="540" y="430" class="card-title">Inline forms</text>
+  <text x="540" y="452" class="text">disabled add until</text>
+  <text x="540" y="470" class="text">title exists</text>
+  <text x="540" y="488" class="text">date hints for roadmap</text>
+
+  <rect x="760" y="404" width="190" height="92" rx="12" class="local"/>
+  <text x="780" y="430" class="card-title">Instant paint</text>
+  <text x="780" y="452" class="text">card appears or title</text>
+  <text x="780" y="470" class="text">changes immediately</text>
+  <text x="780" y="488" class="text">modal shows saving</text>
+
+  <rect x="1000" y="404" width="174" height="92" rx="12" class="server"/>
+  <text x="1020" y="430" class="card-title">Validate</text>
+  <text x="1020" y="452" class="text">title not empty</text>
+  <text x="1020" y="470" class="text">dates ordered</text>
+  <text x="1020" y="488" class="text">Zod + RLS</text>
+
+  <rect x="1224" y="404" width="102" height="92" rx="12" class="feedback"/>
+  <text x="1242" y="430" class="card-title">Result</text>
+  <text x="1242" y="452" class="text">Saved time</text>
+  <text x="1242" y="470" class="text">toast error</text>
+  <text x="1242" y="488" class="text">undo banner</text>
+
+  <path d="M472 450 H520" class="flow-blue"/>
+  <path d="M710 450 H760" class="flow-green"/>
+  <path d="M950 450 H1000" class="flow"/>
+  <path d="M1174 450 H1224" class="flow"/>
+
+  <!-- Row 3 -->
+  <rect x="52" y="554" width="1304" height="170" rx="18" class="lane"/>
+  <text x="76" y="584" class="section">3. MOVE OR SCHEDULE CARDS</text>
+
+  <rect x="300" y="602" width="172" height="72" rx="12" class="user"/>
+  <text x="320" y="628" class="card-title">Drag card/list</text>
+  <text x="320" y="650" class="text">between cards,</text>
+  <text x="320" y="668" class="text">lists, or sprint strip</text>
+
+  <rect x="520" y="586" width="190" height="104" rx="12" class="ui"/>
+  <text x="540" y="612" class="card-title">Drag guidance</text>
+  <text x="540" y="634" class="text">8px activation</text>
+  <text x="540" y="652" class="text">floating overlay</text>
+  <text x="540" y="670" class="text">drop-zone highlight</text>
+  <text x="540" y="688" class="text">sprint band highlight</text>
+
+  <rect x="760" y="586" width="190" height="104" rx="12" class="local"/>
+  <text x="780" y="612" class="card-title">Optimistic move</text>
+  <text x="780" y="634" class="text">new list position</text>
+  <text x="780" y="652" class="text">or sprint chip</text>
+  <text x="780" y="670" class="text">updates before</text>
+  <text x="780" y="688" class="text">roundtrip finishes</text>
+
+  <rect x="1000" y="586" width="174" height="104" rx="12" class="server"/>
+  <text x="1020" y="612" class="card-title">Save move</text>
+  <text x="1020" y="634" class="text">positionBetween</text>
+  <text x="1020" y="652" class="text">moveCard / moveList</text>
+  <text x="1020" y="670" class="text">bulkSetSprint</text>
+  <text x="1020" y="688" class="text">permission checked</text>
+
+  <rect x="1224" y="586" width="102" height="104" rx="12" class="feedback"/>
+  <text x="1242" y="612" class="card-title">Recover</text>
+  <text x="1242" y="634" class="text">undo cross</text>
+  <text x="1242" y="652" class="text">list move</text>
+  <text x="1242" y="670" class="text">error retry</text>
+  <text x="1242" y="688" class="text">refresh</text>
+
+  <path d="M472 638 H520" class="flow-blue"/>
+  <path d="M710 638 H760" class="flow-green"/>
+  <path d="M950 638 H1000" class="flow"/>
+  <path d="M1174 638 H1224" class="flow"/>
+
+  <!-- Row 4 -->
+  <rect x="52" y="752" width="1304" height="170" rx="18" class="lane"/>
+  <text x="76" y="782" class="section">4. BULK SELECT AND APPLY ACTIONS</text>
+
+  <rect x="300" y="800" width="172" height="72" rx="12" class="user"/>
+  <text x="320" y="826" class="card-title">Select cards</text>
+  <text x="320" y="848" class="text">handle, Ctrl/Cmd,</text>
+  <text x="320" y="866" class="text">Shift range</text>
+
+  <rect x="520" y="784" width="190" height="104" rx="12" class="ui"/>
+  <text x="540" y="810" class="card-title">Selection mode</text>
+  <text x="540" y="832" class="text">selected ring</text>
+  <text x="540" y="850" class="text">bottom bar appears</text>
+  <text x="540" y="868" class="text">Esc clears</text>
+  <text x="540" y="886" class="text">over 50 disables</text>
+
+  <rect x="760" y="784" width="190" height="104" rx="12" class="local"/>
+  <text x="780" y="810" class="card-title">Bulk preview</text>
+  <text x="780" y="832" class="text">complete, archive,</text>
+  <text x="780" y="850" class="text">move, sprint, label,</text>
+  <text x="780" y="868" class="text">priority, member,</text>
+  <text x="780" y="886" class="text">component</text>
+
+  <rect x="1000" y="784" width="174" height="104" rx="12" class="server"/>
+  <text x="1020" y="810" class="card-title">Bulk actions</text>
+  <text x="1020" y="832" class="text">server calls run</text>
+  <text x="1020" y="850" class="text">bounded batches</text>
+  <text x="1020" y="868" class="text">RLS may drop</text>
+  <text x="1020" y="886" class="text">forbidden writes</text>
+
+  <rect x="1224" y="784" width="102" height="104" rx="12" class="feedback"/>
+  <text x="1242" y="810" class="card-title">Confirm</text>
+  <text x="1242" y="832" class="text">success toast</text>
+  <text x="1242" y="850" class="text">selection</text>
+  <text x="1242" y="868" class="text">clears</text>
+  <text x="1242" y="886" class="text">undo when safe</text>
+
+  <path d="M472 836 H520" class="flow-blue"/>
+  <path d="M710 836 H760" class="flow-green"/>
+  <path d="M950 836 H1000" class="flow"/>
+  <path d="M1174 836 H1224" class="flow"/>
+
+  <!-- Row 5 -->
+  <rect x="52" y="950" width="1304" height="180" rx="18" class="lane"/>
+  <text x="76" y="980" class="section">5. OPEN CARD DETAILS</text>
+
+  <rect x="300" y="1004" width="172" height="72" rx="12" class="user"/>
+  <text x="320" y="1030" class="card-title">Open card</text>
+  <text x="320" y="1052" class="text">click tile or</text>
+  <text x="320" y="1070" class="text">schedule chip</text>
+
+  <rect x="520" y="992" width="190" height="104" rx="12" class="ui"/>
+  <text x="540" y="1018" class="card-title">Modal guidance</text>
+  <text x="540" y="1040" class="text">sections grouped as</text>
+  <text x="540" y="1058" class="text">Planning, Work,</text>
+  <text x="540" y="1076" class="text">References, Talk,</text>
+  <text x="540" y="1094" class="text">History</text>
+
+  <rect x="760" y="992" width="190" height="104" rx="12" class="local"/>
+  <text x="780" y="1018" class="card-title">Live detail UI</text>
+  <text x="780" y="1040" class="text">complete toggle</text>
+  <text x="780" y="1058" class="text">notes empty state</text>
+  <text x="780" y="1076" class="text">keyboard nav</text>
+  <text x="780" y="1094" class="text">roadmap / epic links</text>
+
+  <rect x="1000" y="992" width="174" height="104" rx="12" class="server"/>
+  <text x="1020" y="1018" class="card-title">Autosave</text>
+  <text x="1020" y="1040" class="text">title on blur</text>
+  <text x="1020" y="1058" class="text">notes debounce</text>
+  <text x="1020" y="1076" class="text">archive action</text>
+  <text x="1020" y="1094" class="text">server validates</text>
+
+  <rect x="1224" y="992" width="102" height="104" rx="12" class="feedback"/>
+  <text x="1242" y="1018" class="card-title">Guide</text>
+  <text x="1242" y="1040" class="text">Saving...</text>
+  <text x="1242" y="1058" class="text">Saved time</text>
+  <text x="1242" y="1076" class="text">undo</text>
+  <text x="1242" y="1094" class="text">removed notice</text>
+
+  <path d="M472 1040 H520" class="flow-blue"/>
+  <path d="M710 1040 H760" class="flow-green"/>
+  <path d="M950 1040 H1000" class="flow"/>
+  <path d="M1174 1040 H1224" class="flow"/>
+
+  <!-- Cross-cutting recovery loop -->
+  <path d="M1276 1130 C1276 1178 884 1186 854 1096" class="flow-red dash"/>
+  <text x="770" y="1188" class="tiny">ERROR OR UNDO LOOPS THE USER BACK TO THE LAST STABLE BOARD STATE</text>
+
+  <!-- Right side rules panel -->
+  <rect x="1390" y="118" width="358" height="1012" rx="18" class="rule"/>
+  <text x="1420" y="150" class="section">SYSTEM GUIDANCE RULES</text>
+  <line x1="1420" y1="174" x2="1718" y2="174" class="line"/>
+
+  <rect x="1420" y="198" width="298" height="76" rx="10" class="chip"/>
+  <text x="1440" y="224" class="card-title">Make scope visible</text>
+  <text x="1440" y="246" class="muted">Filters show count, active state,</text>
+  <text x="1440" y="264" class="muted">clear affordance, and URL state.</text>
+
+  <rect x="1420" y="298" width="298" height="76" rx="10" class="chip"/>
+  <text x="1440" y="324" class="card-title">Do not leave user guessing</text>
+  <text x="1440" y="346" class="muted">Empty board, empty list, zero-filter,</text>
+  <text x="1440" y="364" class="muted">and no-sprints states explain next step.</text>
+
+  <rect x="1420" y="398" width="298" height="76" rx="10" class="chip"/>
+  <text x="1440" y="424" class="card-title">Show drag confidence</text>
+  <text x="1440" y="446" class="muted">Overlay, highlight, cursor, rotation,</text>
+  <text x="1440" y="464" class="muted">and sprint bands preview the target.</text>
+
+  <rect x="1420" y="498" width="298" height="76" rx="10" class="chip"/>
+  <text x="1440" y="524" class="card-title">Respond immediately</text>
+  <text x="1440" y="546" class="muted">Optimistic title, completion, move,</text>
+  <text x="1440" y="564" class="muted">sprint, label, member, and priority updates.</text>
+
+  <rect x="1420" y="598" width="298" height="76" rx="10" class="chip"/>
+  <text x="1440" y="624" class="card-title">Validate before and after</text>
+  <text x="1440" y="646" class="muted">Client catches empty titles and bad dates;</text>
+  <text x="1440" y="664" class="muted">server uses Zod, auth, and RLS.</text>
+
+  <rect x="1420" y="698" width="298" height="76" rx="10" class="chip"/>
+  <text x="1440" y="724" class="card-title">Recover without panic</text>
+  <text x="1440" y="746" class="muted">Undo banner, rollback, retry bus,</text>
+  <text x="1440" y="764" class="muted">toast, and refresh keep state stable.</text>
+
+  <rect x="1420" y="798" width="298" height="76" rx="10" class="chip"/>
+  <text x="1440" y="824" class="card-title">Bulk actions are explicit</text>
+  <text x="1440" y="846" class="muted">Selection ring and bottom bar appear only</text>
+  <text x="1440" y="864" class="muted">after selectedCardIds is non-empty.</text>
+
+  <rect x="1420" y="898" width="298" height="76" rx="10" class="chip"/>
+  <text x="1440" y="924" class="card-title">Details stay organized</text>
+  <text x="1440" y="946" class="muted">Card modal groups work into sections,</text>
+  <text x="1440" y="964" class="muted">shows save state, and keeps shortcuts safe.</text>
+
+  <rect x="1420" y="998" width="298" height="76" rx="10" class="chip"/>
+  <text x="1440" y="1024" class="card-title">Realtime is user-facing</text>
+  <text x="1440" y="1046" class="muted">If another user removes the card,</text>
+  <text x="1440" y="1064" class="muted">the modal informs and exits cleanly.</text>
+
+  <!-- Legend -->
+  <rect x="52" y="1160" width="610" height="54" rx="12" class="lane"/>
+  <rect x="74" y="1178" width="18" height="18" rx="4" fill="#172554" stroke="#60a5fa"/>
+  <text x="102" y="1192" class="muted">User action</text>
+  <rect x="200" y="1178" width="18" height="18" rx="4" fill="#164e63" stroke="#38bdf8"/>
+  <text x="228" y="1192" class="muted">UI guidance</text>
+  <rect x="342" y="1178" width="18" height="18" rx="4" fill="#064e3b" stroke="#34d399"/>
+  <text x="370" y="1192" class="muted">Local response</text>
+  <rect x="510" y="1178" width="18" height="18" rx="4" fill="#3b0764" stroke="#c084fc"/>
+  <text x="538" y="1192" class="muted">Save/check</text>
+</svg>

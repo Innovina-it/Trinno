@@ -1,0 +1,223 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1120" viewBox="0 0 1500 1120" role="img" aria-labelledby="title desc">
+  <title id="title">Board System-to-User Interaction Diagram</title>
+  <desc id="desc">Product interaction flow diagram for how the board page initiates visible feedback toward the user.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7f8fb; }
+      .panel { fill: #ffffff; stroke: #d8deea; stroke-width: 1.4; }
+      .header { fill: #111827; }
+      .headerText { fill: #ffffff; font: 700 18px Arial, sans-serif; letter-spacing: .6px; }
+      .title { fill: #111827; font: 700 31px Arial, sans-serif; }
+      .subtitle { fill: #5b6474; font: 15px Arial, sans-serif; }
+      .colTitle { fill: #334155; font: 700 13px Arial, sans-serif; letter-spacing: 1.4px; }
+      .cellTitle { fill: #111827; font: 700 15px Arial, sans-serif; }
+      .cellText { fill: #475569; font: 13px Arial, sans-serif; }
+      .small { fill: #64748b; font: 12px Arial, sans-serif; }
+      .tag { fill: #eff6ff; stroke: #bfdbfe; }
+      .tagText { fill: #1d4ed8; font: 700 11px Arial, sans-serif; letter-spacing: .5px; }
+      .system { fill: #eef2ff; stroke: #c7d2fe; }
+      .ui { fill: #ecfeff; stroke: #a5f3fc; }
+      .user { fill: #f0fdf4; stroke: #bbf7d0; }
+      .warn { fill: #fff7ed; stroke: #fed7aa; }
+      .error { fill: #fef2f2; stroke: #fecaca; }
+      .neutral { fill: #f8fafc; stroke: #d8deea; }
+      .arrow { stroke: #64748b; stroke-width: 1.7; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #94a3b8; stroke-width: 1.4; stroke-dasharray: 5 5; fill: none; }
+      .laneLine { stroke: #e2e8f0; stroke-width: 1; }
+      .foot { fill: #64748b; font: 11px Arial, sans-serif; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#64748b" />
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#0f172a" flood-opacity=".10"/>
+    </filter>
+  </defs>
+
+  <rect class="bg" width="1500" height="1120"/>
+
+  <text class="title" x="60" y="58">Board Page: System-to-User Interactions</text>
+  <text class="subtitle" x="60" y="86">How the product initiates guidance, warnings, live updates, and recovery options toward the person using the board.</text>
+
+  <rect class="header" x="60" y="120" width="380" height="48" rx="8"/>
+  <rect class="header" x="560" y="120" width="380" height="48" rx="8"/>
+  <rect class="header" x="1060" y="120" width="380" height="48" rx="8"/>
+  <text class="headerText" x="185" y="151">SYSTEM EVENT</text>
+  <text class="headerText" x="675" y="151">VISIBLE UI SIGNAL</text>
+  <text class="headerText" x="1160" y="151">USER RESPONSE</text>
+
+  <line class="laneLine" x1="60" y1="204" x2="1440" y2="204"/>
+  <line class="laneLine" x1="60" y1="314" x2="1440" y2="314"/>
+  <line class="laneLine" x1="60" y1="424" x2="1440" y2="424"/>
+  <line class="laneLine" x1="60" y1="534" x2="1440" y2="534"/>
+  <line class="laneLine" x1="60" y1="644" x2="1440" y2="644"/>
+  <line class="laneLine" x1="60" y1="754" x2="1440" y2="754"/>
+  <line class="laneLine" x1="60" y1="864" x2="1440" y2="864"/>
+  <line class="laneLine" x1="60" y1="974" x2="1440" y2="974"/>
+
+  <!-- Row 1: access removed -->
+  <g filter="url(#shadow)">
+    <rect class="warn" x="60" y="186" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="84" y="214">Access is revoked or hidden by RLS</text>
+    <text class="cellText" x="84" y="238">Board snapshot returns null during load</text>
+    <text class="small" x="84" y="258">Server redirects to /?notice=removed</text>
+
+    <rect class="warn" x="560" y="186" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="584" y="214">Access notice toast</text>
+    <text class="cellText" x="584" y="238">"You no longer have access"</text>
+    <text class="small" x="584" y="258">Query is stripped so it shows once</text>
+
+    <rect class="user" x="1060" y="186" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="1084" y="214">User understands why board closed</text>
+    <text class="cellText" x="1084" y="238">They land back in the app shell</text>
+    <text class="small" x="1084" y="258">No silent failure or blank board</text>
+  </g>
+  <path class="arrow" d="M440 229 H560"/>
+  <path class="arrow" d="M940 229 H1060"/>
+
+  <!-- Row 2: realtime board changes -->
+  <g filter="url(#shadow)">
+    <rect class="system" x="60" y="296" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="84" y="324">Other people change board data</text>
+    <text class="cellText" x="84" y="348">Cards, lists, labels, members, comments</text>
+    <text class="small" x="84" y="368">Supabase postgres_changes emits events</text>
+
+    <rect class="ui" x="560" y="296" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="584" y="324">Board updates in place</text>
+    <text class="cellText" x="584" y="348">Cards move, appear, disappear, or update</text>
+    <text class="small" x="584" y="368">Zustand store is patched live</text>
+
+    <rect class="user" x="1060" y="296" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="1084" y="324">User sees current shared state</text>
+    <text class="cellText" x="1084" y="348">No manual refresh required</text>
+    <text class="small" x="1084" y="368">Removed cards also clear selection</text>
+  </g>
+  <path class="arrow" d="M440 339 H560"/>
+  <path class="arrow" d="M940 339 H1060"/>
+
+  <!-- Row 3: presence -->
+  <g filter="url(#shadow)">
+    <rect class="system" x="60" y="406" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="84" y="434">Presence channel syncs viewers</text>
+    <text class="cellText" x="84" y="458">Users track board or card location</text>
+    <text class="small" x="84" y="478">Metadata includes display name and card title</text>
+
+    <rect class="ui" x="560" y="406" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="584" y="434">Presence avatars appear in masthead</text>
+    <text class="cellText" x="584" y="458">Card viewers get a highlighted border</text>
+    <text class="small" x="584" y="478">Tooltips say who is on board or card</text>
+
+    <rect class="user" x="1060" y="406" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="1084" y="434">User knows who is collaborating</text>
+    <text class="cellText" x="1084" y="458">They can avoid duplicate work</text>
+    <text class="small" x="1084" y="478">Context is social, not technical</text>
+  </g>
+  <path class="arrow" d="M440 449 H560"/>
+  <path class="arrow" d="M940 449 H1060"/>
+
+  <!-- Row 4: activity feed refresh -->
+  <g filter="url(#shadow)">
+    <rect class="system" x="60" y="516" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="84" y="544">New activity row is inserted</text>
+    <text class="cellText" x="84" y="568">Move, archive, comment, assign, label</text>
+    <text class="small" x="84" y="588">Activity sync triggers router.refresh()</text>
+
+    <rect class="ui" x="560" y="516" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="584" y="544">Activity panel refreshes</text>
+    <text class="cellText" x="584" y="568">Count, grouped days, actor, verb, target</text>
+    <text class="small" x="584" y="588">Feed can also show "No activity yet"</text>
+
+    <rect class="user" x="1060" y="516" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="1084" y="544">User can audit what changed</text>
+    <text class="cellText" x="1084" y="568">Card links open the relevant detail view</text>
+    <text class="small" x="1084" y="588">Recent work becomes explainable</text>
+  </g>
+  <path class="arrow" d="M440 559 H560"/>
+  <path class="arrow" d="M940 559 H1060"/>
+
+  <!-- Row 5: errors and retry -->
+  <g filter="url(#shadow)">
+    <rect class="error" x="60" y="626" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="84" y="654">Save or server action fails</text>
+    <text class="cellText" x="84" y="678">Move, title, description, archive, sprint</text>
+    <text class="small" x="84" y="698">Caller pushes errorBus and often toast.error</text>
+
+    <rect class="error" x="560" y="626" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="584" y="654">Persistent ErrorPane appears</text>
+    <text class="cellText" x="584" y="678">Shows message, Retry when available</text>
+    <text class="small" x="584" y="698">Can collapse, clear all, or dismiss one</text>
+
+    <rect class="user" x="1060" y="626" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="1084" y="654">User recovers deliberately</text>
+    <text class="cellText" x="1084" y="678">Retry repeats the failed action</text>
+    <text class="small" x="1084" y="698">Refresh reconciles uncertain board state</text>
+  </g>
+  <path class="arrow" d="M440 669 H560"/>
+  <path class="arrow" d="M940 669 H1060"/>
+
+  <!-- Row 6: undo banner -->
+  <g filter="url(#shadow)">
+    <rect class="system" x="60" y="736" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="84" y="764">Reversible action succeeds</text>
+    <text class="cellText" x="84" y="788">Archive, complete, title, description, move</text>
+    <text class="small" x="84" y="808">Action registers undo callback</text>
+
+    <rect class="ui" x="560" y="736" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="584" y="764">Bottom UndoBanner appears</text>
+    <text class="cellText" x="584" y="788">One latest action, Undo, dismiss button</text>
+    <text class="small" x="584" y="808">Auto expires after about 8 seconds</text>
+
+    <rect class="user" x="1060" y="736" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="1084" y="764">User can reverse or accept</text>
+    <text class="cellText" x="1084" y="788">Undo invokes the stored callback</text>
+    <text class="small" x="1084" y="808">Timeout means the action stands</text>
+  </g>
+  <path class="arrow" d="M440 779 H560"/>
+  <path class="arrow" d="M940 779 H1060"/>
+
+  <!-- Row 7: notifications and watchers -->
+  <g filter="url(#shadow)">
+    <rect class="system" x="60" y="846" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="84" y="874">Notification is created for user</text>
+    <text class="cellText" x="84" y="898">Mention, assignment, watched card update</text>
+    <text class="small" x="84" y="918">Realtime channel listens by recipient</text>
+
+    <rect class="ui" x="560" y="846" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="584" y="874">Bell pulses and unread badge changes</text>
+    <text class="cellText" x="584" y="898">Dropdown lists actor, action, card, age</text>
+    <text class="small" x="584" y="918">Links open card, roadmap focus, or inbox</text>
+
+    <rect class="user" x="1060" y="846" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="1084" y="874">User is pulled back to relevant work</text>
+    <text class="cellText" x="1084" y="898">Opening an item marks it read</text>
+    <text class="small" x="1084" y="918">Watching controls explain who receives signals</text>
+  </g>
+  <path class="arrow" d="M440 889 H560"/>
+  <path class="arrow" d="M940 889 H1060"/>
+
+  <!-- Row 8: empty and filtered states -->
+  <g filter="url(#shadow)">
+    <rect class="neutral" x="60" y="956" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="84" y="984">Board or filtered result is empty</text>
+    <text class="cellText" x="84" y="1008">No lists, no cards in list, or filters hide all</text>
+    <text class="small" x="84" y="1028">State is detected from current board store</text>
+
+    <rect class="neutral" x="560" y="956" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="584" y="984">Empty guidance appears</text>
+    <text class="cellText" x="584" y="1008">"EMPTY BOARD", "NO CARDS", hidden count</text>
+    <text class="small" x="584" y="1028">Clear filters or add-list affordance shown</text>
+
+    <rect class="user" x="1060" y="956" width="380" height="86" rx="10"/>
+    <text class="cellTitle" x="1084" y="984">User knows what to do next</text>
+    <text class="cellText" x="1084" y="1008">Create structure or remove the filter</text>
+    <text class="small" x="1084" y="1028">No confusing blank surface</text>
+  </g>
+  <path class="arrow" d="M440 999 H560"/>
+  <path class="arrow" d="M940 999 H1060"/>
+
+  <rect class="tag" x="60" y="1065" width="180" height="28" rx="14"/>
+  <text class="tagText" x="84" y="1084">BOARD ONLY</text>
+  <rect class="tag" x="252" y="1065" width="310" height="28" rx="14"/>
+  <text class="tagText" x="276" y="1084">PRODUCT INTERACTION FLOW</text>
+  <text class="foot" x="580" y="1084">This is not a route/store/database architecture diagram; it shows system-initiated user-facing behavior.</text>
+</svg>

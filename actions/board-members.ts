@@ -8,6 +8,7 @@ import {
   InviteBoardMemberInput,
   ChangeBoardMemberRoleInput,
   RemoveBoardMemberInput,
+  AddBoardMembersByIdsInput,
 } from "@/lib/validation";
 
 export async function inviteBoardMemberImpl(
@@ -95,6 +96,7 @@ export async function inviteBoardMember(
   const token = (await getSessionToken())!;
   const r = await inviteBoardMemberImpl(token, input);
   revalidatePath(`/b/${input.boardId}/settings`);
+  revalidatePath(`/b/${input.boardId}`);
   return r;
 }
 
@@ -105,6 +107,7 @@ export async function changeBoardMemberRole(
   const token = (await getSessionToken())!;
   const r = await changeBoardMemberRoleImpl(token, input);
   revalidatePath(`/b/${input.boardId}/settings`);
+  revalidatePath(`/b/${input.boardId}`);
   return r;
 }
 
@@ -115,4 +118,43 @@ export async function removeBoardMember(
   const token = (await getSessionToken())!;
   await removeBoardMemberImpl(token, input);
   revalidatePath(`/b/${input.boardId}/settings`);
+  revalidatePath(`/b/${input.boardId}`);
+}
+
+// Bulk add board members by user id (no email lookup). Used by the
+// PeoplePicker flow, which already resolved profile ids from search.
+// onConflictDoNothing matches inviteBoardMemberImpl: re-adding an existing
+// member is a no-op rather than an error.
+export async function addBoardMembersByIdsImpl(
+  token: string,
+  input: {
+    boardId: string;
+    members: { userId: string; role: "admin" | "member" | "observer" }[];
+  },
+) {
+  const parsed = AddBoardMembersByIdsInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const rows = parsed.members.map((m) => ({
+      boardId: parsed.boardId,
+      userId: m.userId,
+      role: m.role,
+    }));
+    const inserted = await tx
+      .insert(boardMembers)
+      .values(rows)
+      .onConflictDoNothing()
+      .returning();
+    return inserted;
+  });
+}
+
+export async function addBoardMembersByIds(
+  input: Parameters<typeof addBoardMembersByIdsImpl>[1],
+) {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  const r = await addBoardMembersByIdsImpl(token, input);
+  revalidatePath(`/b/${input.boardId}/settings`);
+  revalidatePath(`/b/${input.boardId}`);
+  return r;
 }

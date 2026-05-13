@@ -197,6 +197,9 @@ export function useBoardRealtime(boardId: string, workspaceId?: string) {
   const addCardMember = useBoardStore((s) => s.addCardMember);
   const removeCardMember = useBoardStore((s) => s.removeCardMember);
 
+  const upsertBoardMember = useBoardStore((s) => s.upsertBoardMember);
+  const removeBoardMember = useBoardStore((s) => s.removeBoardMember);
+
   const addChecklist = useBoardStore((s) => s.addChecklist);
   const updateChecklist = useBoardStore((s) => s.updateChecklist);
   const removeChecklist = useBoardStore((s) => s.removeChecklist);
@@ -369,6 +372,54 @@ export function useBoardRealtime(boardId: string, workspaceId?: string) {
             } else if (payload.eventType === "DELETE" && payload.old) {
               const o = payload.old as Record<string, unknown>;
               removeCardMember(o.card_id as string, o.user_id as string);
+            }
+          },
+        )
+        .on(
+          // Keep boardProfiles + boardMembers fresh so the card Members
+          // panel sees newly-invited users without a full page reload.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "board_members",
+            filter: `board_id=eq.${boardId}`,
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (payload: any) => {
+            if (
+              (payload.eventType === "INSERT" || payload.eventType === "UPDATE") &&
+              payload.new
+            ) {
+              const r = payload.new as Record<string, unknown>;
+              const role = r.role as "admin" | "member" | "observer";
+              const userId = r.user_id as string;
+              // Fetch profile in the background; insert what we have now
+              // so role/membership reflects immediately even if profile
+              // fetch is still in flight.
+              upsertBoardMember({ userId, role });
+              (async () => {
+                const { data } = await supa
+                  .from("profiles")
+                  .select("id, display_name, handle, avatar_url")
+                  .eq("id", userId)
+                  .maybeSingle();
+                if (data) {
+                  upsertBoardMember(
+                    { userId, role },
+                    {
+                      id: data.id as string,
+                      displayName: data.display_name as string,
+                      handle: data.handle as string,
+                      avatarUrl: (data.avatar_url ?? null) as string | null,
+                    },
+                  );
+                }
+              })();
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              const o = payload.old as Record<string, unknown>;
+              removeBoardMember(o.user_id as string);
             }
           },
         )
@@ -573,6 +624,8 @@ export function useBoardRealtime(boardId: string, workspaceId?: string) {
     removeCardLabel,
     addCardMember,
     removeCardMember,
+    upsertBoardMember,
+    removeBoardMember,
     addChecklist,
     updateChecklist,
     removeChecklist,

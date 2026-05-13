@@ -105,7 +105,7 @@ export function MeActiveSprints({ sprints, burndowns }: Props) {
               ? Math.round((sprint.totalCompletedPoints / sprint.totalPoints) * 100)
               : 0;
           const bdPoints = burndowns[sprint.id] ?? [];
-          const href = `/w/${sprint.workspaceId}/sprints/${sprint.id}/report`;
+          const href = `/w/${sprint.workspaceId}/sprints/${sprint.id}`;
 
           return (
             <a

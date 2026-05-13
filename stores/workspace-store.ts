@@ -4,9 +4,12 @@ import {
   createContext,
   createElement,
   useContext,
+  useEffect,
   useRef,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
+import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import type { WorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 
 // Plan #16b-β — per-workspace zustand store. Mirrors the BoardStoreProvider
@@ -252,6 +255,65 @@ export function WorkspaceStoreProvider({
       store: createWorkspaceStore(initial),
     };
   }
+  // Workspace roster (workspaceProfiles) is authoritative on the server
+  // and not edited optimistically client-side. After invite/remove the
+  // member action revalidates the workspace layout, which feeds a fresh
+  // `initial` here — reconcile so pickers in the new-card dialog and
+  // roadmap update without a full reload.
+  useEffect(() => {
+    const s = ref.current?.store;
+    if (!s) return;
+    const cur = s.getState();
+    const changed =
+      cur.workspaceProfiles.length !== initial.workspaceProfiles.length ||
+      cur.workspaceProfiles.some(
+        (p, i) =>
+          p.id !== initial.workspaceProfiles[i]?.id ||
+          p.displayName !== initial.workspaceProfiles[i]?.displayName,
+      );
+    if (changed) {
+      s.setState({ workspaceProfiles: initial.workspaceProfiles });
+    }
+  }, [initial.workspaceProfiles]);
+
+  // Subscribe to workspace_members CDC so any page hosting this provider
+  // (roadmap, backlog, all-tasks, dashboards, board layout) picks up
+  // invites/removals without waiting for a manual refresh. router.refresh
+  // re-runs the server component, which feeds a fresh snapshot into the
+  // reconciler above. Realtime publication added in migration 0076.
+  const router = useRouter();
+  useEffect(() => {
+    const workspaceId = initial.workspaceId;
+    if (!workspaceId) return;
+    const supa = createSupabaseBrowser();
+    let cancelled = false;
+    let channel: ReturnType<typeof supa.channel> | null = null;
+    (async () => {
+      const { data } = await supa.auth.getSession();
+      const token = data.session?.access_token;
+      if (token) await supa.realtime.setAuth(token);
+      if (cancelled) return;
+      channel = supa
+        .channel(`ws_roster:${workspaceId}`)
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "workspace_members",
+            filter: `workspace_id=eq.${workspaceId}`,
+          },
+          () => router.refresh(),
+        )
+        .subscribe();
+    })();
+    return () => {
+      cancelled = true;
+      if (channel) supa.removeChannel(channel);
+    };
+  }, [initial.workspaceId, router]);
+
   return createElement(
     WorkspaceStoreContext.Provider,
     { value: ref.current.store },

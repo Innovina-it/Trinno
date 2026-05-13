@@ -78,8 +78,15 @@ type Row = {
 
 export function RoadmapListView({
   workspaceId,
+  filteredCardIds,
 }: {
   workspaceId: string;
+  /**
+   * Id allow-list mirroring the Gantt's URL filter pipeline (type,
+   * sprint, overdue, assignee, search). `null` means no filter is
+   * active — every non-archived card renders.
+   */
+  filteredCardIds?: Set<string> | null;
 }) {
   const router = useRouter();
   const storeCards = useWorkspaceStore((s) => s.cards);
@@ -94,7 +101,11 @@ export function RoadmapListView({
   // parent and walk a depth-first traversal that emits one row per card
   // in startDate-ASC order at every level.
   const rows = useMemo<Row[]>(() => {
-    const visible = storeCards.filter((c) => !c.archived);
+    const visible = storeCards.filter(
+      (c) =>
+        !c.archived &&
+        (filteredCardIds == null || filteredCardIds.has(c.id)),
+    );
     const byParent = new Map<string | null, StoreCard[]>();
     const byId = new Map<string, StoreCard>();
     for (const c of visible) {
@@ -142,7 +153,7 @@ export function RoadmapListView({
     }
     for (const top of epicsFirst) emit(top, top.type === "epic" ? 0 : 1);
     return out;
-  }, [storeCards]);
+  }, [storeCards, filteredCardIds]);
 
   // Owner-display lookup pulled from the workspace profiles array.
   function ownerName(card: StoreCard): string | null {

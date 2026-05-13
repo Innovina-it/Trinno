@@ -49,6 +49,7 @@ import {
   parseFilters,
   applyFilters,
   partitionLanes,
+  isFilterActive,
   type LaneMode,
 } from "@/lib/board-filters";
 
@@ -451,12 +452,7 @@ export function BoardView({
                 visible to onDragEnd. Hidden when the toggle is off. */}
             {showSprintStrip && <SprintDropStrip />}
             {(() => {
-              const filterActive =
-                filters.types.length > 0 ||
-                filters.labelIds.length > 0 ||
-                filters.due !== null ||
-                filters.assignedToMe ||
-                filters.scheduled;
+              const filterActive = isFilterActive(filters);
               const hiddenByFilters =
                 filterActive && cards.length > 0 && visibleCards.length === 0;
               if (!hiddenByFilters) return null;
@@ -518,11 +514,7 @@ export function BoardView({
                       workspaceId={board.workspaceId}
                       ordinal={idx + 1}
                       cardIdFilter={
-                        filters.types.length ||
-                        filters.labelIds.length ||
-                        filters.due ||
-                        filters.assignedToMe ||
-                        filters.scheduled
+                        isFilterActive(filters)
                           ? new Set(visibleCards.map((c) => c.id))
                           : undefined
                       }

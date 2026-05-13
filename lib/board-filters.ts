@@ -12,7 +12,10 @@ export type Filters = {
   labelIds: string[];
   due: "overdue" | "this-week" | null;
   assignedToMe: boolean;
-  /** When true, show only cards with no members AND no owner. */
+  /** When true, show only cards with no members. Matches the "Unassigned"
+   *  swimlane in partitionLanes (mode=assignee) — owner_id is ignored here
+   *  because createCard defaults it to the creator, so any owner-based
+   *  semantics would make this filter match nothing. */
   unassigned: boolean;
   scheduled: boolean;
   hideCompleted: boolean;
@@ -28,8 +31,6 @@ type FilterCard = {
   sprintId?: string | null;
   startDate?: Date | string | null;
   targetDate?: Date | string | null;
-  /** ownerId is used by the unassigned filter. Optional for backwards compat. */
-  ownerId?: string | null;
 };
 
 export function parseFilters(sp: URLSearchParams): Filters {
@@ -146,11 +147,8 @@ export function applyFilters<T extends FilterCard>(
       if (!mems || !mems.has(ctx.currentUserId)) return false;
     }
     if (f.unassigned) {
-      // No members AND no owner.
       const mems = memberByCard.get(c.id);
-      const hasMembers = mems && mems.size > 0;
-      const hasOwner = Boolean(c.ownerId);
-      if (hasMembers || hasOwner) return false;
+      if (mems && mems.size > 0) return false;
     }
     if (f.scheduled) {
       if (!c.startDate && !c.targetDate) return false;

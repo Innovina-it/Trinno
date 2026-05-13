@@ -1,0 +1,288 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1840" height="1160" viewBox="0 0 1840 1160" role="img" aria-labelledby="title desc">
+  <title id="title">Roadmap Page Architecture Diagram</title>
+  <desc id="desc">A simplified, ordered diagram of the roadmap page architecture, rendering model, drag systems, persistence flow, and rules.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1120"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#000000" flood-opacity="0.30"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#cbd5e1"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#93c5fd"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#86efac"/>
+    </marker>
+    <style>
+      .page-title { font: 800 34px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #f8fafc; }
+      .page-subtitle { font: 500 15px Inter, ui-sans-serif, system-ui, sans-serif; fill: #cbd5e1; }
+      .lane-title { font: 800 14px Inter, ui-sans-serif, system-ui, sans-serif; fill: #e2e8f0; letter-spacing: .12em; }
+      .card-title { font: 800 16px Inter, ui-sans-serif, system-ui, sans-serif; fill: #f8fafc; }
+      .card-text { font: 500 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #dbeafe; }
+      .muted { font: 500 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #cbd5e1; }
+      .small { font: 700 11px Inter, ui-sans-serif, system-ui, sans-serif; fill: #cbd5e1; }
+      .tiny { font: 700 10px Inter, ui-sans-serif, system-ui, sans-serif; fill: #94a3b8; letter-spacing: .06em; }
+      .lane { fill: rgba(15, 23, 42, .74); stroke: rgba(148, 163, 184, .28); stroke-width: 1.2; }
+      .server { fill: #172554; stroke: #60a5fa; stroke-width: 1.3; filter: url(#shadow); }
+      .client { fill: #064e3b; stroke: #34d399; stroke-width: 1.3; filter: url(#shadow); }
+      .action { fill: #3b0764; stroke: #d8b4fe; stroke-width: 1.3; filter: url(#shadow); }
+      .data { fill: #7c2d12; stroke: #fb923c; stroke-width: 1.3; filter: url(#shadow); }
+      .neutral { fill: #111827; stroke: #64748b; stroke-width: 1.3; filter: url(#shadow); }
+      .danger { fill: #450a0a; stroke: #f87171; stroke-width: 1.3; filter: url(#shadow); }
+      .flow { fill: none; stroke: #cbd5e1; stroke-width: 2.1; marker-end: url(#arrow); }
+      .flow-blue { fill: none; stroke: #93c5fd; stroke-width: 2.3; marker-end: url(#arrowBlue); }
+      .flow-green { fill: none; stroke: #86efac; stroke-width: 2.3; marker-end: url(#arrowGreen); }
+      .flow-dashed { fill: none; stroke: #cbd5e1; stroke-width: 2; stroke-dasharray: 7 7; marker-end: url(#arrow); }
+      .num { font: 800 13px Inter, ui-sans-serif, system-ui, sans-serif; fill: #020617; }
+      .num-circle { fill: #e2e8f0; }
+    </style>
+  </defs>
+
+  <rect width="1840" height="1160" fill="url(#bg)"/>
+  <circle cx="150" cy="95" r="180" fill="#1d4ed8" opacity=".11"/>
+  <circle cx="1600" cy="980" r="260" fill="#059669" opacity=".10"/>
+
+  <text x="56" y="58" class="page-title">Roadmap Page Architecture</text>
+  <text x="56" y="88" class="page-subtitle">Workspace-level timeline: server snapshot, client layout, timeline interactions, Server Actions, Postgres RLS, and realtime sync.</text>
+
+  <!-- Lane 1 -->
+  <rect x="48" y="126" width="1328" height="184" rx="18" class="lane"/>
+  <text x="72" y="156" class="lane-title">1. SERVER LOAD</text>
+
+  <rect x="80" y="196" width="184" height="76" rx="12" class="server"/>
+  <circle cx="104" cy="220" r="13" class="num-circle"/><text x="100" y="225" class="num">1</text>
+  <text x="126" y="222" class="card-title">Route</text>
+  <text x="126" y="246" class="card-text">/w/:workspaceId/roadmap</text>
+
+  <rect x="314" y="196" width="190" height="76" rx="12" class="server"/>
+  <circle cx="338" cy="220" r="13" class="num-circle"/><text x="334" y="225" class="num">2</text>
+  <text x="360" y="222" class="card-title">Auth + Workspace</text>
+  <text x="360" y="246" class="card-text">requireUser + getWorkspace</text>
+
+  <rect x="554" y="196" width="220" height="76" rx="12" class="server"/>
+  <circle cx="578" cy="220" r="13" class="num-circle"/><text x="574" y="225" class="num">3</text>
+  <text x="600" y="222" class="card-title">Workspace Snapshot</text>
+  <text x="600" y="246" class="card-text">boards, lists, cards, links</text>
+
+  <rect x="824" y="196" width="224" height="76" rx="12" class="server"/>
+  <circle cx="848" cy="220" r="13" class="num-circle"/><text x="844" y="225" class="num">4</text>
+  <text x="870" y="222" class="card-title">Roadmap Cards</text>
+  <text x="870" y="246" class="card-text">dated, visible, not archived</text>
+
+  <rect x="1098" y="196" width="220" height="76" rx="12" class="server"/>
+  <circle cx="1122" cy="220" r="13" class="num-circle"/><text x="1118" y="225" class="num">5</text>
+  <text x="1144" y="222" class="card-title">WorkspaceStore</text>
+  <text x="1144" y="246" class="card-text">client state provider</text>
+
+  <path d="M264 234 H314" class="flow-blue"/>
+  <path d="M504 234 H554" class="flow-blue"/>
+  <path d="M774 234 H824" class="flow-blue"/>
+  <path d="M1048 234 H1098" class="flow-blue"/>
+
+  <!-- Lane 2 -->
+  <rect x="48" y="344" width="1328" height="258" rx="18" class="lane"/>
+  <text x="72" y="374" class="lane-title">2. CLIENT RENDER</text>
+
+  <rect x="80" y="432" width="204" height="76" rx="12" class="client"/>
+  <circle cx="104" cy="456" r="13" class="num-circle"/><text x="100" y="461" class="num">6</text>
+  <text x="126" y="458" class="card-title">RoadmapView</text>
+  <text x="126" y="482" class="card-text">orchestrates timeline UI</text>
+
+  <rect x="338" y="388" width="210" height="76" rx="12" class="client"/>
+  <circle cx="362" cy="412" r="13" class="num-circle"/><text x="358" y="417" class="num">7</text>
+  <text x="384" y="414" class="card-title">URL View State</text>
+  <text x="384" y="438" class="card-text">zoom, lanes, q, filters</text>
+
+  <rect x="338" y="498" width="210" height="76" rx="12" class="client"/>
+  <circle cx="362" cy="522" r="13" class="num-circle"/><text x="358" y="527" class="num">8</text>
+  <text x="384" y="524" class="card-title">Workspace Store</text>
+  <text x="384" y="548" class="card-text">source for bars + lanes</text>
+
+  <rect x="604" y="388" width="226" height="76" rx="12" class="client"/>
+  <circle cx="628" cy="412" r="13" class="num-circle"/><text x="624" y="417" class="num">9</text>
+  <text x="650" y="414" class="card-title">Filter Cards</text>
+  <text x="650" y="438" class="card-text">dated, search, sprint, type</text>
+
+  <rect x="604" y="498" width="226" height="76" rx="12" class="client"/>
+  <circle cx="628" cy="522" r="13" class="num-circle"/><text x="624" y="527" class="num">10</text>
+  <text x="650" y="524" class="card-title">Build Lanes</text>
+  <text x="650" y="548" class="card-text">epic / assignee / component</text>
+
+  <rect x="886" y="388" width="222" height="76" rx="12" class="client"/>
+  <circle cx="910" cy="412" r="13" class="num-circle"/><text x="906" y="417" class="num">11</text>
+  <text x="936" y="414" class="card-title">Timeline Grid</text>
+  <text x="936" y="438" class="card-text">UTC dates + zoom scale</text>
+
+  <rect x="886" y="498" width="222" height="76" rx="12" class="client"/>
+  <circle cx="910" cy="522" r="13" class="num-circle"/><text x="906" y="527" class="num">12</text>
+  <text x="936" y="524" class="card-title">RoadmapBar</text>
+  <text x="936" y="548" class="card-text">card span on timeline</text>
+
+  <rect x="1160" y="432" width="178" height="76" rx="12" class="client"/>
+  <circle cx="1184" cy="456" r="13" class="num-circle"/><text x="1180" y="461" class="num">13</text>
+  <text x="1210" y="458" class="card-title">Overlays</text>
+  <text x="1210" y="482" class="card-text">arrows, sprints, mini-map</text>
+
+  <path d="M1208 272 C1208 324 182 348 182 432" class="flow-green"/>
+  <path d="M284 470 H338" class="flow-green"/>
+  <path d="M548 426 H604" class="flow-green"/>
+  <path d="M548 536 H604" class="flow-green"/>
+  <path d="M830 426 H886" class="flow-green"/>
+  <path d="M830 536 H886" class="flow-green"/>
+  <path d="M1108 536 C1135 536 1134 470 1160 470" class="flow-green"/>
+
+  <!-- Lane 3 -->
+  <rect x="48" y="636" width="1328" height="218" rx="18" class="lane"/>
+  <text x="72" y="666" class="lane-title">3. USER INTERACTIONS</text>
+
+  <rect x="80" y="724" width="196" height="76" rx="12" class="action"/>
+  <circle cx="104" cy="748" r="13" class="num-circle"/><text x="100" y="753" class="num">14</text>
+  <text x="130" y="750" class="card-title">Header Controls</text>
+  <text x="130" y="774" class="card-text">zoom, lanes, search, view</text>
+
+  <rect x="326" y="724" width="206" height="76" rx="12" class="action"/>
+  <circle cx="350" cy="748" r="13" class="num-circle"/><text x="346" y="753" class="num">15</text>
+  <text x="376" y="750" class="card-title">Bar Drag</text>
+  <text x="376" y="774" class="card-text">move / resize / reparent</text>
+
+  <rect x="582" y="724" width="206" height="76" rx="12" class="action"/>
+  <circle cx="606" cy="748" r="13" class="num-circle"/><text x="602" y="753" class="num">16</text>
+  <text x="632" y="750" class="card-title">New Card</text>
+  <text x="632" y="774" class="card-text">click, chip drag, paint drag</text>
+
+  <rect x="838" y="724" width="206" height="76" rx="12" class="action"/>
+  <circle cx="862" cy="748" r="13" class="num-circle"/><text x="858" y="753" class="num">17</text>
+  <text x="888" y="750" class="card-title">Row Reorder</text>
+  <text x="888" y="774" class="card-text">epic lanes sparse rank</text>
+
+  <rect x="1094" y="724" width="206" height="76" rx="12" class="action"/>
+  <circle cx="1118" cy="748" r="13" class="num-circle"/><text x="1114" y="753" class="num">18</text>
+  <text x="1144" y="750" class="card-title">Bar Menu</text>
+  <text x="1144" y="774" class="card-text">open, dates, complete, archive</text>
+
+  <path d="M182 508 C166 596 178 656 178 724" class="flow"/>
+  <path d="M997 574 C902 640 429 652 429 724" class="flow"/>
+  <path d="M997 574 C878 640 685 652 685 724" class="flow"/>
+  <path d="M717 574 C777 648 941 660 941 724" class="flow"/>
+  <path d="M997 574 C1090 640 1197 652 1197 724" class="flow"/>
+
+  <!-- Lane 4 -->
+  <rect x="48" y="888" width="1328" height="204" rx="18" class="lane"/>
+  <text x="72" y="918" class="lane-title">4. PERSISTENCE AND REALTIME</text>
+
+  <rect x="100" y="976" width="218" height="76" rx="12" class="neutral"/>
+  <circle cx="124" cy="1000" r="13" class="num-circle"/><text x="120" y="1005" class="num">19</text>
+  <text x="150" y="1002" class="card-title">Optimistic Patch</text>
+  <text x="150" y="1026" class="muted">workspace store updates first</text>
+
+  <rect x="382" y="976" width="218" height="76" rx="12" class="server"/>
+  <circle cx="406" cy="1000" r="13" class="num-circle"/><text x="402" y="1005" class="num">20</text>
+  <text x="432" y="1002" class="card-title">Server Actions</text>
+  <text x="432" y="1026" class="card-text">updateCard / reorder / create</text>
+
+  <rect x="664" y="976" width="218" height="76" rx="12" class="data"/>
+  <circle cx="688" cy="1000" r="13" class="num-circle"/><text x="684" y="1005" class="num">21</text>
+  <text x="714" y="1002" class="card-title">Postgres + RLS</text>
+  <text x="714" y="1026" class="card-text">permission checks + triggers</text>
+
+  <rect x="946" y="976" width="218" height="76" rx="12" class="data"/>
+  <circle cx="970" cy="1000" r="13" class="num-circle"/><text x="966" y="1005" class="num">22</text>
+  <text x="996" y="1002" class="card-title">Workspace Realtime</text>
+  <text x="996" y="1026" class="card-text">cards, lists, links, sprints</text>
+
+  <rect x="1228" y="976" width="112" height="76" rx="12" class="neutral"/>
+  <text x="1250" y="1002" class="card-title">Rollback</text>
+  <text x="1250" y="1026" class="muted">on error</text>
+
+  <path d="M429 800 C429 904 209 910 209 976" class="flow"/>
+  <path d="M685 800 C685 904 491 910 491 976" class="flow"/>
+  <path d="M941 800 C941 904 491 910 491 976" class="flow"/>
+  <path d="M1200 800 C1200 904 491 910 491 976" class="flow"/>
+  <path d="M318 1014 H382" class="flow"/>
+  <path d="M600 1014 H664" class="flow-blue"/>
+  <path d="M882 1014 H946" class="flow"/>
+  <path d="M1055 976 C1055 870 443 666 443 498" class="flow-dashed"/>
+  <path d="M600 1038 C780 1105 1110 1105 1228 1038" class="flow"/>
+  <text x="972" y="884" class="tiny">REALTIME RECONCILES WORKSPACE STORE</text>
+
+  <!-- Rules table -->
+  <rect x="1424" y="126" width="360" height="966" rx="18" class="lane"/>
+  <text x="1450" y="156" class="lane-title">ROADMAP RULES</text>
+  <text x="1450" y="184" class="page-subtitle">The important behavior in plain English.</text>
+
+  <g transform="translate(1450 214)">
+    <rect x="0" y="0" width="308" height="44" rx="9" fill="#0f172a" stroke="#64748b"/>
+    <text x="14" y="28" class="small">Rule</text>
+    <text x="118" y="28" class="small">Meaning</text>
+
+    <rect x="0" y="54" width="308" height="74" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="80" class="card-title">Access</text>
+    <text x="118" y="76" class="muted">Workspace and board rows are</text>
+    <text x="118" y="96" class="muted">filtered by Postgres RLS.</text>
+
+    <rect x="0" y="138" width="308" height="74" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="164" class="card-title">Visible Bars</text>
+    <text x="118" y="160" class="muted">Only non-archived cards with</text>
+    <text x="118" y="180" class="muted">both start and target dates.</text>
+
+    <rect x="0" y="222" width="308" height="74" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="248" class="card-title">Dates</text>
+    <text x="118" y="244" class="muted">Date math is UTC. Drag/resize</text>
+    <text x="118" y="264" class="muted">writes startDate/targetDate.</text>
+
+    <rect x="0" y="306" width="308" height="74" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="332" class="card-title">Snapping</text>
+    <text x="118" y="328" class="muted">Bars can snap to sprint ends</text>
+    <text x="118" y="348" class="muted">or blocker target dates.</text>
+
+    <rect x="0" y="390" width="308" height="74" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="416" class="card-title">Lanes</text>
+    <text x="118" y="412" class="muted">Default lanes are by epic.</text>
+    <text x="118" y="432" class="muted">Alternates: assignee/component.</text>
+
+    <rect x="0" y="474" width="308" height="74" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="500" class="card-title">Reparent</text>
+    <text x="118" y="496" class="muted">Dragging across epic lanes</text>
+    <text x="118" y="516" class="muted">updates parentCardId.</text>
+
+    <rect x="0" y="558" width="308" height="74" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="584" class="card-title">Row Order</text>
+    <text x="118" y="580" class="muted">Epic row handles write sparse</text>
+    <text x="118" y="600" class="muted">roadmapOrder ranks.</text>
+
+    <rect x="0" y="642" width="308" height="74" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="668" class="card-title">Auto Cascade</text>
+    <text x="118" y="664" class="muted">If enabled, blocked dependents</text>
+    <text x="118" y="684" class="muted">can be shifted after confirm.</text>
+
+    <rect x="0" y="726" width="308" height="74" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="752" class="card-title">Critical Path</text>
+    <text x="118" y="748" class="muted">Client computes longest path</text>
+    <text x="118" y="768" class="muted">from is_blocked_by links.</text>
+
+    <rect x="0" y="810" width="308" height="74" rx="9" fill="#111827" stroke="#334155"/>
+    <text x="14" y="836" class="card-title">Realtime</text>
+    <text x="118" y="832" class="muted">Supabase CDC reconciles cards,</text>
+    <text x="118" y="852" class="muted">links, sprints and versions.</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(58 1126)">
+    <rect x="0" y="-14" width="14" height="14" rx="3" fill="#172554" stroke="#60a5fa"/>
+    <text x="22" y="-3" class="small">Server</text>
+    <rect x="104" y="-14" width="14" height="14" rx="3" fill="#064e3b" stroke="#34d399"/>
+    <text x="126" y="-3" class="small">Client</text>
+    <rect x="210" y="-14" width="14" height="14" rx="3" fill="#3b0764" stroke="#d8b4fe"/>
+    <text x="232" y="-3" class="small">User interaction</text>
+    <rect x="392" y="-14" width="14" height="14" rx="3" fill="#7c2d12" stroke="#fb923c"/>
+    <text x="414" y="-3" class="small">Database / realtime</text>
+    <line x1="618" y1="-7" x2="668" y2="-7" class="flow-dashed"/>
+    <text x="682" y="-3" class="small">Realtime reconciliation</text>
+  </g>
+</svg>

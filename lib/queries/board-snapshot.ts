@@ -13,6 +13,7 @@ import {
   comments,
   attachments,
   boardMembers,
+  workspaceMembers,
   profiles,
   cardLinks,
   components,
@@ -62,6 +63,7 @@ export type BoardSnapshot = {
   cardVersions: CardVersionRow[];
   boardProfiles: BoardProfile[];
   boardMembers: BoardMemberRole[];
+  workspaceProfiles: BoardProfile[];
 };
 
 async function listCommentsCompat(
@@ -148,6 +150,7 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
       componentRows,
       cardComponentRows,
       cardVersionRows,
+      workspaceMemberRows,
     ] = await Promise.all([
       tx
         .select()
@@ -202,11 +205,20 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
         .select()
         .from(cardVersions)
         .where(eq(cardVersions.workspaceId, board.workspaceId)),
+      tx
+        .select({ userId: workspaceMembers.userId })
+        .from(workspaceMembers)
+        .where(eq(workspaceMembers.workspaceId, board.workspaceId)),
     ]);
 
-    const memberIds = memberRows.map((m) => m.userId);
-    const profileRows =
-      memberIds.length === 0
+    const allMemberIds = Array.from(
+      new Set<string>([
+        ...memberRows.map((m) => m.userId),
+        ...workspaceMemberRows.map((m) => m.userId),
+      ]),
+    );
+    const allProfileRows =
+      allMemberIds.length === 0
         ? []
         : await tx
             .select({
@@ -216,7 +228,11 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
               avatarUrl: profiles.avatarUrl,
             })
             .from(profiles)
-            .where(inArray(profiles.id, memberIds));
+            .where(inArray(profiles.id, allMemberIds));
+
+    const boardMemberIdSet = new Set(memberRows.map((m) => m.userId));
+    const profileRows = allProfileRows.filter((p) => boardMemberIdSet.has(p.id));
+    const workspaceProfileRows = allProfileRows;
 
     return {
       board,
@@ -235,6 +251,7 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
       cardVersions: cardVersionRows,
       boardProfiles: profileRows,
       boardMembers: memberRows,
+      workspaceProfiles: workspaceProfileRows,
     };
   });
 });
