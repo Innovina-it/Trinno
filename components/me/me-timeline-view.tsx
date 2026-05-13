@@ -2,15 +2,20 @@
 /**
  * Cross-workspace timeline view for /me/timeline and /timeline.
  *
- * Renders cards grouped by workspace (collapsible, collapsed by default)
- * → board with a lightweight inline Gantt bar scaled to the visible date
- * range. Intentionally simpler than the per-workspace RoadmapView to
- * avoid coupling to the workspace store.
+ * Workspace groups are collapsible (collapsed by default). When expanded,
+ * each workspace renders its cards as the same hierarchical list view
+ * used inside a single workspace's roadmap → list mode: epic → child →
+ * subtask, indented, ordered by startDate ASC NULLS LAST.
  */
 import { useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, ChevronRight, CornerLeftUp } from "lucide-react";
 import type { CrossWorkspaceCard } from "@/lib/queries/cards";
 import { formatDate } from "@/lib/format-date";
+import {
+  PRIORITY_TINT,
+  type CardPriority,
+} from "@/components/board/card/priority-picker";
 
 type Props = {
   cards: CrossWorkspaceCard[];
@@ -30,18 +35,91 @@ type WorkspaceGroup = {
   boards: BoardLane[];
 };
 
-const PRIORITY_COLORS: Record<string, string> = {
-  p0: "bg-red-500",
-  p1: "bg-orange-400",
-  p2: "bg-yellow-400",
-  p3: "bg-blue-400",
-  p4: "bg-fg/20",
+type Row = {
+  card: CrossWorkspaceCard;
+  depth: 0 | 1 | 2;
 };
+
+function timeOf(d: Date | string | null): number {
+  if (!d) return Number.POSITIVE_INFINITY;
+  const dt = d instanceof Date ? d : new Date(d);
+  return Number.isNaN(dt.getTime()) ? Number.POSITIVE_INFINITY : dt.getTime();
+}
+
+function PriorityDot({ priority }: { priority: CardPriority | null }) {
+  const dotClass = priority ? PRIORITY_TINT[priority].dot : "bg-fg/15";
+  return (
+    <span
+      aria-hidden
+      data-priority={priority ?? "none"}
+      className={`inline-block size-2 rounded-full shrink-0 ${dotClass}`}
+      title={priority ? `Priority ${priority.toUpperCase()}` : "No priority"}
+    />
+  );
+}
+
+// Build epic → child → subtask rows for a flat card list. Same shape as
+// RoadmapListView's tree, scoped to one board's worth of cards.
+function buildRows(cards: CrossWorkspaceCard[]): Row[] {
+  const byParent = new Map<string | null, CrossWorkspaceCard[]>();
+  const byId = new Map<string, CrossWorkspaceCard>();
+  for (const c of cards) {
+    byId.set(c.id, c);
+    const arr = byParent.get(c.parentCardId ?? null) ?? [];
+    arr.push(c);
+    byParent.set(c.parentCardId ?? null, arr);
+  }
+  for (const arr of byParent.values()) {
+    arr.sort((a, b) => {
+      const ta = timeOf(a.startDate);
+      const tb = timeOf(b.startDate);
+      if (ta !== tb) return ta - tb;
+      return a.title.localeCompare(b.title);
+    });
+  }
+  const out: Row[] = [];
+  const topLevel = byParent.get(null) ?? [];
+  // Also treat as "top level" any card whose parent isn't in this slice
+  // (parent lives in another workspace / board) so nothing gets dropped.
+  for (const c of cards) {
+    if (c.parentCardId && !byId.has(c.parentCardId)) {
+      topLevel.push(c);
+    }
+  }
+  const seenTop = new Set<string>();
+  const topSorted = topLevel
+    .filter((c) => {
+      if (seenTop.has(c.id)) return false;
+      seenTop.add(c.id);
+      return true;
+    })
+    .sort((a, b) => {
+      const ae = a.type === "epic" ? 0 : 1;
+      const be = b.type === "epic" ? 0 : 1;
+      if (ae !== be) return ae - be;
+      const ta = timeOf(a.startDate);
+      const tb = timeOf(b.startDate);
+      if (ta !== tb) return ta - tb;
+      return a.title.localeCompare(b.title);
+    });
+
+  function emit(card: CrossWorkspaceCard, depth: 0 | 1 | 2) {
+    out.push({ card, depth });
+    const children = byParent.get(card.id) ?? [];
+    for (const child of children) {
+      const nextDepth: 0 | 1 | 2 = depth === 0 ? 1 : 2;
+      emit(child, nextDepth);
+    }
+  }
+  for (const c of topSorted) emit(c, 0);
+  return out;
+}
 
 export function MeTimelineView({
   cards,
 }: Omit<Props, "viewerId"> & { viewerId?: string }) {
-  // Group: workspace → boards → cards. Sorted by name throughout.
+  const router = useRouter();
+
   const groups = useMemo<WorkspaceGroup[]>(() => {
     const byWs = new Map<string, WorkspaceGroup>();
     for (const c of cards) {
@@ -71,8 +149,6 @@ export function MeTimelineView({
     return out;
   }, [cards]);
 
-  // Collapse state: keep only the OPEN workspace ids in the set. Default
-  // is empty → every workspace collapsed on first paint.
   const [openWs, setOpenWs] = useState<Set<string>>(() => new Set());
 
   function toggleWs(id: string) {
@@ -83,22 +159,6 @@ export function MeTimelineView({
       return next;
     });
   }
-
-  // Global date range for proportional bar rendering.
-  const { minMs, rangeMs } = useMemo(() => {
-    if (cards.length === 0) {
-      const now = Date.now();
-      return { minMs: now, rangeMs: 30 * 86_400_000 };
-    }
-    let min = Infinity;
-    let max = -Infinity;
-    for (const c of cards) {
-      min = Math.min(min, c.startDate.getTime());
-      max = Math.max(max, c.targetDate.getTime());
-    }
-    const pad = (max - min) * 0.05 || 86_400_000;
-    return { minMs: min - pad, rangeMs: max - min + 2 * pad };
-  }, [cards]);
 
   if (cards.length === 0) {
     return (
@@ -147,84 +207,123 @@ export function MeTimelineView({
 
             {open && (
               <div className="space-y-4 px-3 sm:px-4 pb-4 pt-3 border-t border-hairline">
-                {ws.boards.map((lane) => (
-                  <div key={lane.boardId}>
-                    <h3 className="mono-meta text-fg mb-2">{lane.boardTitle}</h3>
-                    <div className="rounded-lg border border-hairline overflow-hidden">
-                      <table className="w-full text-sm border-collapse">
-                        <thead>
-                          <tr className="bg-[color:var(--surface-raised,rgb(0_0_0/0.15))] border-b border-hairline">
-                            <th className="text-left px-3 py-2 mono-meta-sm text-fg-muted font-normal w-[40%]">
-                              CARD
-                            </th>
-                            <th className="text-left px-3 py-2 mono-meta-sm text-fg-muted font-normal hidden sm:table-cell w-[12%]">
-                              START
-                            </th>
-                            <th className="text-left px-3 py-2 mono-meta-sm text-fg-muted font-normal hidden sm:table-cell w-[12%]">
-                              TARGET
-                            </th>
-                            <th className="px-3 py-2 mono-meta-sm text-fg-muted font-normal">
-                              TIMELINE
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {lane.cards.map((c) => {
-                            const startPct =
-                              ((c.startDate.getTime() - minMs) / rangeMs) * 100;
-                            const widthPct =
-                              ((c.targetDate.getTime() -
-                                c.startDate.getTime()) /
-                                rangeMs) *
-                              100;
-                            const barColor = c.priority
-                              ? PRIORITY_COLORS[c.priority]
-                              : "bg-fg/30";
-                            const done = Boolean(c.completedAt);
-
+                {ws.boards.map((lane) => {
+                  const rows = buildRows(lane.cards);
+                  return (
+                    <div key={lane.boardId}>
+                      <h3 className="mono-meta text-fg mb-2">
+                        {lane.boardTitle}
+                      </h3>
+                      <div className="rounded-lg border border-hairline overflow-hidden">
+                        <div
+                          className="grid items-center gap-3 border-b border-hairline bg-[color:var(--surface-strong)] px-3 py-2 mono-meta-sm text-fg-faint"
+                          style={{
+                            gridTemplateColumns:
+                              "minmax(0,1fr) 7rem 7rem 1.5rem",
+                          }}
+                        >
+                          <span>TITLE</span>
+                          <span className="text-right tabular-nums">START</span>
+                          <span className="text-right tabular-nums">
+                            TARGET
+                          </span>
+                          <span className="sr-only">Status</span>
+                        </div>
+                        <ul className="divide-y divide-hairline">
+                          {rows.map(({ card, depth }) => {
+                            const isEpic = card.type === "epic";
+                            const completed = card.completedAt != null;
+                            const indentPx = depth * 20;
                             return (
-                              <tr
-                                key={c.id}
-                                className={`border-b border-hairline last:border-0 hover:bg-[rgb(255_255_255/0.03)] transition-colors ${done ? "opacity-50" : ""}`}
+                              <li
+                                key={card.id}
+                                data-card-id={card.id}
+                                data-depth={depth}
+                                data-card-type={card.type}
+                                className="group/row grid items-center gap-3 px-3 py-2 hover:bg-[rgb(255_255_255/0.04)] transition-colors"
+                                style={{
+                                  gridTemplateColumns:
+                                    "minmax(0,1fr) 7rem 7rem 1.5rem",
+                                }}
                               >
-                                <td className="px-3 py-2.5 align-middle">
+                                <div className="flex items-center gap-2 min-w-0">
                                   <span
-                                    className={`text-fg-muted leading-snug line-clamp-1 ${done ? "line-through" : ""}`}
-                                  >
-                                    {c.title}
-                                  </span>
-                                  {c.type !== "task" && (
-                                    <span className="ml-1.5 mono-meta-sm text-fg-faint uppercase">
-                                      {c.type}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2.5 align-middle mono-meta-sm text-fg-muted hidden sm:table-cell whitespace-nowrap">
-                                  {formatDate(c.startDate)}
-                                </td>
-                                <td className="px-3 py-2.5 align-middle mono-meta-sm text-fg-muted hidden sm:table-cell whitespace-nowrap">
-                                  {formatDate(c.targetDate)}
-                                </td>
-                                <td className="px-3 py-2.5 align-middle">
-                                  <div className="relative h-4 w-full min-w-[80px]">
-                                    <div
-                                      className={`absolute top-1 h-2 rounded-sm ${barColor}`}
-                                      style={{
-                                        left: `${Math.max(0, startPct).toFixed(2)}%`,
-                                        width: `${Math.max(2, widthPct).toFixed(2)}%`,
-                                      }}
-                                      title={`${formatDate(c.startDate)} → ${formatDate(c.targetDate)}`}
+                                    style={{ width: indentPx }}
+                                    aria-hidden
+                                  />
+                                  {depth > 0 && (
+                                    <CornerLeftUp
+                                      aria-hidden
+                                      className="size-3 text-fg-faint shrink-0 -scale-x-100"
                                     />
-                                  </div>
-                                </td>
-                              </tr>
+                                  )}
+                                  <PriorityDot
+                                    priority={
+                                      (card.priority ?? null) as
+                                        | CardPriority
+                                        | null
+                                    }
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      router.push(
+                                        `/b/${card.boardId}/c/${card.id}`,
+                                      )
+                                    }
+                                    className={[
+                                      "truncate text-left text-sm transition-colors hover:underline focus-visible:outline-none focus-visible:underline",
+                                      isEpic
+                                        ? "font-medium text-fg"
+                                        : "text-fg-muted hover:text-fg",
+                                      completed
+                                        ? "line-through text-fg-faint"
+                                        : "",
+                                    ].join(" ")}
+                                    title={card.title}
+                                  >
+                                    {card.title}
+                                  </button>
+                                  <span
+                                    className="chip mono-meta-sm shrink-0 text-fg-faint"
+                                    data-card-type={card.type}
+                                  >
+                                    {card.type.toUpperCase()}
+                                  </span>
+                                </div>
+                                <span className="text-right text-xs text-fg-muted tabular-nums">
+                                  {formatDate(card.startDate) || "—"}
+                                </span>
+                                <span className="text-right text-xs text-fg-muted tabular-nums">
+                                  {formatDate(card.targetDate) || "—"}
+                                </span>
+                                <span
+                                  className="flex items-center justify-center"
+                                  aria-label={
+                                    completed ? "Completed" : "Not completed"
+                                  }
+                                >
+                                  {completed ? (
+                                    <Check
+                                      className="size-3.5 text-[color:var(--accent-lime)]"
+                                      strokeWidth={3}
+                                      aria-hidden
+                                    />
+                                  ) : (
+                                    <span
+                                      aria-hidden
+                                      className="size-3 rounded-full border border-hairline-hi"
+                                    />
+                                  )}
+                                </span>
+                              </li>
                             );
                           })}
-                        </tbody>
-                      </table>
+                        </ul>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
