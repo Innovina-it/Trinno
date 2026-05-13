@@ -68,14 +68,36 @@ export async function searchMentionables(
 }
 
 // Search profiles visible to the caller by display name or handle prefix.
-// Used by the workspace-creation member picker.
+// Past collaborators (any user who shares a workspace_members or
+// board_members row with the caller) are ranked first; everyone else
+// follows alphabetically by display name.
 export async function searchProfiles(
   query: string,
 ): Promise<{ id: string; handle: string | null; displayName: string }[]> {
   await requireUser();
   const token = (await getSessionToken())!;
+  const me = decodeSub(token);
   const q = query.trim().toLowerCase();
   return dbAsUser(token, async (tx) => {
+    // Collaborators: anyone who has been on any of the caller's
+    // workspaces or boards. Dedup by id, exclude self.
+    const collabRows = await tx
+      .selectDistinct({ id: sql<string>`id` })
+      .from(
+        sql`(
+          select wm2.user_id as id
+            from public.workspace_members wm1
+            join public.workspace_members wm2 on wm2.workspace_id = wm1.workspace_id
+            where wm1.user_id = ${me} and wm2.user_id <> ${me}
+          union
+          select bm2.user_id as id
+            from public.board_members bm1
+            join public.board_members bm2 on bm2.board_id = bm1.board_id
+            where bm1.user_id = ${me} and bm2.user_id <> ${me}
+        ) as collab`,
+      );
+    const collabSet = new Set(collabRows.map((r) => r.id));
+
     const where = q
       ? or(
           ilike(profiles.handle, `${q}%`),
@@ -90,7 +112,27 @@ export async function searchProfiles(
       })
       .from(profiles)
       .where(where)
-      .limit(12);
-    return rows;
+      .limit(48);
+
+    // Hide seed-generated profiles (handle ending in a long timestamp,
+    // e.g. "agg-nav-1778140694228-296208") from the empty-query preload.
+    // Once the user types something, surface every match.
+    const seedPattern = /-\d{10,}(-[a-z0-9]+)?$/i;
+    const filtered = q
+      ? rows
+      : rows.filter((r) => !seedPattern.test(r.handle ?? ""));
+
+    // Sort: caller-self last (or absent if RLS doesn't return it),
+    // collaborators first, then alphabetical by display name.
+    filtered.sort((a, b) => {
+      if (a.id === me && b.id !== me) return 1;
+      if (b.id === me && a.id !== me) return -1;
+      const aCollab = collabSet.has(a.id) ? 0 : 1;
+      const bCollab = collabSet.has(b.id) ? 0 : 1;
+      if (aCollab !== bCollab) return aCollab - bCollab;
+      return a.displayName.localeCompare(b.displayName);
+    });
+
+    return filtered.slice(0, 12);
   });
 }
