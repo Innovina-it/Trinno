@@ -39,8 +39,6 @@ import { MembersSection } from "./card/members-section";
 import { OwnerSection } from "./card/owner-section";
 import { ChecklistsSection } from "./card/checklists-section";
 import { AttachmentsSection } from "./card/attachments-section";
-import { CommentsSection } from "./card/comments-section";
-import { CardHistorySection } from "./card/history-section";
 import { TypePicker } from "./card/type-picker";
 import { PriorityPicker, type CardPriority } from "./card/priority-picker";
 import { CoverPicker, type CoverKind } from "./card/cover-picker";
@@ -821,18 +819,9 @@ export function CardModal({
         <AttachmentsSection cardId={card.id} />
       </AccordionGroup>
 
-      {/* Talk (open by default) */}
-      <AccordionGroup id="talk" title="Talk" defaultOpen>
-        <CommentsSection cardId={card.id} />
-        {children && (
-          <div className="border-t border-hairline pt-4">{children}</div>
-        )}
-      </AccordionGroup>
-
-      {/* History — collapsed by default; accordion lazy-fetches on open. */}
-      <AccordionGroup id="history" title="History">
-        <CardHistorySection cardId={card.id} />
-      </AccordionGroup>
+      {children && (
+        <div className="border-t border-hairline pt-4">{children}</div>
+      )}
 
       <div className="flex justify-end gap-2 border-t border-hairline pt-4">
         <Button

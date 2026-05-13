@@ -18,7 +18,7 @@ import {
   horizontalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
-import { ChevronRight, Layers3 } from "lucide-react";
+import { Layers3 } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { errorBus } from "@/lib/errors/error-bus";
@@ -45,7 +45,6 @@ import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { useBoardPresence, type Viewer } from "@/hooks/use-board-presence";
 import { PresenceAvatars } from "./presence-avatars";
 import { boardCode } from "@/lib/format";
-import { useActivityPanel } from "@/lib/use-activity-panel";
 import {
   parseFilters,
   applyFilters,
@@ -74,12 +73,10 @@ export function BoardView({
   board,
   currentUser,
   sprints = [],
-  children,
 }: {
   board: BoardRow;
   currentUser: Viewer;
   sprints?: SprintLite[];
-  children?: React.ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -92,7 +89,6 @@ export function BoardView({
   const boardProfiles = useBoardStore((s) => s.boardProfiles);
   const moveListLocal = useBoardStore((s) => s.moveList);
   const moveCardLocal = useBoardStore((s) => s.moveCard);
-  const activity = useActivityPanel();
   // Plan #16b-γ-Master-D D1 — optimistic patches for sprint assignment go
   // through the per-board store (drives card-tile.sprintId visibility) and
   // the workspace store (drives the human-readable chip name). The CDC
@@ -428,23 +424,6 @@ export function BoardView({
               <Layers3 className="size-3.5" />
               <span>Sprints</span>
             </button>
-            <button
-              type="button"
-              onClick={activity.toggle}
-              data-testid="board-activity-toggle"
-              aria-pressed={activity.open}
-              title={activity.open ? "Hide activity" : "Show activity"}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
-                activity.open
-                  ? "border-fg/40 bg-fg/10 text-fg"
-                  : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
-              }`}
-            >
-              <ChevronRight
-                className={`size-3.5 transition-transform ${activity.open ? "rotate-90" : "rotate-180"}`}
-              />
-              <span>Activity</span>
-            </button>
             <Button
               render={<Link href={`/b/${board.id}/settings`} />}
               nativeButton={false}
@@ -602,7 +581,6 @@ export function BoardView({
             </DragOverlay>
           </DndContext>
         </div>
-        {children}
       </div>
       <QuickAddFab />
       <BulkActionBar sprints={sprints} />
