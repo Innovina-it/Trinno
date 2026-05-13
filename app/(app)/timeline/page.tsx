@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { listAllAcrossWorkspaces } from "@/lib/queries/cards";
+import { listWorkspaces } from "@/lib/queries/workspaces";
 import { MeTimelineWorkspaceFilter } from "@/components/me/me-timeline-workspace-filter";
 import { MeTimelineView } from "@/components/me/me-timeline-view";
 
@@ -21,15 +22,19 @@ export default async function CommonTimelinePage({
   const wsParam = typeof sp.ws === "string" ? sp.ws : "";
   const selectedWsIds = wsParam ? wsParam.split(",").filter(Boolean) : [];
 
-  // Fetch unfiltered once so we can both (a) populate the workspace
-  // filter dropdown with every workspace that has visible cards, and
-  // (b) apply the selection in memory. listWorkspaces is intentionally
-  // not used here — its RLS path hides workspaces the user only reaches
-  // through board membership (no workspace_members row), which would
-  // bury those workspaces in the filter.
-  const allCards = await listAllAcrossWorkspaces(token);
+  // Workspace filter must show EVERY workspace the caller can see, even
+  // when it has zero cards with start + target dates. Union the two
+  // sources so workspaces only reachable via board membership (no row in
+  // workspace_members) still appear, AND empty workspaces still appear.
+  const [allCards, memberWorkspaces] = await Promise.all([
+    listAllAcrossWorkspaces(token),
+    listWorkspaces(token),
+  ]);
   const wsById = new Map<string, string>();
-  for (const c of allCards) wsById.set(c.workspaceId, c.workspaceName);
+  for (const w of memberWorkspaces) wsById.set(w.id, w.name);
+  for (const c of allCards) {
+    if (!wsById.has(c.workspaceId)) wsById.set(c.workspaceId, c.workspaceName);
+  }
   const workspaces = [...wsById.entries()]
     .map(([id, name]) => ({ id, name }))
     .sort((a, b) => a.name.localeCompare(b.name));
