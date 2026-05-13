@@ -14,10 +14,25 @@ import {
 // cluster so the operator's primary axis (mine vs all vs unassigned) is
 // always visible. URL-backed: ?assignee=me|all|none.
 
-const SEGMENTS: { value: AssigneeMode; label: string }[] = [
-  { value: "me", label: "Mine" },
-  { value: "all", label: "All" },
-  { value: "none", label: "Unassigned" },
+// `title` carries scope context — the filter is workspace-scoped (board /
+// roadmap pages live under /w/{id}), distinct from `/me` which spans all
+// workspaces. Boss feedback 2026-05-13: copy must make that obvious.
+const SEGMENTS: { value: AssigneeMode; label: string; title: string }[] = [
+  {
+    value: "me",
+    label: "Mine",
+    title: "Assigned to me in this workspace. /me shows all workspaces.",
+  },
+  {
+    value: "all",
+    label: "All",
+    title: "Every card in this workspace, regardless of assignee.",
+  },
+  {
+    value: "none",
+    label: "Unassigned",
+    title: "Cards in this workspace with no owner and no assignees.",
+  },
 ];
 
 export function AssigneeFilterRow({
@@ -69,6 +84,7 @@ export function AssigneeFilterRow({
             role="radio"
             aria-checked={mode === seg.value}
             data-testid={`assignee-filter-${seg.value}`}
+            title={seg.title}
             onClick={() => setMode(seg.value)}
             className={[
               "px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40",

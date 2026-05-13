@@ -25,7 +25,6 @@ import {
   ChevronDown,
   Columns,
   Home,
-  ListChecks,
   Map,
   Menu,
   MoreHorizontal,
@@ -84,7 +83,6 @@ export function TopNav({
           { href: `/w/${wsForLinks}/roadmap`, label: "Roadmap", Icon: Map, testId: "nav-roadmap", chord: "g r" },
           { href: `/w/${wsForLinks}/boards`, label: "Boards", Icon: Columns, testId: "nav-boards", chord: "g b" },
           { href: `/w/${wsForLinks}/backlog`, label: "Backlog", Icon: Tag, testId: "nav-backlog", chord: "g l" },
-          { href: `/w/${wsForLinks}/all-tasks`, label: "My tasks", Icon: ListChecks, testId: "nav-all-tasks", chord: "g t" },
         ] as Primary[])
       : []),
   ];

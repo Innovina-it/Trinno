@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bug, CalendarClock, CircleDot, ListTodo, Mountain, Square } from "lucide-react";
+import { Bug, CalendarClock, CircleDot, ListTodo, Mountain, Plus, Square } from "lucide-react";
 import { AssigneePicker } from "./assignee-picker";
 import {
   Dialog,
@@ -132,6 +132,7 @@ export function CardQuickView({
   onOpenChange,
   onPatch,
   onToggleMember,
+  onCreateSubtask,
 }: {
   card: QuickViewCard | null;
   memberProfiles: QuickViewProfile[];
@@ -148,10 +149,13 @@ export function CardQuickView({
   onPatch?: (patch: PatchInput) => Promise<void> | void;
   /** When provided, assignee chips become toggleable. */
   onToggleMember?: (userId: string) => Promise<void> | void;
+  /** When provided, inline "Add subtask" affordance is rendered. */
+  onCreateSubtask?: (title: string) => Promise<void> | void;
 }) {
   const router = useRouter();
   const editable = typeof onPatch === "function";
   const membersEditable = typeof onToggleMember === "function";
+  const subtaskCreatable = typeof onCreateSubtask === "function";
 
   if (!card) {
     // Defensive: card was removed between the tile rendering and the
@@ -189,8 +193,10 @@ export function CardQuickView({
           boardId={boardId}
           editable={editable}
           membersEditable={membersEditable}
+          subtaskCreatable={subtaskCreatable}
           onPatch={onPatch}
           onToggleMember={onToggleMember}
+          onCreateSubtask={onCreateSubtask}
           onClose={() => onOpenChange(false)}
           router={router}
         />
@@ -211,8 +217,10 @@ function CardQuickViewBody({
   boardId,
   editable,
   membersEditable,
+  subtaskCreatable,
   onPatch,
   onToggleMember,
+  onCreateSubtask,
   onClose,
   router,
 }: {
@@ -224,8 +232,10 @@ function CardQuickViewBody({
   boardId: string;
   editable: boolean;
   membersEditable: boolean;
+  subtaskCreatable: boolean;
   onPatch?: (patch: PatchInput) => Promise<void> | void;
   onToggleMember?: (userId: string) => Promise<void> | void;
+  onCreateSubtask?: (title: string) => Promise<void> | void;
   onClose: () => void;
   router: ReturnType<typeof useRouter>;
 }) {
@@ -619,21 +629,14 @@ function CardQuickViewBody({
           )}
         </div>
 
-        {/* SUBTASKS — one-row summary. Read-only (managed via the full
-            modal); kept for context. */}
-        {subtaskTotal > 0 && (
-          <div className="space-y-1 text-xs">
-            <span className="mono-meta-sm text-fg-faint">SUBTASKS</span>
-            <div
-              data-testid="card-quick-view-subtasks"
-              className="flex h-[34px] items-center gap-1.5 rounded-md border border-hairline bg-transparent px-2"
-            >
-              <ListTodo className="size-3 text-fg-faint" aria-hidden />
-              <span className="text-fg tabular-nums">
-                {subtaskDone}/{subtaskTotal}
-              </span>
-            </div>
-          </div>
+        {/* SUBTASKS — count summary + inline add affordance. */}
+        {(subtaskTotal > 0 || subtaskCreatable) && (
+          <SubtaskSection
+            subtaskDone={subtaskDone}
+            subtaskTotal={subtaskTotal}
+            creatable={subtaskCreatable}
+            onCreateSubtask={onCreateSubtask}
+          />
         )}
 
         {/* DESCRIPTION — textarea when editing; preview when not. */}
@@ -665,7 +668,7 @@ function CardQuickViewBody({
         )}
       </div>
 
-      <DialogFooter className="flex w-full items-center justify-between gap-2 sm:justify-between">
+      <DialogFooter>
         <Button
           type="button"
           onClick={openAdvanced}
@@ -673,15 +676,107 @@ function CardQuickViewBody({
         >
           Open advanced settings
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onClose}
-          data-testid="card-quick-view-close"
-        >
-          Close
-        </Button>
       </DialogFooter>
     </>
+  );
+}
+
+// Inline subtask block: shows the done/total count and (when creatable)
+// a single-line input to add another subtask. The parent (card-tile or
+// roadmap-view) is responsible for the actual createCard server call;
+// this component just collects a title and calls back.
+function SubtaskSection({
+  subtaskDone,
+  subtaskTotal,
+  creatable,
+  onCreateSubtask,
+}: {
+  subtaskDone: number;
+  subtaskTotal: number;
+  creatable: boolean;
+  onCreateSubtask?: (title: string) => Promise<void> | void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (adding) inputRef.current?.focus();
+  }, [adding]);
+
+  async function commit() {
+    const title = draft.trim();
+    if (!title || !onCreateSubtask) {
+      setAdding(false);
+      setDraft("");
+      return;
+    }
+    setBusy(true);
+    try {
+      await onCreateSubtask(title);
+      setDraft("");
+      inputRef.current?.focus();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-1 text-xs">
+      <span className="mono-meta-sm text-fg-faint">SUBTASKS</span>
+      <div
+        data-testid="card-quick-view-subtasks"
+        className="rounded-md border border-hairline bg-transparent"
+      >
+        {subtaskTotal > 0 && (
+          <div className="flex h-[34px] items-center gap-1.5 px-2 border-b border-hairline">
+            <ListTodo className="size-3 text-fg-faint" aria-hidden />
+            <span className="text-fg tabular-nums">
+              {subtaskDone}/{subtaskTotal}
+            </span>
+          </div>
+        )}
+        {creatable && (
+          adding ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void commit();
+              }}
+              className="flex h-[34px] items-center gap-1.5 px-2"
+            >
+              <Plus className="size-3 text-fg-faint" aria-hidden />
+              <input
+                ref={inputRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={() => void commit()}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setAdding(false);
+                    setDraft("");
+                  }
+                }}
+                disabled={busy}
+                placeholder="Subtask title…"
+                className="flex-1 bg-transparent outline-none text-xs text-fg placeholder:text-fg-faint"
+                data-testid="card-quick-view-subtask-input"
+              />
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="flex h-[34px] w-full items-center gap-1.5 px-2 text-left text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.04)]"
+              data-testid="card-quick-view-add-subtask"
+            >
+              <Plus className="size-3 text-fg-faint" aria-hidden />
+              <span className="text-xs">Add subtask</span>
+            </button>
+          )
+        )}
+      </div>
+    </div>
   );
 }

@@ -7,15 +7,11 @@
 -- time" flow: there is no shared workspace to anchor visibility.
 --
 -- This app is a single-tenant internal tool. The expected trust model is
--- "anyone signed in can see everyone's display name + handle to invite
+-- "anyone signed in can see everyone's display name and handle to invite
 -- them". This policy adds that path. The existing profiles_self_select
--- policy stays, so deeper visibility (e.g. avatar, onboarding state)
--- still requires the workspace/board overlap.
+-- policy stays, so deeper visibility still requires the workspace/board
+-- overlap (policies OR together in Postgres).
 
+drop policy if exists profiles_authenticated_select on public.profiles;
 create policy profiles_authenticated_select on public.profiles for select
   using (auth.uid() is not null);
-
-comment on policy profiles_authenticated_select on public.profiles is
-  $c$Any authenticated user can read profile rows. Used by the workspace
-member picker and any future "invite somebody" affordance. Stricter
-joins remain on profiles_self_select; both policies OR together.$c$;

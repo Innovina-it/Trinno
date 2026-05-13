@@ -67,6 +67,7 @@ export async function createCardImpl(token: string, input: {
   startDate?: Date | string | null;
   targetDate?: Date | string | null;
   parentCardId?: string | null;
+  ownerId?: string | null;
 }) {
   const parsed = CreateCardInput.parse(input);
   const creatorId = decodeSub(token);
@@ -108,6 +109,9 @@ export async function createCardImpl(token: string, input: {
       parentCardId: parsed.parentCardId ?? null,
       startDate,
       targetDate,
+      // Owner set at INSERT bypasses the owner-change trigger (which only
+      // fires on UPDATE) — the creator is by definition a writable member.
+      ownerId: parsed.ownerId ?? null,
     }).returning();
     if (!row) throw new Error("Forbidden");
 

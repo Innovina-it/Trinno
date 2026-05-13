@@ -146,38 +146,41 @@ export function CreateWorkspaceDialog({
             )}
 
             {/* Search input */}
-            <div className="relative">
-              <Input
-                id="ws-members"
-                value={memberQuery}
-                onChange={(e) => handleMemberInput(e.target.value)}
-                placeholder="Search by name or handle…"
-                autoComplete="off"
-              />
-              {suggestions.length > 0 && (
-                <ul className="absolute z-50 mt-1 w-full rounded-lg border border-hairline bg-[color:var(--surface)] shadow-lg py-1 text-sm max-h-64 overflow-y-auto">
-                  {suggestions.map((p) => (
+            <Input
+              id="ws-members"
+              value={memberQuery}
+              onChange={(e) => handleMemberInput(e.target.value)}
+              placeholder="Search by name or handle…"
+              autoComplete="off"
+            />
+            {suggestions.length > 0 && (
+              <ul className="rounded-lg border border-hairline bg-[color:var(--surface)] py-1 text-sm max-h-48 overflow-y-auto">
+                {suggestions.map((p) => {
+                  const handleLc = p.handle?.toLowerCase() ?? "";
+                  const nameLc = p.displayName.toLowerCase();
+                  const showHandle = p.handle && handleLc !== nameLc;
+                  return (
                     <li key={p.id}>
                       <button
                         type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-[rgb(255_255_255/0.06)] flex items-center gap-2"
+                        className="w-full text-left px-3 py-2 hover:bg-[rgb(255_255_255/0.06)] flex items-center gap-2 truncate"
                         onClick={() => addMember(p)}
                       >
-                        <span className="font-medium text-fg">{p.displayName}</span>
-                        {p.handle && (
-                          <span className="text-fg-faint mono-meta-sm">@{p.handle}</span>
+                        <span className="font-medium text-fg truncate">{p.displayName}</span>
+                        {showHandle && (
+                          <span className="text-fg-faint mono-meta-sm truncate">@{p.handle}</span>
                         )}
                       </button>
                     </li>
-                  ))}
-                </ul>
-              )}
-              {suggestions.length === 0 && memberQuery.trim() !== "" && !searching && (
-                <p className="mt-1 px-1 text-xs text-fg-faint">
-                  No people match &ldquo;{memberQuery.trim()}&rdquo;.
-                </p>
-              )}
-            </div>
+                  );
+                })}
+              </ul>
+            )}
+            {suggestions.length === 0 && memberQuery.trim() !== "" && !searching && (
+              <p className="px-1 text-xs text-fg-faint">
+                No people match &ldquo;{memberQuery.trim()}&rdquo;.
+              </p>
+            )}
           </div>
 
           <DialogFooter>

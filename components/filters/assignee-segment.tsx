@@ -10,10 +10,25 @@
  */
 import type { AssigneeMode } from "@/lib/board-filters";
 
-const SEGMENTS: { value: AssigneeMode; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "me", label: "Mine" },
-  { value: "none", label: "Unassigned" },
+// `title` carries scope context — every consumer of this component is
+// workspace-scoped (board, roadmap, etc.); /me is the cross-workspace
+// counterpart. Boss feedback 2026-05-13: copy must make that obvious.
+const SEGMENTS: { value: AssigneeMode; label: string; title: string }[] = [
+  {
+    value: "all",
+    label: "All",
+    title: "Every card in this workspace, regardless of assignee.",
+  },
+  {
+    value: "me",
+    label: "Mine",
+    title: "Assigned to me in this workspace. /me shows all workspaces.",
+  },
+  {
+    value: "none",
+    label: "Unassigned",
+    title: "Cards in this workspace with no owner and no assignees.",
+  },
 ];
 
 export function AssigneeSegment({
@@ -37,6 +52,7 @@ export function AssigneeSegment({
           role="radio"
           aria-checked={value === seg.value}
           data-testid={`assignee-segment-${seg.value}`}
+          title={seg.title}
           onClick={() => onChange(seg.value)}
           className={[
             "px-2.5 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40",

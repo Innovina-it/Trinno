@@ -49,7 +49,6 @@ import {
   parseFilters,
   applyFilters,
   partitionLanes,
-  getAssigneeMode,
   type LaneMode,
 } from "@/lib/board-filters";
 
@@ -143,13 +142,6 @@ export function BoardView({
     () => parseFilters(new URLSearchParams(sp.toString())),
     [sp],
   );
-  // Assignee filter is treated as "user-applied" only when the user has
-  // narrowed below the default "Mine + Unassigned" union. The default
-  // mode (assignedToMe && unassigned) should not light up the "filter
-  // active" affordances.
-  const isAssigneeFilterActive =
-    getAssigneeMode(filters) !== "me+none" &&
-    (filters.assignedToMe || filters.unassigned);
   const laneMode = ((sp.get("lanes") as LaneMode | null) ?? "none") as LaneMode;
 
   const visibleCards = useMemo(
@@ -463,7 +455,7 @@ export function BoardView({
                 filters.types.length > 0 ||
                 filters.labelIds.length > 0 ||
                 filters.due !== null ||
-                isAssigneeFilterActive ||
+                filters.assignedToMe ||
                 filters.scheduled;
               const hiddenByFilters =
                 filterActive && cards.length > 0 && visibleCards.length === 0;
@@ -529,7 +521,7 @@ export function BoardView({
                         filters.types.length ||
                         filters.labelIds.length ||
                         filters.due ||
-                        isAssigneeFilterActive ||
+                        filters.assignedToMe ||
                         filters.scheduled
                           ? new Set(visibleCards.map((c) => c.id))
                           : undefined

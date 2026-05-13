@@ -25,7 +25,7 @@ export default async function RoadmapPage({
 
   return (
     <WorkspaceStoreProvider initial={snapshot}>
-      <div className="mx-auto max-w-7xl px-3 sm:px-4 md:px-6 pt-3 md:pt-5 pb-6 md:pb-10 space-y-4 md:space-y-6">
+      <div className="px-3 sm:px-4 md:px-6 pt-3 md:pt-5 pb-6 md:pb-10 space-y-4 md:space-y-6">
         {/* Operator-console crumb. One line, mono-meta, all the metadata
             the page header used to need. The actual page IS the gantt; the
             crumb earns its keep, nothing else does. */}

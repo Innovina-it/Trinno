@@ -13,7 +13,6 @@ import {
   FolderPlus,
   Inbox,
   LayoutDashboard,
-  ListChecks,
   LogOut,
   Map as MapIcon,
   PlusSquare,
@@ -165,14 +164,6 @@ export function CommandPalette({
         shortcut: "g l",
         icon: <Tag className="size-3.5 text-fg-muted" />,
         href: targetWsId ? `/w/${targetWsId}/backlog` : "",
-        requiresWs: true,
-      },
-      {
-        id: "goto:all-tasks",
-        label: "My tasks",
-        shortcut: "g t",
-        icon: <ListChecks className="size-3.5 text-fg-muted" />,
-        href: targetWsId ? `/w/${targetWsId}/all-tasks` : "",
         requiresWs: true,
       },
       {

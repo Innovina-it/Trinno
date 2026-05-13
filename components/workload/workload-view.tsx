@@ -615,22 +615,21 @@ export function WorkloadView({
                   >
                     {lanesMode === "workspace" ? (
                       <Link
-                        href={`/w/${u.laneKey}/all-tasks`}
+                        href={`/w/${u.laneKey}`}
                         className="shrink-0 border-r border-hairline px-3 py-2 flex items-center gap-2.5 hover:bg-[color:var(--surface-strong)] transition-colors"
                         style={{ width: LANE_LABEL_WIDTH }}
-                        title={`Open ${u.name}'s tasks`}
+                        title={`Open ${u.name}'s workspace`}
                       >
                         {labelInner}
                       </Link>
                     ) : (
-                      <Link
-                        href={`/all-tasks?owner=${u.userId}`}
-                        className="shrink-0 border-r border-hairline px-3 py-2 flex items-center gap-2.5 hover:bg-[color:var(--surface-strong)] transition-colors"
+                      <span
+                        className="shrink-0 border-r border-hairline px-3 py-2 flex items-center gap-2.5"
                         style={{ width: LANE_LABEL_WIDTH }}
-                        title={`Open ${u.name}'s tasks`}
+                        title={u.name}
                       >
                         {labelInner}
-                      </Link>
+                      </span>
                     )}
                     <div
                       className="relative flex-1"

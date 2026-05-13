@@ -21,7 +21,7 @@ import { PriorityChip, type CardPriority } from "./card/priority-picker";
 import { CardCover } from "./card/cover-picker";
 import { CompleteToggle } from "./card/complete-toggle";
 import { cardCode } from "@/lib/format";
-import { updateCard } from "@/actions/cards";
+import { createCard, updateCard } from "@/actions/cards";
 import { toggleCardMember } from "@/actions/card-members";
 import { SubtaskBadge } from "./card-tile-subtask-badge";
 import { formatDate } from "@/lib/format-date";
@@ -169,6 +169,26 @@ export function CardTile({
       }
     },
     [card.id, quickViewMemberIds, storeAddMember, storeRemoveMember],
+  );
+
+  // Inline create a subtask from the quick view. Lands in the same list
+  // as the parent; type=subtask + parentCardId=this card. CDC echo from
+  // the realtime channel inserts the new row into the store; no optimistic
+  // patch needed here.
+  const onQuickCreateSubtask = useCallback(
+    async (title: string) => {
+      try {
+        const created = await createCard({ listId: card.listId, title });
+        await updateCard({
+          id: created.id,
+          type: "subtask",
+          parentCardId: card.id,
+        });
+      } catch (err) {
+        toast.error((err as Error).message ?? "Failed to create subtask");
+      }
+    },
+    [card.id, card.listId],
   );
 
   // Inline title edit state
@@ -475,6 +495,7 @@ export function CardTile({
         onOpenChange={setQuickViewOpen}
         onPatch={onQuickPatch}
         onToggleMember={onQuickToggleMember}
+        onCreateSubtask={onQuickCreateSubtask}
       />
     </div>
   );

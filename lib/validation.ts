@@ -126,6 +126,9 @@ export const CreateCardInput = z.object({
   // Optional parent epic. When set, child inherits parent's dates if its
   // own are blank.
   parentCardId: Uuid.nullable().optional(),
+  // Optional initial owner. Skips the post-create owner-claim trigger;
+  // the owner-change trigger only fires on UPDATE.
+  ownerId: Uuid.nullable().optional(),
 });
 export const CardType = z.enum(["epic", "story", "task", "subtask", "bug"]);
 // Plan #16b-γ-C (#1) — card priority. Mirrors the SQL enum.

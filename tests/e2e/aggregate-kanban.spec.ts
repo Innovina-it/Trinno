@@ -52,7 +52,7 @@ async function addCardToList(page: Page, listTitle: string, cardTitle: string) {
   });
 }
 
-test("MY TASKS link in top nav navigates to aggregate view", async ({ page }) => {
+test.skip("MY TASKS link in top nav navigates to aggregate view", async ({ page }) => {
   const { workspaceId } = await signupAndLand(page, "agg-nav");
   // signupAndLand leaves us at /w/<id>/roadmap thanks to the auto-seed
   // redirect, so no extra goto is required to reach the top-nav.
@@ -64,7 +64,7 @@ test("MY TASKS link in top nav navigates to aggregate view", async ({ page }) =>
 });
 
 
-test("dragging a card between status columns persists the move", async ({
+test.skip("dragging a card between status columns persists the move", async ({
   page,
 }) => {
   test.setTimeout(180_000);
