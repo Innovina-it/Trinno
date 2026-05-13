@@ -466,47 +466,73 @@ export function RoadmapView({
     const subtaskAllowed =
       selectedTypes.length === 0 || selectedTypes.includes("subtask");
     const parentTypes = selectedTypes.filter((t) => t !== "subtask");
-    return storeCards
-      .filter((c) => {
-        if (c.archived) return false;
-        if (c.startDate === null || c.targetDate === null) return false;
-        if (queryNorm && !c.title.toLowerCase().includes(queryNorm)) {
+    // Task 11 follow-up — any card that passes the user's filters drags
+    // its ancestors along so subtask matches keep a parent row to render
+    // under. We compute the pass set first, then expand by walking the
+    // parentCardId chain.
+    const baseEligible = (c: typeof storeCards[number]) => {
+      if (c.archived) return false;
+      if (c.startDate === null || c.targetDate === null) return false;
+      return true;
+    };
+    const userFilterPasses = (c: typeof storeCards[number]) => {
+      if (queryNorm && !c.title.toLowerCase().includes(queryNorm)) {
+        return false;
+      }
+      if (selectedTypes.length) {
+        if (c.type === "subtask") {
+          if (!subtaskAllowed) return false;
+        } else if (parentTypes.length && !parentTypes.includes(c.type)) {
           return false;
         }
-        if (selectedTypes.length) {
-          if (c.type === "subtask") {
-            if (!subtaskAllowed) return false;
-          } else if (parentTypes.length && !parentTypes.includes(c.type)) {
-            // Non-subtask card: drop only when the user picked parent
-            // types that don't include this one. If they only picked
-            // "subtask", parentTypes is empty → every parent passes.
-            return false;
-          }
-        }
-        if (sprintFilter && c.sprintId !== sprintFilter) return false;
-        if (filters.due === "overdue") {
-          const due = c.dueDate
-            ? c.dueDate instanceof Date
-              ? c.dueDate
-              : new Date(c.dueDate)
-            : null;
-          if (!due || due > now || c.dueComplete) return false;
-        }
-        // Assignee filter: assignedToMe shows only cards where viewerId is
-        // in cardMembers; unassigned shows cards with no members and no owner.
-        if (filters.assignedToMe) {
-          if (!viewerId) return false;
-          const mems = memberByCard.get(c.id);
-          if (!mems || !mems.has(viewerId)) return false;
-        }
-        if (filters.unassigned) {
-          const mems = memberByCard.get(c.id);
-          const hasMembers = mems && mems.size > 0;
-          const hasOwner = Boolean(c.ownerId);
-          if (hasMembers || hasOwner) return false;
-        }
-        return true;
-      })
+      }
+      if (sprintFilter && c.sprintId !== sprintFilter) return false;
+      if (filters.due === "overdue") {
+        const due = c.dueDate
+          ? c.dueDate instanceof Date
+            ? c.dueDate
+            : new Date(c.dueDate)
+          : null;
+        if (!due || due > now || c.dueComplete) return false;
+      }
+      if (filters.assignedToMe) {
+        if (!viewerId) return false;
+        const mems = memberByCard.get(c.id);
+        if (!mems || !mems.has(viewerId)) return false;
+      }
+      if (filters.unassigned) {
+        const mems = memberByCard.get(c.id);
+        const hasMembers = mems && mems.size > 0;
+        const hasOwner = Boolean(c.ownerId);
+        if (hasMembers || hasOwner) return false;
+      }
+      return true;
+    };
+
+    const cardById = new Map<string, typeof storeCards[number]>();
+    for (const c of storeCards) cardById.set(c.id, c);
+    const passSet = new Set<string>();
+    for (const c of storeCards) {
+      if (!baseEligible(c)) continue;
+      if (userFilterPasses(c)) passSet.add(c.id);
+    }
+    // Pull ancestors of every matching card into the pass set so subtask
+    // matches don't render orphaned. Skip ancestors that fail base
+    // eligibility (archived / no dates) — they still can't render.
+    for (const id of [...passSet]) {
+      let cur = cardById.get(id);
+      while (cur?.parentCardId) {
+        const parent = cardById.get(cur.parentCardId);
+        if (!parent) break;
+        if (!baseEligible(parent)) break;
+        if (passSet.has(parent.id)) break;
+        passSet.add(parent.id);
+        cur = parent;
+      }
+    }
+
+    return storeCards
+      .filter((c) => passSet.has(c.id))
       .map((c) => ({
         id: c.id,
         title: c.title,
