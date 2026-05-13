@@ -136,9 +136,9 @@ export function EpicKanbanView({
           className="rounded-2xl border border-hairline bg-[color:var(--surface)] px-6 py-16 text-center space-y-2"
           data-testid="epic-empty"
         >
-          <p className="mono-meta-sm text-fg-faint">NO STORIES YET</p>
+          <p className="mono-meta-sm text-fg-faint">NO CARDS YET</p>
           <p className="text-sm text-fg-muted max-w-sm mx-auto">
-            Create stories on the board with this epic as parent. They will
+            Create cards on the board with this epic as parent. They will
             appear here grouped by status.
           </p>
         </div>

@@ -1475,12 +1475,13 @@ export function RoadmapView({
                 drag.rowDragGhost !== null &&
                 epicHeader?.id === drag.rowDragGhost.cardId;
               const count = ll.placed.length;
+              // Story was retired as a picker type (commit 131081f); epic
+              // children now span task/bug/subtask, so "STORY/STORIES" is
+              // wrong. Use the same neutral CARD/CARDS as the other lanes.
               const meta =
                 ll.lane.kind === "uncategorized"
                   ? `${count} ${count === 1 ? "ORPHAN" : "ORPHANS"}`
-                  : ll.lane.kind === "assignee" || ll.lane.kind === "component"
-                    ? `${count} ${count === 1 ? "CARD" : "CARDS"}`
-                    : `${count} ${count === 1 ? "STORY" : "STORIES"}`;
+                  : `${count} ${count === 1 ? "CARD" : "CARDS"}`;
               return (
                 <div
                   key={ll.lane.id}

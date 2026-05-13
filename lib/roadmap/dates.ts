@@ -59,12 +59,28 @@ export function gridStartFor(now: Date, zoom: Zoom): Date {
 }
 
 /**
- * End of the visible grid. Always at least 6 months ahead of `start`,
- * regardless of zoom. Callers may extend further to cover specific cards.
+ * End of the visible grid — horizon scales with zoom so each level shows
+ * a useful planning window. Callers may extend further to cover specific
+ * cards. (Pixel density is set by `pixelsPerDay`; this controls span.)
+ *
+ *   fit     — 180d (the canvas re-fits to viewport regardless)
+ *   week    — 180d (~26 weeks; week zoom is dense so this is plenty)
+ *   month   — 365d (~1 year)
+ *   quarter — 730d (~2 years)
  */
 export function gridEndFor(start: Date, zoom: Zoom): Date {
-  void zoom;
-  return addDays(startOfDay(start), 180);
+  const base = startOfDay(start);
+  switch (zoom) {
+    case "week":
+      return addDays(base, 180);
+    case "month":
+      return addDays(base, 365);
+    case "quarter":
+      return addDays(base, 730);
+    case "fit":
+    default:
+      return addDays(base, 180);
+  }
 }
 
 /** Pixel offset from `gridStart` for a given date at the given pixels-per-day. */

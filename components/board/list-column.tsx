@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
+import { useShallow } from "zustand/shallow";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -72,10 +73,13 @@ export function ListColumn({
   ordinal?: number;
   cardIdFilter?: Set<string>;
 }) {
-  const cards = useBoardStore((s) => s.cards);
-  const listCards = useMemo(
-    () => cards.filter((c) => c.listId === list.id),
-    [cards, list.id],
+  // Per-list selector. Previously this read `s.cards` whole and filtered
+  // in a useMemo — every single-card update bumped the array reference
+  // and every column on the board re-rendered. `useShallow` makes the
+  // hook compare item refs so re-renders only fire when *this* list's
+  // cards actually change.
+  const listCards = useBoardStore(
+    useShallow((s) => s.cards.filter((c) => c.listId === list.id)),
   );
   const filtered = useMemo(
     () => (cardIdFilter ? listCards.filter((c) => cardIdFilter.has(c.id)) : listCards),

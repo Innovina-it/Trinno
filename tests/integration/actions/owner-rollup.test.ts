@@ -42,7 +42,14 @@ describe("owner_id + epic date rollup", () => {
   it("persists owner_id and clears it on null", async () => {
     const u = await makeUser("ow");
     const { l1 } = await setupBoardWithLists(u.jwt);
-    const c = await createCardImpl(u.jwt, { listId: l1.id, title: "X" });
+    // createCardImpl now defaults ownerId to the creator when undefined.
+    // Pass explicit null to exercise the "no owner" path the rest of the
+    // test asserts on.
+    const c = await createCardImpl(u.jwt, {
+      listId: l1.id,
+      title: "X",
+      ownerId: null,
+    });
     expect(c.ownerId).toBeNull();
 
     await updateCardImpl(u.jwt, { id: c.id, ownerId: u.id });

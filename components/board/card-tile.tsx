@@ -6,7 +6,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarRange, Check, CircleDot, CornerLeftUp, Layers3 } from "lucide-react";
 import { toast } from "sonner";
-import type { CardRow } from "@/lib/queries/board-snapshot";
+import type { CardRow, BoardProfile } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { getCardStatusKind, STATUS_LABEL } from "@/lib/status";
@@ -26,6 +26,13 @@ import { toggleCardMember } from "@/actions/card-members";
 import { SubtaskBadge } from "./card-tile-subtask-badge";
 import { formatDate } from "@/lib/format-date";
 import { CardQuickView, type PatchInput } from "./card-quick-view";
+
+// Module-level frozen constants so the closed-state selectors return a
+// stable reference. Without this, returning a fresh `[]` from a selector
+// would trip Zustand's snapshot-cache warning and force a re-render every
+// store update.
+const EMPTY_STRING_ARRAY: string[] = [];
+const EMPTY_PROFILES_ARRAY: BoardProfile[] = [];
 
 export function CardTile({
   card,
@@ -64,14 +71,30 @@ export function CardTile({
   const storeAddMember = useBoardStore((s) => s.addCardMember);
   const storeRemoveMember = useBoardStore((s) => s.removeCardMember);
 
+  // Inline title edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(card.title);
+  // Quick-view dialog state. Declared early so the quick-view selectors
+  // below can short-circuit when the dialog is closed (P1.6 perf — at
+  // ~200 cards the per-tile s.cards scans dominated re-render cost on
+  // every CDC echo).
+  const [quickViewOpen, setQuickViewOpen] = useState(false);
+
   // Quick-view data — previously selected inside CardQuickView itself.
   // Lifted here so the component is store-agnostic and can be reused
   // from the roadmap (which reads useWorkspaceStore instead).
   // Array selectors MUST use useShallow to avoid Zustand's
   // "getSnapshot should be cached" snapshot-loop bug.
+  //
+  // Perf: when the dialog is closed (~always for the vast majority of
+  // tiles on screen), each selector returns a constant cheap value so
+  // the tile no longer iterates `s.cards` twice per CDC echo. The full
+  // selectors re-engage as soon as the user opens the quick view.
   const quickViewMemberIds = useBoardStore(
     useShallow((s) =>
-      s.cardMembers.filter((m) => m.cardId === card.id).map((m) => m.userId),
+      quickViewOpen
+        ? s.cardMembers.filter((m) => m.cardId === card.id).map((m) => m.userId)
+        : EMPTY_STRING_ARRAY,
     ),
   );
   // Return raw store array — useShallow caches by reference equality of
@@ -79,12 +102,15 @@ export function CardTile({
   // selector created fresh objects each call, so shallow always saw new
   // items and the cache never hit → snapshot loop.
   const quickViewProfilesRaw = useBoardStore(
-    useShallow((s) => s.boardProfiles),
+    useShallow((s) =>
+      quickViewOpen ? s.boardProfiles : EMPTY_PROFILES_ARRAY,
+    ),
   );
   // Two primitive scalar selectors — returning {total, done} as one object
   // would trip Zustand's snapshot warning. See CardMetaRow / SubtaskBadge
   // for the same pattern.
   const quickViewSubtaskTotal = useBoardStore((s) => {
+    if (!quickViewOpen) return 0;
     let n = 0;
     for (const c of s.cards) {
       if (c.parentCardId === card.id && !c.archived) n += 1;
@@ -92,6 +118,7 @@ export function CardTile({
     return n;
   });
   const quickViewSubtaskDone = useBoardStore((s) => {
+    if (!quickViewOpen) return 0;
     let n = 0;
     for (const c of s.cards) {
       if (c.parentCardId === card.id && !c.archived && c.completedAt != null) {
@@ -191,13 +218,11 @@ export function CardTile({
     [card.id, card.listId],
   );
 
-  // Inline title edit state
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(card.title);
-  // Quick-view dialog state. Independent of inline title editing so the
-  // title's onDoubleClick (enterEdit) keeps working — the title stops
-  // propagation, so the tile's onDoubleClick won't double-trigger.
-  const [quickViewOpen, setQuickViewOpen] = useState(false);
+  // (isEditing, editValue, quickViewOpen) are declared at the top of the
+  // component above the quick-view selectors so they can short-circuit
+  // when the dialog is closed. The note about double-click independence
+  // still applies: the title stops propagation, so the tile's
+  // onDoubleClick won't double-trigger.
   const [, startTransition] = useTransition();
   // Track whether blur should be ignored after a keyboard-commit/cancel.
   const commitRef = useRef(false);
@@ -322,6 +347,7 @@ export function CardTile({
   const completed = card.completedAt != null || card.dueComplete;
 
   return (
+    <>
     <div
       ref={setNodeRef}
       style={style}
@@ -433,7 +459,7 @@ export function CardTile({
             />
           ) : (
             <span
-              className="hover-underline-signal group-hover/card:hover-underline-signal-active inline"
+              className="hover-underline-signal group-hover/card:hover-underline-signal-active inline break-words [overflow-wrap:anywhere]"
               onDoubleClick={enterEdit}
             >
               {card.title}
@@ -458,10 +484,15 @@ export function CardTile({
         }}
         fmtShortDate={formatDate}
       />
-      {/* Quick view dialog — portaled, so position inside the tile doesn't
-          affect layout. Opened by double-click on the tile body. Card data
-          + member profiles + subtask counts are computed above from
-          useBoardStore and passed as props (component is store-agnostic). */}
+    </div>
+    {/* Quick view dialog — rendered as a SIBLING of the role=button root
+        so React-tree event bubbling from the portaled DialogContent does
+        not re-enter the card's onClick (which would reopen it on every
+        click inside the dialog, including the X close button).
+        Lazy-mounted: ~27 KB of CardQuickView (Dialog + AssigneePicker +
+        portals) only enters the tree when the user actually opens a
+        tile. Until then the tile pays zero render cost for it. */}
+    {quickViewOpen && (
       <CardQuickView
         card={{
           id: card.id,
@@ -497,7 +528,8 @@ export function CardTile({
         onToggleMember={onQuickToggleMember}
         onCreateSubtask={onQuickCreateSubtask}
       />
-    </div>
+    )}
+    </>
   );
 }
 

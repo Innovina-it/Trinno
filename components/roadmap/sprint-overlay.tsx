@@ -58,10 +58,21 @@ export function SprintOverlay({
             }`}
             style={{ left: x, width: w }}
           >
-            {w >= 56 && (
+            {/* Label threshold raised from 56 → 90: below 90px a truncated
+                "SPRINT 1…" is noise. The hover title on the band still
+                surfaces the full name. */}
+            {w >= 90 && (
               <span
-                className="absolute mono-meta-sm whitespace-nowrap text-fg-faint"
-                style={{ top: -14, left: 4 }}
+                // inline-block + explicit width is what text-overflow:ellipsis
+                // actually needs to clip; maxWidth alone leaves the span free
+                // to shrink-wrap past it on some browsers. The 8px gap keeps
+                // adjacent bands' labels from visually colliding.
+                className="absolute inline-block mono-meta-sm whitespace-nowrap text-fg-faint overflow-hidden text-ellipsis"
+                style={{
+                  top: -14,
+                  left: 4,
+                  width: Math.max(0, w - 8),
+                }}
               >
                 {sp.name.toUpperCase()}
                 {isActive ? " · ACTIVE" : ""}

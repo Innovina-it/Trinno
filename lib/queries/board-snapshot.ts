@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { eq, asc, and, inArray, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import {
@@ -116,7 +117,12 @@ async function listCommentsCompat(
   }));
 }
 
-export async function getBoardSnapshot(
+// React `cache` dedupes invocations within a single request. Multiple
+// consumers (layout, page, sibling fetches) can call `getBoardSnapshot`
+// with the same (token, boardId) tuple and share one in-flight promise
+// instead of re-running 14 RLS-bound queries. Mirrors the pattern used
+// by `getWorkspaceSnapshot` in workspace-snapshot.ts:107.
+export const getBoardSnapshot = cache(async function getBoardSnapshot(
   token: string,
   boardId: string,
 ): Promise<BoardSnapshot | null> {
@@ -231,4 +237,4 @@ export async function getBoardSnapshot(
       boardMembers: memberRows,
     };
   });
-}
+});

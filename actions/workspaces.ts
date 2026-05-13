@@ -18,7 +18,11 @@ function decodeSub(jwt: string): string {
 
 export async function createWorkspaceImpl(
   token: string,
-  input: { name: string; memberIds?: string[] },
+  input: {
+    name: string;
+    members?: { id: string; role: "admin" | "member" }[];
+    memberIds?: string[];
+  },
 ) {
   const parsed = CreateWorkspaceInput.parse(input);
   const ownerId = decodeSub(token);
@@ -27,17 +31,26 @@ export async function createWorkspaceImpl(
       .insert(workspaces)
       .values({ name: parsed.name, ownerId })
       .returning();
-    // Always insert the creator as owner.
-    const memberRows: { workspaceId: string; userId: string; role: "owner" | "admin" | "member" }[] = [
-      { workspaceId: ws.id, userId: ownerId, role: "owner" },
-    ];
-    // Append selected members (skip if they are the creator to avoid dupe).
-    for (const uid of parsed.memberIds) {
-      if (uid !== ownerId) {
-        memberRows.push({ workspaceId: ws.id, userId: uid, role: "member" });
-      }
+    // RLS gating splits this into two statements:
+    //   1. ws_members_owner_bootstrap allows the owner to insert their OWN
+    //      row only. Run that alone first so `is_workspace_admin` becomes
+    //      true for the actor.
+    //   2. ws_members_admin_write then permits inserting the other rows.
+    //      Doing it as one multi-row VALUES (...) statement fails because
+    //      RLS evaluates each row before any of them is visible.
+    await tx
+      .insert(workspaceMembers)
+      .values({ workspaceId: ws.id, userId: ownerId, role: "owner" });
+    const extras = parsed.members
+      .filter((m) => m.id !== ownerId)
+      .map((m) => ({
+        workspaceId: ws.id,
+        userId: m.id,
+        role: m.role,
+      }));
+    if (extras.length > 0) {
+      await tx.insert(workspaceMembers).values(extras);
     }
-    await tx.insert(workspaceMembers).values(memberRows);
     return ws;
   });
 }
@@ -72,7 +85,11 @@ export async function deleteWorkspaceImpl(
   });
 }
 
-export async function createWorkspace(input: { name: string; memberIds?: string[] }) {
+export async function createWorkspace(input: {
+  name: string;
+  members?: { id: string; role: "admin" | "member" }[];
+  memberIds?: string[];
+}) {
   await requireUser();
   const token = (await getSessionToken())!;
   const ws = await createWorkspaceImpl(token, input);

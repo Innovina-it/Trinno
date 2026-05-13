@@ -4,7 +4,28 @@ export const Title = z.string().trim().min(1, "Required").max(120);
 export const Email = z.string().trim().email().max(254);
 export const Uuid = z.string().uuid();
 
-export const CreateWorkspaceInput = z.object({ name: Title, memberIds: z.array(Uuid).optional().default([]) });
+// `members` carries (id, role) for each invitee selected in the
+// create-workspace dialog. Roles allowed at creation are admin|member —
+// `owner` is reserved for the creator and inserted server-side.
+// `memberIds` is the legacy plain-array shape; the action coerces it.
+export const CreateWorkspaceInput = z
+  .object({
+    name: Title,
+    members: z
+      .array(z.object({ id: Uuid, role: z.enum(["admin", "member"]) }))
+      .optional()
+      .default([]),
+    memberIds: z.array(Uuid).optional(),
+  })
+  .transform((v) => {
+    if (v.members.length === 0 && v.memberIds && v.memberIds.length > 0) {
+      return {
+        name: v.name,
+        members: v.memberIds.map((id) => ({ id, role: "member" as const })),
+      };
+    }
+    return { name: v.name, members: v.members };
+  });
 export const RenameWorkspaceInput = z.object({ id: Uuid, name: Title });
 export const DeleteWorkspaceInput = z.object({ id: Uuid });
 export const SetWorkspaceAutoAssignCreatorInput = z.object({

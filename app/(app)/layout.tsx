@@ -17,78 +17,109 @@ import { profiles, boards, dashboards } from "@/lib/db/schema";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const token = (await getSessionToken())!;
+
+  const h = await headers();
+  const path = h.get("x-pathname") ?? "";
+  const wsMatch = path.match(/^\/w\/([0-9a-f-]{36})/);
+  const boardMatch = path.match(/^\/b\/([0-9a-f-]{36})/);
+  const dashboardMatch = path.match(/^\/dashboards\/([0-9a-f-]{36})/);
+
+  // Plan #16b-γ-B (#7) — fetch the onboarding flag so we can decide
+  // whether to render the first-run tour. On any error (RLS, transient DB
+  // hiccup) default to "completed" so we never accidentally pin the
+  // overlay to the user's screen forever.
+  //
+  // Perf (P1.6) — coalesce the route-scoped workspace lookup (board or
+  // dashboard) and the onboarding-flag fetch into a single dbAsUser
+  // transaction so they share one BEGIN/SET/COMMIT round-trip instead of
+  // running serially. listWorkspaces / listFavoriteBoards /
+  // listRecentBoardViews are kicked off in parallel via Promise.all
+  // alongside this transaction — they each open their own dbAsUser
+  // session, but at least they run concurrently rather than sequentially.
+  type RouteWorkspace = { workspaceId: string | null } | undefined;
+  type OnboardingRow = { onboardingCompletedAt: Date | null } | undefined;
+
+  const layoutTx = dbAsUser(token, async (tx) => {
+    const tasks: Array<Promise<unknown>> = [];
+
+    let routePromise: Promise<RouteWorkspace> = Promise.resolve(undefined);
+    if (boardMatch) {
+      // On board / card pages there's no workspace in the URL. Resolve via
+      // the board's workspace_id so the top-nav links (Roadmap, Boards,
+      // Backlog…) stay in the right workspace instead of falling back to
+      // workspaces[0] which is usually Demo.
+      routePromise = tx
+        .select({ workspaceId: boards.workspaceId })
+        .from(boards)
+        .where(eq(boards.id, boardMatch[1]))
+        .then((rows) => rows[0] as RouteWorkspace)
+        .catch(() => undefined);
+      tasks.push(routePromise);
+    } else if (dashboardMatch) {
+      // On a workspace-scoped dashboard, resolve the workspace from the
+      // dashboard row so the top-nav links route to that workspace
+      // instead of falling back to workspaces[0]. Personal-scope
+      // dashboards have a null workspaceId.
+      routePromise = tx
+        .select({ workspaceId: dashboards.workspaceId })
+        .from(dashboards)
+        .where(eq(dashboards.id, dashboardMatch[1]))
+        .then((rows) => rows[0] as RouteWorkspace)
+        .catch(() => undefined);
+      tasks.push(routePromise);
+    }
+
+    const onboardingPromise: Promise<OnboardingRow> = tx
+      .select({ onboardingCompletedAt: profiles.onboardingCompletedAt })
+      .from(profiles)
+      .where(eq(profiles.id, user.id))
+      .then((rows) => rows[0] as OnboardingRow)
+      .catch(() => undefined);
+    tasks.push(onboardingPromise);
+
+    await Promise.all(tasks);
+    return {
+      route: await routePromise,
+      onboarding: await onboardingPromise,
+    };
+  });
+
+  // Kick off the three independent queries in parallel. Each opens its own
+  // dbAsUser transaction (separate JWT bookkeeping), but the wall-clock
+  // cost is now max() of the four instead of sum().
+  const [wsResult, layoutResult, favoritesResult, recentsResult] =
+    await Promise.allSettled([
+      listWorkspaces(token),
+      layoutTx,
+      listFavoriteBoards(token),
+      listRecentBoardViews(token, 5),
+    ]);
+
   let ws: Awaited<ReturnType<typeof listWorkspaces>> = [];
   let shellError: string | null = null;
-  try {
-    ws = await listWorkspaces(token);
-  } catch (err) {
+  if (wsResult.status === "fulfilled") {
+    ws = wsResult.value;
+  } else {
+    const err = wsResult.reason;
     shellError =
       err instanceof Error
         ? err.message
         : "Could not load your workspaces after sign-in.";
   }
 
-  const h = await headers();
-  const path = h.get("x-pathname") ?? "";
   let activeWorkspaceId: string | undefined;
-  const wsMatch = path.match(/^\/w\/([0-9a-f-]{36})/);
-  const boardMatch = path.match(/^\/b\/([0-9a-f-]{36})/);
-  const dashboardMatch = path.match(/^\/dashboards\/([0-9a-f-]{36})/);
   if (wsMatch) {
     activeWorkspaceId = wsMatch[1];
-  } else if (boardMatch) {
-    // On board / card pages there's no workspace in the URL. Resolve via
-    // the board's workspace_id so the top-nav links (Roadmap, Boards,
-    // Backlog…) stay in the right workspace instead of falling back to
-    // workspaces[0] which is usually Demo.
-    try {
-      const [row] = await dbAsUser(token, async (tx) =>
-        tx
-          .select({ workspaceId: boards.workspaceId })
-          .from(boards)
-          .where(eq(boards.id, boardMatch[1])),
-      );
-      activeWorkspaceId = row?.workspaceId;
-    } catch {
-      activeWorkspaceId = undefined;
-    }
-  } else if (dashboardMatch) {
-    // On a workspace-scoped dashboard, resolve the workspace from the
-    // dashboard row so the top-nav links route to that workspace
-    // instead of falling back to workspaces[0]. Personal-scope
-    // dashboards have a null workspaceId, in which case we leave
-    // activeWorkspaceId undefined and the nav uses its own fallback.
-    try {
-      const [row] = await dbAsUser(token, async (tx) =>
-        tx
-          .select({ workspaceId: dashboards.workspaceId })
-          .from(dashboards)
-          .where(eq(dashboards.id, dashboardMatch[1])),
-      );
-      activeWorkspaceId = row?.workspaceId ?? undefined;
-    } catch {
-      activeWorkspaceId = undefined;
-    }
+  } else if (layoutResult.status === "fulfilled") {
+    activeWorkspaceId = layoutResult.value.route?.workspaceId ?? undefined;
   }
 
-  // Plan #16b-γ-B (#7) — fetch the onboarding flag so we can decide
-  // whether to render the first-run tour. On any error (RLS, transient DB
-  // hiccup) default to "completed" so we never accidentally pin the
-  // overlay to the user's screen forever.
-  let onboardingCompletedAt: Date | null = new Date();
-  try {
-    const [row] = await dbAsUser(token, async (tx) =>
-      tx
-        .select({
-          onboardingCompletedAt: profiles.onboardingCompletedAt,
-        })
-        .from(profiles)
-        .where(eq(profiles.id, user.id)),
-    );
-    onboardingCompletedAt = row?.onboardingCompletedAt ?? null;
-  } catch {
-    // Leave default (non-null) so the tour stays hidden.
-  }
+  // Default to a non-null timestamp so any failure path keeps the tour
+  // hidden — matches the pre-P1.6 behavior.
+  const onboardingCompletedAt: Date | null =
+    layoutResult.status === "fulfilled"
+      ? (layoutResult.value.onboarding?.onboardingCompletedAt ?? null)
+      : new Date();
 
   const showTour = onboardingCompletedAt === null && ws.length > 0;
 
@@ -116,18 +147,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // top nav so the user can jump cross-workspace. Best-effort: any RLS
   // hiccup falls back to an empty list rather than blocking the whole
   // app shell.
-  let favorites: Awaited<ReturnType<typeof listFavoriteBoards>> = [];
-  let recents: Awaited<ReturnType<typeof listRecentBoardViews>> = [];
-  try {
-    favorites = await listFavoriteBoards(token);
-  } catch {
-    favorites = [];
-  }
-  try {
-    recents = await listRecentBoardViews(token, 5);
-  } catch {
-    recents = [];
-  }
+  const favorites: Awaited<ReturnType<typeof listFavoriteBoards>> =
+    favoritesResult.status === "fulfilled" ? favoritesResult.value : [];
+  const recents: Awaited<ReturnType<typeof listRecentBoardViews>> =
+    recentsResult.status === "fulfilled" ? recentsResult.value : [];
 
   return (
     <>
