@@ -101,6 +101,14 @@ export async function createCardImpl(token: string, input: {
       }
     }
 
+    // Default ownerId to the creator when the client didn't supply one.
+    // Distinguish "not provided" (undefined) from "explicitly null" so the
+    // rare un-owned create stays possible if a caller intentionally passes
+    // null. The creator is always a valid claimant — owner-change trigger
+    // only fires on UPDATE, never INSERT.
+    const ownerId =
+      parsed.ownerId === undefined ? creatorId : parsed.ownerId;
+
     const [row] = await tx.insert(cards).values({
       listId: parsed.listId,
       title: parsed.title,
@@ -109,9 +117,7 @@ export async function createCardImpl(token: string, input: {
       parentCardId: parsed.parentCardId ?? null,
       startDate,
       targetDate,
-      // Owner set at INSERT bypasses the owner-change trigger (which only
-      // fires on UPDATE) — the creator is by definition a writable member.
-      ownerId: parsed.ownerId ?? null,
+      ownerId,
     }).returning();
     if (!row) throw new Error("Forbidden");
 
