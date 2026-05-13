@@ -154,12 +154,9 @@ export function CreateWorkspaceDialog({
                 placeholder="Search by name or handle…"
                 autoComplete="off"
               />
-              {(suggestions.length > 0 || searching) && (
-                <ul className="absolute z-50 mt-1 w-full rounded-lg border border-hairline bg-[color:var(--surface)] shadow-lg py-1 text-sm">
-                  {searching && (
-                    <li className="px-3 py-2 text-fg-faint mono-meta-sm">Searching…</li>
-                  )}
-                  {!searching && suggestions.map((p) => (
+              {suggestions.length > 0 && (
+                <ul className="absolute z-50 mt-1 w-full rounded-lg border border-hairline bg-[color:var(--surface)] shadow-lg py-1 text-sm max-h-64 overflow-y-auto">
+                  {suggestions.map((p) => (
                     <li key={p.id}>
                       <button
                         type="button"
@@ -174,6 +171,11 @@ export function CreateWorkspaceDialog({
                     </li>
                   ))}
                 </ul>
+              )}
+              {suggestions.length === 0 && memberQuery.trim() !== "" && !searching && (
+                <p className="mt-1 px-1 text-xs text-fg-faint">
+                  No people match &ldquo;{memberQuery.trim()}&rdquo;.
+                </p>
               )}
             </div>
           </div>
