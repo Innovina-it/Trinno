@@ -407,6 +407,7 @@ export function BoardView({
           </div>
           <div className="flex items-center gap-2">
             <PresenceAvatars viewers={viewers} />
+            <AssigneeFilterRow />
             <BoardFilterBar currentUserId={currentUser.userId} />
             <button
               type="button"
@@ -454,10 +455,6 @@ export function BoardView({
             </Button>
           </div>
         </div>
-      </div>
-
-      <div className="border-b border-hairline px-3 sm:px-4 md:px-6 py-2 bg-[color:var(--bg-1)]">
-        <AssigneeFilterRow />
       </div>
 
       <div className="relative flex flex-1 items-start gap-4 p-2 sm:p-3 md:p-4">

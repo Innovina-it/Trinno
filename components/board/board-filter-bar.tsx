@@ -6,14 +6,11 @@ import {
   parseFilters,
   serializeFilters,
   isFilterActive,
-  type LaneMode,
 } from "@/lib/board-filters";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
@@ -27,19 +24,10 @@ import {
   Eye,
   EyeOff,
   Filter,
-  Layers,
   Tag,
   X,
 } from "lucide-react";
 
-const LANE_OPTIONS: { id: LaneMode; label: string }[] = [
-  { id: "none", label: "No swimlanes" },
-  { id: "assignee", label: "By assignee" },
-  { id: "parent", label: "By parent" },
-  { id: "label", label: "By label" },
-  { id: "sprint", label: "By sprint" },
-  { id: "type", label: "By type" },
-];
 const TYPE_OPTIONS = ["epic", "story", "task", "subtask", "bug"] as const;
 
 export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
@@ -51,13 +39,11 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
     () => parseFilters(new URLSearchParams(sp.toString())),
     [sp],
   );
-  const lanes = (sp.get("lanes") as LaneMode | null) ?? "none";
   const [, start] = useTransition();
   void currentUserId;
 
-  function update(next: typeof filters, nextLanes: LaneMode = lanes) {
+  function update(next: typeof filters) {
     const params = serializeFilters(next);
-    if (nextLanes !== "none") params.set("lanes", nextLanes);
     const qs = params.toString();
     start(() => router.replace(qs ? `${pathname}?${qs}` : pathname));
   }
@@ -87,56 +73,27 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
     update({ ...filters, hideCompleted: !filters.hideCompleted });
   }
   function clear() {
-    update(
-      {
-        types: [],
-        labelIds: [],
-        due: null,
-        assignedToMe: false,
-        unassigned: false,
-        scheduled: false,
-        hideCompleted: false,
-      },
-      "none",
-    );
+    update({
+      types: [],
+      labelIds: [],
+      due: null,
+      assignedToMe: false,
+      unassigned: false,
+      scheduled: false,
+      hideCompleted: false,
+    });
   }
 
-  const active = isFilterActive(filters) || lanes !== "none";
+  const active = isFilterActive(filters);
   const filterCount =
     (filters.due ? 1 : 0) +
     (filters.scheduled ? 1 : 0) +
     (filters.hideCompleted ? 1 : 0) +
     filters.types.length +
     filters.labelIds.length;
-  const laneLabel =
-    (LANE_OPTIONS.find((l) => l.id === lanes) ?? LANE_OPTIONS[0]).label;
 
   return (
     <div className="inline-flex items-center gap-1.5">
-      {/* Lane mode */}
-      <DropdownMenu>
-        <DropdownMenuTrigger className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40">
-          <Layers className="size-3.5" aria-hidden />
-          <span className="text-fg">{laneLabel}</span>
-          <ChevronDown className="size-3 text-fg-faint" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Swimlanes</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={lanes}
-              onValueChange={(v) => update(filters, v as LaneMode)}
-            >
-              {LANE_OPTIONS.map((o) => (
-                <DropdownMenuRadioItem key={o.id} value={o.id}>
-                  {o.label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
       {/* Filters */}
       <DropdownMenu>
         <DropdownMenuTrigger

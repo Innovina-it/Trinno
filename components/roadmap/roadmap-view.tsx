@@ -1329,9 +1329,9 @@ export function RoadmapView({
         gridStart={gridStart}
         gridEnd={gridEnd}
       />
-      <AssigneeFilterRow />
       {/* === MILESTONE MARKERS START (toolbar) === */}
       <div className="flex items-center gap-2 flex-wrap">
+        <AssigneeFilterRow />
         <RoadmapFilterBar />
         <button
           type="button"
