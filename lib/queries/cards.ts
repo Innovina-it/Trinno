@@ -143,3 +143,76 @@ export async function listAssignedAcrossWorkspaces(
       .slice(0, MAX_CROSS_WS_CARDS);
   });
 }
+
+/**
+ * Returns every card with start + target dates across every workspace the
+ * caller can see (RLS-bound). Used by the "common workspace" / all-workspace
+ * timeline accessible from the workspace switcher.
+ *
+ * @param workspaceIds - if provided, restricts to those workspaces.
+ */
+export async function listAllAcrossWorkspaces(
+  token: string,
+  workspaceIds?: string[],
+): Promise<CrossWorkspaceCard[]> {
+  return dbAsUser(token, async (tx) => {
+    const wsFilter =
+      workspaceIds && workspaceIds.length > 0
+        ? inArray(boards.workspaceId, workspaceIds)
+        : undefined;
+
+    const rows = await tx
+      .select({
+        id: cards.id,
+        title: cards.title,
+        type: cards.type,
+        parentCardId: cards.parentCardId,
+        startDate: cards.startDate,
+        targetDate: cards.targetDate,
+        boardId: cards.boardId,
+        boardTitle: boards.title,
+        workspaceId: boards.workspaceId,
+        workspaceName: workspaces.name,
+        archived: cards.archived,
+        roadmapOrder: cards.roadmapOrder,
+        priority: cards.priority,
+        completedAt: cards.completedAt,
+      })
+      .from(cards)
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .where(
+        and(
+          eq(cards.archived, false),
+          isNotNull(cards.startDate),
+          isNotNull(cards.targetDate),
+          wsFilter,
+        ),
+      )
+      .orderBy(asc(cards.startDate))
+      .limit(MAX_CROSS_WS_CARDS);
+
+    return rows
+      .filter((r) => r.startDate && r.targetDate)
+      .map(
+        (r): CrossWorkspaceCard => ({
+          id: r.id,
+          title: r.title,
+          type: r.type,
+          parentCardId: r.parentCardId ?? null,
+          startDate: r.startDate as Date,
+          targetDate: r.targetDate as Date,
+          boardId: r.boardId,
+          boardTitle: r.boardTitle,
+          workspaceId: r.workspaceId,
+          workspaceName: r.workspaceName,
+          archived: r.archived,
+          roadmapOrder: r.roadmapOrder ?? null,
+          priority: (r.priority ?? null) as CrossWorkspaceCard["priority"],
+          completedAt: (r.completedAt ?? null) as Date | null,
+          // role isn't meaningful here — every card listed, not just yours.
+          role: "member",
+        }),
+      );
+  });
+}

@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Plus, Check, Search, Settings } from "lucide-react";
+import { CalendarRange, ChevronDown, Plus, Check, Search, Settings } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -132,6 +132,13 @@ export function WorkspaceSwitcher({
             })}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
+          <DropdownMenuItem
+            render={<Link href="/timeline" />}
+            data-testid="workspace-switcher-timeline"
+          >
+            <CalendarRange className="size-3.5" />
+            <span className="text-sm">All workspaces timeline</span>
+          </DropdownMenuItem>
           {active && (
             <DropdownMenuItem
               render={<Link href={`/w/${active.id}/settings`} />}
