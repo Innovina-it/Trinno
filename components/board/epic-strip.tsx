@@ -17,32 +17,31 @@ export function EpicStrip() {
   const sp = useSearchParams();
   const [, start] = useTransition();
 
-  // Pull epic cards + their child counts from the board store. Wrapped
-  // in useShallow because we're computing a derived list of objects.
-  const epics = useBoardStore(
-    useShallow((s) => {
-      const childCount = new Map<string, number>();
-      for (const c of s.cards) {
-        if (!c.archived && c.parentCardId) {
-          childCount.set(c.parentCardId, (childCount.get(c.parentCardId) ?? 0) + 1);
-        }
-      }
-      return s.cards
-        .filter((c) => c.type === "epic" && !c.archived)
-        .map((c) => ({
-          id: c.id,
-          title: c.title,
-          count: childCount.get(c.id) ?? 0,
-        }));
-    }),
-  );
+  // Return the raw cards array (stable item refs); useShallow caches by
+  // item reference equality. Build the {id,title,count} shape inside a
+  // downstream useMemo so the selector doesn't churn its snapshot every
+  // call — the previous version mapped to fresh objects inside the
+  // selector and produced an infinite getSnapshot loop.
+  const cards = useBoardStore(useShallow((s) => s.cards));
 
   const activeEpic = sp.get("epic") ?? "";
 
-  const sorted = useMemo(
-    () => [...epics].sort((a, b) => a.title.localeCompare(b.title)),
-    [epics],
-  );
+  const sorted = useMemo(() => {
+    const childCount = new Map<string, number>();
+    for (const c of cards) {
+      if (!c.archived && c.parentCardId) {
+        childCount.set(c.parentCardId, (childCount.get(c.parentCardId) ?? 0) + 1);
+      }
+    }
+    return cards
+      .filter((c) => c.type === "epic" && !c.archived)
+      .map((c) => ({
+        id: c.id,
+        title: c.title,
+        count: childCount.get(c.id) ?? 0,
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [cards]);
 
   function setEpic(next: string) {
     const params = new URLSearchParams(sp.toString());
