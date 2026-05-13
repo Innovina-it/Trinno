@@ -7,6 +7,7 @@ import {
   type VersionCardRow,
 } from "@/lib/queries/versions";
 import { cardCode } from "@/lib/format";
+import { formatDate } from "@/lib/format-date";
 
 const STATE_BADGE: Record<string, string> = {
   unreleased: "border-fg/40 text-fg/80",
@@ -76,7 +77,7 @@ export default async function VersionDetailPage({
           </span>
           {version.releaseDate && (
             <span className="mono-meta-sm text-fg-muted tabular-nums">
-              {new Date(version.releaseDate).toISOString().slice(0, 10)}
+              {formatDate(version.releaseDate)}
             </span>
           )}
         </div>

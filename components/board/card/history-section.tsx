@@ -52,9 +52,8 @@ function fmtVal(field: string, v: string | null): string {
     field === "due_date" ||
     field === "completed_at"
   ) {
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return v;
-    return d.toISOString().slice(0, 10);
+    const out = formatDate(v);
+    return out === "" ? v : out;
   }
   return v.length > 40 ? v.slice(0, 40) + "…" : v;
 }

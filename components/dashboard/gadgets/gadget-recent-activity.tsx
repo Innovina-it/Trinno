@@ -9,7 +9,7 @@ function formatRelative(d: Date | string): string {
   if (h < 24) return `${h}h`;
   const dDays = Math.floor(h / 24);
   if (dDays < 30) return `${dDays}d`;
-  return t.toISOString().slice(0, 10);
+  return formatDate(t);
 }
 
 const KIND_VERB: Record<string, string> = {

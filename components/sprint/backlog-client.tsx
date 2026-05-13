@@ -6,6 +6,7 @@ import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { CreateSprintDialog } from "@/components/sprint/create-sprint-dialog";
 import { SprintCard } from "@/components/sprint/sprint-card";
 import { BacklogList } from "@/components/sprint/backlog-list";
+import { formatDate } from "@/lib/format-date";
 import type { SprintLite } from "@/components/sprint/sprint-picker";
 
 // Plan #16b-α (β concern fix) — backlog page now reads sprints + cards
@@ -199,7 +200,7 @@ export function BacklogClient({
                 <span className="font-medium">{s.name}</span>
                 {s.endDate && (
                   <span className="ml-2 mono-meta-sm text-fg-faint">
-                    {new Date(s.endDate).toLocaleDateString()}
+                    {formatDate(s.endDate)}
                   </span>
                 )}
               </li>

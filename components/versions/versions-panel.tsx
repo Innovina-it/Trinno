@@ -2,6 +2,7 @@ import { listVersions } from "@/lib/queries/versions";
 import { getSessionToken } from "@/lib/auth";
 import { CreateVersionDialog } from "./create-version-dialog";
 import { VersionStateControl } from "./version-state-control";
+import { formatDate } from "@/lib/format-date";
 
 export async function VersionsPanel({
   workspaceId,
@@ -31,9 +32,7 @@ export async function VersionsPanel({
               )}
             </div>
             <span className="mono-meta-sm text-fg-faint tabular-nums">
-              {v.releaseDate
-                ? new Date(v.releaseDate).toISOString().slice(0, 10)
-                : "—"}
+              {v.releaseDate ? formatDate(v.releaseDate) : "—"}
             </span>
             <VersionStateControl id={v.id} state={v.state} />
           </li>

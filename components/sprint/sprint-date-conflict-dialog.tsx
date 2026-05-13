@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { bulkShiftCardDates } from "@/actions/sprints";
 import type { SprintConflictCard } from "@/actions/sprints";
+import { formatDate } from "@/lib/format-date";
 
 // Plan #16b-β — modal that surfaces cards whose dates fall outside the
 // sprint window we just started, and offers a one-shot bulk shift to
@@ -103,13 +104,9 @@ export function SprintDateConflictDialog({
               >
                 <span className="truncate">{c.title}</span>
                 <span className="mono-meta-sm text-fg-faint shrink-0">
-                  {c.startDate
-                    ? c.startDate.toISOString().slice(0, 10)
-                    : "?"}
+                  {c.startDate ? formatDate(c.startDate) : "?"}
                   {" → "}
-                  {c.targetDate
-                    ? c.targetDate.toISOString().slice(0, 10)
-                    : "?"}
+                  {c.targetDate ? formatDate(c.targetDate) : "?"}
                 </span>
               </li>
             ))}

@@ -4,6 +4,7 @@ import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace } from "@/lib/queries/workspaces";
 import { listVersions } from "@/lib/queries/versions";
 import { CreateVersionDialog } from "@/components/versions/create-version-dialog";
+import { formatDate } from "@/lib/format-date";
 
 const STATE_BADGE: Record<string, string> = {
   unreleased: "border-fg/40 text-fg/80",
@@ -71,9 +72,7 @@ export default async function VersionsListPage({
                   </div>
                 )}
                 <div className="mono-meta-sm text-fg-faint tabular-nums">
-                  {v.releaseDate
-                    ? new Date(v.releaseDate).toISOString().slice(0, 10)
-                    : "no date"}
+                  {v.releaseDate ? formatDate(v.releaseDate) : "no date"}
                 </div>
                 {v.description && (
                   <p className="text-sm text-fg-muted mt-2 line-clamp-3">

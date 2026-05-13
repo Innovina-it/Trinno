@@ -27,6 +27,7 @@ import type { RoadmapCard } from "@/lib/queries/roadmap";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { STATUS_LABEL, type StatusKind } from "@/lib/status";
 import { archiveCard, updateCard } from "@/actions/cards";
+import { formatDate } from "@/lib/format-date";
 import {
   PRIORITY_TINT,
   type CardPriority,
@@ -495,19 +496,13 @@ export function RoadmapBar({
                 {storyPoints !== null ? storyPoints : "—"}
               </dd>
               <dt className="text-fg-faint">START</dt>
-              <dd className="text-fg">
-                {card.startDate.toISOString().slice(0, 10)}
-              </dd>
+              <dd className="text-fg">{formatDate(card.startDate)}</dd>
               <dt className="text-fg-faint">TARGET</dt>
-              <dd className="text-fg">
-                {card.targetDate.toISOString().slice(0, 10)}
-              </dd>
+              <dd className="text-fg">{formatDate(card.targetDate)}</dd>
               {card.completedAt && (
                 <>
                   <dt className="text-fg-faint">DONE</dt>
-                  <dd className="text-fg">
-                    {card.completedAt.toISOString().slice(0, 10)}
-                  </dd>
+                  <dd className="text-fg">{formatDate(card.completedAt)}</dd>
                 </>
               )}
             </dl>
