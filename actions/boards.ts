@@ -178,7 +178,12 @@ export async function createBoardFromTemplateImpl(
     title: parsed.title,
     backgroundKind: parsed.backgroundKind,
     backgroundValue: parsed.backgroundValue,
-    seedDefaultLists: false,
+    // Blank template carries no lists of its own — fall through to the
+    // DEFAULT_LIST_TEMPLATES seed (Todo / In Progress / Done) so the
+    // most common new-board path matches Sheet1's "default lists on
+    // board creation" expectation. Named templates supply their own
+    // lists below, so we suppress the default seed for them.
+    seedDefaultLists: tpl.lists.length === 0,
   });
 
   const listIds: string[] = [];

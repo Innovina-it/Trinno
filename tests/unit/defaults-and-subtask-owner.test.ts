@@ -143,6 +143,34 @@ describe("default board lists and subtask owner defaults", () => {
     ).toEqual(["Todo", "In Progress", "Done"]);
   });
 
+  it("createBoardFromTemplateImpl('blank') seeds the three default lists", async () => {
+    // Regression: dispatch 6b wired DEFAULT_LIST_TEMPLATES into createBoardImpl
+    // but the UI calls createBoardFromTemplate with templateId='blank', whose
+    // blank template carries lists=[]. Prior behavior passed
+    // seedDefaultLists:false, producing zero lists. Fix: blank template now
+    // falls through to default seed (lists.length === 0 implies blank).
+    const { createBoardFromTemplateImpl } = await import("@/actions/boards");
+    state.selectResponses = [[{ role: "owner" }]];
+
+    await createBoardFromTemplateImpl(jwtFor(uuid(1)), {
+      workspaceId: uuid(11),
+      title: "Blank Board",
+      backgroundKind: "color",
+      backgroundValue: "#000000",
+      templateId: "blank",
+    });
+
+    const defaultListInsert = state.insertCalls.find((call) =>
+      Array.isArray(call.values),
+    );
+    expect(defaultListInsert, "expected blank template to seed default lists").toBeTruthy();
+    expect(
+      (defaultListInsert?.values as Array<{ title: string }>).map(
+        (list) => list.title,
+      ),
+    ).toEqual(["Todo", "In Progress", "Done"]);
+  });
+
   it("createCardImpl defaults a new subtask owner to the parent owner", async () => {
     const { createCardImpl } = await import("@/actions/cards");
     const parentOwnerId = uuid(2);
