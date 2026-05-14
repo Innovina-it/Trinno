@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/format-date";
+import { EMAIL_KIND_LABELS, type NotificationKind } from "@/lib/notifications/email-labels";
 function formatRelative(d: Date | string): string {
   const t = typeof d === "string" ? new Date(d) : d;
   const diffMs = Date.now() - t.getTime();
@@ -12,22 +13,9 @@ function formatRelative(d: Date | string): string {
   return formatDate(t);
 }
 
-const KIND_VERB: Record<string, string> = {
-  "card.created": "created",
-  "card.archived": "archived",
-  "card.unarchived": "restored",
-  "card.completed": "completed",
-  "card.moved": "moved",
-  "card.assigned": "assigned",
-  "card.unassigned": "unassigned",
-  "card.label.added": "labeled",
-  "card.due": "set due on",
-  "card.dates": "rescheduled",
-  "comment.create": "commented on",
-  "comment.mention": "mentioned in",
-  "list.created": "created list",
-  "list.archived": "archived list",
-};
+function kindVerb(kind: string): string {
+  return EMAIL_KIND_LABELS[kind as NotificationKind]?.subject ?? kind;
+}
 
 function dayBucket(d: Date | string): string {
   const t = typeof d === "string" ? new Date(d) : d;
@@ -84,7 +72,7 @@ export function GadgetRecentActivity({
           <div className="mono-meta-sm text-fg-faint">{g.label}</div>
           <ul className="space-y-1">
             {g.rows.map((r) => {
-              const verb = KIND_VERB[r.type] ?? r.type;
+              const verb = kindVerb(r.type);
               return (
                 <li
                   key={r.id}

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Bug, Mountain, Square } from "lucide-react";
+import { BookOpen, Bug, CheckSquare, Square } from "lucide-react";
 import { AssigneePicker } from "./assignee-picker";
 import { createCard, updateCard } from "@/actions/cards";
 import { toggleCardMember } from "@/actions/card-members";
@@ -28,7 +28,7 @@ function plus14ISO(): string {
   return d.toISOString().slice(0, 10);
 }
 
-type CardType = "task" | "epic" | "story" | "bug";
+type CardType = "story" | "task" | "subtask" | "bug";
 type TypeOption = {
   value: CardType;
   label: string;
@@ -38,9 +38,13 @@ type TypeOption = {
   ringSelected: string;
   bgSelected: string;
 };
-// Story hidden from the picker (UX simplification). Legacy story-typed
-// cards still render with their stored type; new cards default to Task.
 const TYPE_OPTIONS: TypeOption[] = [
+  {
+    value: "story", label: "Story", Icon: BookOpen,
+    text: "text-sky-300",
+    ringSelected: "ring-sky-400/60",
+    bgSelected: "bg-sky-500/15",
+  },
   {
     value: "task", label: "Task", Icon: Square,
     text: "text-fg-muted",
@@ -48,16 +52,16 @@ const TYPE_OPTIONS: TypeOption[] = [
     bgSelected: "bg-[rgb(255_255_255/0.10)]",
   },
   {
+    value: "subtask", label: "Subtask", Icon: CheckSquare,
+    text: "text-emerald-300",
+    ringSelected: "ring-emerald-400/60",
+    bgSelected: "bg-emerald-500/15",
+  },
+  {
     value: "bug", label: "Bug", Icon: Bug,
     text: "text-rose-300",
     ringSelected: "ring-rose-400/60",
     bgSelected: "bg-rose-500/15",
-  },
-  {
-    value: "epic", label: "Epic", Icon: Mountain,
-    text: "text-violet-300",
-    ringSelected: "ring-violet-400/60",
-    bgSelected: "bg-violet-500/15",
   },
 ];
 
@@ -75,8 +79,8 @@ export function NewCardDialog({
   defaultStart?: string;
   defaultTarget?: string;
   // Plan #16b-γ-G G3 — drag-paint can pre-resolve a target board/list and
-  // an epic parent (the lane the user painted on). The dialog still falls
-  // back to the first visible board/list when these are absent.
+  // parent card. The dialog still falls back to the first visible
+  // board/list when these are absent.
   defaultBoard?: string;
   defaultList?: string;
   defaultParent?: string | null;
@@ -85,6 +89,10 @@ export function NewCardDialog({
   const [type, setType] = useState<CardType>("task");
   const [boardId, setBoardId] = useState(defaultBoard ?? "");
   const [listId, setListId] = useState(defaultList ?? "");
+  // Optional parent card. Roadmap paints/chip drags can pre-resolve the
+  // lane parent into `defaultParent`; the dialog surfaces it so the user
+  // can verify or switch before creating a child card.
+  const [parentId, setParentId] = useState<string>(defaultParent ?? "");
   const [start, setStart] = useState(defaultStart ?? todayISO());
   const [target, setTarget] = useState(defaultTarget ?? plus14ISO());
   // Task — assignee picker parity with kanban add-card-form: pre-assign
@@ -109,6 +117,7 @@ export function NewCardDialog({
 
   const boards = useWorkspaceStore((s) => s.boards);
   const lists = useWorkspaceStore((s) => s.lists);
+  const cards = useWorkspaceStore((s) => s.cards);
   // Profile list at workspace scope mirrors `boardProfiles` on the board
   // snapshot but covers every member who's reachable from any board in
   // the workspace. Sufficient for the roadmap create dialog — the user
@@ -129,6 +138,14 @@ export function NewCardDialog({
   const visibleBoards = useMemo(
     () => boards.filter((b) => !b.archived),
     [boards],
+  );
+  const visibleParentCards = useMemo(
+    () =>
+      cards
+        .filter((c) => c.type !== "subtask" && !c.archived)
+        .slice()
+        .sort((a, b) => a.title.localeCompare(b.title)),
+    [cards],
   );
   // Boards that have a list mapped to status_kind="todo". Used to pick a
   // sane default when the caller did not specify a board — gantt new-card
@@ -197,6 +214,32 @@ export function NewCardDialog({
     setStart(defaultStart ?? todayISO());
     setTarget(defaultTarget ?? plus14ISO());
   }, [open, defaultStart, defaultTarget]);
+  // Re-seed parent on every open so a subsequent paint on a different
+  // lane re-resolves cleanly. Empty string = standalone card.
+  useEffect(() => {
+    if (!open) return;
+    setParentId(defaultParent ?? "");
+  }, [open, defaultParent]);
+  // When the user picks a different parent, snap BOARD + LIST to the
+  // parent's board + its todo list. Keeps child card creation coherent.
+  useEffect(() => {
+    if (!open) return;
+    if (!parentId) return;
+    const parent = cards.find((c) => c.id === parentId);
+    if (!parent) return;
+    if (parent.boardId && parent.boardId !== boardId) {
+      setBoardId(parent.boardId);
+      const todo =
+        lists.find(
+          (l) => l.boardId === parent.boardId && l.statusKind === "todo",
+        ) ??
+        lists
+          .filter((l) => l.boardId === parent.boardId)
+          .sort((a, b) => (a.position < b.position ? -1 : 1))[0];
+      setListId(todo?.id ?? "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, parentId]);
 
   function reset() {
     setTitle("");
@@ -204,6 +247,7 @@ export function NewCardDialog({
     setStart(defaultStart ?? todayISO());
     setTarget(defaultTarget ?? plus14ISO());
     setAssignees(new Set());
+    setParentId(defaultParent ?? "");
     // Note: we intentionally do NOT carry the prior defaultParent forward —
     // the parent is a per-open prop. RoadmapView clears its newCardDefaults
     // state on close so the next open re-derives it cleanly.
@@ -223,9 +267,13 @@ export function NewCardDialog({
       toast.error("Start must be on or before target");
       return;
     }
+    if (type === "subtask" && !parentId) {
+      toast.error("Pick a parent card before creating a subtask");
+      return;
+    }
     const startISO = new Date(`${start}T00:00:00.000Z`).toISOString();
     const targetISO = new Date(`${target}T00:00:00.000Z`).toISOString();
-    const parentId = defaultParent ?? null;
+    const parentCardId = parentId || null;
     startTransition(async () => {
       try {
         const created = await createCard({
@@ -236,7 +284,7 @@ export function NewCardDialog({
           // Owner set at INSERT so it skips the owner-change trigger; the
           // creator is by definition a valid claimant.
           ...(currentUserId ? { ownerId: currentUserId } : {}),
-          ...(parentId ? { parentCardId: parentId } : {}),
+          ...(parentCardId ? { parentCardId } : {}),
         });
         // `type` still needs a post-create patch — createCardImpl doesn't
         // accept it. Only thread when the user picked something other than
@@ -256,7 +304,7 @@ export function NewCardDialog({
             );
           }
         }
-        toast.success(`Created ${type === "epic" ? "epic" : "card"} "${t}"`);
+        toast.success(`Created card "${t}"`);
         onOpenChange(false);
         reset();
       } catch (err) {
@@ -323,6 +371,20 @@ export function NewCardDialog({
               })}
             </div>
           </div>
+          <label className="block space-y-1 text-xs">
+            <span className="mono-meta-sm text-fg-faint">PARENT CARD</span>
+            <Select
+              value={parentId}
+              onValueChange={setParentId}
+              data-testid="roadmap-new-card-parent"
+              options={[
+                { value: "", label: "— No parent —" },
+                ...visibleParentCards.map((c) => ({ value: c.id, label: c.title })),
+              ]}
+              className="w-full"
+              size="sm"
+            />
+          </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1 text-xs">
               <span className="mono-meta-sm text-fg-faint">BOARD</span>

@@ -29,6 +29,7 @@ async function setupBoard(jwt: string) {
   return createBoardImpl(jwt, {
     workspaceId: ws.id, title: "B",
     backgroundKind: "color", backgroundValue: "#000",
+    seedDefaultLists: false,
   });
 }
 

@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
-import { listEpicChildren } from "@/lib/queries/epic-children";
+import { dbAsUser } from "@/lib/db/client";
+import { boards } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { listSubboardChildren } from "@/lib/queries/subboard-children";
 import { createWorkspaceImpl } from "@/actions/workspaces";
 import { createBoardImpl } from "@/actions/boards";
 import { createListImpl } from "@/actions/lists";
@@ -23,49 +26,53 @@ async function makeUser(p: string) {
   return { id: data.user!.id, jwt: s.session!.access_token };
 }
 
-describe("listEpicChildren", () => {
-  it("returns only direct children of the epic + the epic's lists", async () => {
-    const u = await makeUser("epic-children");
+describe("listSubboardChildren", () => {
+  it("returns only top-level cards on the sub-board + the sub-board's lists", async () => {
+    const u = await makeUser("subboard-children");
     const ws = await createWorkspaceImpl(u.jwt, { name: "WS" });
-    const b = await createBoardImpl(u.jwt, {
+    const parentBoard = await createBoardImpl(u.jwt, {
       workspaceId: ws.id, title: "B",
       backgroundKind: "color", backgroundValue: "#fafafa",
     });
-    const l = await createListImpl(u.jwt, { boardId: b.id, title: "L" });
-    const epic = await createCardImpl(u.jwt, { listId: l.id, title: "Epic" });
-    await updateCardImpl(u.jwt, { id: epic.id, type: "epic" });
+    const subboard = await createBoardImpl(u.jwt, {
+      workspaceId: ws.id, title: "Sub-board",
+      backgroundKind: "color", backgroundValue: "#fafafa",
+    });
+    await dbAsUser(u.jwt, async (tx) =>
+      tx
+        .update(boards)
+        .set({ parentBoardId: parentBoard.id })
+        .where(eq(boards.id, subboard.id)),
+    );
+    const l = await createListImpl(u.jwt, { boardId: subboard.id, title: "L" });
 
     const c1 = await createCardImpl(u.jwt, { listId: l.id, title: "Child 1" });
     const c2 = await createCardImpl(u.jwt, { listId: l.id, title: "Child 2" });
-    await updateCardImpl(u.jwt, { id: c1.id, parentCardId: epic.id });
-    await updateCardImpl(u.jwt, { id: c2.id, parentCardId: epic.id });
 
     // Grandchild — must NOT be in the result.
     const gc = await createCardImpl(u.jwt, { listId: l.id, title: "GC" });
     await updateCardImpl(u.jwt, { id: gc.id, parentCardId: c1.id });
 
-    const result = await listEpicChildren(u.jwt, epic.id);
+    const result = await listSubboardChildren(u.jwt, subboard.id);
     expect(result).not.toBeNull();
-    expect(result!.epic.id).toBe(epic.id);
-    expect(result!.epic.boardId).toBe(b.id);
+    expect(result!.subboard.id).toBe(subboard.id);
+    expect(result!.subboard.parentBoardId).toBe(parentBoard.id);
     expect(result!.children.map((c) => c.id).sort()).toEqual(
       [c1.id, c2.id].sort(),
     );
     expect(result!.lists.map((x) => x.id)).toContain(l.id);
   });
 
-  it("returns null for non-existent or non-epic ids", async () => {
-    const u = await makeUser("epic-children-null");
+  it("returns null for non-existent or non-sub-board ids", async () => {
+    const u = await makeUser("subboard-children-null");
     const ws = await createWorkspaceImpl(u.jwt, { name: "WS" });
     const b = await createBoardImpl(u.jwt, {
       workspaceId: ws.id, title: "B",
       backgroundKind: "color", backgroundValue: "#fafafa",
     });
-    const l = await createListImpl(u.jwt, { boardId: b.id, title: "L" });
-    const c = await createCardImpl(u.jwt, { listId: l.id, title: "Plain" });
-    expect(await listEpicChildren(u.jwt, c.id)).toBeNull();
+    expect(await listSubboardChildren(u.jwt, b.id)).toBeNull();
     expect(
-      await listEpicChildren(u.jwt, "00000000-0000-0000-0000-000000000000"),
+      await listSubboardChildren(u.jwt, "00000000-0000-0000-0000-000000000000"),
     ).toBeNull();
   });
 });

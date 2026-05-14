@@ -3,17 +3,22 @@ import { requireUser } from "@/lib/auth";
 import { NotificationPrefsForm } from "@/components/settings/notification-prefs-form";
 import { EmailDigestToggle } from "@/components/settings/email-digest-toggle";
 import { getEmailDigestPref } from "@/actions/user-notification-prefs";
+import { EMAIL_KIND_LABELS, type NotificationKind } from "@/lib/notifications/email-labels";
 
 const KIND_DESCRIPTIONS: Array<{ kind: string; label: string; desc: string }> = [
-  { kind: "comment.mention", label: "Mentions", desc: "Someone @mentions you in a comment." },
-  { kind: "comment.create", label: "Comments on watched cards", desc: "New comment on a card you watch." },
-  { kind: "card.assigned", label: "Assigned to you", desc: "Card assignment changes for you." },
-  { kind: "card.due", label: "Due dates", desc: "Cards you watch reach their due date." },
-  { kind: "card.dates", label: "Roadmap reschedules", desc: "Watched card start or target date moves." },
-  { kind: "card.archived", label: "Archive activity", desc: "Cards you watch are archived or restored." },
-  { kind: "card.completed", label: "Completions", desc: "Cards you watch are marked complete." },
-  { kind: "board.member.added", label: "Board membership", desc: "You are added to a board." },
-];
+  "comment.mention",
+  "comment.create",
+  "card.assigned",
+  "card.due",
+  "card.dates",
+  "card.archived",
+  "card.completed",
+  "board.member.added",
+].map((kind) => ({
+  kind,
+  label: EMAIL_KIND_LABELS[kind as NotificationKind].preview,
+  desc: `${EMAIL_KIND_LABELS[kind as NotificationKind].subject} notifications.`,
+}));
 
 export default async function NotificationSettingsPage() {
   await requireUser();

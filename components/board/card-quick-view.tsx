@@ -1,7 +1,16 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bug, CalendarClock, CircleDot, ListTodo, Mountain, Plus, Square } from "lucide-react";
+import {
+  BookOpen,
+  Bug,
+  CheckSquare,
+  CircleDot,
+  Layers3,
+  ListTodo,
+  Plus,
+  Square,
+} from "lucide-react";
 import { AssigneePicker } from "./assignee-picker";
 import {
   Dialog,
@@ -14,6 +23,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { PriorityChip, type CardPriority } from "./card/priority-picker";
 import { formatDate } from "@/lib/format-date";
+import { BoardStoreContext } from "@/stores/board-store";
 
 // Plan: Quick card view on double-click. Editable summary surfaced from the
 // board / workspace store. All fields are inline-editable when the parent
@@ -54,7 +64,15 @@ export type QuickViewCard = {
   targetDate: Date | string | null;
 };
 
-export type QuickViewCardType = "task" | "story" | "bug" | "epic";
+export type QuickViewCardType = "story" | "task" | "subtask" | "bug";
+type QuickViewSubtask = {
+  id: string;
+  title: string;
+  type?: string | null;
+  completedAt?: Date | string | null;
+  dueComplete?: boolean;
+  position?: string;
+};
 
 export type PatchInput = {
   title?: string;
@@ -69,16 +87,20 @@ export type PatchInput = {
 };
 
 type TypeOption = {
-  value: QuickViewCardType;
+  value: string;
   label: string;
   Icon: typeof Square;
   text: string;
   ringSelected: string;
   bgSelected: string;
 };
-// Story hidden from the picker (UX simplification, 2026-05-13). Legacy
-// story-typed cards keep their stored type and render as such elsewhere.
 const TYPE_OPTIONS: TypeOption[] = [
+  {
+    value: "story", label: "Story", Icon: BookOpen,
+    text: "text-sky-300",
+    ringSelected: "ring-sky-400/60",
+    bgSelected: "bg-sky-500/15",
+  },
   {
     value: "task", label: "Task", Icon: Square,
     text: "text-fg-muted",
@@ -86,18 +108,26 @@ const TYPE_OPTIONS: TypeOption[] = [
     bgSelected: "bg-[rgb(255_255_255/0.10)]",
   },
   {
+    value: "subtask", label: "Subtask", Icon: CheckSquare,
+    text: "text-emerald-300",
+    ringSelected: "ring-emerald-400/60",
+    bgSelected: "bg-emerald-500/15",
+  },
+  {
     value: "bug", label: "Bug", Icon: Bug,
     text: "text-rose-300",
     ringSelected: "ring-rose-400/60",
     bgSelected: "bg-rose-500/15",
   },
-  {
-    value: "epic", label: "Epic", Icon: Mountain,
-    text: "text-violet-300",
-    ringSelected: "ring-violet-400/60",
-    bgSelected: "bg-violet-500/15",
-  },
 ];
+const LEGACY_SUBBOARD_OPTION: TypeOption = {
+  value: "legacy-subboard",
+  label: "Sub-board",
+  Icon: Layers3,
+  text: "text-violet-300",
+  ringSelected: "ring-violet-400/60",
+  bgSelected: "bg-violet-500/15",
+};
 const PRIORITY_OPTIONS: readonly (CardPriority | "")[] = [
   "",
   "p0",
@@ -240,8 +270,12 @@ function CardQuickViewBody({
   router: ReturnType<typeof useRouter>;
 }) {
   const completed = card.completedAt != null || card.dueComplete;
-  const cardType = (card.type ?? "task") as QuickViewCardType;
+  const cardType = card.type ?? "task";
+  const typeOptions = TYPE_OPTIONS.some((opt) => opt.value === cardType)
+    ? TYPE_OPTIONS
+    : [{ ...LEGACY_SUBBOARD_OPTION, value: cardType }, ...TYPE_OPTIONS];
   const currentPriority = (card.priority ?? null) as CardPriority | null;
+  const subtaskRows = useQuickViewSubtasks(card.id);
 
   // === TITLE — inline edit on click; commit on blur or Enter; cancel on Esc ===
   const [titleEditing, setTitleEditing] = useState(false);
@@ -285,14 +319,9 @@ function CardQuickViewBody({
   }, [descDraft, card.description, onPatch]);
 
   // === Helpers for select / date / chip handlers ===
-  const setType = useCallback(
-    (t: QuickViewCardType) => {
-      if (t === cardType) return;
-      void onPatch?.({ type: t });
-    },
-    [cardType, onPatch],
-  );
-
+  // Type is intentionally NOT editable here — same rationale as TypePicker
+  // (2026-05-14). Changing type after creation violates DB invariants and
+  // surfaces opaque errors; the TYPE row below renders as a static chip.
   const setPriority = useCallback(
     (p: CardPriority | null) => {
       if (p === currentPriority) return;
@@ -319,15 +348,9 @@ function CardQuickViewBody({
     },
     [onPatch],
   );
-  const setDueDate = useCallback(
-    (v: string) => {
-      const next: Date | string | null = v ? v : null;
-      void onPatch?.({ dueDate: next });
-    },
-    [onPatch],
-  );
-
-  function openAdvanced() {
+  function openAdvanced(e?: React.MouseEvent<HTMLButtonElement>) {
+    e?.preventDefault();
+    e?.stopPropagation();
     onClose();
     router.push(`/b/${boardId}/c/${card.id}`, { scroll: false });
   }
@@ -386,39 +409,33 @@ function CardQuickViewBody({
       </DialogHeader>
 
       <div className="space-y-3">
-        {/* TYPE row — mirrors the new-card pill row, one slot active. */}
+        {/* TYPE row — display-only chip. Type is fixed at creation; see
+            TypePicker for rationale. */}
         <div className="space-y-1 text-xs">
           <span className="mono-meta-sm text-fg-faint">TYPE</span>
           <div className="grid grid-cols-4 gap-1.5" aria-label="Card type">
-            {TYPE_OPTIONS.map((opt) => {
+            {typeOptions.map((opt) => {
               const selected = cardType === opt.value;
               return (
-                <button
+                <span
                   key={opt.value}
-                  type="button"
-                  disabled={!editable}
                   data-selected={selected ? "true" : undefined}
-                  data-testid={
-                    selected ? "card-quick-view-type" : undefined
-                  }
-                  onClick={() => setType(opt.value)}
+                  data-active={selected ? "true" : "false"}
+                  data-testid={selected ? "card-quick-view-type" : undefined}
+                  title="Type is fixed at creation"
                   className={[
                     "inline-flex items-center justify-center gap-1.5",
                     "rounded-full border px-2.5 py-1.5",
-                    "mono-meta-sm transition-colors",
+                    "mono-meta-sm cursor-default",
                     opt.text,
                     selected
                       ? `ring-1 ${opt.ringSelected} ${opt.bgSelected} border-transparent`
-                      : "border-hairline",
-                    editable && !selected
-                      ? "hover:opacity-80"
-                      : "",
-                    editable ? "cursor-pointer" : "cursor-default",
+                      : "opacity-80 border-hairline",
                   ].join(" ")}
                 >
                   <opt.Icon className="size-3.5" aria-hidden />
                   <span>{opt.label.toUpperCase()}</span>
-                </button>
+                </span>
               );
             })}
           </div>
@@ -543,46 +560,6 @@ function CardQuickViewBody({
           </div>
         )}
 
-        {/* DUE — single row. Always rendered when editing so users can set
-            it; otherwise only when populated. */}
-        {(editable || card.dueDate) && (
-          <div className="space-y-1 text-xs">
-            <span className="mono-meta-sm text-fg-faint">DUE</span>
-            {editable ? (
-              <label
-                data-testid="card-quick-view-due"
-                className="flex h-[34px] items-center gap-1.5 rounded-md border border-hairline bg-transparent px-2"
-              >
-                <CalendarClock
-                  className="size-3 text-fg-faint"
-                  aria-hidden
-                />
-                <input
-                  data-testid="card-quick-view-due-edit"
-                  type="date"
-                  value={toDateInput(card.dueDate)}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  aria-label="Due date"
-                  className="flex-1 bg-transparent text-xs text-fg tabular-nums outline-none"
-                />
-              </label>
-            ) : (
-              <div
-                data-testid="card-quick-view-due"
-                className="flex h-[34px] items-center gap-1.5 rounded-md border border-hairline bg-transparent px-2"
-              >
-                <CalendarClock
-                  className="size-3 text-fg-faint"
-                  aria-hidden
-                />
-                <span className="text-fg tabular-nums">
-                  {card.dueDate ? formatDate(card.dueDate) : "—"}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* ASSIGNEES — dropdown multi-select when editable; read-only chip
             list otherwise. */}
         <div className="space-y-1 text-xs">
@@ -631,13 +608,16 @@ function CardQuickViewBody({
           )}
         </div>
 
-        {/* SUBTASKS — count summary + inline add affordance. */}
+        {/* SUBTASKS — child rows + inline add affordance. */}
         {(subtaskTotal > 0 || subtaskCreatable) && (
           <SubtaskSection
             subtaskDone={subtaskDone}
             subtaskTotal={subtaskTotal}
+            subtasks={subtaskRows}
             creatable={subtaskCreatable}
             onCreateSubtask={onCreateSubtask}
+            boardId={boardId}
+            router={router}
           />
         )}
 
@@ -691,20 +671,56 @@ function CardQuickViewBody({
   );
 }
 
-// Inline subtask block: shows the done/total count and (when creatable)
-// a single-line input to add another subtask. The parent (card-tile or
-// roadmap-view) is responsible for the actual createCard server call;
-// this component just collects a title and calls back.
+function useQuickViewSubtasks(cardId: string): QuickViewSubtask[] {
+  const store = useContext(BoardStoreContext);
+  const selectRows = useCallback(() => {
+    if (!store) return [];
+    return store
+      .getState()
+      .cards
+      .filter((c) => c.parentCardId === cardId && !c.archived)
+      .map((c) => ({
+        id: c.id,
+        title: c.title,
+        type: c.type,
+        completedAt: c.completedAt,
+        dueComplete: c.dueComplete,
+        position: c.position,
+      }))
+      .sort((a, b) => ((a.position ?? "") < (b.position ?? "") ? -1 : 1));
+  }, [cardId, store]);
+  const [rows, setRows] = useState<QuickViewSubtask[]>(() => selectRows());
+
+  useEffect(() => {
+    setRows(selectRows());
+    if (!store) return;
+    return store.subscribe(() => {
+      setRows(selectRows());
+    });
+  }, [selectRows, store]);
+
+  return useMemo(() => rows, [rows]);
+}
+
+// Inline subtask block: shows child rows and (when creatable) a
+// single-line input to add another subtask. The parent (card-tile or
+// roadmap-view) is responsible for the actual createCard server call.
 function SubtaskSection({
   subtaskDone,
   subtaskTotal,
+  subtasks,
   creatable,
   onCreateSubtask,
+  boardId,
+  router,
 }: {
   subtaskDone: number;
   subtaskTotal: number;
+  subtasks: QuickViewSubtask[];
   creatable: boolean;
   onCreateSubtask?: (title: string) => Promise<void> | void;
+  boardId: string;
+  router: ReturnType<typeof useRouter>;
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -740,12 +756,62 @@ function SubtaskSection({
         className="rounded-md border border-hairline bg-transparent"
       >
         {subtaskTotal > 0 && (
-          <div className="flex h-[34px] items-center gap-1.5 px-2 border-b border-hairline">
-            <ListTodo className="size-3 text-fg-faint" aria-hidden />
-            <span className="text-fg tabular-nums">
-              {subtaskDone}/{subtaskTotal}
-            </span>
-          </div>
+          <ul className="divide-y divide-hairline" data-testid="card-quick-view-subtask-list">
+            {subtasks.length > 0
+              ? subtasks.map((subtask) => {
+                  const done =
+                    subtask.completedAt != null || Boolean(subtask.dueComplete);
+                  return (
+                    <li key={subtask.id}>
+                      <button
+                        type="button"
+                        className="flex min-h-[34px] w-full items-center gap-1.5 px-2 text-left hover:bg-[rgb(255_255_255/0.04)]"
+                        data-testid="card-quick-view-subtask-row"
+                        data-subtask-id={subtask.id}
+                        data-status={done ? "done" : "open"}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          router.push(`/b/${boardId}/c/${subtask.id}`, {
+                            scroll: false,
+                          });
+                        }}
+                      >
+                        <ListTodo className="size-3 text-fg-faint" aria-hidden />
+                        <span
+                          className={`min-w-0 flex-1 truncate text-xs ${
+                            done ? "line-through text-fg-muted" : "text-fg"
+                          }`}
+                        >
+                          {subtask.title}
+                        </span>
+                        <span className="mono-meta-sm text-fg-faint">
+                          {done ? "DONE" : "OPEN"}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })
+              : Array.from({ length: subtaskTotal }, (_, index) => {
+                  const done = index < subtaskDone;
+                  return (
+                    <li
+                      key={`placeholder-${index}`}
+                      className="flex min-h-[34px] items-center gap-1.5 px-2"
+                      data-testid="card-quick-view-subtask-row"
+                      data-status={done ? "done" : "open"}
+                    >
+                      <ListTodo className="size-3 text-fg-faint" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">
+                        Subtask {index + 1}
+                      </span>
+                      <span className="mono-meta-sm text-fg-faint">
+                        {done ? "DONE" : "OPEN"}
+                      </span>
+                    </li>
+                  );
+                })}
+          </ul>
         )}
         {creatable && (
           adding ? (

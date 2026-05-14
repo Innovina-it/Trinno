@@ -3,7 +3,7 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { useBoardStore } from "@/stores/board-store";
 import { updateCard } from "@/actions/cards";
-import { DatePopover } from "@/components/ui/date-range-popover";
+import { DatePicker } from "@/components/ui/date-picker";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 import { undoBus } from "@/lib/undo-bus";
 
@@ -114,11 +114,12 @@ export function DueSection({ cardId }: { cardId: string }) {
         {pending && <span className="mono-meta-sm text-fg-faint">SAVING…</span>}
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <DatePopover
+        <DatePicker
           value={value}
           onChange={persist}
           disabled={pending}
           triggerLabel="Set due date"
+          inputLabel="Due date"
         />
         {currentCard.dueDate && (
           <label className="flex items-center gap-1.5 mono-meta text-fg/75">

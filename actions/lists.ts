@@ -1,16 +1,23 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { eq, desc, and, sql } from "drizzle-orm";
+import { z } from "zod";
 import { dbAsUser } from "@/lib/db/client";
-import { lists } from "@/lib/db/schema";
+import { cards, lists } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { positionBetween } from "@/lib/ordering";
 import { STATUS_DEFAULT_TITLE, type StatusKind } from "@/lib/status";
 import {
   CreateListInput, RenameListInput, MoveListInput, ArchiveListInput,
   SetWipLimitInput, SetListStatusKindInput, SetListColorInput, DeleteListInput,
-  EnsureStatusListInput,
+  EnsureStatusListInput, Uuid,
 } from "@/lib/validation";
+
+const MoveCardToListInput = z.object({
+  cardId: Uuid,
+  toListId: Uuid,
+  position: z.string().min(1).max(64),
+});
 
 export async function createListImpl(token: string, input: { boardId: string; title: string }) {
   const parsed = CreateListInput.parse(input);
@@ -261,5 +268,58 @@ export async function setListColor(
   const t = (await getSessionToken())!;
   const r = await setListColorImpl(t, input);
   revalidatePath(`/b/${r.boardId}`);
+  return r;
+}
+
+export async function moveCardToListImpl(
+  token: string,
+  input: {
+    cardId: string;
+    toListId: string;
+    position: string;
+  },
+) {
+  const parsed = MoveCardToListInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const [card] = await tx
+      .select({
+        id: cards.id,
+        boardId: cards.boardId,
+      })
+      .from(cards)
+      .where(eq(cards.id, parsed.cardId))
+      .limit(1);
+    if (!card) throw new Error("Forbidden");
+
+    const [toList] = await tx
+      .select({
+        id: lists.id,
+        boardId: lists.boardId,
+      })
+      .from(lists)
+      .where(and(eq(lists.id, parsed.toListId), eq(lists.archived, false)))
+      .limit(1);
+    if (!toList) throw new Error("Forbidden");
+    if (toList.boardId !== card.boardId) {
+      throw new Error("Destination list must be on the card's board");
+    }
+
+    const [moved] = await tx
+      .update(cards)
+      .set({ listId: parsed.toListId, position: parsed.position })
+      .where(eq(cards.id, parsed.cardId))
+      .returning();
+    if (!moved) throw new Error("Forbidden");
+    return { success: true as const, card: moved };
+  });
+}
+
+export async function moveCardToList(
+  input: Parameters<typeof moveCardToListImpl>[1],
+) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const r = await moveCardToListImpl(t, input);
+  revalidatePath(`/b/${r.card.boardId}`);
   return r;
 }

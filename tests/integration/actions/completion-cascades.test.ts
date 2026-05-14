@@ -58,66 +58,66 @@ describe("subtask → parent autocomplete cascade", () => {
     const u = await makeUser("cc-all");
     const { l1 } = await setupBoardWithLists(u.jwt);
 
-    const epic = await createCardImpl(u.jwt, { listId: l1.id, title: "Epic" });
-    await updateCardImpl(u.jwt, { id: epic.id, type: "epic" });
+    const parent = await createCardImpl(u.jwt, { listId: l1.id, title: "Parent" });
+    await updateCardImpl(u.jwt, { id: parent.id, type: "story" });
 
     const c1 = await createCardImpl(u.jwt, {
       listId: l1.id,
       title: "C1",
-      parentCardId: epic.id,
+      parentCardId: parent.id,
     });
     const c2 = await createCardImpl(u.jwt, {
       listId: l1.id,
       title: "C2",
-      parentCardId: epic.id,
+      parentCardId: parent.id,
     });
     const c3 = await createCardImpl(u.jwt, {
       listId: l1.id,
       title: "C3",
-      parentCardId: epic.id,
+      parentCardId: parent.id,
     });
 
     // Complete two of three children — parent should still be open.
     await updateCardImpl(u.jwt, { id: c1.id, completed: true });
     await updateCardImpl(u.jwt, { id: c2.id, completed: true });
-    expect((await readCard(u.jwt, epic.id)).completedAt).toBeNull();
+    expect((await readCard(u.jwt, parent.id)).completedAt).toBeNull();
 
     // Last child flips → parent autocompletes.
     await updateCardImpl(u.jwt, { id: c3.id, completed: true });
-    expect((await readCard(u.jwt, epic.id)).completedAt).not.toBeNull();
+    expect((await readCard(u.jwt, parent.id)).completedAt).not.toBeNull();
   });
 
   it("does NOT auto-uncomplete the parent when a child is un-checked", async () => {
     const u = await makeUser("cc-no-undo");
     const { l1 } = await setupBoardWithLists(u.jwt);
 
-    const epic = await createCardImpl(u.jwt, { listId: l1.id, title: "Epic" });
-    await updateCardImpl(u.jwt, { id: epic.id, type: "epic" });
+    const parent = await createCardImpl(u.jwt, { listId: l1.id, title: "Parent" });
+    await updateCardImpl(u.jwt, { id: parent.id, type: "story" });
     const c1 = await createCardImpl(u.jwt, {
       listId: l1.id,
       title: "C1",
-      parentCardId: epic.id,
+      parentCardId: parent.id,
     });
     const c2 = await createCardImpl(u.jwt, {
       listId: l1.id,
       title: "C2",
-      parentCardId: epic.id,
+      parentCardId: parent.id,
     });
     const c3 = await createCardImpl(u.jwt, {
       listId: l1.id,
       title: "C3",
-      parentCardId: epic.id,
+      parentCardId: parent.id,
     });
 
     await updateCardImpl(u.jwt, { id: c1.id, completed: true });
     await updateCardImpl(u.jwt, { id: c2.id, completed: true });
     await updateCardImpl(u.jwt, { id: c3.id, completed: true });
-    const completed = (await readCard(u.jwt, epic.id)).completedAt;
+    const completed = (await readCard(u.jwt, parent.id)).completedAt;
     expect(completed).not.toBeNull();
 
     // Un-check one child — parent must keep its completed_at exactly.
     await updateCardImpl(u.jwt, { id: c1.id, completed: false });
-    const after = await readCard(u.jwt, epic.id);
+    const after = await readCard(u.jwt, parent.id);
     expect(after.completedAt).not.toBeNull();
     // Same instant as before — no cascade re-write of the parent's stamp.
     expect(after.completedAt!.toString()).toBe(completed!.toString());
@@ -127,22 +127,22 @@ describe("subtask → parent autocomplete cascade", () => {
     const u = await makeUser("cc-arch");
     const { l1 } = await setupBoardWithLists(u.jwt);
 
-    const epic = await createCardImpl(u.jwt, { listId: l1.id, title: "Epic" });
-    await updateCardImpl(u.jwt, { id: epic.id, type: "epic" });
+    const parent = await createCardImpl(u.jwt, { listId: l1.id, title: "Parent" });
+    await updateCardImpl(u.jwt, { id: parent.id, type: "story" });
     const c1 = await createCardImpl(u.jwt, {
       listId: l1.id,
       title: "C1",
-      parentCardId: epic.id,
+      parentCardId: parent.id,
     });
     const c2 = await createCardImpl(u.jwt, {
       listId: l1.id,
       title: "C2",
-      parentCardId: epic.id,
+      parentCardId: parent.id,
     });
     const c3 = await createCardImpl(u.jwt, {
       listId: l1.id,
       title: "C3-archived",
-      parentCardId: epic.id,
+      parentCardId: parent.id,
     });
 
     // Archive c3 — it should drop out of the "all done" tally entirely.
@@ -150,10 +150,10 @@ describe("subtask → parent autocomplete cascade", () => {
 
     // Completing the two non-archived children should be enough.
     await updateCardImpl(u.jwt, { id: c1.id, completed: true });
-    expect((await readCard(u.jwt, epic.id)).completedAt).toBeNull();
+    expect((await readCard(u.jwt, parent.id)).completedAt).toBeNull();
 
     await updateCardImpl(u.jwt, { id: c2.id, completed: true });
-    expect((await readCard(u.jwt, epic.id)).completedAt).not.toBeNull();
+    expect((await readCard(u.jwt, parent.id)).completedAt).not.toBeNull();
     // Archived child stays uncompleted — we never touched it.
     expect((await readCard(u.jwt, c3.id)).completedAt).toBeNull();
   });

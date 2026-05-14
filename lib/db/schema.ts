@@ -48,6 +48,10 @@ export const workspaces = pgTable("workspaces", {
     .notNull()
     .defaultNow(),
   autoAssignCreator: boolean("auto_assign_creator").notNull().default(false),
+  featureFlags: jsonb("feature_flags")
+    .$type<Record<string, boolean>>()
+    .notNull()
+    .default(sql`jsonb_build_object()`),
 });
 
 export const workspaceMembers = pgTable(
@@ -74,6 +78,8 @@ export const boards = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    parentBoardId: uuid("parent_board_id"),
+    migratedFromEpicId: uuid("_migrated_from_epic_id"),
   },
   (t) => ({
     backgroundKindCheck: check(

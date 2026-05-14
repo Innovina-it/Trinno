@@ -22,8 +22,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { undoBus } from "@/lib/undo-bus";
 import { errorBus } from "@/lib/errors/error-bus";
+import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
 import { CardTile } from "./card-tile";
 import { NewCardDialog } from "./new-card-dialog";
+import { VirtualizedList } from "./virtualized-list";
 
 // Plan #16b-γ-C (#3) — opt-in virtualization. We render at most this
 // many tiles up front; cards beyond fold behind a "Show all (+N)" chip
@@ -94,6 +96,7 @@ export function ListColumn({
     ? filtered.slice(0, VIRTUALIZE_THRESHOLD)
     : filtered;
   const hiddenCount = filtered.length - visibleCards.length;
+  const virtualizedBoardEnabled = useWorkspaceFlag("virtualized_board");
 
   const sortableId = `list:${list.id}`;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -124,6 +127,10 @@ export function ListColumn({
   const cardSortableIds = useMemo(
     () => visibleCards.map((c) => `card:${c.id}`),
     [visibleCards],
+  );
+  const virtualizedCardSortableIds = useMemo(
+    () => filtered.map((c) => `card:${c.id}`),
+    [filtered],
   );
 
   const overLimit = list.wipLimit != null && filtered.length > list.wipLimit;
@@ -328,43 +335,78 @@ export function ListColumn({
         </DropdownMenu>
       </div>
 
-      <div
-        ref={setDropRef}
-        data-over={isOver ? "true" : undefined}
-        className="flex max-h-[calc(100vh-22rem)] flex-col gap-2.5 overflow-y-auto p-2.5 transition-colors duration-200 data-[over=true]:bg-[color:var(--surface-strong)]"
-      >
-        <SortableContext
-          items={cardSortableIds}
-          strategy={verticalListSortingStrategy}
+      {virtualizedBoardEnabled ? (
+        <div
+          ref={setDropRef}
+          data-over={isOver ? "true" : undefined}
+          className="flex max-h-[calc(100vh-22rem)] flex-col overflow-hidden p-2.5 transition-colors duration-200 data-[over=true]:bg-[color:var(--surface-strong)]"
         >
-          {visibleCards.map((card) => (
-            <CardTile
-              key={card.id}
-              card={card}
-              boardId={boardId}
-              workspaceId={workspaceId}
+          <SortableContext
+            items={virtualizedCardSortableIds}
+            strategy={verticalListSortingStrategy}
+          >
+            <VirtualizedList
+              items={filtered}
+              estimatedSize={96}
+              overscan={6}
+              render={(card) => (
+                <CardTile
+                  key={card.id}
+                  card={card}
+                  boardId={boardId}
+                  workspaceId={workspaceId}
+                />
+              )}
             />
-          ))}
-        </SortableContext>
-        {visibleCards.length === 0 && filtered.length === 0 && (
-          <div
-            className="self-stretch text-center py-3 mono-meta-sm text-fg-faint select-none"
-            data-testid="list-empty"
+          </SortableContext>
+          {filtered.length === 0 && (
+            <div
+              className="self-stretch text-center py-3 mono-meta-sm text-fg-faint select-none"
+              data-testid="list-empty"
+            >
+              NO CARDS
+            </div>
+          )}
+        </div>
+      ) : (
+        <div
+          ref={setDropRef}
+          data-over={isOver ? "true" : undefined}
+          className="flex max-h-[calc(100vh-22rem)] flex-col gap-2.5 overflow-y-auto p-2.5 transition-colors duration-200 data-[over=true]:bg-[color:var(--surface-strong)]"
+        >
+          <SortableContext
+            items={cardSortableIds}
+            strategy={verticalListSortingStrategy}
           >
-            NO CARDS
-          </div>
-        )}
-        {hiddenCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowAll(true)}
-            data-testid="list-show-all"
-            className="chip mono-meta-sm self-center inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
-          >
-            SHOW ALL · +{hiddenCount} MORE
-          </button>
-        )}
-      </div>
+            {visibleCards.map((card) => (
+              <CardTile
+                key={card.id}
+                card={card}
+                boardId={boardId}
+                workspaceId={workspaceId}
+              />
+            ))}
+          </SortableContext>
+          {visibleCards.length === 0 && filtered.length === 0 && (
+            <div
+              className="self-stretch text-center py-3 mono-meta-sm text-fg-faint select-none"
+              data-testid="list-empty"
+            >
+              NO CARDS
+            </div>
+          )}
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              data-testid="list-show-all"
+              className="chip mono-meta-sm self-center inline-flex items-center gap-1.5 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
+            >
+              SHOW ALL · +{hiddenCount} MORE
+            </button>
+          )}
+        </div>
+      )}
       <div className="border-t border-hairline px-2.5 py-2">
         <button
           type="button"

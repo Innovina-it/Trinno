@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { boards, boardMembers } from "@/lib/db/schema";
+import { boards, boardMembers, lists } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
   listBoardsWithLists,
@@ -17,8 +17,10 @@ import {
 } from "@/lib/validation";
 import {
   BOARD_TEMPLATES,
+  DEFAULT_LIST_TEMPLATES,
   type BoardTemplateId,
 } from "@/lib/board-templates";
+import { positionsBetween } from "@/lib/ordering";
 import { createListImpl, setListStatusKindImpl } from "@/actions/lists";
 import { createLabelImpl } from "@/actions/labels";
 import { workspaceMembers } from "@/lib/db/schema";
@@ -36,10 +38,12 @@ export async function createBoardImpl(
     title: string;
     backgroundKind: "color" | "image";
     backgroundValue: string;
+    seedDefaultLists?: boolean;
   },
 ) {
   const parsed = CreateBoardInput.parse(input);
   const createdBy = decodeSub(token);
+  const seedDefaultLists = input.seedDefaultLists ?? true;
   return dbAsUser(token, async (tx) => {
     // Pre-check role: only owner/admin can create boards in a workspace
     // (boards_admin_write RLS, migration 0003). Without this the RLS
@@ -79,6 +83,16 @@ export async function createBoardImpl(
       userId: createdBy,
       role: "admin",
     });
+    if (seedDefaultLists && DEFAULT_LIST_TEMPLATES.length > 0) {
+      const positions = positionsBetween(null, null, DEFAULT_LIST_TEMPLATES.length);
+      await tx.insert(lists).values(
+        DEFAULT_LIST_TEMPLATES.map((list, position) => ({
+          boardId: b.id,
+          title: list.name,
+          position: positions[position],
+        })),
+      );
+    }
     return b;
   });
 }
@@ -164,6 +178,7 @@ export async function createBoardFromTemplateImpl(
     title: parsed.title,
     backgroundKind: parsed.backgroundKind,
     backgroundValue: parsed.backgroundValue,
+    seedDefaultLists: false,
   });
 
   const listIds: string[] = [];

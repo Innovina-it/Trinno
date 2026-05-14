@@ -25,8 +25,56 @@ import {
 } from "@/actions/checklists";
 import { createCardLinkImpl } from "@/actions/card-links";
 import { watchCardImpl } from "@/actions/watchers";
+import { StructuredError, toStructuredError } from "@/lib/errors";
 
 const DAY_MS = 86_400_000;
+
+export type SeedFailure = { step: string; error: unknown };
+export type SeedResult = {
+  ok: boolean;
+  partial: boolean;
+  workspaceId: string | null;
+  failures: SeedFailure[];
+};
+
+type SeedOpts = {
+  mode?: "demo" | "minimal" | "rich";
+  __testFailStep?: string;
+};
+
+async function seedStep<T>(
+  failures: SeedFailure[],
+  step: string,
+  fn: () => Promise<T>,
+  failStep?: string,
+): Promise<T | null> {
+  try {
+    if (failStep === step) {
+      throw new StructuredError("SEED_TEST_FAILURE", `Forced failure: ${step}`, {
+        step,
+      });
+    }
+    return await fn();
+  } catch (error) {
+    failures.push({
+      step,
+      error: toStructuredError(error, "SEED_STEP_FAILED", { step }),
+    });
+    return null;
+  }
+}
+
+function seedResult(
+  workspaceId: string | null,
+  failures: SeedFailure[],
+): SeedResult {
+  return {
+    ok: failures.length === 0,
+    partial: workspaceId !== null && failures.length > 0,
+    workspaceId,
+    failures,
+  };
+}
 
 /**
  * Plan #16b-γ-B (#5) — Seed an illustrative demo workspace for a fresh
@@ -40,28 +88,38 @@ const DAY_MS = 86_400_000;
  */
 export async function seedDemoWorkspaceImpl(
   token: string,
-  opts: { mode?: "demo" | "minimal" | "rich" } = {},
-): Promise<{ workspaceId: string }> {
+  opts: SeedOpts = {},
+): Promise<SeedResult> {
   const mode = opts.mode ?? "demo";
+  const failures: SeedFailure[] = [];
   // 'demo' (the signup-form checkbox) and 'rich' both produce the
   // populated workspace.  'minimal' is the e2e shortcut that creates
   // only the workspace shell.
-  if (mode === "demo" || mode === "rich") return seedRichDemoImpl(token);
-  const ws = await createWorkspaceImpl(
-    token,
-    { name: mode === "minimal" ? "Test Workspace" : "Demo Workspace" },
+  if (mode === "demo" || mode === "rich") {
+    return seedRichDemoImpl(token, failures, opts.__testFailStep);
+  }
+  const ws = await seedStep(
+    failures,
+    "workspace",
+    () =>
+      createWorkspaceImpl(token, {
+        name: mode === "minimal" ? "Test Workspace" : "Demo Workspace",
+      }),
+    opts.__testFailStep,
   );
+  if (!ws) return seedResult(null, failures);
 
   // Minimal mode: just the workspace.  Used by e2e tests so each spec
   // builds the exact fixture it needs without colliding with seeded
   // boards/cards/sprints.
   if (mode === "minimal") {
-    try {
-      await markOnboardingCompletedImpl(token);
-    } catch {
-      // Non-fatal.
-    }
-    return { workspaceId: ws.id };
+    await seedStep(
+      failures,
+      "mark-onboarding-completed",
+      () => markOnboardingCompletedImpl(token),
+      opts.__testFailStep,
+    );
+    return seedResult(ws.id, failures);
   }
 
   // Board pre-seeded with the OKR/Sprint template (5 lists + status mapping
@@ -88,13 +146,13 @@ export async function seedDemoWorkspaceImpl(
   today.setHours(9, 0, 0, 0);
   const plus = (n: number) => new Date(today.getTime() + n * DAY_MS);
 
-  const epic = await createCardImpl(token, {
+  const parentStory = await createCardImpl(token, {
     listId: backlogId,
     title: "Build auth flow",
   });
   await updateCardImpl(token, {
-    id: epic.id,
-    type: "epic",
+    id: parentStory.id,
+    type: "story",
     storyPoints: 13,
     startDate: today,
     targetDate: plus(21),
@@ -108,7 +166,7 @@ export async function seedDemoWorkspaceImpl(
   await updateCardImpl(token, {
     id: story.id,
     type: "story",
-    parentCardId: epic.id,
+    parentCardId: parentStory.id,
     storyPoints: 5,
     dueDate: plus(7),
   });
@@ -145,7 +203,7 @@ export async function seedDemoWorkspaceImpl(
   });
 
   // Sprint — planned, tomorrow → +14 days. Cards 2-5 (story, subtask, bug,
-  // task) get assigned. Epic stays at backlog so the roadmap shows it as a
+  // task) get assigned. Parent story stays at backlog so the roadmap shows it as a
   // larger umbrella bar.
   const sprint = await createSprintImpl(token, {
     workspaceId: ws.id,
@@ -207,7 +265,7 @@ export async function seedDemoWorkspaceImpl(
     // Non-fatal — the tour will still hide on Skip / Finish.
   }
 
-  return { workspaceId: ws.id };
+  return seedResult(ws.id, failures);
 }
 
 export async function seedDemoWorkspace() {
@@ -220,7 +278,7 @@ export async function seedDemoWorkspace() {
 
 // -------------------------------------------------------------------
 // "Rich" seed — pile of dummy data to exercise every feature surface.
-// 3 boards, 4 sprints, ~50 cards spanning epic/story/task/subtask/bug
+// 3 boards, 4 sprints, ~50 cards spanning story/task/subtask/bug
 // across past + future + far-future, with priorities, labels, owners,
 // collaborators, components, versions, archived rows. Owner is always
 // the seeding user (we can't service-role-create extra members from
@@ -239,35 +297,62 @@ function decodeSubLocal(jwt: string): string {
 
 async function seedRichDemoImpl(
   token: string,
-): Promise<{ workspaceId: string }> {
+  failures: SeedFailure[] = [],
+  failStep?: string,
+): Promise<SeedResult> {
   const userId = decodeSubLocal(token);
   // Both 'demo' and 'rich' modes funnel here; keep the name "Demo
   // Workspace" so the seed is indistinguishable to the user (and to
   // the existing seed-demo integration test).
-  const ws = await createWorkspaceImpl(token, { name: "Demo Workspace" });
+  const ws = await seedStep(
+    failures,
+    "workspace",
+    () => createWorkspaceImpl(token, { name: "Demo Workspace" }),
+    failStep,
+  );
+  if (!ws) return seedResult(null, failures);
 
   // ---- Boards (3 different templates) ----
-  const okr = await createBoardFromTemplateImpl(token, {
-    workspaceId: ws.id,
-    title: "Product OKRs",
-    backgroundKind: "color",
-    backgroundValue: "#0f0f12",
-    templateId: "okr_sprint",
-  });
-  const triage = await createBoardFromTemplateImpl(token, {
-    workspaceId: ws.id,
-    title: "Bug triage",
-    backgroundKind: "color",
-    backgroundValue: "#16151b",
-    templateId: "bug_triage",
-  });
-  const standup = await createBoardFromTemplateImpl(token, {
-    workspaceId: ws.id,
-    title: "Daily standup",
-    backgroundKind: "color",
-    backgroundValue: "#101418",
-    templateId: "standup",
-  });
+  const okr = await seedStep(
+    failures,
+    "board-product-okrs",
+    () =>
+      createBoardFromTemplateImpl(token, {
+        workspaceId: ws.id,
+        title: "Product OKRs",
+        backgroundKind: "color",
+        backgroundValue: "#0f0f12",
+        templateId: "okr_sprint",
+      }),
+    failStep,
+  );
+  const triage = await seedStep(
+    failures,
+    "board-bug-triage",
+    () =>
+      createBoardFromTemplateImpl(token, {
+        workspaceId: ws.id,
+        title: "Bug triage",
+        backgroundKind: "color",
+        backgroundValue: "#16151b",
+        templateId: "bug_triage",
+      }),
+    failStep,
+  );
+  const standup = await seedStep(
+    failures,
+    "board-daily-standup",
+    () =>
+      createBoardFromTemplateImpl(token, {
+        workspaceId: ws.id,
+        title: "Daily standup",
+        backgroundKind: "color",
+        backgroundValue: "#101418",
+        templateId: "standup",
+      }),
+    failStep,
+  );
+  if (!okr || !triage || !standup) return seedResult(ws.id, failures);
 
   // OKR list ids: 0 Backlog, 1 This sprint, 2 In progress, 3 Review, 4 Done
   const okrBacklog = okr.listIds[0];
@@ -347,23 +432,23 @@ async function seedRichDemoImpl(
     /* non-fatal — workspace may have invariants we're not aware of */
   }
 
-  // ---- Epic 1: "Onboarding revamp" w/ 4 stories + subtasks ----
-  const epic1 = await createCardImpl(token, {
+  // ---- Initiative 1: "Onboarding revamp" w/ 4 stories + subtasks ----
+  const initiative1 = await createCardImpl(token, {
     listId: okrBacklog,
     title: "Onboarding revamp",
     startDate: day(-7),
     targetDate: day(35),
   });
   await updateCardImpl(token, {
-    id: epic1.id,
-    type: "epic",
+    id: initiative1.id,
+    type: "story",
     storyPoints: 21,
     priority: "p1",
     ownerId: userId,
     description:
       "## Goal\nLift activation rate from 38% to 55% by Q3.\n\n## Scope\n- New welcome wizard\n- Empty-state illustrations\n- Sample-data toggle on signup\n- Polished tour overlay\n\n## Out of scope\nMarketing email sequence (owned by growth).",
   });
-  await toggleCardLabelImpl(token, { cardId: epic1.id, labelId: labelGrowth.id });
+  await toggleCardLabelImpl(token, { cardId: initiative1.id, labelId: labelGrowth.id });
 
   const stories1: Array<{ id: string; boardId: string }> = [];
   for (let i = 0; i < 4; i++) {
@@ -377,14 +462,14 @@ async function seedRichDemoImpl(
     const s = await createCardImpl(token, {
       listId: list,
       title: titles[i],
-      parentCardId: epic1.id,
+      parentCardId: initiative1.id,
       startDate: day(i * 4 - 5),
       targetDate: day(i * 4 + 4),
     });
     await updateCardImpl(token, {
       id: s.id,
       type: "story",
-      parentCardId: epic1.id,
+      parentCardId: initiative1.id,
       storyPoints: pick([3, 5, 8, 13], i),
       priority: pick(PRIORITIES, i + 1),
       estimateMin: pick([240, 480, 720, 960], i),
@@ -415,37 +500,37 @@ async function seedRichDemoImpl(
     });
   }
 
-  // ---- Epic 2: "Performance pass" w/ 3 stories ----
-  const epic2 = await createCardImpl(token, {
+  // ---- Initiative 2: "Performance pass" w/ 3 stories ----
+  const initiative2 = await createCardImpl(token, {
     listId: okrBacklog,
     title: "Performance pass Q3",
     startDate: day(7),
     targetDate: day(56),
   });
   await updateCardImpl(token, {
-    id: epic2.id,
-    type: "epic",
+    id: initiative2.id,
+    type: "story",
     storyPoints: 13,
     priority: "p2",
     ownerId: userId,
     description:
       "## Goal\nGet p95 navigation under 200ms across the board page.\n\n## Workstreams\n1. Code-split routes\n2. Cache board snapshots\n3. Index hot tables (cards, activity, notifications)\n\n## Risks\nIndex changes need staging soak; coordinate with infra.",
   });
-  await toggleCardLabelImpl(token, { cardId: epic2.id, labelId: labelTech.id });
+  await toggleCardLabelImpl(token, { cardId: initiative2.id, labelId: labelTech.id });
 
   for (let i = 0; i < 3; i++) {
     const titles = ["Code-split routes", "Cache snapshots", "Index hot tables"];
     const s = await createCardImpl(token, {
       listId: okrBacklog,
       title: titles[i],
-      parentCardId: epic2.id,
+      parentCardId: initiative2.id,
       startDate: day(7 + i * 8),
       targetDate: day(7 + i * 8 + 10),
     });
     await updateCardImpl(token, {
       id: s.id,
       type: "story",
-      parentCardId: epic2.id,
+      parentCardId: initiative2.id,
       storyPoints: pick([5, 8, 13], i),
       priority: pick(PRIORITIES, i),
       estimateMin: pick([480, 720, 1200], i),
@@ -457,16 +542,16 @@ async function seedRichDemoImpl(
     });
   }
 
-  // ---- Epic 3: "Mobile beta" — far-future, no children yet ----
-  const epic3 = await createCardImpl(token, {
+  // ---- Initiative 3: "Mobile beta" — far-future, no children yet ----
+  const initiative3 = await createCardImpl(token, {
     listId: okrBacklog,
     title: "Mobile beta launch",
     startDate: day(45),
     targetDate: day(110),
   });
   await updateCardImpl(token, {
-    id: epic3.id,
-    type: "epic",
+    id: initiative3.id,
+    type: "story",
     storyPoints: 34,
     priority: "p3",
     ownerId: userId,
@@ -596,14 +681,14 @@ async function seedRichDemoImpl(
   // Each comment also auto-watches the author.
   await safe(() =>
     createCommentImpl(token, {
-      cardId: epic1.id,
+      cardId: initiative1.id,
       body:
         "Kickoff sync is on the calendar.\n\n- Wireframes by Tue\n- Copy review by Thu\n- First pass live by next Sprint demo",
     }),
   );
   await safe(() =>
     createCommentImpl(token, {
-      cardId: epic1.id,
+      cardId: initiative1.id,
       body:
         "Update: design has the welcome wizard wireframes ready.  See [Figma board](https://figma.com).",
     }),
@@ -616,7 +701,7 @@ async function seedRichDemoImpl(
   );
   await safe(() =>
     createCommentImpl(token, {
-      cardId: epic2.id,
+      cardId: initiative2.id,
       body:
         "Code-split landed on staging.  p95 dropped from 380ms to 210ms — close to the goal.",
     }),
@@ -672,33 +757,33 @@ async function seedRichDemoImpl(
   }
 
   // ---- Card-link relations (dependency arrows on the roadmap) ----
-  // Stories under epic1 block the epic itself; performance epic relates
-  // to the onboarding epic (shared infra work).
+  // Stories under initiative1 block the initiative itself; performance
+  // work relates to the onboarding initiative (shared infra work).
   await safe(() =>
     createCardLinkImpl(token, {
       fromCardId: stories1[0].id,
-      toCardId: epic1.id,
+      toCardId: initiative1.id,
       kind: "blocks",
     }),
   );
   await safe(() =>
     createCardLinkImpl(token, {
       fromCardId: stories1[1].id,
-      toCardId: epic1.id,
+      toCardId: initiative1.id,
       kind: "blocks",
     }),
   );
   await safe(() =>
     createCardLinkImpl(token, {
-      fromCardId: epic2.id,
-      toCardId: epic1.id,
+      fromCardId: initiative2.id,
+      toCardId: initiative1.id,
       kind: "relates_to",
     }),
   );
   await safe(() =>
     createCardLinkImpl(token, {
-      fromCardId: epic3.id,
-      toCardId: epic2.id,
+      fromCardId: initiative3.id,
+      toCardId: initiative2.id,
       kind: "is_blocked_by",
     }),
   );
@@ -706,7 +791,7 @@ async function seedRichDemoImpl(
   // ---- Watchers: pin the user as watcher on the headline cards so the
   //      inbox demo has signal.  toggleCardMember already auto-watches;
   //      this catches the rest. ----
-  for (const c of [epic1.id, epic2.id, epic3.id]) {
+  for (const c of [initiative1.id, initiative2.id, initiative3.id]) {
     await safe(() => watchCardImpl(token, { cardId: c }));
   }
 
@@ -744,7 +829,7 @@ async function seedRichDemoImpl(
     type: "markdown_note",
     config: {
       body:
-        "## Welcome\nThis workspace is fully populated so every page has something to look at:\n\n- **Roadmap** — 3 epics with dates and dependencies\n- **Boards** — Product OKRs / Bug triage / Daily standup\n- **My tasks** — cards owned by you across the boards\n- **Versions** — v1.0, v1.1, v2.0\n- **Inbox** — bell pulses as comments / mentions / assignments fire\n\nDelete this workspace from Settings whenever you want a clean slate.",
+        "## Welcome\nThis workspace is fully populated so every page has something to look at:\n\n- **Roadmap** — 3 initiatives with dates and dependencies\n- **Boards** — Product OKRs / Bug triage / Daily standup\n- **My tasks** — cards owned by you across the boards\n- **Versions** — v1.0, v1.1, v2.0\n- **Inbox** — bell pulses as comments / mentions / assignments fire\n\nDelete this workspace from Settings whenever you want a clean slate.",
     },
     size: "3x2",
   });
@@ -780,7 +865,7 @@ async function seedRichDemoImpl(
     /* non-fatal */
   }
 
-  return { workspaceId: ws.id };
+  return seedResult(ws.id, failures);
 }
 
 // Best-effort wrapper used by the rich seed.  Any single create that
@@ -790,7 +875,7 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   try {
     return await fn();
   } catch (err) {
-    console.error("[seed.safe] non-fatal:", (err as Error).message);
+    console.error("[seed.safe] non-fatal:", toStructuredError(err));
     return null;
   }
 }

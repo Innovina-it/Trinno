@@ -1,4 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+  EMAIL_KIND_LABELS,
+  type NotificationKind,
+} from "@/lib/notifications/email-labels";
 
 // Daily digest builder.  Companion to lib/notify-email.ts (per-event sender)
 // — this assembles ONE email per user per day grouped by kind/card from the
@@ -19,34 +23,10 @@ type Notif = {
   created_at: string;
 };
 
-// Same VERB_BY_KIND copy lives in notify-email.ts; intentionally
-// duplicated so neither file imports the other (keeps the per-event path
-// independent of the digest path).
-const KIND_LABEL: Record<string, { plural: string; singular: string }> = {
-  "comment.mention": { plural: "mentions", singular: "mention" },
-  "comment.create": { plural: "new comments", singular: "new comment" },
-  "card.assigned": { plural: "assignments", singular: "assignment" },
-  "card.unassigned": { plural: "unassignments", singular: "unassignment" },
-  "card.due": { plural: "due dates", singular: "due date" },
-  "card.dates": { plural: "reschedules", singular: "reschedule" },
-  "card.archived": { plural: "archives", singular: "archive" },
-  "card.unarchived": { plural: "restores", singular: "restore" },
-  "card.moved": { plural: "card moves", singular: "card move" },
-  "card.linked": { plural: "card links", singular: "card link" },
-  "card.sprint_changed": { plural: "sprint moves", singular: "sprint move" },
-  "card.completed": { plural: "completions", singular: "completion" },
-  "board.member.added": {
-    plural: "board memberships",
-    singular: "board membership",
-  },
-};
-
 function labelFor(kind: string, count: number): string {
-  const entry = KIND_LABEL[kind];
+  const entry = EMAIL_KIND_LABELS[kind as NotificationKind];
   if (!entry) return `${count} ${kind}`;
-  return count === 1
-    ? `${count} ${entry.singular}`
-    : `${count} ${entry.plural}`;
+  return `${count} ${count === 1 ? entry.subject : entry.preview}`;
 }
 
 function escapeHtml(s: string): string {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Seed an AIWEPI / Switch project workspace from the project plan PDF.
-// 5 work packages (epics) + 11 tasks (stories) + 11 deliverables (subtasks)
+// 5 work packages + 11 tasks (stories) + 11 deliverables (subtasks)
 // + 5 milestones (versions). Dates anchored to PROJECT_START as M1.
 //
 // Owner = aiwepi@local / password aiwepi-seed-2026 (created if missing).
@@ -299,24 +299,24 @@ async function seed() {
   }
   console.log(`Versions: ${Object.keys(versions).length}`);
 
-  // Epics + tasks + deliverables
+  // Work packages + tasks + deliverables
   let cardPos = 0;
   const nextPos = () => `a${(cardPos++).toString(36).padStart(3, "0")}`;
 
   for (const wp of WPS) {
-    const [epic] = await call("cards", {
+    const [workPackage] = await call("cards", {
       list_id: lists.todo,
       board_id: board.id,
       title: wp.title,
       position: nextPos(),
     });
-    await update("cards", epic.id, {
-      type: "epic",
+    await update("cards", workPackage.id, {
+      type: "story",
       description: `**${wp.kind}** · M${wp.startMonth}–M${wp.endMonth}\n\n${wp.description}`,
       start_date: monthStart(wp.startMonth).toISOString().slice(0, 10),
       target_date: monthStart(wp.endMonth).toISOString().slice(0, 10),
     });
-    console.log(`Epic ${wp.code}: ${epic.id}`);
+    console.log(`Work package ${wp.code}: ${workPackage.id}`);
 
     const taskCards = [];
     for (const t of wp.tasks) {
@@ -329,7 +329,7 @@ async function seed() {
       await update("cards", card.id, {
         type: "story",
         description: t.description,
-        parent_card_id: epic.id,
+        parent_card_id: workPackage.id,
         start_date: monthStart(wp.startMonth).toISOString().slice(0, 10),
         target_date: monthStart(wp.endMonth).toISOString().slice(0, 10),
       });
@@ -346,7 +346,7 @@ async function seed() {
       await update("cards", card.id, {
         type: "subtask",
         description: d.description,
-        parent_card_id: taskCards[0]?.id ?? epic.id,
+        parent_card_id: taskCards[0]?.id ?? workPackage.id,
         target_date: monthStart(wp.endMonth).toISOString().slice(0, 10),
       });
     }

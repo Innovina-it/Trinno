@@ -151,7 +151,7 @@ Changes (per page):
 - **Settings** (`settings/page.tsx`): label/control two-column → stacked `<md:`. Save bar sticky bottom on mobile.
 - **Versions index** (`versions/page.tsx`) + detail (`versions/[versionId]/page.tsx`): table → card list `<md:`.
 - **Sprints detail** (`sprints/[sprintId]/page.tsx`) + report (`report/page.tsx`): two-pane → stacked `<md:`.
-- **Epic** (`e/[epicId]/page.tsx`): hero metric strip wraps; child board uses the same board adaptations as 4.2.
+- **Sub-board** (`e/[sub-boardId]/page.tsx`): hero metric strip wraps; child board uses the same board adaptations as 4.2.
 - **Roadmap** (`roadmap/page.tsx`): adopt 4.4 roadmap changes.
 
 ### 4.6 Dashboards (app/(app)/dashboards/**)
@@ -271,9 +271,9 @@ Each packet is independent enough to run in its own worktree. Cross-cutting deli
 - `app/(app)/w/[workspaceId]/versions/[versionId]/page.tsx`
 - `app/(app)/w/[workspaceId]/sprints/[sprintId]/page.tsx`
 - `app/(app)/w/[workspaceId]/sprints/[sprintId]/report/page.tsx`
-- `app/(app)/w/[workspaceId]/e/[epicId]/page.tsx`
+- `app/(app)/w/[workspaceId]/e/[sub-boardId]/page.tsx`
 - `app/(app)/w/[workspaceId]/roadmap/page.tsx` (page shell only; chart body is in Packet 5)
-- Supporting components under `components/workspace/`, `components/epic/`, `components/sprint/` (except `burndown-chart.tsx`), `components/versions/`, `components/archive/`
+- Supporting components under `components/workspace/`, `components/sub-board/`, `components/sprint/` (except `burndown-chart.tsx`), `components/versions/`, `components/archive/`
 - Tests: workspace playwright suite at 375 + 768 + 1280.
 
 **Packet 7 — Dashboards.**

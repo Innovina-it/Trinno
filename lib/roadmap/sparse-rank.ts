@@ -39,3 +39,36 @@ export function computeNewRank(
   }
   return mid;
 }
+
+/**
+ * Local optimistic variant used by the roadmap drag UI. Server writes stay
+ * integer-ranked through computeNewRank + transactional renumbering, but the
+ * client can receive two rapid local drops before realtime echoes the first
+ * write. When the ideal rank is already present in the current snapshot, use a
+ * tiny in-gap fractional offset so React sorting remains collision-free until
+ * the authoritative server rank arrives.
+ */
+export function computeOptimisticRank(
+  beforeRank: number | null,
+  afterRank: number | null,
+  occupiedRanks: Iterable<number>,
+): number {
+  const occupied = new Set(occupiedRanks);
+  const base = computeNewRank(beforeRank, afterRank);
+  if (!occupied.has(base)) return base;
+
+  const lower = beforeRank ?? base - RANK_STEP;
+  const upper = afterRank ?? base + RANK_STEP;
+  if (upper <= lower) throw new RankCollisionError();
+
+  const gap = upper - lower;
+  for (let i = 1; i <= 64; i++) {
+    const offset = gap * (i / 257);
+    const up = base + offset;
+    if (up < upper && !occupied.has(up)) return up;
+    const down = base - offset;
+    if (down > lower && !occupied.has(down)) return down;
+  }
+
+  throw new RankCollisionError();
+}

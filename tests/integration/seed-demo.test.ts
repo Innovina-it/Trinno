@@ -40,6 +40,7 @@ describe("seedDemoWorkspace", () => {
     const u = await makeUser("seed");
     const { workspaceId } = await seedDemoWorkspaceImpl(u.jwt);
     expect(workspaceId).toBeTruthy();
+    if (!workspaceId) throw new Error("seed did not return a workspace id");
 
     // Workspace named "Demo Workspace".
     const wsRows = await dbAsUser(u.jwt, async (tx) =>
@@ -68,7 +69,7 @@ describe("seedDemoWorkspace", () => {
     );
     expect(cardRows.length).toBeGreaterThanOrEqual(5);
     const types = new Set(cardRows.map((c) => c.type));
-    expect(types.has("epic")).toBe(true);
+    expect(types.has("epic")).toBe(false);
     expect(types.has("story")).toBe(true);
 
     const sprintRows = await dbAsUser(u.jwt, async (tx) =>
@@ -95,5 +96,24 @@ describe("seedDemoWorkspace", () => {
       tx.select().from(gadgets).where(eq(gadgets.dashboardId, someDash.id)),
     );
     expect(gadgetRows.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns a structured partial result when a seed sub-step fails", async () => {
+    const u = await makeUser("seed-partial");
+    await expect(
+      seedDemoWorkspaceImpl(u.jwt, {
+        mode: "minimal",
+        __testFailStep: "mark-onboarding-completed",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      partial: true,
+      failures: [
+        {
+          step: "mark-onboarding-completed",
+          error: { code: "SEED_TEST_FAILURE" },
+        },
+      ],
+    });
   });
 });

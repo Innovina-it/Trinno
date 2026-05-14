@@ -1,3 +1,4 @@
+import "server-only";
 import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import {
@@ -6,6 +7,9 @@ import {
   profiles,
   sprints,
 } from "@/lib/db/schema";
+import type { CardHistoryRow } from "./card-history-types";
+
+export type { CardHistoryRow };
 
 // Merged audit feed for a single card. Combines:
 //   1. `card_field_history` — every tracked field change (title, owner,
@@ -15,33 +19,13 @@ import {
 // secondary lookup pass.
 //
 // RLS: dbAsUser scopes by JWT. Both tables RLS to "viewer of card".
-
-export type CardHistoryRow =
-  | {
-      kind: "field";
-      id: string;
-      cardId: string;
-      field: string;
-      oldValue: string | null;
-      newValue: string | null;
-      actorId: string | null;
-      actorName: string | null;
-      at: Date;
-    }
-  | {
-      kind: "sprint";
-      // Sprint-assignment window. assignedAt = entered, removedAt = exited
-      // (or null when still active in that sprint).
-      id: string;
-      cardId: string;
-      sprintId: string | null;
-      sprintName: string | null;
-      assignedAt: Date;
-      removedAt: Date | null;
-      at: Date;
-    };
+//
+// NOTE: the React client hook `useCardHistoryPaginated` lives in
+// `./use-card-history.ts` so that client components don't pull
+// drizzle / postgres into the browser bundle via this file.
 
 const MAX_HISTORY_ROWS = 200;
+const DEFAULT_HISTORY_PAGE_SIZE = 20;
 
 export async function listCardHistory(
   token: string,
@@ -139,6 +123,23 @@ export async function listCardHistory(
     out.sort((a, b) => b.at.getTime() - a.at.getTime());
     return out.slice(0, MAX_HISTORY_ROWS);
   });
+}
+
+export async function listCardHistoryPage(
+  token: string,
+  cardId: string,
+  page = 0,
+  pageSize = DEFAULT_HISTORY_PAGE_SIZE,
+): Promise<{ rows: CardHistoryRow[]; nextPage: number | null }> {
+  const safePageSize = Math.max(1, Math.min(pageSize, MAX_HISTORY_ROWS));
+  const safePage = Math.max(0, page);
+  const rows = await listCardHistory(token, cardId);
+  const start = safePage * safePageSize;
+  const pageRows = rows.slice(start, start + safePageSize);
+  return {
+    rows: pageRows,
+    nextPage: start + safePageSize < rows.length ? safePage + 1 : null,
+  };
 }
 
 // Suppress unused-imports lint warnings if drizzle helpers vary across

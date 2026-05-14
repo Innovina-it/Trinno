@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { markNotificationRead } from "@/actions/notifications";
 import { toast } from "sonner";
+import { EMAIL_KIND_LABELS, type NotificationKind } from "@/lib/notifications/email-labels";
 
 type N = {
   id: string;
@@ -25,20 +26,9 @@ type N = {
   createdAt: string;
 };
 
-const KIND_LABEL: Record<string, string> = {
-  "comment.mention": "mentioned you in",
-  "comment.create": "commented on",
-  "card.assigned": "assigned you to",
-  "card.unassigned": "unassigned you from",
-  "card.archived": "archived",
-  "card.unarchived": "restored",
-  "card.completed": "completed",
-  "card.moved": "moved",
-  "card.due": "set due date on",
-  "card.dates": "updated roadmap dates on",
-  "card.label.added": "added a label to",
-  "board.member.added": "added you to a board",
-};
+function kindLabel(kind: string): string {
+  return EMAIL_KIND_LABELS[kind as NotificationKind]?.subject ?? kind;
+}
 
 function rel(d: string) {
   const sec = Math.round((Date.now() - new Date(d).getTime()) / 1000);
@@ -205,7 +195,7 @@ export function NotificationBell({ userId }: { userId: string }) {
                   </span>
                   <span className="text-fg-muted">
                     {" "}
-                    {KIND_LABEL[n.kind] ?? n.kind}{" "}
+                    {kindLabel(n.kind)}{" "}
                   </span>
                   <span className="font-medium">
                     {n.cardTitle ??

@@ -4,12 +4,12 @@
 // SUPABASE_SERVICE_ROLE_KEY from env. Does NOT touch the password.
 //
 // Mapping (per the project plan PDF):
-//   6 epics (WP1.1..WP1.6)
+//   6 work packages (WP1.1..WP1.6)
 //   11 stories (T1.1..T5.2)
 //   11 subtasks (D1.1.1..D1.5.2)
 //   5 versions (M1.1..M1.5)
 // Dates anchored to PROJECT_START as M1. Each WP carries start/target_date
-// on the epic so the roadmap renders bars immediately.
+// on the work-package card so the roadmap renders bars immediately.
 
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
@@ -316,19 +316,19 @@ async function seed() {
   const nextPos = () => `a${(cardPos++).toString(36).padStart(3, "0")}`;
 
   for (const wp of WPS) {
-    const [epic] = await call("cards", {
+    const [workPackage] = await call("cards", {
       list_id: lists.todo,
       board_id: board.id,
       title: wp.title,
       position: nextPos(),
     });
-    await update("cards", epic.id, {
-      type: "epic",
+    await update("cards", workPackage.id, {
+      type: "story",
       description: `**${wp.kind}** · M${wp.startMonth}–M${wp.endMonth}\n\n${wp.description}`,
       start_date: isoDate(monthStart(wp.startMonth)),
       target_date: isoDate(monthStart(wp.endMonth)),
     });
-    console.log(`Epic ${wp.code}: ${epic.id}`);
+    console.log(`Work package ${wp.code}: ${workPackage.id}`);
 
     const taskCards = [];
     for (const t of wp.tasks) {
@@ -341,7 +341,7 @@ async function seed() {
       await update("cards", card.id, {
         type: "story",
         description: t.description,
-        parent_card_id: epic.id,
+        parent_card_id: workPackage.id,
         start_date: isoDate(monthStart(wp.startMonth)),
         target_date: isoDate(monthStart(wp.endMonth)),
       });
@@ -358,7 +358,7 @@ async function seed() {
       await update("cards", card.id, {
         type: "subtask",
         description: d.description,
-        parent_card_id: taskCards[0]?.id ?? epic.id,
+        parent_card_id: taskCards[0]?.id ?? workPackage.id,
         target_date: isoDate(monthStart(wp.endMonth)),
       });
     }

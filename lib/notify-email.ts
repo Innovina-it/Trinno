@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { EMAIL_KIND_LABELS, type NotificationKind } from "@/lib/notifications/email-labels";
 
 // Email pipeline.  Fetches notifications with email_sent_at IS NULL,
 // gates each by user_notification_prefs(channel='email', enabled=true),
@@ -24,21 +25,9 @@ type Notif = {
   created_at: string;
 };
 
-const VERB_BY_KIND: Record<string, string> = {
-  "comment.mention": "mentioned you in a comment",
-  "comment.create": "commented on a card you watch",
-  "card.assigned": "assigned you to a card",
-  "card.unassigned": "unassigned you from a card",
-  "card.due": "set a due date on a card you watch",
-  "card.dates": "rescheduled a card you watch",
-  "card.archived": "archived a card you watch",
-  "card.unarchived": "restored a card you watch",
-  "card.moved": "moved a card you watch",
-  "card.linked": "linked a card to one you watch",
-  "card.sprint_changed": "moved a card you watch to a different sprint",
-  "card.completed": "completed a card you watch",
-  "board.member.added": "added you to a board",
-};
+function kindLabel(kind: string): string {
+  return EMAIL_KIND_LABELS[kind as NotificationKind]?.subject ?? kind;
+}
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => {
@@ -157,7 +146,7 @@ export async function processPendingEmails(opts: {
         if (b?.title) boardTitle = b.title;
       }
 
-      const verb = VERB_BY_KIND[n.kind] ?? n.kind;
+      const verb = kindLabel(n.kind);
       const subject = `${actorName} ${verb}${cardTitle ? `: ${cardTitle}` : ""}`;
       const linkPath = n.related_card_id
         ? `/c/${n.related_card_id}`

@@ -26,6 +26,7 @@ import {
 import { undoBus } from "@/lib/undo-bus";
 import { formatDate } from "@/lib/format-date";
 import { toast } from "sonner";
+import { EMAIL_KIND_LABELS, type NotificationKind } from "@/lib/notifications/email-labels";
 
 const FILTERS = [
   { id: "all", label: "All" },
@@ -36,24 +37,31 @@ const FILTERS = [
 ];
 
 type KindMeta = { verb: string; Icon: typeof Bell };
-const KIND_META: Record<string, KindMeta> = {
-  "comment.mention": { verb: "mentioned you in", Icon: AtSign },
-  "comment.create": { verb: "commented on", Icon: MessageSquare },
-  "card.assigned": { verb: "assigned you to", Icon: UserPlus },
-  "card.unassigned": { verb: "unassigned you from", Icon: Users },
-  "card.archived": { verb: "archived", Icon: Archive },
-  "card.unarchived": { verb: "restored", Icon: CornerUpRight },
-  "card.completed": { verb: "completed", Icon: CheckCircle2 },
-  "card.moved": { verb: "moved", Icon: CornerUpRight },
-  "card.due": { verb: "set due date on", Icon: Calendar },
-  "card.dates": { verb: "rescheduled", Icon: CalendarRange },
-  "card.label.added": { verb: "labeled", Icon: Tag },
-  "card.linked": { verb: "linked a card to", Icon: Link2 },
-  "card.sprint_changed": { verb: "moved sprint on", Icon: Timer },
-  "card.owner_assigned": { verb: "made you owner of", Icon: UserPlus },
-  "card.owner_unassigned": { verb: "removed you as owner of", Icon: Users },
-  "board.member.added": { verb: "added you to a board", Icon: Users },
+const KIND_ICON: Record<string, typeof Bell> = {
+  "comment.mention": AtSign,
+  "comment.create": MessageSquare,
+  "card.assigned": UserPlus,
+  "card.unassigned": Users,
+  "card.archived": Archive,
+  "card.unarchived": CornerUpRight,
+  "card.completed": CheckCircle2,
+  "card.moved": CornerUpRight,
+  "card.due": Calendar,
+  "card.dates": CalendarRange,
+  "card.label.added": Tag,
+  "card.linked": Link2,
+  "card.sprint_changed": Timer,
+  "card.owner_assigned": UserPlus,
+  "card.owner_unassigned": Users,
+  "board.member.added": Users,
 };
+
+function kindMeta(kind: string): KindMeta {
+  return {
+    verb: EMAIL_KIND_LABELS[kind as NotificationKind]?.subject ?? kind,
+    Icon: KIND_ICON[kind] ?? Bell,
+  };
+}
 
 type N = {
   id: string;
@@ -295,10 +303,7 @@ export function InboxList({
                   {g.rows.map((n) => {
                     const flatIdx = flat.indexOf(n);
                     const isActive = flatIdx === activeIdx;
-                    const meta = KIND_META[n.kind] ?? {
-                      verb: n.kind,
-                      Icon: Bell,
-                    };
+                    const meta = kindMeta(n.kind);
                     const Icon = meta.Icon;
                     return (
                       <li

@@ -180,7 +180,7 @@ The doc lists 4 security gaps at the bottom. These are documented but NOT fixed 
 1. Open the roadmap view.
 2. Look for a toggle in the toolbar: "Gantt | List".
 3. Click "List".
-4. **Expected**: a hierarchical list view appears — epics at the top, tasks nested under their epic, subtasks nested under their task.
+4. **Expected**: a hierarchical list view appears — sub-boards at the top, tasks nested under their sub-board, subtasks nested under their task.
 5. **Expected**: rows are sorted by start date, earliest first. Items with no start date appear at the bottom.
 6. **Expected**: each row shows a priority dot, the title, the dates, an owner avatar, and the completion state.
 7. Click "Gantt" to switch back.
@@ -299,20 +299,20 @@ When you create a new workspace, you can now invite members in the same dialog. 
 
 ---
 
-## 11. Epic boards on the boards page (Task #14)
+## 11. Sub-board boards on the boards page (Task #14)
 
 ### What changed
-On the boards listing page (`/w/<workspace>/boards`), in addition to regular boards, you now see epic-type cards from the workspace. Epic tiles look the same as board tiles but have an "EPIC BOARD" tag in the corner.
+On the boards listing page (`/w/<workspace>/boards`), in addition to regular boards, you now see sub-board-type cards from the workspace. Sub-board tiles look the same as board tiles but have an "SUB-BOARD BOARD" tag in the corner.
 
 ### How to test it
 1. Go to `/w/<your-workspace>/boards`.
 2. **Expected**: regular boards appear as usual.
-3. **Expected**: any epic-type cards in this workspace also appear as tiles in the grid, each with an "EPIC BOARD" tag overlay.
-4. Click an epic tile.
-5. **Expected**: it opens the card popup for that epic (same intercept popup as clicking a card on a board).
+3. **Expected**: any sub-board-type cards in this workspace also appear as tiles in the grid, each with an "SUB-BOARD BOARD" tag overlay.
+4. Click an sub-board tile.
+5. **Expected**: it opens the card popup for that sub-board (same intercept popup as clicking a card on a board).
 
 ### How to verify with seeded data
-After running the AIWEPI seed, you should see 6 work packages (WP1.1-WP1.6) as epics. They should all show on the boards page with the EPIC BOARD tag.
+After running the AIWEPI seed, you should see 6 work packages (WP1.1-WP1.6) as sub-boards. They should all show on the boards page with the SUB-BOARD BOARD tag.
 
 ---
 

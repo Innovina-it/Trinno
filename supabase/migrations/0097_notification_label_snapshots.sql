@@ -49,12 +49,24 @@ end$$;
 --    don't overwrite anything richer that may have been stored.
 update public.notifications n
    set payload = coalesce(payload, '{}'::jsonb)
-                || jsonb_build_object(
-                     'board_title', b.title,
-                     'actor_name', p.display_name
-                   )
+                || case
+                     when not (coalesce(payload, '{}'::jsonb) ? 'board_title')
+                     then jsonb_build_object('board_title', b.title)
+                     else '{}'::jsonb
+                   end
+                || case
+                     when not (coalesce(payload, '{}'::jsonb) ? 'actor_name')
+                     then jsonb_build_object(
+                       'actor_name',
+                       (
+                         select p.display_name
+                           from public.profiles p
+                          where p.id = n.actor_user_id
+                       )
+                     )
+                     else '{}'::jsonb
+                   end
   from public.boards b
-  left join public.profiles p on p.id = n.actor_user_id
  where n.kind = 'board.member.added'
    and n.related_board_id = b.id
    and (

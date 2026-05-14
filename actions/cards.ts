@@ -86,28 +86,42 @@ export async function createCardImpl(token: string, input: {
     let startDate = toDate(parsed.startDate);
     let targetDate = toDate(parsed.targetDate);
 
-    // Subtask date inheritance: if linked to a parent and own dates blank,
-    // copy the parent's span. Lets a child default onto the roadmap inside
-    // its epic without forcing the user to repick dates.
-    if (parsed.parentCardId && (!startDate || !targetDate)) {
+    let parentDefaults:
+      | { startDate: Date | null; targetDate: Date | null; ownerId: string | null }
+      | undefined;
+    if (parsed.parentCardId && (!startDate || !targetDate || parsed.ownerId === undefined)) {
       const [parent] = await tx
-        .select({ startDate: cards.startDate, targetDate: cards.targetDate })
+        .select({
+          startDate: cards.startDate,
+          targetDate: cards.targetDate,
+          ownerId: cards.ownerId,
+        })
         .from(cards)
         .where(eq(cards.id, parsed.parentCardId))
         .limit(1);
-      if (parent) {
-        if (!startDate && parent.startDate) startDate = parent.startDate;
-        if (!targetDate && parent.targetDate) targetDate = parent.targetDate;
-      }
+      parentDefaults = parent;
     }
 
-    // Default ownerId to the creator when the client didn't supply one.
+    // Subtask date inheritance: if linked to a parent and own dates blank,
+    // copy the parent's span. Lets a child default onto the roadmap without
+    // forcing the user to repick dates.
+    if (parentDefaults) {
+      if (!startDate && parentDefaults.startDate) startDate = parentDefaults.startDate;
+      if (!targetDate && parentDefaults.targetDate) targetDate = parentDefaults.targetDate;
+    }
+
+    // Default ownerId to the parent owner for subtasks, otherwise creator,
+    // when the client didn't supply one.
     // Distinguish "not provided" (undefined) from "explicitly null" so the
     // rare un-owned create stays possible if a caller intentionally passes
     // null. The creator is always a valid claimant — owner-change trigger
     // only fires on UPDATE, never INSERT.
     const ownerId =
-      parsed.ownerId === undefined ? creatorId : parsed.ownerId;
+      parsed.ownerId === undefined
+        ? parentDefaults
+          ? parentDefaults.ownerId
+          : creatorId
+        : parsed.ownerId;
 
     const [row] = await tx.insert(cards).values({
       listId: parsed.listId,
@@ -177,6 +191,9 @@ export async function updateCardImpl(token: string, input: {
           : new Date(parsed.dueDate);
   }
   if (parsed.dueComplete !== undefined) patch.dueComplete = parsed.dueComplete;
+  if (parsed.type === "epic") {
+    throw new Error("Epic cards have been migrated to sub-boards.");
+  }
   if (parsed.type !== undefined) patch.type = parsed.type;
   if (parsed.parentCardId !== undefined) patch.parentCardId = parsed.parentCardId;
   if (parsed.storyPoints !== undefined) patch.storyPoints = parsed.storyPoints;
@@ -350,7 +367,7 @@ export async function moveCardImpl(token: string, input: {
 }
 
 /**
- * Plan #epic-as-kanban — drag-end handler for the epic-kanban view.
+ * Sub-board status drag handler.
  * Resolves (or creates) a list on the card's board with the target
  * status_kind, then moves the card into it at end-of-list.
  *
@@ -757,9 +774,9 @@ export async function moveCard(input: Parameters<typeof moveCardImpl>[1]) {
   revalidatePath(`/b/${r.boardId}`);
   return r;
 }
-// Plan #epic-as-kanban — server-action wrapper for the epic-kanban
-// drag-end handler. No `revalidatePath`: the kanban view relies on
-// realtime CDC for updates, not Next router cache invalidation.
+// Server-action wrapper for status-column drag. No `revalidatePath`:
+// the kanban view relies on realtime CDC for updates, not Next router
+// cache invalidation.
 export async function moveCardToStatus(input: {
   cardId: string; statusKind: StatusKind;
 }) {

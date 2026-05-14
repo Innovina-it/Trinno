@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
 } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useShallow } from "zustand/shallow";
 import {
@@ -75,6 +74,27 @@ import {
 } from "@/components/board/card-quick-view";
 import { parseFilters } from "@/lib/board-filters";
 import { useRoadmapDragHarness } from "./use-roadmap-drag-harness";
+import {
+  useBoards,
+  useMembers,
+  useWorkspaceSnapshot,
+  workspaceSnapshotKeys,
+} from "@/lib/queries/workspace-snapshot-shared";
+import {
+  logWorkspaceTabSwitchLatency,
+  useWorkspaceCacheQueryClient,
+} from "@/stores/workspace-cache-store";
+import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
+import { createSupabaseBrowser } from "@/lib/supabase/browser";
+import {
+  countMineHiddenRoadmapCards,
+  roadmapUserFilterPasses,
+} from "@/lib/roadmap/filtering";
+import {
+  rememberRoadmapCardOrigin,
+  restoreRoadmapCardOrigin,
+  roadmapHref,
+} from "@/lib/roadmap/back-nav";
 
 const ROW_HEIGHT = 36; // 28px bar + 8px gap
 const LANE_HEADER_HEIGHT = 28;
@@ -413,15 +433,88 @@ export function RoadmapView({
   // Read cards directly from the workspace store, projecting to the
   // RoadmapCard shape the layout helpers expect.
   const storeCards = useWorkspaceStore((s) => s.cards);
-  const storeBoards = useWorkspaceStore((s) => s.boards);
+  const storeBoardsRaw = useWorkspaceStore((s) => s.boards);
   const storeLists = useWorkspaceStore((s) => s.lists);
   const storeLinks = useWorkspaceStore((s) => s.cardLinks);
   const storeSprints = useWorkspaceStore((s) => s.sprints);
   const storeCardMembers = useWorkspaceStore((s) => s.cardMembers);
-  const storeProfiles = useWorkspaceStore((s) => s.workspaceProfiles);
+  const storeProfilesRaw = useWorkspaceStore((s) => s.workspaceProfiles);
   const storeCardComponents = useWorkspaceStore((s) => s.cardComponents);
   const storeComponents = useWorkspaceStore((s) => s.components);
   const patchCardInStore = useWorkspaceStore((s) => s.patchCard);
+  const setWorkspaceSnapshot = useWorkspaceStore((s) => s.setSnapshot);
+  const workspaceQueryClient = useWorkspaceCacheQueryClient();
+  const sharedSnapshot = useWorkspaceSnapshot(workspaceId);
+  const sharedBoards = useBoards(workspaceId);
+  const sharedMembers = useMembers(workspaceId);
+  const sharedWorkspaceCacheEnabled = useWorkspaceFlag(
+    "shared_workspace_cache_v2",
+  );
+  const storeBoards =
+    sharedWorkspaceCacheEnabled && sharedBoards.length > 0
+      ? sharedBoards
+      : storeBoardsRaw;
+  const storeProfiles = useMemo(
+    () =>
+      sharedWorkspaceCacheEnabled && sharedMembers.length > 0
+        ? sharedMembers.map((m) => ({
+            id: m.userId,
+            displayName: m.displayName,
+          }))
+        : storeProfilesRaw,
+    [sharedMembers, sharedWorkspaceCacheEnabled, storeProfilesRaw],
+  );
+
+  useEffect(() => {
+    if (!sharedWorkspaceCacheEnabled || !sharedSnapshot) return;
+    setWorkspaceSnapshot(sharedSnapshot);
+  }, [setWorkspaceSnapshot, sharedSnapshot, sharedWorkspaceCacheEnabled]);
+
+  useEffect(() => {
+    const supa = createSupabaseBrowser();
+    let cancelled = false;
+    let channel: ReturnType<typeof supa.channel> | null = null;
+    (async () => {
+      const { data } = await supa.auth.getSession();
+      const token = data.session?.access_token;
+      if (token) await supa.realtime.setAuth(token);
+      if (cancelled) return;
+      channel = supa
+        .channel(`roadmap_boards:${workspaceId}`)
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          {
+            event: "*",
+            schema: "public",
+            table: "boards",
+            filter: `workspace_id=eq.${workspaceId}`,
+          },
+          () => {
+            if (sharedWorkspaceCacheEnabled) {
+              void workspaceQueryClient.invalidateQueries({
+                queryKey: workspaceSnapshotKeys.workspace(workspaceId),
+              });
+            }
+            router.refresh();
+          },
+        )
+        .subscribe();
+    })();
+    return () => {
+      cancelled = true;
+      if (channel) supa.removeChannel(channel);
+    };
+  }, [
+    router,
+    sharedWorkspaceCacheEnabled,
+    workspaceId,
+    workspaceQueryClient,
+  ]);
+
+  useEffect(() => {
+    logWorkspaceTabSwitchLatency("roadmap", workspaceId);
+  }, [workspaceId]);
 
   // Plan #16b-γ-A (#2) — index card → status kind via list mapping. We
   // recompute when either list mappings or the visible cards change.
@@ -458,14 +551,6 @@ export function RoadmapView({
       memberByCard.set(cm.cardId, s);
     }
     const now = new Date();
-    // Task 11 — split the type filter so the "Subtask" toggle never
-    // hides parent rows. Parents are gated by the parent-eligible types
-    // only; the subtask toggle is the gate for subtask rows. An empty
-    // filter is the identity pass-through.
-    const selectedTypes = filters.types;
-    const subtaskAllowed =
-      selectedTypes.length === 0 || selectedTypes.includes("subtask");
-    const parentTypes = selectedTypes.filter((t) => t !== "subtask");
     // Task 11 follow-up — any card that passes the user's filters drags
     // its ancestors along so subtask matches keep a parent row to render
     // under. We compute the pass set first, then expand by walking the
@@ -475,39 +560,15 @@ export function RoadmapView({
       if (c.startDate === null || c.targetDate === null) return false;
       return true;
     };
-    const userFilterPasses = (c: typeof storeCards[number]) => {
-      if (queryNorm && !c.title.toLowerCase().includes(queryNorm)) {
-        return false;
-      }
-      if (selectedTypes.length) {
-        if (c.type === "subtask") {
-          if (!subtaskAllowed) return false;
-        } else if (parentTypes.length && !parentTypes.includes(c.type)) {
-          return false;
-        }
-      }
-      if (sprintFilter && c.sprintId !== sprintFilter) return false;
-      if (filters.due === "overdue") {
-        const due = c.dueDate
-          ? c.dueDate instanceof Date
-            ? c.dueDate
-            : new Date(c.dueDate)
-          : null;
-        if (!due || due > now || c.dueComplete) return false;
-      }
-      if (filters.assignedToMe) {
-        if (!viewerId) return false;
-        const mems = memberByCard.get(c.id);
-        if (!mems || !mems.has(viewerId)) return false;
-      }
-      if (filters.unassigned) {
-        const mems = memberByCard.get(c.id);
-        const hasMembers = mems && mems.size > 0;
-        const hasOwner = Boolean(c.ownerId);
-        if (hasMembers || hasOwner) return false;
-      }
-      return true;
-    };
+    const userFilterPasses = (c: typeof storeCards[number]) =>
+      roadmapUserFilterPasses(c, {
+        queryNorm,
+        filters,
+        sprintFilter,
+        viewerId,
+        memberByCard,
+        now,
+      });
 
     const cardById = new Map<string, typeof storeCards[number]>();
     for (const c of storeCards) cardById.set(c.id, c);
@@ -557,6 +618,24 @@ export function RoadmapView({
       }));
   }, [storeCards, storeBoards, storeCardMembers, queryNorm, filters, sprintFilter, viewerId]);
 
+  const mineHiddenCount = useMemo(() => {
+    const memberByCard = new Map<string, Set<string>>();
+    for (const cm of storeCardMembers) {
+      const s = memberByCard.get(cm.cardId) ?? new Set<string>();
+      s.add(cm.userId);
+      memberByCard.set(cm.cardId, s);
+    }
+    return countMineHiddenRoadmapCards(storeCards, {
+      queryNorm,
+      filters,
+      sprintFilter,
+      viewerId,
+      memberByCard,
+      now: new Date(),
+      requireScheduled: viewMode === "gantt",
+    });
+  }, [storeCards, storeCardMembers, queryNorm, filters, sprintFilter, viewerId, viewMode]);
+
   // Same user-filter predicate the Gantt applies, but without the
   // "needs start+target date" gate — the list view shows undated rows
   // too. Returns null when no filter is active so the ListView can skip
@@ -578,43 +657,15 @@ export function RoadmapView({
       memberByCard.set(cm.cardId, s);
     }
     const now = new Date();
-    const selectedTypes = filters.types;
-    const subtaskAllowed =
-      selectedTypes.length === 0 || selectedTypes.includes("subtask");
-    const parentTypes = selectedTypes.filter((t) => t !== "subtask");
-
-    const passes = (c: typeof storeCards[number]) => {
-      if (c.archived) return false;
-      if (queryNorm && !c.title.toLowerCase().includes(queryNorm)) return false;
-      if (selectedTypes.length) {
-        if (c.type === "subtask") {
-          if (!subtaskAllowed) return false;
-        } else if (parentTypes.length && !parentTypes.includes(c.type)) {
-          return false;
-        }
-      }
-      if (sprintFilter && c.sprintId !== sprintFilter) return false;
-      if (filters.due === "overdue") {
-        const due = c.dueDate
-          ? c.dueDate instanceof Date
-            ? c.dueDate
-            : new Date(c.dueDate)
-          : null;
-        if (!due || due > now || c.dueComplete) return false;
-      }
-      if (filters.assignedToMe) {
-        if (!viewerId) return false;
-        const mems = memberByCard.get(c.id);
-        if (!mems || !mems.has(viewerId)) return false;
-      }
-      if (filters.unassigned) {
-        const mems = memberByCard.get(c.id);
-        const hasMembers = mems && mems.size > 0;
-        const hasOwner = Boolean(c.ownerId);
-        if (hasMembers || hasOwner) return false;
-      }
-      return true;
-    };
+    const passes = (c: typeof storeCards[number]) =>
+      roadmapUserFilterPasses(c, {
+        queryNorm,
+        filters,
+        sprintFilter,
+        viewerId,
+        memberByCard,
+        now,
+      });
 
     const cardById = new Map<string, typeof storeCards[number]>();
     for (const c of storeCards) cardById.set(c.id, c);
@@ -939,9 +990,14 @@ export function RoadmapView({
   // jumps to /b/[boardId]/c/[cardId] when the user wants the full editor.
   const onOpenCard = useCallback(
     (cardId: string, boardId: string) => {
+      // Back-nav approach: remember the roadmap origin and explicitly restore
+      // it when the in-place quick view closes. router.back() is unreliable
+      // here because roadmap cards can also be opened via board-scoped card
+      // routes whose close behavior falls back to /b/[boardId].
+      rememberRoadmapCardOrigin(workspaceId, sp.toString() ? `?${sp.toString()}` : "");
       setQuickViewCard({ cardId, boardId });
     },
-    [],
+    [workspaceId, sp],
   );
 
   // Quick-view data — resolved against the workspace store. The selectors
@@ -1437,7 +1493,7 @@ export function RoadmapView({
       {/* === MILESTONE MARKERS START (toolbar) === */}
       <div className="flex items-center gap-2 flex-wrap">
         <AssigneeFilterRow />
-        <RoadmapFilterBar />
+        <RoadmapFilterBar mineHiddenCount={mineHiddenCount} />
         <button
           type="button"
           onClick={() => setShowMilestones((v) => !v)}
@@ -1581,19 +1637,17 @@ export function RoadmapView({
                     />
                   )}
                   {epicHeader ? (
-                    <Link
-                      href={`/w/${workspaceId}/e/${epicHeader.id}`}
-                      // Task 8 — wrap to two lines instead of truncating to
-                      // a single ellipsis. `line-clamp-2` keeps a tight
-                      // visual rhythm and the `title` attribute restores
-                      // the full text on hover for narrow panels.
-                      className="mono-meta text-fg line-clamp-2 break-words hover:underline focus:outline-none focus:underline"
-                      data-testid="lane-epic-header-link"
+                    <span
+                      // Lane names used to link to retired /e/[id] routes,
+                      // which now 404. Keep them non-clickable; lane filtering
+                      // is controlled by the toolbar's lane-mode controls.
+                      className="mono-meta text-fg line-clamp-2 break-words"
+                      data-testid="lane-epic-header-label"
                       data-card-id={epicHeader.id}
                       title={ll.lane.title}
                     >
                       {ll.lane.title}
-                    </Link>
+                    </span>
                   ) : (
                     <span
                       className="mono-meta text-fg line-clamp-2 break-words"
@@ -2219,7 +2273,13 @@ export function RoadmapView({
         boardId={quickViewCard?.boardId ?? ""}
         open={quickViewCard != null}
         onOpenChange={(next) => {
-          if (!next) setQuickViewCard(null);
+          if (!next) {
+            setQuickViewCard(null);
+            restoreRoadmapCardOrigin(
+              router,
+              roadmapHref(workspaceId, sp.toString() ? `?${sp.toString()}` : ""),
+            );
+          }
         }}
         onPatch={onQuickPatch}
         onToggleMember={onQuickToggleMember}

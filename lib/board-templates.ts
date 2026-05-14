@@ -29,6 +29,12 @@ export type BoardTemplate = {
   labels: BoardTemplateLabelSpec[];
 };
 
+export const DEFAULT_LIST_TEMPLATES: Array<{ name: string }> = [
+  { name: "Todo" },
+  { name: "In Progress" },
+  { name: "Done" },
+];
+
 export const BOARD_TEMPLATES: BoardTemplate[] = [
   {
     id: "blank",

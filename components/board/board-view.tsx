@@ -21,6 +21,12 @@ import {
 import { Layers3 } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
+import {
+  useBoards,
+  useWorkspaceSnapshot,
+} from "@/lib/queries/workspace-snapshot-shared";
+import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
+import { logWorkspaceTabSwitchLatency } from "@/stores/workspace-cache-store";
 import { errorBus } from "@/lib/errors/error-bus";
 import type { BoardRow } from "@/lib/queries/board-snapshot";
 import { positionBetween } from "@/lib/ordering";
@@ -88,6 +94,7 @@ export function BoardView({
   const cardMembers = useBoardStore((s) => s.cardMembers);
   const labels = useBoardStore((s) => s.labels);
   const boardProfiles = useBoardStore((s) => s.boardProfiles);
+  const setWorkspaceSnapshot = useWorkspaceStore((s) => s.setSnapshot);
   const moveListLocal = useBoardStore((s) => s.moveList);
   const moveCardLocal = useBoardStore((s) => s.moveCard);
   // Plan #16b-γ-Master-D D1 — optimistic patches for sprint assignment go
@@ -97,6 +104,24 @@ export function BoardView({
   const updateCardLocal = useBoardStore((s) => s.updateCard);
   const patchWorkspaceCard = useWorkspaceStore((s) => s.patchCard);
   const [, start] = useTransition();
+  const sharedSnapshot = useWorkspaceSnapshot(board.workspaceId);
+  const sharedBoards = useBoards(board.workspaceId);
+  const sharedWorkspaceCacheEnabled = useWorkspaceFlag(
+    "shared_workspace_cache_v2",
+  );
+  const displayBoard =
+    sharedWorkspaceCacheEnabled
+      ? (sharedBoards.find((b) => b.id === board.id) ?? board)
+      : board;
+
+  useEffect(() => {
+    if (!sharedWorkspaceCacheEnabled || !sharedSnapshot) return;
+    setWorkspaceSnapshot(sharedSnapshot);
+  }, [setWorkspaceSnapshot, sharedSnapshot, sharedWorkspaceCacheEnabled]);
+
+  useEffect(() => {
+    logWorkspaceTabSwitchLatency("board", board.workspaceId);
+  }, [board.workspaceId]);
 
   // Plan #16b-γ-Master-D D1 — toggle for the sprint drop strip. Persisted
   // to localStorage so the user's preference survives navigation. Initial
@@ -399,7 +424,7 @@ export function BoardView({
               BOARD · #{boardCode(board.id)}
             </span>
             <h1 className="font-sans text-lg font-semibold tracking-tight text-fg truncate">
-              {board.title}
+              {displayBoard.title}
             </h1>
           </div>
           <div className="flex items-center gap-2">

@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq, and, inArray, isNull } from "drizzle-orm";
+import { eq, and, inArray, isNull, isNotNull, or, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { sprints, cards, boards, workspaceMembers } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
@@ -207,30 +207,19 @@ export async function bulkShiftCardDatesImpl(
   if (p.cardIds.length === 0) return { updated: 0 };
   return dbAsUser(token, async (tx) => {
     const rows = await tx
-      .select({
-        id: cards.id,
-        startDate: cards.startDate,
-        targetDate: cards.targetDate,
+      .update(cards)
+      .set({
+        startDate: sql`${cards.startDate} + (${p.deltaMinutes} * interval '1 minute')`,
+        targetDate: sql`${cards.targetDate} + (${p.deltaMinutes} * interval '1 minute')`,
       })
-      .from(cards)
-      .where(inArray(cards.id, p.cardIds));
-    const deltaMs = p.deltaMinutes * 60_000;
-    let updated = 0;
-    for (const r of rows) {
-      const patch: Record<string, unknown> = {};
-      if (r.startDate)
-        patch.startDate = new Date(r.startDate.getTime() + deltaMs);
-      if (r.targetDate)
-        patch.targetDate = new Date(r.targetDate.getTime() + deltaMs);
-      if (Object.keys(patch).length === 0) continue;
-      const result = await tx
-        .update(cards)
-        .set(patch)
-        .where(eq(cards.id, r.id))
-        .returning({ id: cards.id });
-      if (result.length > 0) updated += 1;
-    }
-    return { updated };
+      .where(
+        and(
+          inArray(cards.id, p.cardIds),
+          or(isNotNull(cards.startDate), isNotNull(cards.targetDate)),
+        ),
+      )
+      .returning({ id: cards.id });
+    return { updated: rows.length };
   });
 }
 

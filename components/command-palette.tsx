@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
   Archive,
@@ -50,6 +50,26 @@ type PaletteItem = {
 
 type CardResult = Awaited<ReturnType<typeof search>>[number];
 
+export function isEditableShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
+export function isBoardRoute(pathname: string | null | undefined): boolean {
+  return /^\/(?:b|board)\//.test(pathname ?? "");
+}
+
+export function shouldSuppressQuickAddShortcut(
+  event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "target">,
+  pathname: string | null | undefined,
+): boolean {
+  if (event.metaKey || event.ctrlKey || event.altKey) return false;
+  if (event.key !== "c" && event.key !== "C") return false;
+  return !isBoardRoute(pathname) || isEditableShortcutTarget(event.target);
+}
+
 /**
  * Plan #16b-γ-D (#5) — global command palette.
  *
@@ -77,6 +97,7 @@ export function CommandPalette({
   recents: PaletteRecent[];
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   // Open state lives in a shared store so the nav's ⌘K trigger button
   // and the `useNavChords` hook can both flip it. Esc closes locally.
@@ -95,6 +116,17 @@ export function CommandPalette({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, setOpen]);
+
+  useEffect(() => {
+    function onKeyCapture(e: KeyboardEvent) {
+      if (!shouldSuppressQuickAddShortcut(e, pathname)) return;
+      e.stopImmediatePropagation();
+    }
+    window.addEventListener("keydown", onKeyCapture, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", onKeyCapture, { capture: true });
+    };
+  }, [pathname]);
 
   // Reset state on close.
   useEffect(() => {

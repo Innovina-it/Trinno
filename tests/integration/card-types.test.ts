@@ -34,13 +34,14 @@ async function setup(jwt: string) {
 }
 
 describe("card types + hierarchy", () => {
-  it("defaults to task and accepts type changes", async () => {
+  it("defaults to task and rejects the retired epic type", async () => {
     const u = await makeUser("ct1");
     const { l } = await setup(u.jwt);
     const c = await createCardImpl(u.jwt, { listId: l.id, title: "C" });
     expect((c as { type: string }).type).toBe("task");
-    const updated = await updateCardImpl(u.jwt, { id: c.id, type: "epic" });
-    expect((updated as { type: string }).type).toBe("epic");
+    await expect(updateCardImpl(u.jwt, { id: c.id, type: "epic" })).rejects.toThrow(
+      /sub-boards/i,
+    );
   });
 
   it("rejects subtask without parent", async () => {

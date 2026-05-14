@@ -1,6 +1,13 @@
 import { redirect } from "next/navigation";
 import { getSessionToken, requireUser } from "@/lib/auth";
-import { getWorkspace } from "@/lib/queries/workspaces";
+import { getWorkspace, listMembers } from "@/lib/queries/workspaces";
+import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
+import { hasFlag } from "@/lib/feature-flags/has-flag";
+import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
+import {
+  HydrationBoundary,
+  type DehydratedWorkspaceCache,
+} from "@/stores/workspace-cache-store";
 
 // Single guard for every page under /w/<id>/*: if RLS hides the
 // workspace row (membership revoked, or the id never existed for this
@@ -19,5 +26,40 @@ export default async function WorkspaceLayout({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) redirect("/?notice=removed");
-  return <>{children}</>;
+  const sharedWorkspaceCacheEnabled = await hasFlag(
+    workspaceId,
+    "shared_workspace_cache_v2",
+  );
+  if (!sharedWorkspaceCacheEnabled) return <>{children}</>;
+
+  const [snapshot, members] = await Promise.all([
+    getWorkspaceSnapshot(token, workspaceId),
+    listMembers(token, workspaceId),
+  ]);
+  const sharedSnapshot = {
+    ...snapshot,
+    workspace: {
+      id: ws.id,
+      name: ws.name,
+      ownerId: ws.ownerId,
+      createdAt: ws.createdAt,
+    },
+    members,
+    featureFlags: ws.featureFlags,
+  };
+  const state: DehydratedWorkspaceCache = {
+    queries: [
+      {
+        queryKey: ["workspace-snapshot", workspaceId, "snapshot"] as const,
+        data: sharedSnapshot,
+        updatedAt: Date.now(),
+      },
+    ],
+  };
+
+  return (
+    <HydrationBoundary state={state}>
+      <WorkspaceStoreProvider initial={snapshot}>{children}</WorkspaceStoreProvider>
+    </HydrationBoundary>
+  );
 }

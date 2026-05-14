@@ -61,7 +61,7 @@ Net effect: cold and warm Vercel-side latency on `/b/[boardId]` and `/w/[id]/roa
 
 - **`BoardStoreProvider` re-render fanout**: 261 grep matches for `useBoardStore`/`useWorkspaceStore` selectors across `components/` and `hooks/`. Most select primitive scalars or refer to actions (fine). A non-trivial subset select whole arrays without `useShallow`:
   - `versions/version-card-section.tsx:26` `s.cardVersions`
-  - `epic/epic-kanban-view.tsx:40` `s.cards`, line 42 `s.lists`
+  - `sub-board/sub-board-kanban-view.tsx:40` `s.cards`, line 42 `s.lists`
   - `board/board-filter-bar.tsx:37` `s.labels`
   - `board/list-column.tsx:75` `s.cards`  ← **biggest culprit, called per list column**
   - `board/board-view.tsx:84-89` `lists/cards/cardLabels/cardMembers/labels/boardProfiles` — at the root, this is OK (single subscriber), but means every CDC echo re-renders `BoardView` and the whole tree below.

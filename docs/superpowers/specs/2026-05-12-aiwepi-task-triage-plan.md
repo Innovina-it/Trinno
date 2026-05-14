@@ -10,7 +10,7 @@
 ## Decisions (user-confirmed)
 
 1. **My Tasks** — keep page, keep name. No removal.
-2. **Epic boards** — surface epics on `/w/[ws]/boards`. Same tile shape as boards, distinguished by `Epic Board` tag.
+2. **Sub-board boards** — surface sub-boards on `/w/[ws]/boards`. Same tile shape as boards, distinguished by `Sub-board Board` tag.
 3. **Roles** — documentation only (`docs/roles.md`). No in-app permissions UI in this batch.
 
 ## Out of scope
@@ -61,7 +61,7 @@ Single codex agent rewrites `scripts/seed-aiwepi.mjs` and `scripts/seed-aiwepi-t
 | 11 | Subtask filter hides parent tasks | `lib/roadmap/layout.ts` | When `hideSubtasks=false`, ensure parents always render even if filter excludes parent type. Subtask rows indented under parent regardless of parent filter state |
 | 5 | New-card form vs edit inconsistency | `components/board/add-card-form.tsx` + `card-modal.tsx` | Add quick-edit fields to edit form OR strip edit modal of fields not in new-card form. Decision per shape phase. Specifically: assignee picker must exist in BOTH paths |
 | 10 | New card in gantt missing owner + not in todo | roadmap inline create handler | When user creates card on gantt, default owner to current user, default list to first "todo" list of the board. Currently lacks both |
-| 6 | Listview ordered by start date | new component | Add `<ListView>` toggle to roadmap. Tree: epic → task → subtask, ordered by `startDate ASC`. Subtasks indented |
+| 6 | Listview ordered by start date | new component | Add `<ListView>` toggle to roadmap. Tree: sub-board → task → subtask, ordered by `startDate ASC`. Subtasks indented |
 
 **Verification**: Playwright tests on roadmap responsive breakpoint, lane truncation, listview render, create-from-gantt smoke.
 
@@ -104,7 +104,7 @@ User decision: Versions stay as-is. Milestones = a new first-class concept on th
 |---|---|---|---|
 | 7 | Workspace create — choose members | `components/workspace/create-workspace-dialog.tsx`, `actions/workspaces.ts:19-34` | Add member multi-select to dialog. On submit, insert workspace_members rows in same transaction. Member options = all profiles the creator can see (handle privacy here — likely all profiles in same auth org) |
 | 13 | My Tasks renamed/clarified | none — keep as-is per user | No code change. Memory: decision logged. |
-| 14 | Epic boards on boards page | `app/(app)/w/[workspaceId]/boards/page.tsx`, board tile component | Query cards `where type='epic'` in workspace. Render alongside boards. Add `<Tag>Epic Board</Tag>` label on tile. Click → opens epic detail modal (the existing intercept) |
+| 14 | Sub-board boards on boards page | `app/(app)/w/[workspaceId]/boards/page.tsx`, board tile component | Query cards `where type='sub-board'` in workspace. Render alongside boards. Add `<Tag>Sub-board Board</Tag>` label on tile. Click → opens sub-board detail modal (the existing intercept) |
 | 24 | Subtasks not shown on board | `components/board/board-view.tsx`, card-tile | Render subtask count badge on parent card. Optional: expand-in-place to show subtask titles. Spec: badge first, expand later if user asks |
 
 **Verification**: Playwright happy-path each surface.
@@ -154,7 +154,7 @@ For each dispatch:
 
 - **Task 4 (perf)**: until diagnosis returns, scope is unknown. Could be 1h or 1 week.
 - **Task 17 (Milestone vs Version)**: user used "Milestones had become Version ??" — implies they want the UI to say Milestone, not Version. Confirm before P2.
-- **Task 14 (Epic boards)**: spec assumes epic detail opens existing modal. If user wants a dedicated "epic-as-board" view (kanban of epic's child tasks), scope grows by ~1 day.
+- **Task 14 (Sub-board boards)**: spec assumes sub-board detail opens existing modal. If user wants a dedicated "sub-board-as-board" view (kanban of sub-board's child tasks), scope grows by ~1 day.
 
 ## Next step
 

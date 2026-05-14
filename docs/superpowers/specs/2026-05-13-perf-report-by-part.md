@@ -14,7 +14,7 @@ The repository being audited is `/home/innovina/Documents/trello-foundation`, br
 The six parts of the system are:
 
 1. **Board page** — the kanban board at `/b/[boardId]`
-2. **Workspace pages** — the roadmap, sprints, backlog, archive, all-tasks, versions, and epic views at `/w/[workspaceId]/...`
+2. **Workspace pages** — the roadmap, sprints, backlog, archive, all-tasks, versions, and sub-board views at `/w/[workspaceId]/...`
 3. **App shell + middleware + auth** — the layout that wraps every authenticated page, plus the request middleware and Supabase session refresh
 4. **Dashboards + Me / Inbox / Workload** — per-user and cross-workspace analytical views
 5. **Realtime + sync subsystem** — every Supabase Realtime channel and every sync hook
@@ -116,11 +116,11 @@ The quick wins (less than an hour each) are: dropping `cardVersions` from the sn
 
 ---
 
-## Part 2 — Workspace pages (roadmap, sprints, backlog, archive, all-tasks, versions, epic)
+## Part 2 — Workspace pages (roadmap, sprints, backlog, archive, all-tasks, versions, sub-board)
 
 ### What this part does
 
-These are the multi-board views scoped to a workspace. The roadmap is a Gantt-style timeline; sprints show backlogs and reports; archive lists archived cards; all-tasks lists every card the user can see in the workspace; versions tracks release versions; epic is a focused view of a single epic and its children.
+These are the multi-board views scoped to a workspace. The roadmap is a Gantt-style timeline; sprints show backlogs and reports; archive lists archived cards; all-tasks lists every card the user can see in the workspace; versions tracks release versions; sub-board is a focused view of a single sub-board and its children.
 
 ### How much it contributes
 

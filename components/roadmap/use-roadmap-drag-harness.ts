@@ -22,6 +22,7 @@ import { PRIORITIES } from "./priority-gutter";
 import type { CardPriority } from "@/components/board/card/priority-picker";
 import type { LaneMode } from "./roadmap-header";
 import type { CascadeAffectedCard } from "./cascade-confirm-dialog";
+import { computeOptimisticRank, RankCollisionError } from "@/lib/roadmap/sparse-rank";
 
 // Plan #16b-γ-G aggregate review I2 — drag-harness extraction. All five
 // roadmap drag systems live here so `roadmap-view.tsx` becomes
@@ -1007,12 +1008,22 @@ export function useRoadmapDragHarness(
         null
       : null;
     let optimistic: number | null = null;
-    if (beforeOrd !== null && afterOrd !== null) {
-      const m = Math.floor((beforeOrd + afterOrd) / 2);
-      if (m !== beforeOrd && m !== afterOrd) optimistic = m;
-    } else if (beforeOrd !== null) optimistic = beforeOrd + 1024;
-    else if (afterOrd !== null) optimistic = afterOrd - 1024;
-    else optimistic = 1024;
+    try {
+      optimistic = computeOptimisticRank(
+        beforeOrd,
+        afterOrd,
+        storeCardsRef.current
+          .filter(
+            (c) =>
+              c.boardId === boardId &&
+              c.id !== cardId &&
+              c.roadmapOrder !== null,
+          )
+          .map((c) => c.roadmapOrder as number),
+      );
+    } catch (err) {
+      if (!(err instanceof RankCollisionError)) throw err;
+    }
     if (optimistic !== null) {
       patchCardInStore(cardId, { roadmapOrder: optimistic });
     }

@@ -9,6 +9,8 @@ import { ShortcutsOverlay } from "@/components/shortcuts-overlay";
 import { AccessNotice } from "@/components/access-notice";
 import { QuickAddCardMount } from "@/components/quick-add-card-dialog";
 import { CommandPalette } from "@/components/command-palette";
+import { getUserPreferences } from "@/actions/profile-preferences";
+import { UserPreferencesProvider } from "@/lib/preferences/provider";
 import { listWorkspaces } from "@/lib/queries/workspaces";
 import { listFavoriteBoards, listRecentBoardViews } from "@/lib/queries/favorites";
 import { dbAsUser } from "@/lib/db/client";
@@ -84,15 +86,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     };
   });
 
-  // Kick off the three independent queries in parallel. Each opens its own
+  // Kick off the independent queries in parallel. Each opens its own
   // dbAsUser transaction (separate JWT bookkeeping), but the wall-clock
-  // cost is now max() of the four instead of sum().
-  const [wsResult, layoutResult, favoritesResult, recentsResult] =
+  // cost is now max() of the request set instead of sum().
+  const [
+    wsResult,
+    layoutResult,
+    favoritesResult,
+    recentsResult,
+    preferencesResult,
+  ] =
     await Promise.allSettled([
       listWorkspaces(token),
       layoutTx,
       listFavoriteBoards(token),
       listRecentBoardViews(token, 5),
+      getUserPreferences(),
     ]);
 
   let ws: Awaited<ReturnType<typeof listWorkspaces>> = [];
@@ -151,9 +160,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     favoritesResult.status === "fulfilled" ? favoritesResult.value : [];
   const recents: Awaited<ReturnType<typeof listRecentBoardViews>> =
     recentsResult.status === "fulfilled" ? recentsResult.value : [];
+  const initialPreferences =
+    preferencesResult.status === "fulfilled" ? preferencesResult.value : {};
 
   return (
-    <>
+    <UserPreferencesProvider initial={initialPreferences}>
       <TopNav
         email={user.email ?? ""}
         userId={user.id}
@@ -183,6 +194,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           workspaceName: r.workspaceName,
         }))}
       />
-    </>
+    </UserPreferencesProvider>
   );
 }

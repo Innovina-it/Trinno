@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  StructuredError,
+  toStructuredError,
+  type StructuredErrorShape,
+} from "@/lib/errors/structured-error";
+
 /**
  * Plan #16b-γ-C (#6) — global error bus.
  *
@@ -17,7 +23,10 @@
 
 export type ErrorEntry = {
   id: string;
+  error: StructuredErrorShape;
+  code: string;
   message: string;
+  context?: unknown;
   ts: number;
   retry?: () => Promise<void> | void;
 };
@@ -42,11 +51,24 @@ function nextId(): string {
 export const errorBus = {
   push(input: {
     message: string;
+    code?: string;
+    context?: unknown;
+    error?: unknown;
     retry?: () => Promise<void> | void;
   }): string {
+    const error = input.error
+      ? toStructuredError(input.error, input.code ?? "ACTION_FAILED", input.context)
+      : new StructuredError(
+          input.code ?? "ACTION_FAILED",
+          input.message,
+          input.context,
+        ).toJSON();
     const entry: ErrorEntry = {
       id: nextId(),
-      message: input.message,
+      error,
+      code: error.code,
+      message: error.message,
+      context: error.context,
       ts: Date.now(),
       retry: input.retry,
     };

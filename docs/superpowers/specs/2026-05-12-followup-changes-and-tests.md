@@ -25,7 +25,7 @@ Open the app in a browser, sign in, pick the AIWEPI workspace.
 Instead of always opening the full-page card modal, there is now a "quick view" popup with a compact summary that surfaces:
 
 - Title (editable)
-- Type pills (TASK / STORY / BUG / EPIC) — editable, click to switch
+- Type pills (TASK / STORY / BUG / SUB-BOARD) — editable, click to switch
 - Priority + Status row — editable
 - Start / Target dates — editable
 - Due date — editable
@@ -71,7 +71,7 @@ Open a quick view as in step 1 above, then try each field:
 5. Try Escape during edit → cancels and reverts.
 
 **Type**
-1. Click any of the 4 pills (TASK / STORY / BUG / EPIC).
+1. Click any of the 4 pills (TASK / STORY / BUG / SUB-BOARD).
 2. **Expected**: the clicked pill becomes active. Refreshing or re-opening the card shows the new type.
 3. Open the full modal → the type matches.
 

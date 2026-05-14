@@ -55,15 +55,21 @@ import { cardCode } from "@/lib/format";
 import Link from "next/link";
 import {
   Archive,
+  ArrowRight,
   CalendarRange,
   Check,
   ChevronRight,
-  Layers3,
+  History,
   MoreHorizontal,
   Move,
 } from "lucide-react";
 import { MoveToBoardDialog } from "./card/move-to-board-dialog";
 import { MarkdownView } from "@/components/markdown";
+import {
+  useCardHistoryPaginated,
+  type CardHistoryRow,
+} from "@/lib/queries/use-card-history";
+import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
 
 export type CardModalCard = {
   id: string;
@@ -96,17 +102,20 @@ function AccordionGroup({
   title,
   count,
   defaultOpen = false,
+  onOpenChange,
   children,
 }: {
   id: string;
   title: string;
   count?: number;
   defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: React.ReactNode;
 }) {
   return (
     <details
       open={defaultOpen}
+      onToggle={(e) => onOpenChange?.(e.currentTarget.open)}
       data-testid={`card-modal-group-${id}`}
       className="group/acc rounded-xl border border-hairline bg-[color:var(--surface)] open:bg-[color:var(--surface-strong)] transition-colors"
     >
@@ -126,6 +135,158 @@ function AccordionGroup({
       </summary>
       <div className="px-3 pb-3 pt-1 space-y-4">{children}</div>
     </details>
+  );
+}
+
+const FIELD_LABEL: Record<string, string> = {
+  title: "Title",
+  priority: "Priority",
+  owner_id: "Owner",
+  start_date: "Start date",
+  target_date: "Target date",
+  due_date: "Due date",
+  completed_at: "Completion",
+  sprint_id: "Sprint",
+  parent_card_id: "Parent",
+  type: "Type",
+  story_points: "Story points",
+  estimate_min: "Estimate (min)",
+};
+
+function fmtHistoryDate(d: Date): string {
+  const ms = Date.now() - d.getTime();
+  const min = Math.round(ms / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `${h}h ago`;
+  const days = Math.round(h / 24);
+  if (days < 30) return `${days}d ago`;
+  return d.toLocaleDateString();
+}
+
+function shortHistoryValue(v: string | null): string {
+  if (!v) return "-";
+  return v.length > 12 ? `...${v.slice(-6)}` : v;
+}
+
+function fmtHistoryValue(field: string, v: string | null): string {
+  if (v === null || v === "") return "-";
+  if (
+    field === "owner_id" ||
+    field === "parent_card_id" ||
+    field === "sprint_id"
+  ) {
+    return shortHistoryValue(v);
+  }
+  if (
+    field === "start_date" ||
+    field === "target_date" ||
+    field === "due_date" ||
+    field === "completed_at"
+  ) {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString();
+  }
+  return v.length > 40 ? `${v.slice(0, 40)}...` : v;
+}
+
+function CardHistoryPanel({
+  cardId,
+  enabled,
+}: {
+  cardId: string;
+  enabled: boolean;
+}) {
+  const { rows, loading, error, hasMore, loadNextPage } =
+    useCardHistoryPaginated(cardId, 20, enabled);
+
+  return (
+    <section className="space-y-3" data-testid="history-section">
+      <div className="flex items-baseline justify-between border-b border-hairline pb-1">
+        <h3 className="mono-meta text-fg-muted inline-flex items-center gap-1.5">
+          <History className="size-3" aria-hidden />
+          History
+        </h3>
+        {loading ? (
+          <span className="mono-meta-sm text-fg-faint">LOADING...</span>
+        ) : (
+          <span className="mono-meta-sm text-fg-faint tabular-nums">
+            {rows.length} {rows.length === 1 ? "EVENT" : "EVENTS"}
+          </span>
+        )}
+      </div>
+
+      {error && (
+        <p className="text-xs text-[color:var(--accent-magenta)]">
+          Failed to load: {error}
+        </p>
+      )}
+
+      {!loading && rows.length === 0 && !error && (
+        <p className="mono-meta-sm text-fg-faint">NO CHANGES YET</p>
+      )}
+
+      {rows.length > 0 && (
+        <ol className="space-y-1.5" data-testid="history-list">
+          {rows.map((r: CardHistoryRow) => (
+            <li
+              key={`${r.kind}:${r.id}`}
+              className="flex items-baseline gap-2 text-xs leading-snug"
+              data-testid="history-row"
+              data-kind={r.kind}
+            >
+              <span
+                className="mono-meta-sm text-fg-faint w-20 shrink-0 tabular-nums"
+                title={r.at.toISOString()}
+              >
+                {fmtHistoryDate(r.at)}
+              </span>
+              {r.kind === "field" ? (
+                <>
+                  <span className="text-fg-muted shrink-0">
+                    {FIELD_LABEL[r.field] ?? r.field}
+                  </span>
+                  <span className="text-fg-faint">
+                    {fmtHistoryValue(r.field, r.oldValue)}
+                  </span>
+                  <ArrowRight className="size-3 text-fg-faint shrink-0" />
+                  <span className="text-fg">
+                    {fmtHistoryValue(r.field, r.newValue)}
+                  </span>
+                  {r.actorName && (
+                    <span className="ml-auto mono-meta-sm text-fg-faint truncate">
+                      by {r.actorName}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="text-fg-muted shrink-0">Sprint</span>
+                  <span className="text-fg">{r.sprintName ?? "Backlog"}</span>
+                  <span className="mono-meta-sm text-fg-faint">
+                    {r.removedAt ? "left" : "active"}
+                  </span>
+                </>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {hasMore && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={loadNextPage}
+          disabled={loading}
+          data-testid="history-load-more"
+        >
+          Load more
+        </Button>
+      )}
+    </section>
   );
 }
 
@@ -306,9 +467,12 @@ export function CardModal({
   const [moveOpen, setMoveOpen] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [editingNotes, setEditingNotes] = useState(false);
+  const [historyRequested, setHistoryRequested] = useState(false);
+  const historySentinelRef = useRef<HTMLDivElement | null>(null);
   const descTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedDesc = useRef(card.description ?? "");
   const lastSavedTitle = useRef(card.title);
+  const lazyHistory = useWorkspaceFlag("lazy_card_history", false);
 
   useEffect(() => {
     return () => {
@@ -319,6 +483,9 @@ export function CardModal({
   // Sibling navigation. Same as before.
   const boardStore = useContext(BoardStoreContext);
   const allCards = useStore(boardStore!, (s) => s.cards);
+  const liveCard = allCards.find((c) => c.id === card.id) as
+    | (typeof allCards)[number]
+    | undefined;
   const cardVisible = useStore(boardStore!, (s) =>
     s.cards.some((c) => c.id === card.id),
   );
@@ -343,6 +510,19 @@ export function CardModal({
     if (asDialog) router.back();
     else router.replace(`/b/${card.boardId}`);
   }, [asDialog, card.boardId, cardVisible, router]);
+
+  useEffect(() => {
+    if (!lazyHistory || historyRequested) return;
+    const node = historySentinelRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setHistoryRequested(true);
+      }
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [historyRequested, lazyHistory]);
 
   // Stable ref pointing at the current `handleToggleComplete` so the
   // keydown effect (registered above the function declaration) can call
@@ -510,9 +690,14 @@ export function CardModal({
     }, 600);
   }
 
+  const activeCardType = liveCard?.type ?? card.type ?? "task";
   const hasRoadmapDates = Boolean(card.startDate || card.targetDate);
-  const onRoadmap = card.type === "epic" || card.type === "story";
+  const onRoadmap = activeCardType === "story";
   const showRoadmapLink = Boolean(workspaceId && hasRoadmapDates && onRoadmap);
+  const knownCardTypes = new Set(["story", "task", "subtask", "bug"]);
+  const isLegacySubboardType = Boolean(
+    activeCardType && !knownCardTypes.has(activeCardType),
+  );
 
   // Save indicator copy.
   const saveIndicator = pending
@@ -526,9 +711,6 @@ export function CardModal({
   // and optimistic updates) so the toggle's visual flips immediately.
   // Fall back to the SSR prop on the standalone card page when the store
   // hasn't hydrated yet.
-  const liveCard = allCards.find((c) => c.id === card.id) as
-    | (typeof allCards)[number]
-    | undefined;
   const isCompleted =
     (liveCard?.completedAt ??
       (card as { completedAt?: Date | string | null }).completedAt) != null ||
@@ -667,7 +849,7 @@ export function CardModal({
             <>
               <TypePicker
                 cardId={card.id}
-                type={card.type ?? "task"}
+                type={activeCardType}
                 parentCardId={card.parentCardId ?? null}
               />
               <PriorityPicker
@@ -689,7 +871,7 @@ export function CardModal({
               />
               <span aria-hidden className="mx-1 h-4 w-px bg-hairline" />
               <WatchToggle cardId={card.id} />
-              {(showRoadmapLink || (card.type === "epic" && workspaceId)) && (
+              {showRoadmapLink && (
                 <span aria-hidden className="mx-1 h-4 w-px bg-hairline" />
               )}
               {showRoadmapLink && (
@@ -702,19 +884,18 @@ export function CardModal({
                   Roadmap →
                 </Link>
               )}
-              {card.type === "epic" && workspaceId && (
-                <Link
-                  href={`/w/${workspaceId}/e/${card.id}`}
-                  data-testid="card-modal-epic-cta"
-                  className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
-                >
-                  <Layers3 className="size-3" aria-hidden />
-                  Epic kanban →
-                </Link>
-              )}
             </>
           )}
         </div>
+        {isLegacySubboardType && (
+          <div
+            data-testid="card-modal-subboard-deprecated"
+            className="rounded-xl border border-hairline bg-[color:var(--surface)] px-3 py-2 text-sm text-fg-muted"
+          >
+            This retired card type has been migrated to a sub-board. Open it
+            from the workspace board list.
+          </div>
+        )}
       </div>
 
       {/* Task 5 — quick-edit strip. Surfaces the three minimum-set fields
@@ -817,6 +998,24 @@ export function CardModal({
           <CardLinksSection cardId={card.id} boardId={card.boardId} />
         )}
         <AttachmentsSection cardId={card.id} />
+      </AccordionGroup>
+
+      <AccordionGroup
+        id="history"
+        title="History"
+        onOpenChange={(open) => {
+          if (open) setHistoryRequested(true);
+        }}
+      >
+        <div
+          ref={historySentinelRef}
+          data-testid="card-modal-history-lazy-sentinel"
+        >
+          <CardHistoryPanel
+            cardId={card.id}
+            enabled={!lazyHistory || historyRequested}
+          />
+        </div>
       </AccordionGroup>
 
       {children && (

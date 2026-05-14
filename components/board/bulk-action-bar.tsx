@@ -36,8 +36,8 @@ import {
   bulkAddLabel,
   bulkSetPriority,
   bulkSetCompleted,
-  moveCard,
 } from "@/actions/cards";
+import { moveCardToList } from "@/actions/lists";
 import {
   PRIORITY_TINT,
   type CardPriority,
@@ -257,7 +257,11 @@ export function BulkActionBar({
       try {
         await Promise.all(
           newPositions.map((np) =>
-            moveCard({ id: np.id, listId: toListId, position: np.position }),
+            moveCardToList({
+              cardId: np.id,
+              toListId,
+              position: np.position,
+            }),
           ),
         );
         for (const np of newPositions) {
@@ -270,7 +274,11 @@ export function BulkActionBar({
             try {
               await Promise.all(
                 originals.map((o) =>
-                  moveCard({ id: o.id, listId: o.listId, position: o.position }),
+                  moveCardToList({
+                    cardId: o.id,
+                    toListId: o.listId,
+                    position: o.position,
+                  }),
                 ),
               );
               for (const o of originals) {
