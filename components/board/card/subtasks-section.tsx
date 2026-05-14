@@ -40,10 +40,14 @@ export function SubtasksSection({
     if (!text.trim()) return;
     start(async () => {
       try {
-        const child = await createCard({ listId, title: text });
+        // Pass parentCardId on creation so the server-side owner inheritance
+        // (actions/cards.ts createCardImpl) fires — without it the new row
+        // is born owned by the creator, and the subsequent promotion update
+        // does not retroactively re-resolve the owner.
+        const child = await createCard({ listId, title: text, parentCardId: cardId });
         addCardLocal(child);
-        // Promote it to subtask + set parent
-        const updated = await updateCard({ id: child.id, type: "subtask", parentCardId: cardId });
+        // Promote to type=subtask; parent already set above.
+        const updated = await updateCard({ id: child.id, type: "subtask" });
         updateCardLocal(child.id, { type: "subtask", parentCardId: cardId } as Partial<typeof child>);
         setText("");
         setAdding(false);

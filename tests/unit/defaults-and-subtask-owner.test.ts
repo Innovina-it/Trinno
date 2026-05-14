@@ -171,6 +171,28 @@ describe("default board lists and subtask owner defaults", () => {
     ).toEqual(["Todo", "In Progress", "Done"]);
   });
 
+  it("subtasks-section.tsx passes parentCardId to createCard at creation time", async () => {
+    // Regression: dispatch 6b made createCardImpl inherit parent's ownerId
+    // when parentCardId is supplied. The board UI was creating subtasks in
+    // two steps — createCard without parentCardId, then updateCard to set
+    // type='subtask' + parentCardId — which bypassed the server inheritance
+    // and left the card owned by the creator. Fix: createCard now receives
+    // parentCardId in the same call.
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(
+      "components/board/card/subtasks-section.tsx",
+      "utf8",
+    );
+    // Must include parentCardId in the createCard call.
+    expect(src).toMatch(
+      /createCard\(\s*\{\s*listId\s*,\s*title\s*:\s*text\s*,\s*parentCardId\s*:\s*cardId\s*\}/,
+    );
+    // Should NOT pre-create without parentCardId then attach via update.
+    expect(src).not.toMatch(
+      /createCard\(\s*\{\s*listId\s*,\s*title\s*:\s*text\s*\}\s*\)/,
+    );
+  });
+
   it("createCardImpl defaults a new subtask owner to the parent owner", async () => {
     const { createCardImpl } = await import("@/actions/cards");
     const parentOwnerId = uuid(2);
