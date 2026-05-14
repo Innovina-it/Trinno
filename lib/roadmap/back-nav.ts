@@ -23,6 +23,23 @@ export function rememberRoadmapCardOrigin(
   return href;
 }
 
+// Consume the stored origin without navigating. Returns the stored href
+// or null. Used by card-modal close to decide between "go back to
+// roadmap I came from" vs the default `router.back()` flow when the
+// user reached the detail page from the board.
+export function consumeRoadmapCardOrigin(
+  storage: Pick<Storage, "getItem" | "removeItem"> | null =
+    typeof window === "undefined" ? null : window.sessionStorage,
+): string | null {
+  try {
+    const href = storage?.getItem(ROADMAP_CARD_ORIGIN_KEY) ?? null;
+    if (href) storage?.removeItem(ROADMAP_CARD_ORIGIN_KEY);
+    return href || null;
+  } catch {
+    return null;
+  }
+}
+
 export function restoreRoadmapCardOrigin(
   router: RoadmapBackNavRouter,
   fallbackHref: string,

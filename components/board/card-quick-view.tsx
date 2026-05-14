@@ -351,7 +351,14 @@ function CardQuickViewBody({
   function openAdvanced(e?: React.MouseEvent<HTMLButtonElement>) {
     e?.preventDefault();
     e?.stopPropagation();
-    onClose();
+    // Do NOT call the onClose handler here. When the quick-view was
+    // opened from the roadmap, roadmap-view's onOpenChange runs
+    // restoreRoadmapCardOrigin on close — which clears the sessionStorage
+    // breadcrumb AND replaces the URL with /roadmap. Both side-effects
+    // break the "close detail returns to roadmap" flow: the breadcrumb
+    // is then unavailable to card-modal close. Just navigate; the
+    // roadmap-view unmounts when the URL changes and the dialog
+    // disappears with it.
     router.push(`/b/${boardId}/c/${card.id}`, { scroll: false });
   }
 
@@ -650,7 +657,14 @@ function CardQuickViewBody({
         )}
       </div>
 
-      <DialogFooter className="flex w-full items-center justify-between gap-2 sm:justify-between">
+      <DialogFooter className="items-center justify-between !px-2 sm:justify-between">
+        <Button
+          type="button"
+          onClick={openAdvanced}
+          data-testid="card-quick-view-open-advanced"
+        >
+          Open advanced settings
+        </Button>
         <Button
           type="button"
           variant="outline"
@@ -658,13 +672,6 @@ function CardQuickViewBody({
           data-testid="card-quick-view-close"
         >
           Close
-        </Button>
-        <Button
-          type="button"
-          onClick={openAdvanced}
-          data-testid="card-quick-view-open-advanced"
-        >
-          Open advanced settings
         </Button>
       </DialogFooter>
     </>

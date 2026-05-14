@@ -70,6 +70,7 @@ import {
   type CardHistoryRow,
 } from "@/lib/queries/use-card-history";
 import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
+import { consumeRoadmapCardOrigin } from "@/lib/roadmap/back-nav";
 
 export type CardModalCard = {
   id: string;
@@ -560,6 +561,16 @@ export function CardModal({
   }, [router, card.boardId, siblingNav.prev, siblingNav.next]);
 
   function close() {
+    // Honor the roadmap-origin breadcrumb when present: opens from
+    // /w/.../roadmap → quick-view → "Open advanced settings" land here,
+    // and Close should return to the roadmap not the underlying board.
+    // Falls through to router.back() for the normal /b/.../c/{cardId}
+    // flow opened directly from the board.
+    const roadmapHref = consumeRoadmapCardOrigin();
+    if (roadmapHref) {
+      router.replace(roadmapHref, { scroll: false });
+      return;
+    }
     router.back();
   }
 
