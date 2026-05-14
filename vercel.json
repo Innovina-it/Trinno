@@ -1,5 +1,4 @@
 {
-  "_comment": "No explicit function overrides: Supabase SSR helpers use HTTPS clients, and raw SQL pooling is bounded in lib/db/client.ts rather than route-specific Vercel settings.",
   "crons": [
     { "path": "/api/cron/send-emails", "schedule": "0 8 * * *" }
   ]
