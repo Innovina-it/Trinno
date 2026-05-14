@@ -202,14 +202,23 @@ export function CardTile({
   // as the parent; type=subtask + parentCardId=this card. CDC echo from
   // the realtime channel inserts the new row into the store; no optimistic
   // patch needed here.
+  //
+  // parentCardId is passed at creation time so actions/cards.ts
+  // createCardImpl can copy the parent's ownerId. The subsequent update
+  // only promotes type — without parentCardId at insert the new row would
+  // be born owned by the creator, and the type-update never re-resolves
+  // owner.
   const onQuickCreateSubtask = useCallback(
     async (title: string) => {
       try {
-        const created = await createCard({ listId: card.listId, title });
+        const created = await createCard({
+          listId: card.listId,
+          title,
+          parentCardId: card.id,
+        });
         await updateCard({
           id: created.id,
           type: "subtask",
-          parentCardId: card.id,
         });
       } catch (err) {
         toast.error((err as Error).message ?? "Failed to create subtask");

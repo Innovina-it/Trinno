@@ -193,6 +193,25 @@ describe("default board lists and subtask owner defaults", () => {
     );
   });
 
+  it("card-tile.tsx onQuickCreateSubtask passes parentCardId at creation", async () => {
+    // Same regression as subtasks-section.tsx but via the quick-create
+    // subtask path on a card tile. card-tile.tsx was the second site that
+    // bypassed createCardImpl's parent-owner inheritance.
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("components/board/card-tile.tsx", "utf8");
+    expect(src).toMatch(/onQuickCreateSubtask/);
+    // Must include parentCardId on the create call. ([^}] alone won't
+    // cross newlines; use [\s\S] to be ES5-target safe.)
+    expect(src).toMatch(
+      /createCard\(\s*\{[\s\S]*?parentCardId\s*:\s*card\.id/,
+    );
+    // The bug shape: createCard({ listId: card.listId, title }) with no
+    // parentCardId — assert that exact bad call doesn't survive.
+    expect(src).not.toMatch(
+      /createCard\(\s*\{\s*listId\s*:\s*card\.listId\s*,\s*title\s*\}\s*\)/,
+    );
+  });
+
   it("createCardImpl defaults a new subtask owner to the parent owner", async () => {
     const { createCardImpl } = await import("@/actions/cards");
     const parentOwnerId = uuid(2);
