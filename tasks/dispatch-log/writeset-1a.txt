@@ -1,0 +1,14 @@
+# Dispatch 1a actual writeset
+# Source: git status after dispatch return, then orchestrator post-move of test file
+actions/cards.ts                                       (modified — type='epic' paths only)
+lib/db/schema.ts                                       (modified — adds parentBoardId, migratedFromEpicId)
+lib/epic/group-children-by-status.ts                   (deleted)
+supabase/migrations/0099_board_subboard_columns.sql    (new)
+supabase/migrations/0100_migrate_epics_to_subboards.sql (new)
+tests/unit/subboard-migration.test.ts                  (new — relocated from lib/subboard/__tests__/ by orchestrator)
+
+# Disjoint check vs Wave 2 writesets: PASS
+# - 1b owns: components/epic/*, components/board/{new-card-dialog,card/type-picker,card-modal,card-quick-view}.tsx, docs, seed, route segments — disjoint
+# - 2 owns: middleware.ts, lib/supabase/middleware.ts, supabase/migrations/0056_*, 0057_*, lib/notifications/email-labels.ts — disjoint
+# - 3a owns: supabase/migrations/01XX_indexes_*.sql — disjoint (1a used 0099, 0100)
+# - 3b owns: lib/supabase/server.ts, lib/supabase/browser.ts, .env.local.example, vercel.json — disjoint

@@ -1,0 +1,6 @@
+# Dispatch 3a actual writeset
+supabase/migrations/0101_indexes_notifications_unread.sql  (new — partial index, recipient+read_at+created_at desc WHERE read_at IS NULL)
+tests/integration/db-indexes.test.ts                       (new)
+
+# No existing migration touched. No new index for card_field_history (existing covers).
+# No new index for board activity (existing covers).

@@ -270,9 +270,9 @@ timebox = "720h"
 inactivity_timeout = "168h"
 
 # This hook runs before a new user is created and allows developers to reject the request based on the incoming user object.
-# [auth.hook.before_user_created]
-# enabled = true
-# uri = "pg-functions://postgres/auth/before-user-created-hook"
+[auth.hook.before_user_created]
+enabled = true
+uri = "pg-functions://postgres/public/auth_block_external_domains"
 
 # This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
 # [auth.hook.custom_access_token]

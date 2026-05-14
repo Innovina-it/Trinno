@@ -1,0 +1,6 @@
+# Dispatch 3c actual writeset
+actions/cards.ts                              (no change — bulk-archive was already a single UPDATE)
+actions/sprints.ts                            (modified — date-shift collapsed to one UPDATE with SQL interval arithmetic)
+tests/unit/batch-update-refactor.test.ts      (new)
+
+# 1a's edits in actions/cards.ts (type='epic' paths) preserved untouched.

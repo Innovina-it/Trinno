@@ -1,0 +1,13 @@
+# Dispatch 2 actual writeset
+lib/supabase/middleware.ts                                (modified)
+lib/notifications/email-labels.ts                         (new)
+lib/notifications/email-digest.ts                         (modified — migrated to shared labels)
+supabase/migrations/0056_auth_domain_allowlist.sql.disabled  (deleted — renamed)
+supabase/migrations/0056_auth_domain_allowlist.sql         (new — re-enabled)
+supabase/migrations/0057_storage_rls.sql.disabled          (deleted — renamed)
+supabase/migrations/0057_storage_rls.sql                   (new — re-enabled)
+tests/unit/security-middleware.test.ts                     (new)
+tests/unit/security-baseline-sql.test.ts                   (new)
+
+# Note: root middleware.ts not modified — existing delegation to lib/supabase/middleware.ts
+# was already correct, only the latter needed gate logic.

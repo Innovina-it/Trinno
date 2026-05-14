@@ -1,0 +1,9 @@
+# Dispatch 3b actual writeset
+lib/supabase/server.ts                       (modified — zod env validation, RSC-safe cookie writes)
+lib/supabase/browser.ts                      (modified — zod validation, memoized client)
+.env.local.example                           (modified — documented all 5 env keys)
+vercel.json                                  (modified — kept minimal, added rationale)
+tests/unit/supabase-client-env.test.ts       (new)
+
+# lib/supabase/middleware.ts NOT touched (dispatch 2's; already correct).
+# lib/db/client.ts NOT touched (out of writeset; flagged as follow-up).

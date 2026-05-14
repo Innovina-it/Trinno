@@ -1,0 +1,13 @@
+# Dispatch 4 actual writeset
+app/(app)/w/[workspaceId]/layout.tsx          (modified — layout-level shared fetch)
+app/(app)/b/[boardId]/layout.tsx              (modified — wired to shared cache)
+lib/queries/workspace-snapshot-shared.ts      (new — query-key factory + hooks)
+stores/workspace-cache-store.ts               (new — TanStack-shaped local adapter; NO new npm dep)
+components/board/board-view.tsx               (modified — consume shared hooks when flag ON)
+components/roadmap/roadmap-view.tsx           (modified — consume shared hooks when flag ON)
+tests/shared-cache/golden.test.ts             (new)
+tests/shared-cache/back-compat.test.ts        (new)
+tests/shared-cache/cache-invalidation.test.ts (new)
+
+# Existing lib/queries/* untouched (only new files added).
+# Feature flag: NEXT_PUBLIC_SHARED_WORKSPACE_CACHE === 'true', default OFF.
