@@ -8,7 +8,7 @@ import {
   ensureUser,
   TESTBED_EMAIL,
   TESTBED_PASSWORD,
-} from "./seed-testbed-common.mjs";
+} from "./testbed-common.mjs";
 
 const TARGET = 5000;
 const KIND = "card.assigned";

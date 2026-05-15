@@ -13,7 +13,7 @@ import {
   rankString,
   TESTBED_EMAIL,
   TESTBED_PASSWORD,
-} from "./seed-testbed-common.mjs";
+} from "./testbed-common.mjs";
 
 const BOARD_TITLE = "TB-Sprint";
 const LIST_TITLE = "In Progress";

@@ -15,10 +15,10 @@ Run these once before any test:
 npm run db:reset
 
 # 2. Seed testbed fixtures.
-node scripts/seed-testbed-500-card-board.mjs       # board TB-Big with 500 cards
-node scripts/seed-testbed-100-card-sprint.mjs      # board TB-Sprint + sprint TB-Sprint-100 (100 cards)
-node scripts/seed-testbed-5k-notifications.mjs     # 5000 unread for testbed@local
-node scripts/seed-testbed-member.mjs               # testbed-member@local + testbed-outsider@local
+./scripts/seeds/run.sh local testbed-500-cards     # board TB-Big with 500 cards
+./scripts/seeds/run.sh local testbed-100-sprint    # board TB-Sprint + sprint TB-Sprint-100 (100 cards)
+./scripts/seeds/run.sh local testbed-5k-notif      # 5000 unread for testbed@local
+./scripts/seeds/run.sh local testbed-member        # testbed-member@local + testbed-outsider@local
 
 # 3. (TB-07 only) Enable the auth Before-User-Created hook in local Supabase.
 # Edit supabase/config.toml, uncomment these four lines:

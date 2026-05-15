@@ -18,7 +18,7 @@ import {
   TESTBED_PASSWORD,
   TESTBED_MEMBER_EMAIL,
   TESTBED_MEMBER_PASSWORD,
-} from "./seed-testbed-common.mjs";
+} from "./testbed-common.mjs";
 
 const OUTSIDER_EMAIL = "testbed-outsider@local";
 const OUTSIDER_PASSWORD = "testbed-seed-2026";
