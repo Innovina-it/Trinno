@@ -11,6 +11,7 @@ import {
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { DatePicker } from "@/components/ui/date-picker";
 import { cn } from "@/lib/utils";
 import {
   CalendarClock,
@@ -313,22 +314,19 @@ export function RoadmapHeader({
               >
                 Today
               </button>
-              <label className="flex-1 inline-flex items-center gap-2 px-3 min-h-11 rounded-xl border border-hairline bg-[color:var(--surface)] hover:bg-[color:var(--surface-strong)] transition-colors cursor-pointer">
-                <CalendarDays
-                  className="size-3.5 text-fg-faint"
-                  aria-hidden
-                />
-                <input
-                  type="date"
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      onJumpToDate(new Date(e.target.value));
+              <div className="flex-1">
+                <DatePicker
+                  value={null}
+                  onChange={(d) => {
+                    if (d) {
+                      onJumpToDate(d);
                       setDisplaySheetOpen(false);
                     }
                   }}
-                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-fg text-sm"
+                  triggerLabel="Jump to date"
+                  inputLabel="Jump to date"
                 />
-              </label>
+              </div>
             </div>
           </section>
         </div>
@@ -509,20 +507,20 @@ export function RoadmapHeader({
           >
             Today
           </button>
-          <label
-            className="inline-flex items-center pl-2 pr-2 hover:bg-[rgb(255_255_255/0.08)] cursor-pointer"
+          <div
+            className="inline-flex items-center pl-2 pr-2"
             title="Jump to date"
+            data-testid="roadmap-jump-date"
           >
-            <CalendarDays className="size-3.5 text-fg-faint" aria-hidden />
-            <input
-              type="date"
-              data-testid="roadmap-jump-date"
-              onChange={(e) => {
-                if (e.target.value) onJumpToDate(new Date(e.target.value));
+            <DatePicker
+              value={null}
+              onChange={(d) => {
+                if (d) onJumpToDate(d);
               }}
-              className="ml-1 w-[7rem] bg-transparent border-0 outline-none text-fg text-xs"
+              triggerLabel="Jump to date"
+              inputLabel="Jump to date"
             />
-          </label>
+          </div>
         </div>
 
         {/* Primary action. */}

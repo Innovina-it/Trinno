@@ -12,6 +12,7 @@ import {
   Square,
 } from "lucide-react";
 import { AssigneePicker } from "./assignee-picker";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -137,18 +138,16 @@ const PRIORITY_OPTIONS: readonly (CardPriority | "")[] = [
   "p4",
 ];
 
-// Convert a stored date (Date | string | null) into the YYYY-MM-DD string
-// that <input type="date"> expects.  Empty string when null/invalid.
-function toDateInput(d: Date | string | null | undefined): string {
-  if (d == null) return "";
+// Normalize a stored date (Date | string | null) into a UTC midnight Date,
+// so the calendar grid renders against the same day that was persisted
+// (the DB stores noon-UTC; the picker wants 00:00-UTC of the same day).
+function toDateValue(d: Date | string | null | undefined): Date | null {
+  if (d == null) return null;
   const date = d instanceof Date ? d : new Date(d);
-  if (Number.isNaN(date.getTime())) return "";
-  // Use UTC to match fmtShortDate above; avoids local-tz drift across
-  // midnight that would shift an "Apr 30" stored date to "Apr 29".
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  if (Number.isNaN(date.getTime())) return null;
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
 }
 
 export function CardQuickView({
@@ -335,16 +334,14 @@ function CardQuickViewBody({
   }, [completed, onPatch]);
 
   const setStartDate = useCallback(
-    (v: string) => {
-      const next: Date | string | null = v ? v : null;
-      void onPatch?.({ startDate: next });
+    (v: Date | null) => {
+      void onPatch?.({ startDate: v });
     },
     [onPatch],
   );
   const setTargetDate = useCallback(
-    (v: string) => {
-      const next: Date | string | null = v ? v : null;
-      void onPatch?.({ targetDate: next });
+    (v: Date | null) => {
+      void onPatch?.({ targetDate: v });
     },
     [onPatch],
   );
@@ -530,36 +527,36 @@ function CardQuickViewBody({
             either date is set. */}
         {(editable || card.startDate || card.targetDate) && (
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <span className="mono-meta-sm text-fg-faint">START</span>
               {editable ? (
-                <input
-                  data-testid="card-quick-view-start-edit"
-                  type="date"
-                  value={toDateInput(card.startDate)}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  aria-label="Start date"
-                  className="flex h-[34px] w-full items-center rounded-md border border-hairline bg-transparent px-2 text-xs text-fg tabular-nums outline-none focus:border-hairline-hi"
-                />
+                <div data-testid="card-quick-view-start-edit">
+                  <DatePicker
+                    value={toDateValue(card.startDate)}
+                    onChange={setStartDate}
+                    triggerLabel="Set start"
+                    inputLabel="Start date"
+                  />
+                </div>
               ) : (
-                <div className="flex h-[34px] items-center rounded-md border border-hairline bg-transparent px-2 text-fg tabular-nums">
+                <div className="flex h-8 items-center rounded-md border border-hairline bg-transparent px-2 text-fg tabular-nums">
                   {card.startDate ? formatDate(card.startDate) : "—"}
                 </div>
               )}
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <span className="mono-meta-sm text-fg-faint">TARGET</span>
               {editable ? (
-                <input
-                  data-testid="card-quick-view-target-edit"
-                  type="date"
-                  value={toDateInput(card.targetDate)}
-                  onChange={(e) => setTargetDate(e.target.value)}
-                  aria-label="Target date"
-                  className="flex h-[34px] w-full items-center rounded-md border border-hairline bg-transparent px-2 text-xs text-fg tabular-nums outline-none focus:border-hairline-hi"
-                />
+                <div data-testid="card-quick-view-target-edit">
+                  <DatePicker
+                    value={toDateValue(card.targetDate)}
+                    onChange={setTargetDate}
+                    triggerLabel="Set target"
+                    inputLabel="Target date"
+                  />
+                </div>
               ) : (
-                <div className="flex h-[34px] items-center rounded-md border border-hairline bg-transparent px-2 text-fg tabular-nums">
+                <div className="flex h-8 items-center rounded-md border border-hairline bg-transparent px-2 text-fg tabular-nums">
                   {card.targetDate ? formatDate(card.targetDate) : "—"}
                 </div>
               )}

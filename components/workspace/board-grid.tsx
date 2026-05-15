@@ -42,6 +42,7 @@ export function BoardGrid({
           <Link
             href={`/b/${b.id}`}
             data-board-id={b.id}
+            prefetch={false}
             className="group/board glass relative flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-2xl p-5 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[rgb(255_255_255/0.06)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
           >
             {/* Top strip: index + ID badge + favorite star */}
@@ -85,6 +86,7 @@ export function BoardGrid({
           <Link
             href={`/b/${epic.boardId}/c/${epic.id}`}
             data-epic-card-id={epic.id}
+            prefetch={false}
             className="group/board glass relative flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-2xl p-5 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[rgb(255_255_255/0.06)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
           >
             {/* Epic Board tag — top-right corner */}

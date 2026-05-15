@@ -135,24 +135,48 @@ export async function createCardImpl(token: string, input: {
     }).returning();
     if (!row) throw new Error("Forbidden");
 
-    // Honor the workspace's "auto-assign creator" preference. Resolve
-    // workspace via list → board so we don't need it on the input. The
-    // insert is best-effort: a card_members write failure shouldn't roll
-    // back the card itself, so swallow the error after logging.
-    const [ws] = await tx
-      .select({ autoAssign: workspaces.autoAssignCreator })
-      .from(lists)
-      .innerJoin(boards, eq(boards.id, lists.boardId))
-      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-      .where(eq(lists.id, parsed.listId))
-      .limit(1);
-    if (ws?.autoAssign) {
-      try {
-        await tx
-          .insert(cardMembers)
-          .values({ cardId: row.id, userId: creatorId, boardId: row.boardId });
-      } catch {
-        /* ignore — card already created; assignment is non-critical */
+    // Subtasks inherit the parent's assignees so a child surfaces to the
+    // same people without re-picking. Parent-inheritance takes precedence
+    // over the workspace "auto-assign creator" default — the creator can
+    // still self-assign via the picker if they want to be on the child too.
+    if (parsed.parentCardId) {
+      const parentMembers = await tx
+        .select({ userId: cardMembers.userId })
+        .from(cardMembers)
+        .where(eq(cardMembers.cardId, parsed.parentCardId));
+      if (parentMembers.length > 0) {
+        try {
+          await tx.insert(cardMembers).values(
+            parentMembers.map((m) => ({
+              cardId: row.id,
+              userId: m.userId,
+              boardId: row.boardId,
+            })),
+          );
+        } catch {
+          /* best-effort; card already created */
+        }
+      }
+    } else {
+      // Honor the workspace's "auto-assign creator" preference. Resolve
+      // workspace via list → board so we don't need it on the input. The
+      // insert is best-effort: a card_members write failure shouldn't roll
+      // back the card itself, so swallow the error after logging.
+      const [ws] = await tx
+        .select({ autoAssign: workspaces.autoAssignCreator })
+        .from(lists)
+        .innerJoin(boards, eq(boards.id, lists.boardId))
+        .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+        .where(eq(lists.id, parsed.listId))
+        .limit(1);
+      if (ws?.autoAssign) {
+        try {
+          await tx
+            .insert(cardMembers)
+            .values({ cardId: row.id, userId: creatorId, boardId: row.boardId });
+        } catch {
+          /* ignore — card already created; assignment is non-critical */
+        }
       }
     }
     return row;

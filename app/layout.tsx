@@ -2,6 +2,7 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Instrument_Serif, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthBroadcastListener } from "./(auth)/auth-broadcast-listener";
 
 const geistSans = Geist({
   subsets: ["latin"],
@@ -51,6 +52,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${jetbrainsMono.variable} ${instrumentSerif.variable}`}
     >
       <body className="min-h-dvh bg-background text-foreground antialiased font-sans">
+        <AuthBroadcastListener />
         {children}
         <Toaster richColors />
       </body>

@@ -104,26 +104,30 @@ export function RoadmapDatesSection({ cardId }: { cardId: string }) {
     <section className="space-y-2" data-testid="roadmap-dates-section">
       <div className="flex items-baseline justify-between border-b border-hairline pb-1">
         <h3 className="mono-meta text-fg-muted">Dates</h3>
-        {pending && <span className="mono-meta-sm text-fg-faint">SAVING…</span>}
+        <div className="flex items-baseline gap-2">
+          {/* Persistence hint: dates are stored & rendered as UTC midnight
+              (see toDate above). Surfacing the timezone here pre-empts the
+              "why does my Friday show as Thursday in Tokyo" support thread. */}
+          <span className="mono-meta-sm text-fg-faint">UTC</span>
+          {pending && <span className="mono-meta-sm text-fg-faint">SAVING…</span>}
+        </div>
       </div>
-      <DateRangePopover
-        value={value}
-        onChange={persist}
-        disabled={pending}
-        triggerLabel="Set start / target"
-      />
-      {/* Persistence hint: dates are stored & rendered as UTC midnight
-          (see toDate above). Surfacing the timezone here pre-empts the
-          "why does my Friday show as Thursday in Tokyo" support thread. */}
-      <span className="mono-meta-sm text-fg-faint">DATES IN UTC</span>
-      {inheritedFromParent && (
-        <span
-          data-testid="roadmap-dates-inherited"
-          className="mono-meta-sm text-fg-faint"
-        >
-          INHERITED FROM PARENT
-        </span>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <DateRangePopover
+          value={value}
+          onChange={persist}
+          disabled={pending}
+          triggerLabel="Set start / target"
+        />
+        {inheritedFromParent && (
+          <span
+            data-testid="roadmap-dates-inherited"
+            className="mono-meta-sm text-fg-faint"
+          >
+            INHERITED FROM PARENT
+          </span>
+        )}
+      </div>
       {!onRoadmap && (
         <Button
           type="button"

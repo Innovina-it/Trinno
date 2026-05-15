@@ -250,22 +250,30 @@ export function DateRangePopover({
           </div>
 
           {/* Two-month grid */}
-          <div ref={gridRef} className="grid grid-cols-2 gap-3">
+          <div ref={gridRef} className="grid grid-cols-2">
             {[anchor, new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 1))].map(
               (m, mi) => (
-                <MonthGrid
+                <div
                   key={mi}
-                  anchor={m}
-                  cells={mi === 0 ? cells : cellsNext}
-                  today={today}
-                  focusDay={focusDay}
-                  inRange={inRange}
-                  isEdge={isEdge}
-                  onPick={pickDay}
-                  onHover={setHover}
-                  onPrev={mi === 0 ? () => setAnchor(addMonths(anchor, -1)) : undefined}
-                  onNext={mi === 1 ? () => setAnchor(addMonths(anchor, 1)) : undefined}
-                />
+                  className={
+                    mi === 0
+                      ? "pr-3 border-r border-hairline"
+                      : "pl-3"
+                  }
+                >
+                  <MonthGrid
+                    anchor={m}
+                    cells={mi === 0 ? cells : cellsNext}
+                    today={today}
+                    focusDay={focusDay}
+                    inRange={inRange}
+                    isEdge={isEdge}
+                    onPick={pickDay}
+                    onHover={setHover}
+                    onPrev={mi === 0 ? () => setAnchor(addMonths(anchor, -1)) : undefined}
+                    onNext={mi === 1 ? () => setAnchor(addMonths(anchor, 1)) : undefined}
+                  />
+                </div>
               ),
             )}
           </div>
@@ -409,21 +417,29 @@ export function DatePopover({
               </button>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2">
             {[anchor, addMonths(anchor, 1)].map((m, mi) => (
-              <MonthGrid
+              <div
                 key={mi}
-                anchor={m}
-                cells={mi === 0 ? cells : cellsNext}
-                today={today}
-                focusDay={focusDay}
-                inRange={() => false}
-                isEdge={(d) => (value && isSameDay(d, value) ? "start" : null)}
-                onPick={pickDay}
-                onHover={() => {}}
-                onPrev={mi === 0 ? () => setAnchor(addMonths(anchor, -1)) : undefined}
-                onNext={mi === 1 ? () => setAnchor(addMonths(anchor, 1)) : undefined}
-              />
+                className={
+                  mi === 0
+                    ? "pr-3 border-r border-hairline"
+                    : "pl-3"
+                }
+              >
+                <MonthGrid
+                  anchor={m}
+                  cells={mi === 0 ? cells : cellsNext}
+                  today={today}
+                  focusDay={focusDay}
+                  inRange={() => false}
+                  isEdge={(d) => (value && isSameDay(d, value) ? "start" : null)}
+                  onPick={pickDay}
+                  onHover={() => {}}
+                  onPrev={mi === 0 ? () => setAnchor(addMonths(anchor, -1)) : undefined}
+                  onNext={mi === 1 ? () => setAnchor(addMonths(anchor, 1)) : undefined}
+                />
+              </div>
             ))}
           </div>
         </div>

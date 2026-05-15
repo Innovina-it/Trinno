@@ -22,7 +22,11 @@ export function BoardListRealtime({ workspaceId }: { workspaceId: string }) {
       if (token) await supa.realtime.setAuth(token);
       if (cancelled) return;
 
-      const ch = supa.channel(`ws-boards:${workspaceId}`);
+      // Per-mount nonce: Supabase JS caches channels by name, so under
+      // React StrictMode the effect's double-mount returns the
+      // already-subscribed handle from the first run and `.on()` fails.
+      const nonce = Math.random().toString(36).slice(2, 8);
+      const ch = supa.channel(`ws-boards:${workspaceId}:${nonce}`);
       channel = ch;
       ch.on(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -11,6 +11,7 @@ import { QuickAddCardMount } from "@/components/quick-add-card-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import { getUserPreferences } from "@/actions/profile-preferences";
 import { UserPreferencesProvider } from "@/lib/preferences/provider";
+import { PreferencesBodyMirror } from "@/components/preferences-body-mirror";
 import { listWorkspaces } from "@/lib/queries/workspaces";
 import { listFavoriteBoards, listRecentBoardViews } from "@/lib/queries/favorites";
 import { dbAsUser } from "@/lib/db/client";
@@ -165,6 +166,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <UserPreferencesProvider initial={initialPreferences}>
+      <PreferencesBodyMirror />
       <TopNav
         email={user.email ?? ""}
         userId={user.id}

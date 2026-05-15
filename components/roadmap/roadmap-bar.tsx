@@ -41,6 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 
 const TYPE_DOT: Record<string, string> = {
   epic: "bg-fg",
@@ -109,6 +110,21 @@ type ContextMenu = { x: number; y: number };
 
 function isoForInput(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+function isoToDate(iso: string): Date | null {
+  if (!iso) return null;
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+}
+
+function dateToIso(d: Date | null): string {
+  if (!d) return "";
+  const y = d.getUTCFullYear();
+  const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dy = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${mo}-${dy}`;
 }
 
 export function RoadmapBar({
@@ -217,8 +233,15 @@ export function RoadmapBar({
 
   function handleOpenCard() {
     setMenu(null);
+    // Prefer the in-place quick-view (zero navigation, no loading flash).
+    // The parent (roadmap-view) registers `onOpen` which remembers the
+    // roadmap origin and opens CardQuickView as an overlay. Only fall
+    // back to a route navigation if no handler is wired (legacy usage).
+    if (onOpen) {
+      onOpen(card.id, card.boardId);
+      return;
+    }
     router.push(`/b/${card.boardId}/c/${card.id}`);
-    onOpen?.(card.id, card.boardId);
   }
 
   function handleInBoard() {
@@ -330,7 +353,7 @@ export function RoadmapBar({
         }}
         className={`absolute h-7 rounded-md border border-fg/30 backdrop-blur-sm
                    hover:border-fg/60 transition-colors cursor-grab active:cursor-grabbing
-                   flex items-center px-2 select-none group/bar
+                   flex items-center px-2 select-none group/bar pointer-events-auto
                    ${fill.className}
                    ${focused ? "ring-2 ring-fg/50" : ""}
                    ${tooltipOpen || menu ? "z-30" : ""}
@@ -509,7 +532,7 @@ export function RoadmapBar({
           </div>,
           document.body,
         )}
-      {menu && (
+      {menu && typeof document !== "undefined" && createPortal(
         <div
           ref={menuRef}
           role="menu"
@@ -619,7 +642,8 @@ export function RoadmapBar({
             <ExternalLink className="size-3" />
             Open in new view
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
       <Dialog open={datesOpen} onOpenChange={setDatesOpen}>
         <DialogContent data-testid="roadmap-bar-dates-dialog">
@@ -628,26 +652,28 @@ export function RoadmapBar({
             <DialogDescription>{card.title.toUpperCase()}</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1 text-xs">
+            <div className="space-y-1.5 text-xs">
               <span className="mono-meta-sm text-fg-faint">START</span>
-              <input
-                type="date"
-                value={datesStart}
-                onChange={(e) => setDatesStart(e.target.value)}
-                data-testid="roadmap-bar-dates-start"
-                className="w-full rounded-md border border-hairline bg-transparent px-2 py-1.5 text-fg outline-none focus:border-fg/40"
-              />
-            </label>
-            <label className="space-y-1 text-xs">
+              <div data-testid="roadmap-bar-dates-start">
+                <DatePicker
+                  value={isoToDate(datesStart)}
+                  onChange={(d) => setDatesStart(dateToIso(d))}
+                  triggerLabel="Set start"
+                  inputLabel="Start date"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5 text-xs">
               <span className="mono-meta-sm text-fg-faint">TARGET</span>
-              <input
-                type="date"
-                value={datesTarget}
-                onChange={(e) => setDatesTarget(e.target.value)}
-                data-testid="roadmap-bar-dates-target"
-                className="w-full rounded-md border border-hairline bg-transparent px-2 py-1.5 text-fg outline-none focus:border-fg/40"
-              />
-            </label>
+              <div data-testid="roadmap-bar-dates-target">
+                <DatePicker
+                  value={isoToDate(datesTarget)}
+                  onChange={(d) => setDatesTarget(dateToIso(d))}
+                  triggerLabel="Set target"
+                  inputLabel="Target date"
+                />
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button

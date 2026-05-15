@@ -186,9 +186,15 @@ export function RoadmapView({
   const pathname = usePathname();
   const sp = useSearchParams();
   const zoomParam = sp.get("zoom");
+  // Client-side fallback applied from localStorage during the hydration
+  // effect below. Lets us honor a saved zoom without forcing a
+  // router.replace → second RSC fetch on every roadmap mount (perf hot-
+  // path: TB-10 measured the redirect at ~300 ms p95 on prod). URL still
+  // wins when explicitly set so deep-linked zoom remains bookmarkable.
+  const [clientZoomOverride, setClientZoomOverride] = useState<Zoom | null>(null);
   const zoom: Zoom = (ZOOMS as string[]).includes(zoomParam ?? "")
     ? (zoomParam as Zoom)
-    : "fit";
+    : (clientZoomOverride ?? "fit");
   const lanesParam = sp.get("lanes");
   const laneMode: LaneMode = (LANE_MODES as string[]).includes(lanesParam ?? "")
     ? (lanesParam as LaneMode)
@@ -474,13 +480,16 @@ export function RoadmapView({
     const supa = createSupabaseBrowser();
     let cancelled = false;
     let channel: ReturnType<typeof supa.channel> | null = null;
+    // Per-mount nonce: Supabase JS caches channels by name → StrictMode
+    // double-mount returns already-subscribed handle → `.on()` fails.
+    const nonce = Math.random().toString(36).slice(2, 8);
     (async () => {
       const { data } = await supa.auth.getSession();
       const token = data.session?.access_token;
       if (token) await supa.realtime.setAuth(token);
       if (cancelled) return;
       channel = supa
-        .channel(`roadmap_boards:${workspaceId}`)
+        .channel(`roadmap_boards:${workspaceId}:${nonce}`)
         .on(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           "postgres_changes" as any,
@@ -1244,11 +1253,23 @@ export function RoadmapView({
     } catch {
       saved = null;
     }
-    // Apply saved zoom only if URL is silent on the matter.
+    // Apply saved zoom only if URL is silent on the matter. Use a client
+    // state override (NOT router.replace) so we don't trigger a second
+    // RSC fetch every time the user lands on the roadmap. URL also gets
+    // updated via history.replaceState so the address bar reflects the
+    // active zoom and remains shareable on demand.
     if (saved?.zoom && !zoomParam && (ZOOMS as string[]).includes(saved.zoom)) {
-      const params = new URLSearchParams(sp.toString());
-      params.set("zoom", saved.zoom);
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      setClientZoomOverride(saved.zoom);
+      try {
+        const params = new URLSearchParams(sp.toString());
+        params.set("zoom", saved.zoom);
+        const next = `${pathname}?${params.toString()}`;
+        window.history.replaceState(window.history.state, "", next);
+      } catch {
+        // history.replaceState can throw if the URL is invalid in some
+        // older browsers — the client state above is enough to apply the
+        // saved zoom, the address bar just won't reflect it.
+      }
     }
     // Apply scrollX after first paint. If nothing saved, anchor on `now` so
     // the user lands on "today" even when the grid extends backward to
@@ -1492,8 +1513,8 @@ export function RoadmapView({
       />
       {/* === MILESTONE MARKERS START (toolbar) === */}
       <div className="flex items-center gap-2 flex-wrap">
-        <AssigneeFilterRow />
-        <RoadmapFilterBar mineHiddenCount={mineHiddenCount} />
+        <AssigneeFilterRow hiddenCount={mineHiddenCount} />
+        <RoadmapFilterBar />
         <button
           type="button"
           onClick={() => setShowMilestones((v) => !v)}
@@ -1940,7 +1961,7 @@ export function RoadmapView({
                     renderedBars.push(
                       <div
                         key={`subrow-${parentCard.id}-${rowIdx}`}
-                        className="absolute"
+                        className="absolute pointer-events-none"
                         style={{
                           left: 0,
                           right: 0,
@@ -1964,35 +1985,22 @@ export function RoadmapView({
                             sx +
                             effectivePpd;
                           return (
-                            <div
+                            <RoadmapBar
                               key={sc.id}
-                              className="absolute h-4 rounded-full border border-dashed border-fg/40 bg-[color:var(--surface)]/70 hover:border-fg/80 hover:bg-[color:var(--surface-strong)] transition-colors flex items-center pl-3 pr-2 cursor-pointer select-none"
-                              style={{
-                                left: sx + 24,
-                                width: Math.max(sw - 24, 12),
-                                top: 10,
-                              }}
-                              data-card-id={sc.id}
-                              data-testid="roadmap-subtask-bar"
-                              onClick={() => onOpenCard(sc.id, sc.boardId)}
-                              title={`${sc.title} — ${sc.startDate
-                                .toISOString()
-                                .slice(0, 10)} → ${sc.targetDate
-                                .toISOString()
-                                .slice(0, 10)}`}
-                            >
-                              <span
-                                aria-hidden
-                                className="absolute -left-3 top-1/2 h-px w-3 bg-fg/30"
-                              />
-                              <span
-                                aria-hidden
-                                className="absolute left-1.5 top-1/2 -translate-y-1/2 size-1 rounded-full bg-fg/50"
-                              />
-                              <span className="text-[10px] text-fg-muted truncate tracking-tight">
-                                {sc.title}
-                              </span>
-                            </div>
+                              card={sc}
+                              x={sx}
+                              width={sw}
+                              row={0}
+                              isHeader={false}
+                              focused={flashFocus === sc.id}
+                              status={cardStatusById.get(sc.id) ?? null}
+                              storyPoints={cardSpById.get(sc.id) ?? null}
+                              sprintName={cardSprintNameById.get(sc.id) ?? null}
+                              onMoveStart={handleMoveStart}
+                              onResizeLeftStart={handleResizeLeftStart}
+                              onResizeRightStart={handleResizeRightStart}
+                              onOpen={onOpenCard}
+                            />
                           );
                         })}
                       </div>,
@@ -2019,7 +2027,7 @@ export function RoadmapView({
                   return (
                     <div
                       key={`bar-${c.id}`}
-                      className="absolute"
+                      className="absolute pointer-events-none"
                       style={{
                         left: 0,
                         right: 0,
@@ -2039,7 +2047,7 @@ export function RoadmapView({
                           aria-expanded={expanded}
                           data-testid="roadmap-parent-toggle"
                           data-card-id={c.id}
-                          className="absolute top-1.5 size-5 rounded-md border border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg flex items-center justify-center"
+                          className="absolute top-1.5 size-5 rounded-md border border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg flex items-center justify-center pointer-events-auto"
                           style={{ left: Math.max(0, x - 22) }}
                         >
                           <ChevronDown
@@ -2066,7 +2074,7 @@ export function RoadmapView({
                       />
                       {undated > 0 && (
                         <span
-                          className="absolute top-2 chip mono-meta-sm"
+                          className="absolute top-2 chip mono-meta-sm pointer-events-auto"
                           style={{ left: x + w + 6 }}
                           data-testid="roadmap-undated-subtasks"
                           data-card-id={c.id}
@@ -2083,7 +2091,7 @@ export function RoadmapView({
                   renderedBars.push(
                     <div
                       key={`header-row-${ll.lane.id}`}
-                      className="absolute"
+                      className="absolute pointer-events-none"
                       style={{
                         left: 0,
                         right: 0,
@@ -2118,7 +2126,7 @@ export function RoadmapView({
                   renderedBars.push(
                     <div
                       key={`stackrow-${ll.lane.id}-${r}`}
-                      className="absolute"
+                      className="absolute pointer-events-none"
                       style={{
                         left: 0,
                         right: 0,

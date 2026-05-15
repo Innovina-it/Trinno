@@ -8,6 +8,8 @@ import {
   ensureUser,
   TESTBED_EMAIL,
   TESTBED_PASSWORD,
+  TESTBED_MEMBER_EMAIL,
+  TESTBED_MEMBER_PASSWORD,
 } from "./testbed-common.mjs";
 
 const TARGET = 5000;
@@ -15,6 +17,14 @@ const KIND = "card.assigned";
 
 async function main() {
   const userId = await ensureUser(TESTBED_EMAIL, TESTBED_PASSWORD);
+  // Populate a synthetic actor so the bell renders a real name instead
+  // of the "Someone" fallback when notifications come from the seed.
+  const actorId = await ensureUser(
+    TESTBED_MEMBER_EMAIL,
+    TESTBED_MEMBER_PASSWORD,
+  );
+  const actorName =
+    TESTBED_MEMBER_EMAIL.split("@")[0] ?? TESTBED_MEMBER_EMAIL;
 
   const { count: existing } = await admin
     .from("notifications")
@@ -36,8 +46,13 @@ async function main() {
     for (let i = offset; i < upper; i++) {
       batch.push({
         recipient_user_id: userId,
+        actor_user_id: actorId,
         kind: KIND,
-        payload: { testbed: tag, seq: i + 1 },
+        payload: {
+          testbed: tag,
+          seq: i + 1,
+          actor_name: actorName,
+        },
         read_at: null,
       });
     }

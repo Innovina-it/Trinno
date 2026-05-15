@@ -9,6 +9,17 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { updateVersion, deleteVersion } from "@/actions/versions";
 import { Trash2 } from "lucide-react";
 
@@ -40,7 +51,6 @@ export function VersionStateControl({
   }
 
   function del() {
-    if (!confirm("Delete this version?")) return;
     start(async () => {
       try {
         await deleteVersion({ id });
@@ -73,15 +83,43 @@ export function VersionStateControl({
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button
-        size="xs"
-        variant="ghost"
-        onClick={del}
-        disabled={pending}
-        aria-label="Delete version"
-      >
-        <Trash2 className="size-3" />
-      </Button>
+      <AlertDialog>
+        <AlertDialogTrigger
+          render={
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon-xs"
+              disabled={pending}
+              aria-label="Delete version"
+              title="Delete version"
+              data-testid="delete-version-trigger"
+              className="text-red-400 hover:text-red-300 border-red-500/40 hover:border-red-400/70 bg-red-500/10 hover:bg-red-500/20"
+            >
+              <Trash2 className="size-3" />
+            </Button>
+          }
+        />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this version?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The version will be permanently removed. Cards currently linked to
+              it will be unlinked.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={del}
+              disabled={pending}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
+import { assertUuidOrNotFound } from "@/lib/route-uuid";
 import { getBoardSnapshot } from "@/lib/queries/board-snapshot";
 import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import { getWorkspace, listMembers } from "@/lib/queries/workspaces";
@@ -21,6 +22,7 @@ export default async function BoardLayout({
   params: Promise<{ boardId: string }>;
 }) {
   const { boardId } = await params;
+  assertUuidOrNotFound(boardId);
   await requireUser();
   const token = (await getSessionToken())!;
   const snap = await getBoardSnapshot(token, boardId);

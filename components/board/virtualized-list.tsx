@@ -69,8 +69,8 @@ export function VirtualizedList<T>({
     {
       ref: parentRef,
       "data-testid": "virtualized-list",
-      className: "min-h-0 w-full overflow-y-auto",
-      style: { maxHeight: "inherit", contain: "strict" },
+      className: "min-h-0 w-full flex-1 overflow-y-auto",
+      style: { maxHeight: "inherit" },
     },
     createElement(
       "div",

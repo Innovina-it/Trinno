@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useTransition } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -14,6 +14,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/ui/date-picker";
+
+function isoToDate(iso: string): Date | null {
+  if (!iso) return null;
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+}
+
+function dateToIso(d: Date | null): string {
+  if (!d) return "";
+  const y = d.getUTCFullYear();
+  const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dy = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${mo}-${dy}`;
+}
 import {
   createMilestone,
   updateMilestone,
@@ -65,6 +81,7 @@ export function MilestoneDialog({
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
@@ -147,7 +164,18 @@ export function MilestoneDialog({
 
           <div className="space-y-1">
             <Label htmlFor="m-date">Date</Label>
-            <Input id="m-date" type="date" {...register("date")} />
+            <Controller
+              control={control}
+              name="date"
+              render={({ field }) => (
+                <DatePicker
+                  value={isoToDate(field.value)}
+                  onChange={(d) => field.onChange(dateToIso(d))}
+                  triggerLabel="Set date"
+                  inputLabel="Milestone date"
+                />
+              )}
+            />
             {errors.date && (
               <p className="text-xs text-red-500">{errors.date.message}</p>
             )}

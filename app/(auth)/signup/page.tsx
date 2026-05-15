@@ -1,7 +1,18 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { SignupForm } from "@/components/auth/signup-form";
+import { createSupabaseServer } from "@/lib/supabase/server";
 
-export default function SignupPage() {
+export default async function SignupPage() {
+  // Same rationale as the login page: an authed user landing here (e.g.
+  // via a cross-tab `signed-in` broadcast → `router.refresh()`) gets
+  // bounced into the app shell so peer tabs leave the auth screens.
+  const supa = await createSupabaseServer();
+  const {
+    data: { user },
+  } = await supa.auth.getUser();
+  if (user) redirect("/");
+
   return (
     <main className="relative min-h-dvh flex flex-col">
       <div className="border-b border-hairline">

@@ -4,6 +4,7 @@ import {
   createContext,
   createElement,
   useContext,
+  useEffect,
   useRef,
   useSyncExternalStore,
   type ReactNode,
@@ -177,11 +178,18 @@ export function WorkspaceCacheProvider({
   state?: DehydratedWorkspaceCache;
 }) {
   const ref = useRef<WorkspaceQueryClient | null>(null);
+  const lastStateRef = useRef<DehydratedWorkspaceCache | undefined>(undefined);
   if (!ref.current) {
     ref.current = client ?? new WorkspaceQueryClient(state);
-  } else if (state) {
-    ref.current.hydrate(state);
+    lastStateRef.current = state;
   }
+
+  useEffect(() => {
+    if (!ref.current) return;
+    if (state === lastStateRef.current) return;
+    lastStateRef.current = state;
+    ref.current.hydrate(state);
+  }, [state]);
 
   return createElement(
     WorkspaceCacheContext.Provider,

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
+import { assertUuidOrNotFound } from "@/lib/route-uuid";
 import {
   getVersion,
   listVersionCards,
@@ -8,12 +9,7 @@ import {
 } from "@/lib/queries/versions";
 import { cardCode } from "@/lib/format";
 import { formatDate } from "@/lib/format-date";
-
-const STATE_BADGE: Record<string, string> = {
-  unreleased: "border-fg/40 text-fg/80",
-  released: "border-[color:var(--accent-cyan)] text-[color:var(--accent-cyan)]",
-  archived: "border-fg/20 text-fg/40",
-};
+import { VersionStateControl } from "@/components/versions/version-state-control";
 
 export default async function VersionDetailPage({
   params,
@@ -21,6 +17,8 @@ export default async function VersionDetailPage({
   params: Promise<{ workspaceId: string; versionId: string }>;
 }) {
   const { workspaceId, versionId } = await params;
+  assertUuidOrNotFound(workspaceId);
+  assertUuidOrNotFound(versionId);
   await requireUser();
   const token = (await getSessionToken())!;
   const version = await getVersion(token, versionId);
@@ -68,13 +66,7 @@ export default async function VersionDetailPage({
           {version.semver && (
             <span className="chip">{version.semver}</span>
           )}
-          <span
-            className={`mono-meta-sm border px-2 py-0.5 ${
-              STATE_BADGE[version.state] ?? ""
-            }`}
-          >
-            {version.state.toUpperCase()}
-          </span>
+          <VersionStateControl id={version.id} state={version.state} />
           {version.releaseDate && (
             <span className="mono-meta-sm text-fg-muted tabular-nums">
               {formatDate(version.releaseDate)}

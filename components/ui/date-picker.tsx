@@ -7,6 +7,7 @@ import {
   useState,
   type ChangeEvent,
   type KeyboardEvent,
+  type MouseEvent,
 } from "react";
 import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { formatDate } from "@/lib/format-date";
@@ -100,6 +101,7 @@ export function DatePicker({
   );
   const [focusDay, setFocusDay] = useState(seed);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setText(formattedValue);
@@ -115,7 +117,7 @@ export function DatePicker({
   useEffect(() => {
     if (!open) return;
 
-    function onDocClick(e: MouseEvent) {
+    function onDocClick(e: globalThis.MouseEvent) {
       if (!wrapRef.current) return;
       if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
     }
@@ -220,10 +222,15 @@ export function DatePicker({
       "div",
       {
         className:
-          "inline-flex items-center gap-1.5 h-8 rounded-md border border-hairline-hi bg-[color:var(--surface)] text-fg hover:bg-[color:var(--surface-strong)] disabled:opacity-50 transition-colors focus-within:ring-1 focus-within:ring-fg/40",
+          "inline-flex items-center gap-1.5 h-8 rounded-md border border-hairline-hi bg-[color:var(--surface)] text-fg hover:bg-[color:var(--surface-strong)] disabled:opacity-50 transition-colors focus-within:ring-1 focus-within:ring-fg/40 cursor-text",
+        onClick: () => {
+          if (disabled) return;
+          setOpen(true);
+          inputRef.current?.focus();
+        },
       },
       createElement(Calendar, {
-        className: "ml-2.5 size-3.5 text-fg-muted",
+        className: "ml-2.5 size-3.5 text-fg-muted pointer-events-none",
         "aria-hidden": true,
       }),
       createElement("input", {
@@ -232,9 +239,13 @@ export function DatePicker({
         "aria-label": inputLabel,
         "aria-invalid": invalid || undefined,
         disabled,
-        placeholder: triggerLabel,
+        placeholder: "dd/mm/yyyy",
         value: text,
-        onClick: () => setOpen(true),
+        ref: inputRef,
+        onClick: (e: MouseEvent<HTMLInputElement>) => {
+          e.stopPropagation();
+          setOpen(true);
+        },
         onFocus: () => setOpen(true),
         onKeyDown: onDisplayKeyDown,
         onChange: (e: ChangeEvent<HTMLInputElement>) => onTextChange(e.target.value),
@@ -289,10 +300,18 @@ export function DatePicker({
           ),
           createElement(
             "div",
-            { className: "grid grid-cols-2 gap-3" },
+            { className: "grid grid-cols-2" },
             [anchor, addMonths(anchor, 1)].map((month, monthIndex) =>
-              createElement(MonthGrid, {
-                key: monthIndex,
+              createElement(
+                "div",
+                {
+                  key: monthIndex,
+                  className:
+                    monthIndex === 0
+                      ? "pr-3 border-r border-hairline"
+                      : "pl-3",
+                },
+                createElement(MonthGrid, {
                 anchor: month,
                 cells: monthIndex === 0 ? cells : cellsNext,
                 today,
@@ -301,7 +320,8 @@ export function DatePicker({
                 onPick: pickDay,
                 onPrev: monthIndex === 0 ? () => setAnchor(addMonths(anchor, -1)) : undefined,
                 onNext: monthIndex === 1 ? () => setAnchor(addMonths(anchor, 1)) : undefined,
-              }),
+                }),
+              ),
             ),
           ),
         )

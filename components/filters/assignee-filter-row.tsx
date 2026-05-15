@@ -37,8 +37,10 @@ const SEGMENTS: { value: AssigneeMode; label: string; title: string }[] = [
 
 export function AssigneeFilterRow({
   className,
+  hiddenCount = 0,
 }: {
   className?: string;
+  hiddenCount?: number;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -77,26 +79,50 @@ export function AssigneeFilterRow({
         SHOWING
       </span>
       <div className="inline-flex items-center rounded-full border border-hairline bg-[color:var(--surface)] overflow-hidden">
-        {SEGMENTS.map((seg, i) => (
-          <button
-            key={seg.value}
-            type="button"
-            role="radio"
-            aria-checked={mode === seg.value}
-            data-testid={`assignee-filter-${seg.value}`}
-            title={seg.title}
-            onClick={() => setMode(seg.value)}
-            className={[
-              "px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40",
-              i > 0 ? "border-l border-hairline" : "",
-              mode === seg.value
-                ? "bg-fg/10 text-fg font-medium"
-                : "text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]",
-            ].join(" ")}
-          >
-            {seg.label}
-          </button>
-        ))}
+        {SEGMENTS.map((seg, i) => {
+          const isActive = mode === seg.value;
+          // Badge UX rule: badge appears on the *inactive* chip where the
+          // currently-hidden cards live. While "Mine" is active and 50 are
+          // hidden, those 50 are visible under "All" → badge on All. While
+          // "Unassigned" is active and N are hidden, badge on All.
+          const showBadge =
+            !isActive && seg.value === "all" && mode !== "all" && hiddenCount > 0;
+          return (
+            <button
+              key={seg.value}
+              type="button"
+              role="radio"
+              aria-checked={isActive}
+              data-testid={`assignee-filter-${seg.value}`}
+              title={
+                showBadge
+                  ? `${seg.title} (+${hiddenCount} not visible under the current filter)`
+                  : seg.title
+              }
+              onClick={() => setMode(seg.value)}
+              className={[
+                "relative px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40",
+                i > 0 ? "border-l border-hairline" : "",
+                isActive
+                  ? "bg-fg/10 text-fg font-medium"
+                  : "text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]",
+              ].join(" ")}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                {seg.label}
+                {showBadge && (
+                  <span
+                    data-testid="assignee-filter-hidden-badge"
+                    aria-label={`${hiddenCount} more not shown — switch to ${seg.label} to see them`}
+                    className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-[color:var(--accent-magenta,#d97706)] text-[10px] font-semibold leading-none text-bg-deep tabular-nums"
+                  >
+                    {hiddenCount > 99 ? "99+" : `+${hiddenCount}`}
+                  </span>
+                )}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

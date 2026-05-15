@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionToken, requireUser } from "@/lib/auth";
+import { assertUuidOrNotFound } from "@/lib/route-uuid";
 import { getWorkspace, listMembers } from "@/lib/queries/workspaces";
 import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import { hasFlag } from "@/lib/feature-flags/has-flag";
@@ -22,6 +23,7 @@ export default async function WorkspaceLayout({
   params: Promise<{ workspaceId: string }>;
 }) {
   const { workspaceId } = await params;
+  assertUuidOrNotFound(workspaceId);
   await requireUser();
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);

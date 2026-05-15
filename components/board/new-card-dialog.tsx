@@ -17,6 +17,22 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
+
+function isoToDate(iso: string): Date | null {
+  if (!iso) return null;
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+}
+
+function dateToIso(d: Date | null): string {
+  if (!d) return "";
+  const y = d.getUTCFullYear();
+  const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dy = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${mo}-${dy}`;
+}
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -282,9 +298,13 @@ export function NewCardDialog({
           startDate: startISO,
           targetDate: targetISO,
           // Owner set at INSERT so it skips the owner-change trigger; the
-          // creator is by definition a valid claimant.
-          ...(currentUserId ? { ownerId: currentUserId } : {}),
-          ...(parentCardId ? { parentCardId } : {}),
+          // creator is by definition a valid claimant. When a parent is set
+          // (subtask), omit ownerId so the server inherits the parent's owner.
+          ...(parentCardId
+            ? { parentCardId }
+            : currentUserId
+              ? { ownerId: currentUserId }
+              : {}),
         });
         // `type` still needs a post-create patch — createCardImpl doesn't
         // accept it. Only thread when the user picked something other than
@@ -418,26 +438,28 @@ export function NewCardDialog({
             </label>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1 text-xs">
+            <div className="space-y-1.5 text-xs">
               <span className="mono-meta-sm text-fg-faint">START</span>
-              <input
-                type="date"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-                data-testid="roadmap-new-card-start"
-                className="w-full rounded-md border border-hairline bg-transparent px-2 py-1.5 text-fg outline-none focus:border-fg/40"
-              />
-            </label>
-            <label className="space-y-1 text-xs">
+              <div data-testid="roadmap-new-card-start">
+                <DatePicker
+                  value={isoToDate(start)}
+                  onChange={(d) => setStart(dateToIso(d))}
+                  triggerLabel="Set start"
+                  inputLabel="Start date"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5 text-xs">
               <span className="mono-meta-sm text-fg-faint">TARGET</span>
-              <input
-                type="date"
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-                data-testid="roadmap-new-card-target"
-                className="w-full rounded-md border border-hairline bg-transparent px-2 py-1.5 text-fg outline-none focus:border-fg/40"
-              />
-            </label>
+              <div data-testid="roadmap-new-card-target">
+                <DatePicker
+                  value={isoToDate(target)}
+                  onChange={(d) => setTarget(dateToIso(d))}
+                  triggerLabel="Set target"
+                  inputLabel="Target date"
+                />
+              </div>
+            </div>
           </div>
           {/* Assignee row — dropdown multi-select. Collapses to a single
               trigger button; users open it to check/uncheck members. */}

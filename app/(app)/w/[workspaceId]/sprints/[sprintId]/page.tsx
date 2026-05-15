@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { requireUser, getSessionToken } from "@/lib/auth";
+import { assertUuidOrNotFound } from "@/lib/route-uuid";
 import { dbAsUser } from "@/lib/db/client";
 import { sprints, cards, boards } from "@/lib/db/schema";
 import { computeBurndown } from "@/lib/queries/sprints-stats";
 import { BurndownChart } from "@/components/sprint/burndown-chart";
+import { SprintShiftDatesButton } from "@/components/sprint/sprint-shift-dates-button";
 
 export default async function SprintDetailPage({
   params,
@@ -13,6 +15,8 @@ export default async function SprintDetailPage({
   params: Promise<{ workspaceId: string; sprintId: string }>;
 }) {
   const { workspaceId, sprintId } = await params;
+  assertUuidOrNotFound(workspaceId);
+  assertUuidOrNotFound(sprintId);
   await requireUser();
   const token = (await getSessionToken())!;
 
@@ -30,11 +34,33 @@ export default async function SprintDetailPage({
         storyPoints: cards.storyPoints,
         boardId: cards.boardId,
         boardTitle: boards.title,
+        startDate: cards.startDate,
+        targetDate: cards.targetDate,
       })
       .from(cards)
       .innerJoin(boards, eq(boards.id, cards.boardId))
       .where(eq(cards.sprintId, sprintId)),
   );
+
+  // Date range summary across all cards (so users see the shift land
+  // after pressing Apply on SprintShiftDatesButton).
+  const cardDates = sprintCards
+    .flatMap((c) => [c.startDate, c.targetDate])
+    .filter((d): d is Date => d != null);
+  const minDate = cardDates.length
+    ? new Date(Math.min(...cardDates.map((d) => d.getTime())))
+    : null;
+  const maxDate = cardDates.length
+    ? new Date(Math.max(...cardDates.map((d) => d.getTime())))
+    : null;
+  const fmt = (d: Date | null) =>
+    d == null
+      ? "—"
+      : d.toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
   const burndown = await computeBurndown(token, sprintId);
 
   const remaining = sprintCards.filter((c) => !c.archived);
@@ -62,6 +88,15 @@ export default async function SprintDetailPage({
         {sprint.goal && (
           <p className="text-sm text-fg-muted">{sprint.goal}</p>
         )}
+        <div className="pt-2 flex flex-wrap items-center gap-x-6 gap-y-2">
+          <SprintShiftDatesButton cardIds={sprintCards.map((c) => c.id)} />
+          <span
+            className="mono-meta-sm text-fg-faint"
+            data-testid="sprint-card-date-range"
+          >
+            CARD DATES: {fmt(minDate)} → {fmt(maxDate)}
+          </span>
+        </div>
       </header>
 
       <BurndownChart total={burndown.total} points={burndown.points} />
@@ -83,6 +118,11 @@ export default async function SprintDetailPage({
                 >
                   {c.title}
                 </Link>
+                {(c.startDate || c.targetDate) && (
+                  <span className="mono-meta-sm text-fg-faint tabular-nums shrink-0">
+                    {fmt(c.startDate)} → {fmt(c.targetDate)}
+                  </span>
+                )}
                 {c.storyPoints != null && (
                   <span className="chip tabular-nums">{c.storyPoints}</span>
                 )}
@@ -111,6 +151,11 @@ export default async function SprintDetailPage({
                 >
                   {c.title}
                 </Link>
+                {(c.startDate || c.targetDate) && (
+                  <span className="mono-meta-sm text-fg-faint tabular-nums shrink-0">
+                    {fmt(c.startDate)} → {fmt(c.targetDate)}
+                  </span>
+                )}
                 {c.storyPoints != null && (
                   <span className="chip tabular-nums">{c.storyPoints}</span>
                 )}

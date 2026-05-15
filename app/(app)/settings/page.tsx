@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Bell, ChevronRight, User } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { SeedRichButton } from "@/components/settings/seed-rich-button";
+import { DensityToggle } from "@/components/settings/density-toggle";
 
 export default async function SettingsIndexPage() {
   const user = await requireUser();
@@ -53,6 +54,8 @@ export default async function SettingsIndexPage() {
           </li>
         ))}
       </ul>
+
+      <DensityToggle />
 
       <section className="space-y-3 pt-2">
         <h2 className="mono-meta text-fg-muted">Developer</h2>

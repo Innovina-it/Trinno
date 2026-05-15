@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { cards, boards } from "@/lib/db/schema";
 import { requireUser, getSessionToken } from "@/lib/auth";
+import { assertUuidOrNotFound } from "@/lib/route-uuid";
 import { CardModal } from "@/components/board/card-modal";
 import { CardActivity } from "@/components/board/card/card-activity";
 import { listSprintsForWorkspace } from "@/lib/queries/sprints";
@@ -14,6 +15,7 @@ export default async function InterceptedCardPage({
   params: Promise<{ boardId: string; cardId: string }>;
 }) {
   const { cardId } = await params;
+  assertUuidOrNotFound(cardId);
   const user = await requireUser();
   const token = (await getSessionToken())!;
   const rows = await dbAsUser(token, async (tx) =>

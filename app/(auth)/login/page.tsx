@@ -1,8 +1,20 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { LoginForm } from "@/components/auth/login-form";
+import { createSupabaseServer } from "@/lib/supabase/server";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  // Already-authenticated users land here from cross-tab `signed-in`
+  // broadcasts that trigger `router.refresh()` on peer tabs. Send them
+  // to the app shell so peer tabs leave the login screen without any
+  // client-side navigation hop.
+  const supa = await createSupabaseServer();
+  const {
+    data: { user },
+  } = await supa.auth.getUser();
+  if (user) redirect("/");
+
   return (
     <main className="relative min-h-dvh flex flex-col">
       <div className="border-b border-hairline">

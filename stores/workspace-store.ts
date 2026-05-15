@@ -288,13 +288,19 @@ export function WorkspaceStoreProvider({
     const supa = createSupabaseBrowser();
     let cancelled = false;
     let channel: ReturnType<typeof supa.channel> | null = null;
+    // Supabase JS caches channels by name. Under React StrictMode the
+    // effect runs twice: cleanup removes the channel but the second
+    // mount can race and receive a still-subscribed handle, then
+    // `.on()` after `.subscribe()` fails. Per-mount nonce guarantees
+    // a fresh channel every time.
+    const nonce = Math.random().toString(36).slice(2, 8);
     (async () => {
       const { data } = await supa.auth.getSession();
       const token = data.session?.access_token;
       if (token) await supa.realtime.setAuth(token);
       if (cancelled) return;
       channel = supa
-        .channel(`ws_roster:${workspaceId}`)
+        .channel(`ws_roster:${workspaceId}:${nonce}`)
         .on(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           "postgres_changes" as any,

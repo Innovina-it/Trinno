@@ -33,11 +33,7 @@ import { useWorkspaceStore } from "@/stores/workspace-store";
 const TYPE_OPTIONS = ["epic", "task", "subtask", "bug"] as const;
 type Type = (typeof TYPE_OPTIONS)[number];
 
-export function RoadmapFilterBar({
-  mineHiddenCount = 0,
-}: {
-  mineHiddenCount?: number;
-}) {
+export function RoadmapFilterBar() {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -204,14 +200,6 @@ export function RoadmapFilterBar({
           aria-hidden
         >
           {filters.types.map((t) => t.toUpperCase()).join(" · ")}
-        </span>
-      )}
-      {filters.assignedToMe && mineHiddenCount > 0 && (
-        <span
-          className="inline-flex items-center rounded-full border border-hairline bg-[color:var(--surface)] px-2 py-1 mono-meta-sm text-fg-faint"
-          data-testid="roadmap-mine-hidden-badge"
-        >
-          +{mineHiddenCount} more not shown
         </span>
       )}
     </div>

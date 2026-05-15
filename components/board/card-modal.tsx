@@ -32,6 +32,7 @@ import { updateCard, archiveCard } from "@/actions/cards";
 import { toggleCardMember } from "@/actions/card-members";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { undoBus } from "@/lib/undo-bus";
+import { DatePicker } from "@/components/ui/date-picker";
 import { LabelsSection } from "./card/labels-section";
 import { DueSection } from "./card/due-section";
 import { RoadmapDatesSection } from "./card/roadmap-dates-section";
@@ -291,11 +292,11 @@ function CardHistoryPanel({
   );
 }
 
-function toIsoDay(d: Date | string | null | undefined): string {
-  if (!d) return "";
+function toUtcMidnight(d: Date | string | null | undefined): Date | null {
+  if (!d) return null;
   const dt = d instanceof Date ? d : new Date(d);
-  if (Number.isNaN(dt.getTime())) return "";
-  return dt.toISOString().slice(0, 10);
+  if (Number.isNaN(dt.getTime())) return null;
+  return new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()));
 }
 
 /**
@@ -333,7 +334,7 @@ function QuickEditStrip({
   const assigned = new Set(
     cardMembers.filter((m) => m.cardId === cardId).map((m) => m.userId),
   );
-  const due = toIsoDay(liveDue ?? currentDueDate);
+  const due = toUtcMidnight(liveDue ?? currentDueDate);
 
   function toggle(userId: string) {
     const wasAssigned = assigned.has(userId);
@@ -351,9 +352,10 @@ function QuickEditStrip({
     });
   }
 
-  function setDue(next: string) {
+  function setDue(next: Date | null) {
+    // Persist as noon UTC so the date doesn't shift across time zones — matches DueSection.
     const dueDate = next
-      ? new Date(`${next}T12:00:00.000Z`) // noon UTC — matches DueSection
+      ? new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth(), next.getUTCDate(), 12))
       : null;
     const patch = dueDate
       ? { dueDate }
@@ -376,15 +378,15 @@ function QuickEditStrip({
         className="flex items-center gap-2 rounded-xl border border-hairline bg-[color:var(--surface)] px-3 py-2"
       >
         <span className="mono-meta-sm text-fg-faint">DUE</span>
-        <input
-          type="date"
-          value={due}
-          onChange={(e) => setDue(e.target.value)}
-          aria-label="Due date"
-          data-testid="card-modal-quick-due"
-          disabled={pending}
-          className="ml-auto bg-transparent text-xs text-fg rounded-md border border-hairline px-2 py-1 outline-none focus:border-fg/40"
-        />
+        <div className="ml-auto" data-testid="card-modal-quick-due">
+          <DatePicker
+            value={due}
+            onChange={setDue}
+            disabled={pending}
+            triggerLabel="Set due"
+            inputLabel="Due date"
+          />
+        </div>
       </section>
     );
   }
@@ -430,18 +432,18 @@ function QuickEditStrip({
           );
         })}
       </div>
-      <label className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0">
         <span className="mono-meta-sm text-fg-faint">DUE</span>
-        <input
-          type="date"
-          value={due}
-          onChange={(e) => setDue(e.target.value)}
-          aria-label="Due date"
-          data-testid="card-modal-quick-due"
-          disabled={pending}
-          className="bg-transparent text-xs text-fg rounded-md border border-hairline px-2 py-1 outline-none focus:border-fg/40"
-        />
-      </label>
+        <div data-testid="card-modal-quick-due">
+          <DatePicker
+            value={due}
+            onChange={setDue}
+            disabled={pending}
+            triggerLabel="Set due"
+            inputLabel="Due date"
+          />
+        </div>
+      </div>
     </section>
   );
 }
@@ -529,6 +531,9 @@ export function CardModal({
   // keydown effect (registered above the function declaration) can call
   // the latest closure without re-binding on every render.
   const toggleRef = useRef<(() => void) | null>(null);
+  // Same pattern for `close`, so the Escape handler in the keydown
+  // effect doesn't have to depend on the function identity.
+  const closeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!card.boardId) return;
@@ -554,11 +559,18 @@ export function CardModal({
       } else if (e.key === "c") {
         e.preventDefault();
         toggleRef.current?.();
+      } else if (e.key === "Escape" && !asDialog) {
+        // Full-page modal route: Esc returns to the previous page,
+        // honoring the roadmap-origin breadcrumb if present. The
+        // asDialog branch already gets Esc handling for free from
+        // the Radix Dialog wrapper.
+        e.preventDefault();
+        closeRef.current?.();
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [router, card.boardId, siblingNav.prev, siblingNav.next]);
+  }, [asDialog, router, card.boardId, siblingNav.prev, siblingNav.next]);
 
   function close() {
     // Honor the roadmap-origin breadcrumb when present: opens from
@@ -770,6 +782,7 @@ export function CardModal({
     });
   };
   toggleRef.current = handleToggleComplete;
+  closeRef.current = close;
 
   const body = (
     <div className="space-y-5">

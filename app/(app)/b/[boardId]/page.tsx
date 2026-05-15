@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { requireUser, getSessionToken } from "@/lib/auth";
+import { assertUuidOrNotFound } from "@/lib/route-uuid";
 import { getBoardSnapshot } from "@/lib/queries/board-snapshot";
 import { dbAsUser } from "@/lib/db/client";
 import { profiles } from "@/lib/db/schema";
@@ -14,6 +15,7 @@ export default async function BoardPage({
   params: Promise<{ boardId: string }>;
 }) {
   const { boardId } = await params;
+  assertUuidOrNotFound(boardId);
   const user = await requireUser();
   const token = (await getSessionToken())!;
   const snap = await getBoardSnapshot(token, boardId);

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
+import { assertUuidOrNotFound } from "@/lib/route-uuid";
 import { getBoardSnapshot } from "@/lib/queries/board-snapshot";
 import { listSlaPoliciesForBoard } from "@/lib/queries/sla";
 import { BoardSettingsForm } from "@/components/board/board-settings-form";
@@ -16,6 +17,7 @@ export default async function BoardSettingsPage({
   params: Promise<{ boardId: string }>;
 }) {
   const { boardId } = await params;
+  assertUuidOrNotFound(boardId);
   await requireUser();
   const token = (await getSessionToken())!;
   const snap = await getBoardSnapshot(token, boardId);

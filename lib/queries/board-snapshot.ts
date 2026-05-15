@@ -124,10 +124,18 @@ async function listCommentsCompat(
 // with the same (token, boardId) tuple and share one in-flight promise
 // instead of re-running 14 RLS-bound queries. Mirrors the pattern used
 // by `getWorkspaceSnapshot` in workspace-snapshot.ts:107.
+// RFC 4122 UUID shape. Cheap guard against malformed path params
+// (e.g. "63a12...easda") that would otherwise hit Postgres and raise
+// SQLSTATE 22P02 / `invalid input syntax for type uuid`, surfacing as
+// a 500 instead of the page's `notFound()` path.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const getBoardSnapshot = cache(async function getBoardSnapshot(
   token: string,
   boardId: string,
 ): Promise<BoardSnapshot | null> {
+  if (!UUID_RE.test(boardId)) return null;
   return dbAsUser(token, async (tx) => {
     const [board] = await tx
       .select()

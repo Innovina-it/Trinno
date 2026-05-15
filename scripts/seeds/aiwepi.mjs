@@ -509,15 +509,26 @@ async function seed() {
 
     positionCounter = 0;
 
-    // WP overview card — the lane anchor for this WP in the roadmap. Its
-    // date range covers the whole WP; tasks below get sliced sub-ranges
+    // WP overview card — the lane anchor for this WP in the roadmap.
+    //
+    // Type is set to `epic` (the legacy enum value, still in the schema)
+    // because the roadmap's groupByEpic in lib/roadmap/layout.ts still
+    // hardcodes `type === "epic"` as the lane-grouping primitive. Sheet1
+    // dispatch 1b removed Epic from the UI/creation flow, and the runtime
+    // UPDATE path in actions/cards.ts blocks mutations to `type='epic'` —
+    // but service-role INSERT is fine. Without this, every WP overview
+    // and every task falls into its own orphan lane. Follow-up: rewrite
+    // groupByEpic to walk parent_card_id chains (or use parent_board_id)
+    // so this seed can use `type='story'`.
+    //
+    // Date range covers the whole WP; tasks below get sliced sub-ranges
     // so they appear as separate child bars under the WP lane.
     const [overview] = await call("cards", {
       list_id: subLists[wpStatus],
       board_id: subBoard.id,
       title: `${wp.code} Overview`,
       position: nextPos(),
-      type: "story",
+      type: "epic",
       owner_id: userId,
       description: `**${wp.kind}** · M${wp.startMonth}–M${wp.endMonth}\n\n${wp.description}`,
       start_date: monthDateStr(wp.startMonth),

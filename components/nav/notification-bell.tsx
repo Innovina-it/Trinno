@@ -80,6 +80,9 @@ export function NotificationBell({ userId }: { userId: string }) {
       initialFetchDone = true;
     });
     let ch: ReturnType<typeof supa.channel> | null = null;
+    // Per-mount nonce: Supabase JS caches channels by name → StrictMode
+    // double-mount returns already-subscribed handle → `.on()` fails.
+    const nonce = Math.random().toString(36).slice(2, 8);
     (async () => {
       // Bind the JWT to the realtime socket BEFORE subscribing — without
       // it the socket carries the anon role and the
@@ -90,7 +93,7 @@ export function NotificationBell({ userId }: { userId: string }) {
       if (token) await supa.realtime.setAuth(token);
       if (cancelled) return;
       ch = supa
-        .channel(`notif:${userId}`)
+        .channel(`notif:${userId}:${nonce}`)
         .on(
           "postgres_changes",
           {

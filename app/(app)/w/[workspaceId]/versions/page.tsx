@@ -4,13 +4,8 @@ import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace } from "@/lib/queries/workspaces";
 import { listVersions } from "@/lib/queries/versions";
 import { CreateVersionDialog } from "@/components/versions/create-version-dialog";
+import { VersionStateControl } from "@/components/versions/version-state-control";
 import { formatDate } from "@/lib/format-date";
-
-const STATE_BADGE: Record<string, string> = {
-  unreleased: "border-fg/40 text-fg/80",
-  released: "border-[color:var(--accent-cyan)] text-[color:var(--accent-cyan)]",
-  archived: "border-fg/20 text-fg/40",
-};
 
 export default async function VersionsListPage({
   params,
@@ -50,36 +45,31 @@ export default async function VersionsListPage({
           data-testid="versions-grid"
         >
           {versions.map((v) => (
-            <li key={v.id}>
-              <Link
-                href={`/w/${workspaceId}/versions/${v.id}`}
-                className="block glass rounded-2xl p-5 transition-shadow hover:shadow-[0_8px_30px_-10px_rgb(0_229_255/0.30)]"
-                data-version-id={v.id}
-              >
-                <div className="flex items-baseline justify-between gap-2 mb-2">
-                  <span className="serif-display text-2xl">{v.name}</span>
-                  <span
-                    className={`mono-meta-sm border px-2 py-0.5 ${
-                      STATE_BADGE[v.state] ?? ""
-                    }`}
-                  >
-                    {v.state.toUpperCase()}
-                  </span>
-                </div>
-                {v.semver && (
-                  <div className="mono-meta-sm text-fg-muted mb-1">
-                    {v.semver}
-                  </div>
-                )}
-                <div className="mono-meta-sm text-fg-faint tabular-nums">
-                  {v.releaseDate ? formatDate(v.releaseDate) : "no date"}
-                </div>
-                {v.description && (
-                  <p className="text-sm text-fg-muted mt-2 line-clamp-3">
-                    {v.description}
-                  </p>
-                )}
-              </Link>
+            <li
+              key={v.id}
+              className="glass rounded-2xl p-5 transition-shadow hover:shadow-[0_8px_30px_-10px_rgb(0_229_255/0.30)] space-y-2"
+              data-version-id={v.id}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <Link
+                  href={`/w/${workspaceId}/versions/${v.id}`}
+                  className="serif-display text-2xl hover:text-[color:var(--accent-cyan)] truncate"
+                >
+                  {v.name}
+                </Link>
+                <VersionStateControl id={v.id} state={v.state} />
+              </div>
+              {v.semver && (
+                <div className="mono-meta-sm text-fg-muted">{v.semver}</div>
+              )}
+              <div className="mono-meta-sm text-fg-faint tabular-nums">
+                {v.releaseDate ? formatDate(v.releaseDate) : "no date"}
+              </div>
+              {v.description && (
+                <p className="text-sm text-fg-muted line-clamp-3">
+                  {v.description}
+                </p>
+              )}
             </li>
           ))}
         </ul>

@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { CalendarRange, ChevronDown, Plus, Check, Search, Settings } from "lucide-react";
 import {
   DropdownMenu,
@@ -21,6 +21,22 @@ export type WorkspaceLite = { id: string; name: string };
 // active workspace stays one or two keystrokes away.
 const SEARCH_THRESHOLD = 5;
 
+// Subsections under `/w/{id}/...` that are workspace-agnostic and
+// safe to preserve when switching workspaces. Detail routes that take
+// workspace-scoped IDs (e/{epicId}, sprints/{sprintId}, versions/{versionId})
+// are deliberately excluded — the ID wouldn't exist in the target
+// workspace, so we drop to the section root or the workspace root.
+const PRESERVED_SUBSECTIONS = new Set([
+  "backlog",
+  "all-tasks",
+  "archive",
+  "boards",
+  "roadmap",
+  "settings",
+  "sprints",
+  "versions",
+]);
+
 /**
  * Switch between workspaces, plus create a new one. Settings/members
  * moved out of this trigger; they live on the workspace-settings page,
@@ -36,8 +52,18 @@ export function WorkspaceSwitcher({
   activeId?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [openCreate, setOpenCreate] = useState(false);
   const [q, setQ] = useState("");
+
+  function targetFor(newId: string): string {
+    const m = pathname?.match(/^\/w\/[^/]+\/([^/?#]+)/);
+    const sub = m?.[1];
+    if (sub && PRESERVED_SUBSECTIONS.has(sub)) {
+      return `/w/${newId}/${sub}`;
+    }
+    return `/w/${newId}`;
+  }
   // When the URL doesn't pin a workspace (e.g. /inbox, /dashboards),
   // don't fake "active = workspaces[0]". The trigger label and the
   // in-list checkmark would lie about which workspace the user is in.
@@ -91,7 +117,7 @@ export function WorkspaceSwitcher({
                         );
                         if (first) {
                           e.preventDefault();
-                          router.push(`/w/${first.id}`);
+                          router.push(targetFor(first.id));
                           router.refresh();
                         }
                       }
@@ -115,7 +141,7 @@ export function WorkspaceSwitcher({
                   key={w.id}
                   onClick={() => {
                     if (!isActive) {
-                      router.push(`/w/${w.id}`);
+                      router.push(targetFor(w.id));
                       router.refresh();
                     }
                   }}
