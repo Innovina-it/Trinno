@@ -79,7 +79,7 @@ export const boards = pgTable(
       .notNull()
       .defaultNow(),
     parentBoardId: uuid("parent_board_id"),
-    migratedFromEpicId: uuid("_migrated_from_epic_id"),
+    parentCardId: uuid("parent_card_id"),
   },
   (t) => ({
     backgroundKindCheck: check(
