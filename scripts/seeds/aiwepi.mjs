@@ -1,17 +1,20 @@
 #!/usr/bin/env node
-// AIWEPI / Switch project plan seeder — new DB format.
+// AIWEPI / Switch project plan seeder — anchor-card + sub-board format.
 //
 // Logical structure
 //   Workspace "AIWEPI Switch"
-//   └─ Parent board "AIWEPI Project Plan"  (no cards of its own; carries 5 plan milestones)
-//      └─ 5 sub-boards (parent_board_id wired)
+//   └─ Parent board "AIWEPI Project Plan"  (carries 5 WP anchor cards + 5 plan milestones)
+//      └─ 5 sub-boards, one per WP, each linked 1:1 to its anchor card via
+//         boards.parent_card_id (migration 0105)
 //         └─ each sub-board:
-//            ├─ "WPx.y Overview" story-card    ← roadmap lane anchor for the WP
-//            ├─ Tx.y task-cards (type=story)   ← children of the overview, dates sliced from the WP range
-//            └─ Dx.y.z deliverable-cards       ← children of their related task (type=subtask)
+//            ├─ Tx.y task-cards (type=task)        ← children of the anchor card, dates sliced from the WP range
+//            └─ Dx.y.z deliverable-cards (subtask) ← children of their related task
 //
 // What's intentionally different from the older flat seed
 //   - Sub-boards under a parent (migration 0099 — `boards.parent_board_id`).
+//   - Each sub-board is anchored 1:1 to a card on the parent board via
+//     `boards.parent_card_id` (migration 0105). The roadmap's
+//     `groupBySubBoard` builds lanes from this anchor → sub-board mapping.
 //   - `workspaces.feature_flags` set on the seeded workspace (migration 0102)
 //     so the sub-board / shared-cache flags are ON for this fixture.
 //   - Plan milestones live in the `milestones` table (migration 0095) anchored
@@ -25,6 +28,13 @@
 //   - `lists.status_kind` set on INSERT (no follow-up UPDATE, no trigger flak).
 //   - `owner_id` set on INSERT (trigger from migration 0081 blocks owner_id
 //     UPDATEs by service-role JWTs — INSERT is fine).
+//   - Every card is unassigned: `owner_id = null` and no `card_members` row.
+//     SEED_EMAIL is still the workspace owner + board admin (so they see
+//     the workspace), but the project-plan cards themselves are unowned.
+//     This makes the AIWEPI workspace behave like a fresh project template
+//     where the user picks up cards by self-assigning. Result: "Mine" is
+//     empty, "All" shows every card, "Unassigned" matches "All".
+//     Filter rule: lib/roadmap/filtering.ts → isRoadmapAssignedToViewer.
 //
 // Required env
 //   NEXT_PUBLIC_SUPABASE_URL
@@ -467,23 +477,47 @@ async function seed() {
   });
   console.log(`Parent board: ${parentBoard.id} (${PARENT_BOARD_TITLE})`);
 
-  // Parent board carries no cards — sub-boards do. Lists exist so the
-  // parent board has somewhere to render an empty Todo/In Progress/Done
-  // shell, and so the workspace's roadmap has a board context.
+  // Parent board lists — WP anchor cards live here so they show as the
+  // roadmap lane headers. Their child sub-boards carry the actual tasks.
+  const parentBoardLists = {};
   for (const [i, l] of DEFAULT_LISTS.entries()) {
-    await call("lists", {
+    const [row] = await call("lists", {
       board_id: parentBoard.id,
       title: l.title,
       position: `a${String(i + 1).padStart(6, "0")}`,
       status_kind: l.statusKind,
     });
+    parentBoardLists[l.statusKind] = row.id;
   }
 
-  // Sub-boards (one per WP) ----------------------------------------------
+  // For each WP: an anchor card on the parent board + a sub-board linked
+  // 1:1 via boards.parent_card_id (migration 0105). The roadmap's
+  // groupBySubBoard reads sub-boards from the workspace snapshot and uses
+  // each sub-board's anchor card as the lane header.
+  positionCounter = 0;
   for (const wp of WORK_PACKAGES) {
+    const wpStatus = statusFor(wp.startMonth, wp.endMonth);
+
+    // 1. Anchor card on the parent board.
+    const [anchorCard] = await call("cards", {
+      list_id: parentBoardLists[wpStatus],
+      board_id: parentBoard.id,
+      title: wp.title,
+      position: nextPos(),
+      type: "task",
+      owner_id: null,
+      description: `**${wp.kind}** · M${wp.startMonth}–M${wp.endMonth}\n\n${wp.description}`,
+      start_date: monthDateStr(wp.startMonth),
+      target_date: monthDateStr(wp.endMonth),
+      completed_at:
+        wpStatus === "done" ? monthStart(wp.endMonth).toISOString() : null,
+    });
+
+    // 2. Sub-board anchored to that card.
     const [subBoard] = await call("boards", {
       workspace_id: ws.id,
       parent_board_id: parentBoard.id,
+      parent_card_id: anchorCard.id,
       title: wp.title,
       visibility: "workspace",
       created_by: userId,
@@ -493,9 +527,10 @@ async function seed() {
       user_id: userId,
       role: "admin",
     });
-    console.log(`  ${wp.code} sub-board: ${subBoard.id}`);
+    console.log(
+      `  ${wp.code} sub-board: ${subBoard.id} (anchor card ${anchorCard.id})`,
+    );
 
-    const wpStatus = statusFor(wp.startMonth, wp.endMonth);
     const subLists = {};
     for (const [i, l] of DEFAULT_LISTS.entries()) {
       const [row] = await call("lists", {
@@ -507,38 +542,8 @@ async function seed() {
       subLists[l.statusKind] = row.id;
     }
 
-    positionCounter = 0;
-
-    // WP overview card — the lane anchor for this WP in the roadmap.
-    //
-    // Type is set to `epic` (the legacy enum value, still in the schema)
-    // because the roadmap's groupByEpic in lib/roadmap/layout.ts still
-    // hardcodes `type === "epic"` as the lane-grouping primitive. Sheet1
-    // dispatch 1b removed Epic from the UI/creation flow, and the runtime
-    // UPDATE path in actions/cards.ts blocks mutations to `type='epic'` —
-    // but service-role INSERT is fine. Without this, every WP overview
-    // and every task falls into its own orphan lane. Follow-up: rewrite
-    // groupByEpic to walk parent_card_id chains (or use parent_board_id)
-    // so this seed can use `type='story'`.
-    //
-    // Date range covers the whole WP; tasks below get sliced sub-ranges
-    // so they appear as separate child bars under the WP lane.
-    const [overview] = await call("cards", {
-      list_id: subLists[wpStatus],
-      board_id: subBoard.id,
-      title: `${wp.code} Overview`,
-      position: nextPos(),
-      type: "epic",
-      owner_id: userId,
-      description: `**${wp.kind}** · M${wp.startMonth}–M${wp.endMonth}\n\n${wp.description}`,
-      start_date: monthDateStr(wp.startMonth),
-      target_date: monthDateStr(wp.endMonth),
-      completed_at:
-        wpStatus === "done" ? monthStart(wp.endMonth).toISOString() : null,
-    });
-
-    // Tasks — parented to the overview so they nest under it in the
-    // roadmap. Each task gets its own date segment, not the whole WP range.
+    // Tasks — parented to the anchor card, homed in the sub-board. Each
+    // task gets its own date segment so the roadmap shows individual bars.
     const taskRows = [];
     for (let i = 0; i < wp.tasks.length; i++) {
       const t = wp.tasks[i];
@@ -556,9 +561,9 @@ async function seed() {
         board_id: subBoard.id,
         title: t.title,
         position: nextPos(),
-        type: "story",
-        owner_id: userId,
-        parent_card_id: overview.id,
+        type: "task",
+        owner_id: null,
+        parent_card_id: anchorCard.id,
         description: t.description,
         start_date: monthDateStr(taskStart),
         target_date: monthDateStr(taskEnd),
@@ -581,7 +586,7 @@ async function seed() {
         title: d.title,
         position: nextPos(),
         type: "subtask",
-        owner_id: userId,
+        owner_id: null,
         parent_card_id: parent.row.id,
         description: d.description,
         target_date: monthDateStr(parent.taskEnd),
