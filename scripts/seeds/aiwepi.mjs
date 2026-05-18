@@ -571,8 +571,10 @@ async function seed() {
       taskRows.push({ row, taskStart, taskEnd });
     }
 
-    // Deliverables (type=subtask) — parented to their related task. Date
-    // copies the task's so it shows as a subtask bar under the parent.
+    // Deliverables (type=subtask) — parented to their related task. Dates
+    // copy the task's full range so the deliverable plots as a nested
+    // subtask bar on the roadmap (without both dates it's listed as
+    // "+1 UNDATED" and hidden until the parent is expanded).
     for (const d of wp.deliverables) {
       const parent = taskRows[d.underTaskIndex ?? 0];
       if (!parent)
@@ -586,6 +588,7 @@ async function seed() {
         owner_id: null,
         parent_card_id: parent.row.id,
         description: d.description,
+        start_date: monthDateStr(parent.taskStart),
         target_date: monthDateStr(parent.taskEnd),
       });
     }
