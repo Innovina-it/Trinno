@@ -35,10 +35,14 @@ set type = 'story'
 where type = 'epic';
 
 -- 3. Drop triggers + functions tied to the epic type. ----------------------
+-- The rollup trigger was renamed in migration 0084 (`_aiu` → `_ai`); keep
+-- both names in the drop list so this migration is robust across DBs
+-- that may have been initialised at either version.
 drop trigger if exists cards_validate_epic_parent_biu on public.cards;
 drop trigger if exists cards_co_locate_with_epic_parent_biu on public.cards;
 drop trigger if exists cards_reject_epic_with_epic_children_bu on public.cards;
 drop trigger if exists cards_rollup_epic_dates_aiu on public.cards;
+drop trigger if exists cards_rollup_epic_dates_ai on public.cards;
 drop trigger if exists cards_rollup_epic_dates_ad on public.cards;
 
 drop function if exists public.cards_validate_epic_parent();
