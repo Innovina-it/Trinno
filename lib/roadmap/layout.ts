@@ -1,5 +1,5 @@
 // Plan #13 — pure lane / stack layout for the Roadmap timeline.
-// Group flat list of roadmap cards by epic, stack overlapping bars into
+// Group flat list of roadmap cards by sub-board, stack overlapping bars into
 // vertical sub-rows ("Linear-style"). Both functions are pure so they're
 // trivial to unit-test.
 //
@@ -21,13 +21,22 @@ export type RoadmapCard = {
   roadmapOrder?: number | null;
 };
 
+// Minimal sub-board shape consumed by groupBySubBoard. The sub-board's
+// `parentCardId` is the card it's attached to (via boards.parent_card_id
+// from migration 0105); that anchor card becomes the lane header.
+export type SubBoardRef = {
+  id: string;
+  title: string;
+  parentCardId: string | null;
+};
+
 export type Lane<C extends RoadmapCard = RoadmapCard> = {
   id: string;
   title: string;
-  kind: "epic" | "uncategorized" | "assignee" | "component";
-  /** The epic card itself (header bar). Null for the Uncategorized lane. */
+  kind: "sub_board" | "uncategorized" | "assignee" | "component";
+  /** The card the lane is anchored to (sub-board's anchor card). Null when n/a. */
   headerCard: C | null;
-  /** Children of this epic (or orphan stories for Uncategorized). */
+  /** Children that live inside the lane's sub-board (or empty for orphan/self-lanes). */
   cards: C[];
   /**
    * Plan #16b-β — subtasks (`type === "subtask"`) grouped by `parentCardId`,
@@ -40,25 +49,32 @@ export type Lane<C extends RoadmapCard = RoadmapCard> = {
 
 export const UNCATEGORIZED_LANE_ID = "uncategorized";
 
-export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
-  const epics = new Map<string, C>();
-  const childrenByEpic = new Map<string, C[]>();
+export function groupBySubBoard<C extends RoadmapCard>(
+  cards: C[],
+  subBoards: SubBoardRef[],
+): Lane<C>[] {
+  const cardById = new Map(cards.map((c) => [c.id, c]));
+
+  // Sub-boards whose anchor card is in the input set. A sub-board without a
+  // visible anchor is silently skipped (it can't render a header).
+  const visibleSubBoards = subBoards.filter(
+    (s) => s.parentCardId !== null && cardById.has(s.parentCardId),
+  );
+  const anchorIdToSubBoard = new Map<string, SubBoardRef>(
+    visibleSubBoards.map((s) => [s.parentCardId as string, s]),
+  );
+  const subBoardIdToRef = new Map<string, SubBoardRef>(
+    visibleSubBoards.map((s) => [s.id, s]),
+  );
+
+  const childrenBySubBoardId = new Map<string, C[]>();
   const orphans: C[] = [];
   // Plan #16b-β — collect subtasks separately so they don't appear as their
   // own rows alongside parent stories. They're rendered as nested children
   // when the user expands the parent.
   const subtasksByParent = new Map<string, C[]>();
-  // Build a quick id -> card lookup for resolving subtask parents.
-  const cardById = new Map(cards.map((c) => [c.id, c]));
 
   for (const c of cards) {
-    if (c.type === "epic") {
-      epics.set(c.id, c);
-      if (!childrenByEpic.has(c.id)) childrenByEpic.set(c.id, []);
-    }
-  }
-  for (const c of cards) {
-    if (c.type === "epic") continue;
     if (c.type === "subtask") {
       if (c.parentCardId) {
         const arr = subtasksByParent.get(c.parentCardId) ?? [];
@@ -67,11 +83,17 @@ export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
       }
       continue;
     }
-    if (c.parentCardId && epics.has(c.parentCardId)) {
-      childrenByEpic.get(c.parentCardId)!.push(c);
-    } else {
-      orphans.push(c);
+    // Anchor cards become the lane header — don't also place them in their
+    // own lane.cards list.
+    if (anchorIdToSubBoard.has(c.id)) continue;
+    // Card whose home board IS a visible sub-board → goes into that lane.
+    if (subBoardIdToRef.has(c.boardId)) {
+      const arr = childrenBySubBoardId.get(c.boardId) ?? [];
+      arr.push(c);
+      childrenBySubBoardId.set(c.boardId, arr);
+      continue;
     }
+    orphans.push(c);
   }
 
   // For each lane, pre-stack subtask groups whose parent lives in that lane.
@@ -80,7 +102,6 @@ export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
     for (const parentId of laneCardIds) {
       const subs = subtasksByParent.get(parentId);
       if (!subs || subs.length === 0) continue;
-      // Group subtasks for this parent into rows (greedy stacking).
       const placed = stackInLane(subs);
       const rows: Array<PlacedCard<C>[]> = [];
       for (const p of placed) {
@@ -92,42 +113,37 @@ export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
     return out;
   }
 
-  // Plan #16b-γ-G G1 — sort epics by `roadmapOrder` ASC (NULLS LAST), then
-  // title ASC as the tiebreaker. Cards without an explicit rank fall to
-  // the bottom of the list, keeping the alphabetical default for any
-  // board that has never been manually reordered.
-  const epicLanes: Lane<C>[] = [...epics.values()]
+  // Plan #16b-γ-G G1 — sort sub-board lanes by anchor card's `roadmapOrder`
+  // ASC (NULLS LAST), then anchor title ASC as the tiebreaker.
+  const subBoardLanes: Lane<C>[] = visibleSubBoards
+    .map((s) => ({
+      sub: s,
+      anchor: cardById.get(s.parentCardId as string) as C,
+    }))
     .sort((a, b) => {
-      const ar = a.roadmapOrder ?? null;
-      const br = b.roadmapOrder ?? null;
+      const ar = a.anchor.roadmapOrder ?? null;
+      const br = b.anchor.roadmapOrder ?? null;
       if (ar !== null && br !== null) return ar - br;
       if (ar !== null) return -1;
       if (br !== null) return 1;
-      return a.title.localeCompare(b.title);
+      return a.anchor.title.localeCompare(b.anchor.title);
     })
-    .map<Lane<C>>((e) => {
-      const laneChildren = childrenByEpic.get(e.id) ?? [];
-      const ids: string[] = [e.id, ...laneChildren.map((c) => c.id)];
+    .map<Lane<C>>(({ sub, anchor }) => {
+      const laneChildren = childrenBySubBoardId.get(sub.id) ?? [];
+      const ids: string[] = [anchor.id, ...laneChildren.map((c) => c.id)];
       return {
-        id: e.id,
-        title: e.title,
-        kind: "epic",
-        headerCard: e,
+        id: sub.id,
+        title: anchor.title,
+        kind: "sub_board",
+        headerCard: anchor,
         cards: laneChildren,
         subtaskRowsByParent: subtaskRowsFor(ids),
       };
     });
 
-  // Suppress unused-variable lint hint (cardById may be useful for callers
-  // that want to resolve parent metadata; left exported via no public api).
-  void cardById;
-
-  // Each non-epic top-level card (story / task / bug without an epic
-  // parent) gets its OWN lane named after itself, mirroring how epics
-  // become lanes. Previously these were collapsed into a single
-  // "Unassigned" pile, which hid them under one ambiguous header — bad
-  // for a multi-card roadmap. Subtasks remain nested under their parent
-  // via `subtaskRowsByParent`.
+  // Top-level cards that don't belong to any visible sub-board lane get
+  // their OWN single-row self-lane, mirroring how anchor cards become lanes.
+  // Subtasks remain nested under their parent via `subtaskRowsByParent`.
   const orphanLanes: Lane<C>[] = orphans
     .slice()
     .sort((a, b) => {
@@ -141,13 +157,13 @@ export function groupByEpic<C extends RoadmapCard>(cards: C[]): Lane<C>[] {
     .map<Lane<C>>((c) => ({
       id: c.id,
       title: c.title,
-      kind: "epic",
+      kind: "uncategorized",
       headerCard: c,
       cards: [],
       subtaskRowsByParent: subtaskRowsFor([c.id]),
     }));
 
-  return [...epicLanes, ...orphanLanes];
+  return [...subBoardLanes, ...orphanLanes];
 }
 
 /**
@@ -178,7 +194,6 @@ export function groupByAssignee<C extends RoadmapCard>(
   const cardsByUser = new Map<string, C[]>();
   const unassigned: C[] = [];
   for (const c of cards) {
-    if (c.type === "epic") continue;
     if (c.type === "subtask") continue;
     const userIds = assigneesByCard.get(c.id) ?? [];
     if (userIds.length === 0) {
@@ -248,7 +263,6 @@ export function groupByComponent<C extends RoadmapCard>(
   const cardsByComponent = new Map<string, C[]>();
   const uncomponented: C[] = [];
   for (const c of cards) {
-    if (c.type === "epic") continue;
     if (c.type === "subtask") continue;
     const componentIds = componentsByCard.get(c.id) ?? [];
     if (componentIds.length === 0) {

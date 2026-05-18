@@ -2,9 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   groupByAssignee,
   groupByComponent,
-  groupByEpic,
+  groupBySubBoard,
   stackInLane,
   type RoadmapCard,
+  type SubBoardRef,
 } from "@/lib/roadmap/layout";
 
 const card = (over: Partial<RoadmapCard> = {}): RoadmapCard => ({
@@ -17,69 +18,97 @@ const card = (over: Partial<RoadmapCard> = {}): RoadmapCard => ({
   boardId: over.boardId ?? "B",
 });
 
-describe("groupByEpic", () => {
-  it("creates one lane per epic + a self-lane per orphan story", () => {
-    const epic1 = card({
-      id: "e1",
-      title: "Epic A",
-      type: "epic",
-      parentCardId: null,
-    });
-    const s1 = card({ id: "s1", parentCardId: "e1" });
-    const s2 = card({ id: "s2", parentCardId: null });
-    const lanes = groupByEpic([epic1, s1, s2]);
-    expect(lanes.find((l) => l.id === "e1")?.cards.map((c) => c.id)).toEqual([
+describe("groupBySubBoard", () => {
+  const sub = (over: Partial<SubBoardRef>): SubBoardRef => ({
+    id: over.id ?? "sb",
+    title: over.title ?? "Sub-board",
+    parentCardId: over.parentCardId ?? null,
+  });
+
+  it("creates one lane per sub-board + a self-lane per orphan card", () => {
+    // Anchor card lives on the parent board "B"; its sub-board is "sb1".
+    const anchor = card({ id: "e1", title: "Anchor A", boardId: "B" });
+    // Child lives inside the sub-board (boardId = sub-board id).
+    const s1 = card({ id: "s1", boardId: "sb1" });
+    // Orphan: top-level card not in any sub-board, no anchor wiring.
+    const s2 = card({ id: "s2", boardId: "B" });
+    const lanes = groupBySubBoard(
+      [anchor, s1, s2],
+      [sub({ id: "sb1", title: "Sub A", parentCardId: "e1" })],
+    );
+    expect(lanes.find((l) => l.id === "sb1")?.cards.map((c) => c.id)).toEqual([
       "s1",
     ]);
-    // Orphans now get their OWN lane (id = card id, headerCard = self).
     const orphanLane = lanes.find((l) => l.id === "s2");
     expect(orphanLane?.headerCard?.id).toBe("s2");
     expect(orphanLane?.cards).toEqual([]);
   });
 
-  it("includes the epic itself as a header bar (own card if dates set)", () => {
-    const epic1 = card({
-      id: "e1",
-      title: "Epic A",
-      type: "epic",
-      parentCardId: null,
-    });
-    const lanes = groupByEpic([epic1]);
-    expect(lanes.find((l) => l.id === "e1")?.headerCard?.id).toBe("e1");
+  it("uses the anchor card as the lane header", () => {
+    const anchor = card({ id: "e1", title: "Anchor A", boardId: "B" });
+    const lanes = groupBySubBoard(
+      [anchor],
+      [sub({ id: "sb1", title: "Sub A", parentCardId: "e1" })],
+    );
+    expect(lanes.find((l) => l.id === "sb1")?.headerCard?.id).toBe("e1");
   });
 
-  it("does not put the epic card itself into the lane.cards list", () => {
-    const epic1 = card({ id: "e1", title: "Epic A", type: "epic" });
-    const s1 = card({ id: "s1", parentCardId: "e1" });
-    const lanes = groupByEpic([epic1, s1]);
-    const lane = lanes.find((l) => l.id === "e1")!;
+  it("does not place the anchor card into its own lane.cards list", () => {
+    const anchor = card({ id: "e1", title: "Anchor A", boardId: "B" });
+    const s1 = card({ id: "s1", boardId: "sb1" });
+    const lanes = groupBySubBoard(
+      [anchor, s1],
+      [sub({ id: "sb1", title: "Sub A", parentCardId: "e1" })],
+    );
+    const lane = lanes.find((l) => l.id === "sb1")!;
     expect(lane.cards.map((c) => c.id)).toEqual(["s1"]);
     expect(lane.headerCard?.id).toBe("e1");
   });
 
-  it("orders epic lanes alphabetically by title with orphan self-lanes last", () => {
-    const epicB = card({ id: "eb", title: "Beta", type: "epic" });
-    const epicA = card({ id: "ea", title: "Alpha", type: "epic" });
-    const orphan = card({ id: "s1", title: "Orphan", parentCardId: null });
-    const lanes = groupByEpic([orphan, epicB, epicA]);
-    expect(lanes.map((l) => l.id)).toEqual(["ea", "eb", "s1"]);
+  it("orders sub-board lanes alphabetically by anchor title with orphan self-lanes last", () => {
+    const anchorB = card({ id: "eb", title: "Beta", boardId: "B" });
+    const anchorA = card({ id: "ea", title: "Alpha", boardId: "B" });
+    const orphan = card({ id: "s1", title: "Orphan", boardId: "B" });
+    const lanes = groupBySubBoard(
+      [orphan, anchorB, anchorA],
+      [
+        sub({ id: "sbb", parentCardId: "eb" }),
+        sub({ id: "sba", parentCardId: "ea" }),
+      ],
+    );
+    expect(lanes.map((l) => l.id)).toEqual(["sba", "sbb", "s1"]);
   });
 
-  it("does not emit the Uncategorized lane when there are no orphan stories", () => {
-    const epicA = card({ id: "ea", title: "Alpha", type: "epic" });
-    const s1 = card({ id: "s1", parentCardId: "ea" });
-    const lanes = groupByEpic([epicA, s1]);
-    expect(lanes.map((l) => l.id)).toEqual(["ea"]);
+  it("does not emit any orphan lane when every visible card belongs to a sub-board lane", () => {
+    const anchorA = card({ id: "ea", title: "Alpha", boardId: "B" });
+    const s1 = card({ id: "s1", boardId: "sba" });
+    const lanes = groupBySubBoard(
+      [anchorA, s1],
+      [sub({ id: "sba", parentCardId: "ea" })],
+    );
+    expect(lanes.map((l) => l.id)).toEqual(["sba"]);
   });
 
-  it("epic lanes and orphan self-lanes both use kind=epic", () => {
-    const epicA = card({ id: "ea", title: "Alpha", type: "epic" });
-    const orphan = card({ id: "s1", parentCardId: null });
-    const lanes = groupByEpic([epicA, orphan]);
-    expect(lanes.find((l) => l.id === "ea")?.kind).toBe("epic");
-    // Orphans get their own lane now; same kind so renderer treats them
-    // identically (single-row lane with header bar).
-    expect(lanes.find((l) => l.id === "s1")?.kind).toBe("epic");
+  it("sub-board lanes use kind=sub_board; orphan self-lanes use kind=uncategorized", () => {
+    const anchorA = card({ id: "ea", title: "Alpha", boardId: "B" });
+    const orphan = card({ id: "s1", boardId: "B" });
+    const lanes = groupBySubBoard(
+      [anchorA, orphan],
+      [sub({ id: "sba", parentCardId: "ea" })],
+    );
+    expect(lanes.find((l) => l.id === "sba")?.kind).toBe("sub_board");
+    expect(lanes.find((l) => l.id === "s1")?.kind).toBe("uncategorized");
+  });
+
+  it("skips sub-boards whose anchor card is not in the cards input", () => {
+    // Sub-board points at an anchor card we don't have — it's hidden, not
+    // an error. Falls back to orphan lane for visible cards.
+    const orphan = card({ id: "s1", boardId: "B" });
+    const lanes = groupBySubBoard(
+      [orphan],
+      [sub({ id: "sba", parentCardId: "missing-anchor" })],
+    );
+    expect(lanes.map((l) => l.id)).toEqual(["s1"]);
   });
 });
 
@@ -141,16 +170,14 @@ describe("groupByAssignee", () => {
     expect(ids).toContain("assignee:unassigned");
   });
 
-  it("skips epics and subtasks (epic mode renders them; assignee v1 ignores)", () => {
-    const epic = card({ id: "e1", type: "epic" });
-    const sub = card({ id: "s1", type: "subtask", parentCardId: "x" });
+  it("skips subtasks (rendered nested under parent in sub-board mode)", () => {
+    const subT = card({ id: "s1", type: "subtask", parentCardId: "x" });
     const story = card({ id: "c1" });
     const members = [
-      { cardId: "e1", userId: "u1" },
       { cardId: "s1", userId: "u1" },
       { cardId: "c1", userId: "u1" },
     ];
-    const lanes = groupByAssignee([epic, sub, story], members, profiles);
+    const lanes = groupByAssignee([subT, story], members, profiles);
     expect(lanes.map((l) => l.id)).toEqual(["assignee:u1"]);
     expect(lanes[0].cards.map((c) => c.id)).toEqual(["c1"]);
   });
@@ -227,16 +254,14 @@ describe("groupByComponent", () => {
     expect(ids).toContain("component:uncomponented");
   });
 
-  it("skips epics and subtasks (component v1 ignores them)", () => {
-    const epic = card({ id: "e1", type: "epic" });
-    const sub = card({ id: "s1", type: "subtask", parentCardId: "x" });
+  it("skips subtasks (rendered nested under parent in sub-board mode)", () => {
+    const subT = card({ id: "s1", type: "subtask", parentCardId: "x" });
     const story = card({ id: "c1" });
     const cardComponents = [
-      { cardId: "e1", componentId: "k1" },
       { cardId: "s1", componentId: "k1" },
       { cardId: "c1", componentId: "k1" },
     ];
-    const lanes = groupByComponent([epic, sub, story], cardComponents, components);
+    const lanes = groupByComponent([subT, story], cardComponents, components);
     expect(lanes.map((l) => l.id)).toEqual(["component:k1"]);
     expect(lanes[0].cards.map((c) => c.id)).toEqual(["c1"]);
   });
