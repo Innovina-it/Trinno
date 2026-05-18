@@ -93,7 +93,7 @@ type DragState = {
   startClientX: number;
   origStart: Date;
   origTarget: Date;
-  // Only populated in epic + move mode for cross-lane reparent.
+  // Only populated in sub_board + move mode for cross-lane reparent.
   sourceLaneId: string | null;
   currentLaneId: string | null;
   // Priority-gutter mode.
@@ -246,7 +246,7 @@ export function useRoadmapDragHarness(
       top: number;
       height: number;
       laneId: string;
-      epicId: string | null;
+      laneAnchorId: string | null;
       boardId: string | null;
     };
   } | null>(null);
@@ -262,7 +262,7 @@ export function useRoadmapDragHarness(
         top: number;
         height: number;
         laneId: string;
-        epicId: string | null;
+        laneAnchorId: string | null;
         boardId: string | null;
       };
       canvasX: number;
@@ -578,7 +578,7 @@ export function useRoadmapDragHarness(
         startDate: nextStart,
         targetDate: nextTarget,
       });
-      // Vertical hit-test for cross-lane reparent (epic + move only).
+      // Vertical hit-test for cross-lane reparent (sub_board + move only).
       if (d.mode === "move" && d.sourceLaneId !== null) {
         const canvas = canvasRef.current;
         if (canvas) {
@@ -685,7 +685,7 @@ export function useRoadmapDragHarness(
       });
       return;
     }
-    // Cross-lane reparent detection (epic + move only).
+    // Cross-lane reparent detection (sub_board + move only).
     const reparented =
       d.mode === "move" &&
       d.sourceLaneId !== null &&
@@ -707,18 +707,18 @@ export function useRoadmapDragHarness(
       const targetLane = laneLayoutRef.current.find(
         (ll) => ll.lane.id === d.currentLaneId,
       );
-      const targetEpicId = targetLane?.lane.headerCard?.id ?? null;
+      const targetLaneAnchorId = targetLane?.lane.headerCard?.id ?? null;
       const targetTitle =
         targetLane?.lane.title ??
-        (targetEpicId ? "destination" : "Uncategorized");
+        (targetLaneAnchorId ? "destination" : "Uncategorized");
       const origCard = storeCardsRef.current.find((c) => c.id === d.cardId);
       const origParentId = origCard?.parentCardId ?? null;
-      patchCardInStore(d.cardId, { parentCardId: targetEpicId });
+      patchCardInStore(d.cardId, { parentCardId: targetLaneAnchorId });
       const cardId = d.cardId;
       startTransition(() => {
         void (async () => {
           try {
-            await updateCard({ id: cardId, parentCardId: targetEpicId });
+            await updateCard({ id: cardId, parentCardId: targetLaneAnchorId });
           } catch (err) {
             patchCardInStore(cardId, { parentCardId: origParentId });
             const e = err as { message?: string; cause?: { message?: string } };
@@ -834,7 +834,7 @@ export function useRoadmapDragHarness(
       if (!c) return;
       e.preventDefault();
       let sourceLaneId: string | null = null;
-      if (laneMode === "epic" && mode === "move") {
+      if (laneMode === "sub_board" && mode === "move") {
         for (const ll of laneLayoutRef.current) {
           if (ll.lane.headerCard?.id === cardId) {
             sourceLaneId = ll.lane.id;
@@ -1048,7 +1048,7 @@ export function useRoadmapDragHarness(
 
   const beginRowDrag = useCallback(
     (cardId: string, e: React.PointerEvent) => {
-      if (laneMode !== "epic") return;
+      if (laneMode !== "sub_board") return;
       const panel = labelPanelRef.current;
       if (!panel) return;
       let cursor = HEADER_STRIP_HEIGHT;
@@ -1133,7 +1133,7 @@ export function useRoadmapDragHarness(
       const endDays = Math.max(aDays, bDays);
       const startISO = addDays(gridStart, startDays).toISOString().slice(0, 10);
       const endISO = addDays(gridStart, endDays).toISOString().slice(0, 10);
-      const epicBoardId = p.row.boardId;
+      const laneAnchorBoardId = p.row.boardId;
       // Click without drag = treat as plain canvas click; do nothing.
       // Only a deliberate drag-paint past PAINT_THRESHOLD_PX opens the
       // new-card dialog with a span. Avoids accidental modal pops on
@@ -1142,8 +1142,8 @@ export function useRoadmapDragHarness(
       onOpenNewCardDialog({
         start: startISO,
         target: endISO,
-        board: epicBoardId ?? undefined,
-        parent: p.row.epicId,
+        board: laneAnchorBoardId ?? undefined,
+        parent: p.row.laneAnchorId,
       });
     },
     [gridStart, onPaintPointerMove, ppd, onOpenNewCardDialog],
@@ -1191,9 +1191,9 @@ export function useRoadmapDragHarness(
       const yInBody = Math.max(0, y - bodyTop);
       const rowIdx = Math.floor(yInBody / ROW_HEIGHT);
       const rowTop = bodyTop + rowIdx * ROW_HEIGHT;
-      const epic = ll.lane.headerCard;
-      const epicBoardId = epic
-        ? storeCardsRef.current.find((c) => c.id === epic.id)?.boardId ?? null
+      const laneAnchor = ll.lane.headerCard;
+      const laneAnchorBoardId = laneAnchor
+        ? storeCardsRef.current.find((c) => c.id === laneAnchor.id)?.boardId ?? null
         : null;
       paintRef.current = {
         startClientX: e.clientX,
@@ -1203,8 +1203,8 @@ export function useRoadmapDragHarness(
           top: rowTop,
           height: ROW_HEIGHT,
           laneId: ll.lane.id,
-          epicId: epic?.id ?? null,
-          boardId: epicBoardId,
+          laneAnchorId: laneAnchor?.id ?? null,
+          boardId: laneAnchorBoardId,
         },
       };
       const xSnap = Math.round(x / ppd) * ppd;
@@ -1251,7 +1251,7 @@ export function useRoadmapDragHarness(
           start: startISO,
           target: targetISO,
           board: c.over.row.boardId ?? undefined,
-          parent: c.over.row.epicId,
+          parent: c.over.row.laneAnchorId,
         });
       }
     },
@@ -1296,17 +1296,17 @@ export function useRoadmapDragHarness(
       const yInBody = Math.max(0, y - bodyTop);
       const rowIdx = Math.floor(yInBody / ROW_HEIGHT);
       const rowTop = bodyTop + rowIdx * ROW_HEIGHT;
-      const epic = ll.lane.headerCard;
-      const epicBoardId = epic
-        ? storeCardsRef.current.find((cc) => cc.id === epic.id)?.boardId ?? null
+      const laneAnchor = ll.lane.headerCard;
+      const laneAnchorBoardId = laneAnchor
+        ? storeCardsRef.current.find((cc) => cc.id === laneAnchor.id)?.boardId ?? null
         : null;
       c.over = {
         row: {
           top: rowTop,
           height: ROW_HEIGHT,
           laneId: ll.lane.id,
-          epicId: epic?.id ?? null,
-          boardId: epicBoardId,
+          laneAnchorId: laneAnchor?.id ?? null,
+          boardId: laneAnchorBoardId,
         },
         canvasX: x,
       };
