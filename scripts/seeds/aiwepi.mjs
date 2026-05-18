@@ -377,14 +377,24 @@ async function call(table, body) {
 }
 
 async function findUser(email) {
-  const { data: list, error } = await admin.auth.admin.listUsers();
-  if (error) throw error;
-  const u = list.users.find((x) => x.email === email);
-  if (!u)
-    throw new Error(
-      `No user with email "${email}". Create the account first or set SEED_EMAIL to an existing user.`,
-    );
-  return u.id;
+  // admin.auth.admin.listUsers() paginates (default 50 per page). On local
+  // DBs that have accumulated test users from integration runs the target
+  // user may live past page 1, so we have to walk pages until we find it
+  // or run out.
+  const perPage = 1000;
+  for (let page = 1; page < 100; page++) {
+    const { data: list, error } = await admin.auth.admin.listUsers({
+      page,
+      perPage,
+    });
+    if (error) throw error;
+    const u = list.users.find((x) => x.email === email);
+    if (u) return u.id;
+    if (list.users.length < perPage) break;
+  }
+  throw new Error(
+    `No user with email "${email}". Create the account first or set SEED_EMAIL to an existing user.`,
+  );
 }
 
 async function findWorkspaceByName(name, ownerId) {
