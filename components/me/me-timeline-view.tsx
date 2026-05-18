@@ -4,7 +4,7 @@
  *
  * Workspace groups are collapsible (collapsed by default). When expanded,
  * each workspace renders its cards as the same hierarchical list view
- * used inside a single workspace's roadmap → list mode: epic → child →
+ * used inside a single workspace's roadmap → list mode: anchor → child →
  * subtask, indented, ordered by startDate ASC NULLS LAST.
  */
 import { useMemo, useState } from "react";
@@ -61,7 +61,7 @@ function PriorityDot({ priority }: { priority: CardPriority | null }) {
   );
 }
 
-// Build epic → child → subtask rows for a flat card list. Same shape as
+// Build anchor → child → subtask rows for a flat card list. Same shape as
 // RoadmapListView's tree, scoped to one board's worth of cards.
 function buildRows(cards: CrossWorkspaceCard[]): Row[] {
   const byParent = new Map<string | null, CrossWorkspaceCard[]>();
@@ -97,8 +97,11 @@ function buildRows(cards: CrossWorkspaceCard[]): Row[] {
       return true;
     })
     .sort((a, b) => {
-      const ae = a.type === "epic" ? 0 : 1;
-      const be = b.type === "epic" ? 0 : 1;
+      // Top-level cards with children become depth-0 anchors in the tree.
+      // Prefer them in the sort so anchored hierarchies surface above flat
+      // top-level rows, mirroring how anchor lanes lead in the gantt view.
+      const ae = (byParent.get(a.id)?.length ?? 0) > 0 ? 0 : 1;
+      const be = (byParent.get(b.id)?.length ?? 0) > 0 ? 0 : 1;
       if (ae !== be) return ae - be;
       const ta = timeOf(a.startDate);
       const tb = timeOf(b.startDate);
@@ -252,7 +255,7 @@ export function MeTimelineView({
                         </div>
                         <ul className="divide-y divide-hairline">
                           {rows.map(({ card, depth }) => {
-                            const isEpic = card.type === "epic";
+                            const isAnchorRow = depth === 0;
                             const completed = card.completedAt != null;
                             const indentPx = depth * 20;
                             return (
@@ -294,7 +297,7 @@ export function MeTimelineView({
                                     }
                                     className={[
                                       "truncate text-left text-sm transition-colors hover:underline focus-visible:outline-none focus-visible:underline",
-                                      isEpic
+                                      isAnchorRow
                                         ? "font-medium text-fg"
                                         : "text-fg-muted hover:text-fg",
                                       completed

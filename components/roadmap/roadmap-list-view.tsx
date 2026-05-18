@@ -7,7 +7,7 @@
  * store) drives this view, so no extra queries are needed. The list is
  * organized as:
  *
- *   epic → task/story/bug → subtask
+ *   lane-anchor → task/story/bug → subtask
  *
  * within each lane the parent rows render in `startDate` ASC order
  * (NULLS LAST). Subtasks live nested under their parent and follow the
@@ -72,7 +72,7 @@ function OwnerAvatar({
 
 type Row = {
   card: StoreCard;
-  depth: 0 | 1 | 2; // 0 = epic, 1 = task/story/bug, 2 = subtask
+  depth: 0 | 1 | 2; // 0 = lane anchor, 1 = task/story/bug, 2 = subtask
   hasChildren: boolean;
 };
 
@@ -91,6 +91,17 @@ export function RoadmapListView({
   const router = useRouter();
   const storeCards = useWorkspaceStore((s) => s.cards);
   const storeProfiles = useWorkspaceStore((s) => s.workspaceProfiles);
+  const storeSubBoards = useWorkspaceStore((s) => s.subBoards);
+
+  const laneAnchorIds = useMemo(
+    () =>
+      new Set<string>(
+        storeSubBoards
+          .map((sb) => sb.parentCardId)
+          .filter((id): id is string => id != null),
+      ),
+    [storeSubBoards],
+  );
 
   const profileById = useMemo(
     () => new Map(storeProfiles.map((p) => [p.id, p.displayName])),
@@ -124,13 +135,14 @@ export function RoadmapListView({
       });
     }
     const out: Row[] = [];
-    // Top-level entry points: epics first, then any other top-level card
-    // (story/task/bug) that lacks a parent. Epics get their own root row
-    // so the hierarchy reads epic → child → subtask top-down.
+    // Top-level entry points: lane-anchor cards first (cards that have a
+    // sub-board attached via boards.parent_card_id), then any other
+    // top-level card. Lane anchors get their own root row so the hierarchy
+    // reads anchor → child → subtask top-down.
     const topLevel = byParent.get(null) ?? [];
-    const epicsFirst = topLevel.slice().sort((a, b) => {
-      const ae = a.type === "epic" ? 0 : 1;
-      const be = b.type === "epic" ? 0 : 1;
+    const anchorsFirst = topLevel.slice().sort((a, b) => {
+      const ae = laneAnchorIds.has(a.id) ? 0 : 1;
+      const be = laneAnchorIds.has(b.id) ? 0 : 1;
       if (ae !== be) return ae - be;
       const ta = timeOf(a.startDate);
       const tb = timeOf(b.startDate);
@@ -151,9 +163,9 @@ export function RoadmapListView({
         emit(child, nextDepth);
       }
     }
-    for (const top of epicsFirst) emit(top, top.type === "epic" ? 0 : 1);
+    for (const top of anchorsFirst) emit(top, laneAnchorIds.has(top.id) ? 0 : 1);
     return out;
-  }, [storeCards, filteredCardIds]);
+  }, [storeCards, filteredCardIds, laneAnchorIds]);
 
   // Owner-display lookup pulled from the workspace profiles array.
   function ownerName(card: StoreCard): string | null {
@@ -197,7 +209,7 @@ export function RoadmapListView({
       </div>
       <ul className="divide-y divide-hairline">
         {rows.map(({ card, depth }) => {
-          const isEpic = card.type === "epic";
+          const isLaneAnchor = laneAnchorIds.has(card.id);
           const completed = card.completedAt != null;
           const indentPx = depth * 20;
           const owner = ownerName(card);
@@ -225,7 +237,7 @@ export function RoadmapListView({
                   onClick={() => router.push(`/b/${card.boardId}/c/${card.id}`)}
                   className={[
                     "truncate text-left text-sm transition-colors hover:underline focus-visible:outline-none focus-visible:underline",
-                    isEpic ? "font-medium text-fg" : "text-fg-muted hover:text-fg",
+                    isLaneAnchor ? "font-medium text-fg" : "text-fg-muted hover:text-fg",
                     completed ? "line-through text-fg-faint" : "",
                   ].join(" ")}
                   title={card.title}
