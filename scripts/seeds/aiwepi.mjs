@@ -571,14 +571,16 @@ async function seed() {
       taskRows.push({ row, taskStart, taskEnd });
     }
 
-    // Deliverables (type=subtask) — parented to their related task. Dates
-    // copy the task's full range so the deliverable plots as a nested
-    // subtask bar on the roadmap (without both dates it's listed as
-    // "+1 UNDATED" and hidden until the parent is expanded).
+    // Deliverables (type=subtask) — parented to their related task. Each
+    // deliverable bar spans the LAST quarter of its parent task: a small
+    // marker at the task's tail end rather than a duplicate of the full
+    // task range. Both dates are set so listRoadmapCards plots them.
     for (const d of wp.deliverables) {
       const parent = taskRows[d.underTaskIndex ?? 0];
       if (!parent)
         throw new Error(`${wp.code} ${d.code}: underTaskIndex out of bounds`);
+      const taskSpan = parent.taskEnd - parent.taskStart;
+      const dStart = parent.taskEnd - taskSpan / 4;
       await call("cards", {
         list_id: subList.id,
         board_id: subBoard.id,
@@ -588,7 +590,7 @@ async function seed() {
         owner_id: null,
         parent_card_id: parent.row.id,
         description: d.description,
-        start_date: monthDateStr(parent.taskStart),
+        start_date: monthDateStr(dStart),
         target_date: monthDateStr(parent.taskEnd),
       });
     }
