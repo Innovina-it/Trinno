@@ -30,9 +30,10 @@ import {
 import {
   groupByAssignee,
   groupByComponent,
-  groupByEpic,
+  groupBySubBoard,
   stackInLane,
   UNCATEGORIZED_LANE_ID,
+  type SubBoardRef,
 } from "@/lib/roadmap/layout";
 import { getCardStatusKind, type StatusKind } from "@/lib/status";
 import { criticalPath, type Link as CritLink } from "@/lib/roadmap/critical-path";
@@ -198,7 +199,7 @@ export function RoadmapView({
   const lanesParam = sp.get("lanes");
   const laneMode: LaneMode = (LANE_MODES as string[]).includes(lanesParam ?? "")
     ? (lanesParam as LaneMode)
-    : "epic";
+    : "sub_board";
   const viewParam = sp.get("view");
   const viewMode: ViewMode = (VIEW_MODES as string[]).includes(viewParam ?? "")
     ? (viewParam as ViewMode)
@@ -447,6 +448,7 @@ export function RoadmapView({
   const storeProfilesRaw = useWorkspaceStore((s) => s.workspaceProfiles);
   const storeCardComponents = useWorkspaceStore((s) => s.cardComponents);
   const storeComponents = useWorkspaceStore((s) => s.components);
+  const storeSubBoards = useWorkspaceStore((s) => s.subBoards);
   const patchCardInStore = useWorkspaceStore((s) => s.patchCard);
   const setWorkspaceSnapshot = useWorkspaceStore((s) => s.setSnapshot);
   const workspaceQueryClient = useWorkspaceCacheQueryClient();
@@ -801,6 +803,16 @@ export function RoadmapView({
     });
   }, []);
 
+  const subBoardsForLanes: SubBoardRef[] = useMemo(
+    () =>
+      storeSubBoards.map((sb) => ({
+        id: sb.id,
+        title: sb.title,
+        parentCardId: sb.parentCardId,
+      })),
+    [storeSubBoards],
+  );
+
   const lanes = useMemo(() => {
     if (laneMode === "assignee") {
       return groupByAssignee(cards, storeCardMembers, storeProfiles);
@@ -808,7 +820,7 @@ export function RoadmapView({
     if (laneMode === "component") {
       return groupByComponent(cards, storeCardComponents, storeComponents);
     }
-    return groupByEpic(cards);
+    return groupBySubBoard(cards, subBoardsForLanes);
   }, [
     laneMode,
     cards,
@@ -816,6 +828,7 @@ export function RoadmapView({
     storeProfiles,
     storeCardComponents,
     storeComponents,
+    subBoardsForLanes,
   ]);
 
   // Per-lane stacking + total height. Each entry tracks where in the
@@ -943,10 +956,10 @@ export function RoadmapView({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
-  // ---- Lane mode toggle (URL-synced; default "epic" stays absent from URL) ----
+  // ---- Lane mode toggle (URL-synced; default "sub_board" stays absent from URL) ----
   function setLaneMode(next: LaneMode) {
     const params = new URLSearchParams(sp.toString());
-    if (next === "epic") params.delete("lanes");
+    if (next === "sub_board") params.delete("lanes");
     else params.set("lanes", next);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
@@ -1593,7 +1606,7 @@ export function RoadmapView({
                 className="mx-auto max-w-2xl py-8 text-center text-fg-faint"
                 data-testid="roadmap-empty-unassigned-banner"
               >
-                Mark a card as <span className="chip mono-meta-sm">Epic</span> to organize work into kanbans.
+                Open a card and choose <span className="chip mono-meta-sm">Make sub-board</span> to organize work into lanes.
               </div>
             )}
         <div
@@ -1628,15 +1641,14 @@ export function RoadmapView({
               LANE
             </div>
             {laneLayout.map((ll) => {
-              const epicHeader = ll.lane.headerCard;
-              const draggable = laneMode === "epic" && epicHeader !== null;
+              const laneHeaderCard = ll.lane.headerCard;
+              const draggable = laneMode === "sub_board" && laneHeaderCard !== null;
               const isDragging =
                 drag.rowDragGhost !== null &&
-                epicHeader?.id === drag.rowDragGhost.cardId;
+                laneHeaderCard?.id === drag.rowDragGhost.cardId;
               const count = ll.placed.length;
-              // Story was retired as a picker type (commit 131081f); epic
-              // children now span task/bug/subtask, so "STORY/STORIES" is
-              // wrong. Use the same neutral CARD/CARDS as the other lanes.
+              // Cards-per-lane label. Orphan self-lanes get the ORPHAN
+              // wording so it's clear they're not grouped under a sub-board.
               const meta =
                 ll.lane.kind === "uncategorized"
                   ? `${count} ${count === 1 ? "ORPHAN" : "ORPHANS"}`
@@ -1649,22 +1661,19 @@ export function RoadmapView({
                   }`}
                   style={{ height: ll.height, minHeight: 64 }}
                   data-testid="roadmap-lane-row"
-                  data-card-id={epicHeader?.id}
+                  data-card-id={laneHeaderCard?.id}
                 >
-                  {draggable && epicHeader && (
+                  {draggable && laneHeaderCard && (
                     <RoadmapRowHandle
-                      cardId={epicHeader.id}
+                      cardId={laneHeaderCard.id}
                       onDragStart={drag.beginRowDrag}
                     />
                   )}
-                  {epicHeader ? (
+                  {laneHeaderCard ? (
                     <span
-                      // Lane names used to link to retired /e/[id] routes,
-                      // which now 404. Keep them non-clickable; lane filtering
-                      // is controlled by the toolbar's lane-mode controls.
                       className="mono-meta text-fg line-clamp-2 break-words"
-                      data-testid="lane-epic-header-label"
-                      data-card-id={epicHeader.id}
+                      data-testid="lane-header-label"
+                      data-card-id={laneHeaderCard.id}
                       title={ll.lane.title}
                     >
                       {ll.lane.title}

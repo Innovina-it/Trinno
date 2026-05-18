@@ -72,6 +72,7 @@ function makeSnapshot(title: string): SharedWorkspaceSnapshot {
     cardLinks: [],
     cardMembers: [],
     workspaceProfiles: [{ id: "u1", displayName: "Ada" }],
+    subBoards: [],
   };
 }
 

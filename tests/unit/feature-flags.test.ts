@@ -65,6 +65,7 @@ function makeSnapshot(
     cardLinks: [],
     cardMembers: [],
     workspaceProfiles: [],
+    subBoards: [],
   };
 }
 

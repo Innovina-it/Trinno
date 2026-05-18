@@ -31,6 +31,7 @@ function makeSnapshot(sprints: WorkspaceSnapshot["sprints"]): WorkspaceSnapshot 
     cardLinks: [],
     cardMembers: [],
     workspaceProfiles: [],
+    subBoards: [],
   };
 }
 

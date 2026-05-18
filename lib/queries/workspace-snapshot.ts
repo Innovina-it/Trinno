@@ -102,6 +102,10 @@ export type WorkspaceSnapshot = {
   }>;
   cardMembers: Array<{ cardId: string; userId: string }>;
   workspaceProfiles: Array<{ id: string; displayName: string }>;
+  // Sub-boards in the workspace, keyed by anchor card via boards.parent_card_id
+  // (migration 0105). Consumed by the roadmap's `groupBySubBoard` to build
+  // sub-board lanes whose header is the anchor card.
+  subBoards: Array<{ id: string; title: string; parentCardId: string | null }>;
 };
 
 export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
@@ -116,6 +120,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         archived: boards.archived,
         backgroundKind: boards.backgroundKind,
         backgroundValue: boards.backgroundValue,
+        parentCardId: boards.parentCardId,
       })
       .from(boards)
       .where(eq(boards.workspaceId, workspaceId));
@@ -174,6 +179,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         cardLinks: [],
         cardMembers: [],
         workspaceProfiles: profileRows,
+        subBoards: [],
       };
     }
 
@@ -313,9 +319,26 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
               ),
             );
 
+    // Sub-boards = boards in the workspace with a non-null parent_card_id
+    // (card→sub-board anchor link from migration 0105). The roadmap consumes
+    // this to build lanes whose header is the anchor card.
+    const subBoardRefs = boardRows
+      .filter((b) => b.parentCardId !== null)
+      .map((b) => ({
+        id: b.id,
+        title: b.title,
+        parentCardId: b.parentCardId,
+      }));
+
     return {
       workspaceId,
-      boards: boardRows,
+      boards: boardRows.map((b) => ({
+        id: b.id,
+        title: b.title,
+        archived: b.archived,
+        backgroundKind: b.backgroundKind,
+        backgroundValue: b.backgroundValue,
+      })),
       lists: listRows,
       cards: cardRows,
       sprints: sprintRows,
@@ -326,6 +349,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
       cardLinks: cardLinkRows,
       cardMembers: cardMemberRows,
       workspaceProfiles: profileRows,
+      subBoards: subBoardRefs,
     };
   });
 });

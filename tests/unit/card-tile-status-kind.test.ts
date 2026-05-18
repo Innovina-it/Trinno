@@ -30,6 +30,7 @@ function makeSnapshot(lists: WorkspaceSnapshot["lists"]): WorkspaceSnapshot {
     cardLinks: [],
     cardMembers: [],
     workspaceProfiles: [],
+    subBoards: [],
   };
 }
 

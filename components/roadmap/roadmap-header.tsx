@@ -30,10 +30,10 @@ import type { Zoom } from "@/lib/roadmap/dates";
 import { formatDate } from "@/lib/format-date";
 
 export const ZOOMS: Zoom[] = ["fit", "week", "month", "quarter"];
-export type LaneMode = "epic" | "assignee" | "component";
-export const LANE_MODES: LaneMode[] = ["epic", "assignee", "component"];
+export type LaneMode = "sub_board" | "assignee" | "component";
+export const LANE_MODES: LaneMode[] = ["sub_board", "assignee", "component"];
 export const LANE_MODE_LABEL: Record<LaneMode, string> = {
-  epic: "By epic",
+  sub_board: "By sub-board",
   assignee: "By assignee",
   component: "By component",
 };
