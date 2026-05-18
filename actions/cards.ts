@@ -72,8 +72,50 @@ export async function createCardImpl(token: string, input: {
   const parsed = CreateCardInput.parse(input);
   const creatorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    // When parentCardId is set, the DB trigger `cards_validate_parent`
+    // requires the new card's resolved board (from listId → lists.board_id)
+    // to equal the parent's board. The roadmap NewCardDialog can race —
+    // when the user opens it with a parent on board X but the default lane
+    // is on board Y, the dialog may submit (listId from Y, parentCardId on X).
+    // Snap listId to a list on the parent's board here so the create
+    // succeeds regardless of client state.
+    let effectiveListId = parsed.listId;
+    if (parsed.parentCardId) {
+      const [parentBoard] = await tx
+        .select({ boardId: cards.boardId })
+        .from(cards)
+        .where(eq(cards.id, parsed.parentCardId))
+        .limit(1);
+      const [listBoard] = await tx
+        .select({ boardId: lists.boardId })
+        .from(lists)
+        .where(eq(lists.id, parsed.listId))
+        .limit(1);
+      if (
+        parentBoard?.boardId &&
+        listBoard?.boardId &&
+        parentBoard.boardId !== listBoard.boardId
+      ) {
+        const candidates = await tx
+          .select({
+            id: lists.id,
+            statusKind: lists.statusKind,
+            position: lists.position,
+          })
+          .from(lists)
+          .where(and(eq(lists.boardId, parentBoard.boardId), eq(lists.archived, false)))
+          .orderBy(asc(lists.position));
+        const target =
+          candidates.find((l) => l.statusKind === "todo") ?? candidates[0];
+        if (!target) {
+          throw new Error("Parent card's board has no list to receive the subtask");
+        }
+        effectiveListId = target.id;
+      }
+    }
+
     const [last] = await tx.select({ position: cards.position }).from(cards)
-      .where(eq(cards.listId, parsed.listId))
+      .where(eq(cards.listId, effectiveListId))
       .orderBy(desc(cards.position))
       .limit(1);
     const pos = positionBetween(last?.position ?? null, null);
@@ -124,7 +166,7 @@ export async function createCardImpl(token: string, input: {
         : parsed.ownerId;
 
     const [row] = await tx.insert(cards).values({
-      listId: parsed.listId,
+      listId: effectiveListId,
       title: parsed.title,
       position: pos,
       boardId: "00000000-0000-0000-0000-000000000000", // overwritten by trigger
@@ -327,6 +369,55 @@ export async function updateCardImpl(token: string, input: {
       }
     }
 
+    // Cross-board reparent: DB trigger `cards_validate_parent` rejects a
+    // parent whose board differs from the card's. When the caller just
+    // sets parentCardId (no listId in the patch), snap the card onto a
+    // list on the parent's board so the trigger passes. Mirrors the
+    // create-time snap in createCardImpl. Skips when caller already
+    // supplied a listId (assume they know what they're doing).
+    if (parsed.parentCardId && patch.listId === undefined) {
+      const [self] = await tx
+        .select({ boardId: cards.boardId })
+        .from(cards)
+        .where(eq(cards.id, parsed.id))
+        .limit(1);
+      const [parentBoard] = await tx
+        .select({ boardId: cards.boardId })
+        .from(cards)
+        .where(eq(cards.id, parsed.parentCardId))
+        .limit(1);
+      if (
+        self?.boardId &&
+        parentBoard?.boardId &&
+        self.boardId !== parentBoard.boardId
+      ) {
+        const candidates = await tx
+          .select({
+            id: lists.id,
+            statusKind: lists.statusKind,
+            position: lists.position,
+          })
+          .from(lists)
+          .where(and(eq(lists.boardId, parentBoard.boardId), eq(lists.archived, false)))
+          .orderBy(asc(lists.position));
+        const target =
+          candidates.find((l) => l.statusKind === "todo") ?? candidates[0];
+        if (!target) {
+          throw new Error(
+            "CROSS_BOARD_NO_LIST: parent card's board has no list to receive the card",
+          );
+        }
+        patch.listId = target.id;
+        const [last] = await tx
+          .select({ position: cards.position })
+          .from(cards)
+          .where(eq(cards.listId, target.id))
+          .orderBy(desc(cards.position))
+          .limit(1);
+        patch.position = positionBetween(last?.position ?? null, null);
+      }
+    }
+
     // Subtask date inheritance on retroactive parent link: if parentCardId
     // is being set to a non-null value AND the card has no dates of its
     // own (and none in this patch), copy parent's span. Mirrors the
@@ -365,9 +456,14 @@ export async function updateCardImpl(token: string, input: {
       // Wrap into a stable, code-prefixed Error so callers can detect it
       // without matching English substrings (Server Action serializes as
       // a plain Error so the message prefix is the contract).
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.toLowerCase().includes("parent cycle")) {
+      const cause = (err as { cause?: { message?: string } })?.cause?.message;
+      const msg = (err instanceof Error ? err.message : String(err)) + " " + (cause ?? "");
+      const lower = msg.toLowerCase();
+      if (lower.includes("parent cycle")) {
         throw new Error("PARENT_CYCLE: parent cycle detected");
+      }
+      if (lower.includes("parent must be in same board")) {
+        throw new Error("CROSS_BOARD_PARENT: parent must be in same board");
       }
       throw err;
     }

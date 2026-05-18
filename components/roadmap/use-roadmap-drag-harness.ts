@@ -707,32 +707,61 @@ export function useRoadmapDragHarness(
       const targetLane = laneLayoutRef.current.find(
         (ll) => ll.lane.id === d.currentLaneId,
       );
-      const targetLaneAnchorId = targetLane?.lane.headerCard?.id ?? null;
+      const targetAnchor = targetLane?.lane.headerCard ?? null;
+      const targetLaneAnchorId = targetAnchor?.id ?? null;
       const targetTitle =
         targetLane?.lane.title ??
         (targetLaneAnchorId ? "destination" : "Uncategorized");
       const origCard = storeCardsRef.current.find((c) => c.id === d.cardId);
       const origParentId = origCard?.parentCardId ?? null;
-      patchCardInStore(d.cardId, { parentCardId: targetLaneAnchorId });
+      const origBoardId = origCard?.boardId ?? null;
+      // Cross-board reparent: server snaps the card onto a list on the
+      // parent's board. Mirror that boardId change optimistically so the
+      // groupBySubBoard pass moves the card into the new lane before CDC
+      // catches up. Lane grouping keys off boardId, not parentCardId, so
+      // without this the bar would visually stay in the old lane.
+      const targetBoardId = targetAnchor?.boardId ?? null;
+      const optimisticPatch: { parentCardId: string | null; boardId?: string } = {
+        parentCardId: targetLaneAnchorId,
+      };
+      if (targetBoardId && origBoardId && targetBoardId !== origBoardId) {
+        optimisticPatch.boardId = targetBoardId;
+      }
+      patchCardInStore(d.cardId, optimisticPatch);
       const cardId = d.cardId;
       startTransition(() => {
         void (async () => {
           try {
             await updateCard({ id: cardId, parentCardId: targetLaneAnchorId });
           } catch (err) {
-            patchCardInStore(cardId, { parentCardId: origParentId });
+            const rollback: { parentCardId: string | null; boardId?: string } = {
+              parentCardId: origParentId,
+            };
+            if (optimisticPatch.boardId && origBoardId) {
+              rollback.boardId = origBoardId;
+            }
+            patchCardInStore(cardId, rollback);
             const e = err as { message?: string; cause?: { message?: string } };
             // Drizzle wraps pg errors so the actual cause sits on `err.cause`.
             // Surface that when present so users see "FK violation"/"row not
             // found" instead of an opaque SQL dump.
             const causeMsg = e?.cause?.message;
             const raw = causeMsg ?? e?.message ?? "Reparent failed";
+            const topMsg = e?.message ?? "";
             const isCycle =
-              (e?.message ?? "").startsWith("PARENT_CYCLE") ||
+              topMsg.startsWith("PARENT_CYCLE") ||
               (causeMsg ?? "").toLowerCase().includes("parent cycle");
+            const isCrossBoard =
+              topMsg.startsWith("CROSS_BOARD_PARENT") ||
+              (causeMsg ?? "").toLowerCase().includes("parent must be in same board");
+            const isNoList = topMsg.startsWith("CROSS_BOARD_NO_LIST");
             const message = isCycle
               ? `Cannot move card under ${targetTitle} — cycle detected.`
-              : `Reparent failed: ${raw}`;
+              : isNoList
+                ? `Cannot move card under ${targetTitle} — destination board has no list to receive it.`
+                : isCrossBoard
+                  ? `Cannot move card under ${targetTitle} — parent must be on the same board.`
+                  : `Reparent failed: ${raw}`;
             errorBus.push({ message });
           }
         })();
@@ -1195,6 +1224,15 @@ export function useRoadmapDragHarness(
       const laneAnchorBoardId = laneAnchor
         ? storeCardsRef.current.find((c) => c.id === laneAnchor.id)?.boardId ?? null
         : null;
+      // Sub-board lanes: the anchor card lives on the PARENT board, but the
+      // lane's contents live on the sub-board itself (lane.id === sub-board
+      // id). Painting in such a lane should create a top-level card on the
+      // sub-board — not a child of the anchor card on the parent board.
+      // cards_validate_parent forbids cross-board parenting, so we'd either
+      // fail or land on the wrong board if we kept the anchor as parent.
+      const isSubBoardLane = ll.lane.kind === "sub_board";
+      const paintBoardId = isSubBoardLane ? ll.lane.id : laneAnchorBoardId;
+      const paintParentId = isSubBoardLane ? null : laneAnchor?.id ?? null;
       paintRef.current = {
         startClientX: e.clientX,
         startCanvasX: x,
@@ -1203,8 +1241,8 @@ export function useRoadmapDragHarness(
           top: rowTop,
           height: ROW_HEIGHT,
           laneId: ll.lane.id,
-          laneAnchorId: laneAnchor?.id ?? null,
-          boardId: laneAnchorBoardId,
+          laneAnchorId: paintParentId,
+          boardId: paintBoardId,
         },
       };
       const xSnap = Math.round(x / ppd) * ppd;
@@ -1300,13 +1338,18 @@ export function useRoadmapDragHarness(
       const laneAnchorBoardId = laneAnchor
         ? storeCardsRef.current.find((cc) => cc.id === laneAnchor.id)?.boardId ?? null
         : null;
+      // Sub-board lanes: see paint-start comment. Lane contents live on the
+      // sub-board (lane.id), not on the anchor's parent board.
+      const isSubBoardLane = ll.lane.kind === "sub_board";
+      const chipBoardId = isSubBoardLane ? ll.lane.id : laneAnchorBoardId;
+      const chipParentId = isSubBoardLane ? null : laneAnchor?.id ?? null;
       c.over = {
         row: {
           top: rowTop,
           height: ROW_HEIGHT,
           laneId: ll.lane.id,
-          laneAnchorId: laneAnchor?.id ?? null,
-          boardId: laneAnchorBoardId,
+          laneAnchorId: chipParentId,
+          boardId: chipBoardId,
         },
         canvasX: x,
       };

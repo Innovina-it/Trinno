@@ -215,7 +215,15 @@ describe("default board lists and subtask owner defaults", () => {
   it("createCardImpl defaults a new subtask owner to the parent owner", async () => {
     const { createCardImpl } = await import("@/actions/cards");
     const parentOwnerId = uuid(2);
+    // Order matches createCardImpl's read sequence when parentCardId is set:
+    //   1) parentBoard lookup, 2) listBoard lookup (cross-board guard),
+    //   3) last-position lookup, 4) parent defaults, 5) parentMembers.
+    // parentBoard/listBoard return the same boardId so the cross-board snap
+    // is skipped — the test focuses on owner inheritance, not board reroute.
+    const sharedBoardId = uuid(10);
     state.selectResponses = [
+      [{ boardId: sharedBoardId }],
+      [{ boardId: sharedBoardId }],
       [],
       [{ startDate: null, targetDate: null, ownerId: parentOwnerId }],
       [],

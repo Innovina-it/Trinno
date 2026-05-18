@@ -201,8 +201,20 @@ export function NewCardDialog({
   // if they're available, otherwise fall back to the first visible board.
   // The defaults take precedence on every open so a subsequent paint on a
   // different lane re-resolves to that lane's board.
+  //
+  // Precedence: defaultParent.boardId > defaultBoard > first visible board.
+  // The parent wins because the DB trigger `cards_validate_parent` requires
+  // child.board_id === parent.board_id — submitting with a list on a
+  // different board than the parent will be rejected server-side.
   useEffect(() => {
     if (!open) return;
+    if (defaultParent) {
+      const parent = cards.find((c) => c.id === defaultParent);
+      if (parent?.boardId) {
+        if (boardId !== parent.boardId) setBoardId(parent.boardId);
+        return;
+      }
+    }
     if (defaultBoard) {
       if (boardId !== defaultBoard) setBoardId(defaultBoard);
       return;
@@ -214,12 +226,19 @@ export function NewCardDialog({
     // boardId is intentionally omitted from deps — we only re-seed on open
     // or when the defaults change, not on every internal boardId edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, defaultBoard, visibleBoards, boardsWithTodo]);
+  }, [open, defaultBoard, defaultParent, cards, visibleBoards, boardsWithTodo]);
   useEffect(() => {
     if (!open) return;
+    // Only honor defaultList when it's actually on the resolved boardId.
+    // After defaultParent-precedence kicks in above, defaultList from a
+    // roadmap paint may belong to a different (lane) board than the
+    // parent's board — using it would violate cards_validate_parent.
     if (defaultList) {
-      if (listId !== defaultList) setListId(defaultList);
-      return;
+      const defList = lists.find((l) => l.id === defaultList);
+      if (defList && defList.boardId === boardId) {
+        if (listId !== defaultList) setListId(defaultList);
+        return;
+      }
     }
     if (!boardId) return;
     if (listsForBoard.find((l) => l.id === listId)) return;
@@ -227,7 +246,7 @@ export function NewCardDialog({
     // list (by position) if no list is mapped to status_kind=todo.
     setListId(todoListId ?? listsForBoard[0]?.id ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, defaultList, boardId, listsForBoard, todoListId]);
+  }, [open, defaultList, boardId, listsForBoard, todoListId, lists]);
   // Dialog stays mounted across opens, so useState initializers run once
   // at first render — meaning the start/target defaults from a roadmap
   // drag-paint were captured only on initial mount. Re-seed dates on every
@@ -292,9 +311,40 @@ export function NewCardDialog({
       toast.error("Start must be on or before target");
       return;
     }
+    const parentCardId = parentId || null;
+    // Guard: child.board_id must match parent.board_id (DB trigger
+    // cards_validate_parent). If the dialog state is mid-snap and the
+    // selected list is on a different board than the parent, re-snap to
+    // the parent's todo list and bail so the user sees the change before
+    // confirming the create.
+    if (parentCardId) {
+      const parent = cards.find((c) => c.id === parentCardId);
+      const selectedList = lists.find((l) => l.id === listId);
+      if (
+        parent?.boardId &&
+        selectedList?.boardId &&
+        parent.boardId !== selectedList.boardId
+      ) {
+        const parentLists = lists
+          .filter((l) => l.boardId === parent.boardId)
+          .slice()
+          .sort((a, b) => (a.position < b.position ? -1 : 1));
+        const snap =
+          parentLists.find((l) => l.statusKind === "todo")?.id ??
+          parentLists[0]?.id ??
+          "";
+        if (!snap) {
+          toast.error("Parent card's board has no list to receive the subtask");
+          return;
+        }
+        setBoardId(parent.boardId);
+        setListId(snap);
+        toast.message("Snapped to the parent's board — click Create again to confirm");
+        return;
+      }
+    }
     const startISO = new Date(`${start}T00:00:00.000Z`).toISOString();
     const targetISO = new Date(`${target}T00:00:00.000Z`).toISOString();
-    const parentCardId = parentId || null;
     startTransition(async () => {
       try {
         const created = await createCard({
