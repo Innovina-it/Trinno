@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useShallow } from "zustand/shallow";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarRange, Check, CircleDot, CornerLeftUp, Layers3 } from "lucide-react";
+import { FolderKanban, CalendarRange, Check, CircleDot, CornerLeftUp, Layers3 } from "lucide-react";
 import { toast } from "sonner";
 import type { CardRow, BoardProfile } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
@@ -638,9 +638,9 @@ function CardMetaRow({
             e.stopPropagation();
             metaRouter.push(`/b/${attachedSubboard.subBoardId}`);
           }}
-          className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
+          className="chip mono-meta-sm inline-flex items-center gap-1 text-violet-300 hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
         >
-          <Layers3 className="size-3" aria-hidden />
+          <FolderKanban className="size-3" aria-hidden />
           SUB-BOARD
         </button>
       )}

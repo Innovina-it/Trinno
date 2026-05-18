@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowRight,
+  FolderKanban,
   Bug,
   CheckSquare,
   CircleDot,
@@ -149,10 +150,10 @@ const LEGACY_STORY_OPTION: TypeOption = {
 };
 // UX-only option in the picker. Selected ↔ card has 1:1 sub-board
 // attached. Click handler promotes; never written to `cards.type`.
-// Icon-less like Story — label alone reads cleaner at chip size.
 const SUBBOARD_TYPE_OPTION: TypeOption = {
   value: "sub-board",
   label: "Sub-board",
+  Icon: FolderKanban,
   text: "text-violet-300",
   ringSelected: "ring-violet-400/60",
   bgSelected: "bg-violet-500/15",
@@ -1192,8 +1193,9 @@ function QuickViewSubboardSection({ cardId }: { cardId: string }) {
       data-testid="card-quick-view-subboard-open"
       className="flex items-center gap-2 rounded-md border border-hairline px-2 py-1.5 text-xs"
     >
-      <Layers3 className="size-3.5 text-fg-muted" aria-hidden />
-      <span className="mono-meta-sm text-fg-faint">SUB-BOARD</span>
+      <FolderKanban className="size-3.5 text-violet-300" aria-hidden />
+      <span className="mono-meta-sm text-violet-300">SUB-BOARD</span>
+      <span className="mono-meta-sm text-fg-faint">·</span>
       <Link
         href={`/b/${ctx.attached.subBoardId}`}
         className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg hover:text-fg"

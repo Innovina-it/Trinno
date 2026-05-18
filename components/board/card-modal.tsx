@@ -61,6 +61,7 @@ import {
   Check,
   ChevronRight,
   History,
+  FolderKanban,
   Layers3,
   MoreHorizontal,
   Move,
@@ -954,8 +955,9 @@ export function CardModal({
             data-testid="card-modal-subboard-open"
             className="flex items-center gap-2 rounded-xl border border-hairline bg-[color:var(--surface)] px-3 py-2 text-sm"
           >
-            <Layers3 className="size-4 text-fg-muted" aria-hidden />
-            <span className="text-fg-muted">Sub-board:</span>
+            <FolderKanban className="size-4 text-violet-300" aria-hidden />
+            <span className="mono-meta-sm text-violet-300">SUB-BOARD</span>
+            <span className="text-fg-muted">·</span>
             <Link
               href={`/b/${attachedSubboard.subBoardId}`}
               className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg hover:text-fg"
@@ -976,7 +978,7 @@ export function CardModal({
                 data-testid="card-modal-subboard-promote"
                 className="inline-flex items-center gap-1.5"
               >
-                <Layers3 className="size-3.5" aria-hidden />
+                <FolderKanban className="size-3.5" aria-hidden />
                 {promotingSubboard ? "Creating…" : "Make sub-board"}
               </Button>
               <span className="mono-meta-sm text-fg-faint">

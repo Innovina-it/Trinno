@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Layers3 } from "lucide-react";
+import { FolderKanban } from "lucide-react";
 import { boardCode } from "@/lib/format";
 import { FavoriteToggle } from "./favorite-toggle";
 
@@ -56,9 +56,9 @@ export function BoardGrid({
                   <span
                     data-testid="board-tile-subboard"
                     title="Sub-board"
-                    className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted"
+                    className="chip mono-meta-sm inline-flex items-center gap-1 text-violet-300"
                   >
-                    <Layers3 className="size-3" aria-hidden />
+                    <FolderKanban className="size-3" aria-hidden />
                     SUB-BOARD
                   </span>
                 )}
