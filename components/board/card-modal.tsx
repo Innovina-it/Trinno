@@ -61,9 +61,11 @@ import {
   Check,
   ChevronRight,
   History,
+  Layers3,
   MoreHorizontal,
   Move,
 } from "lucide-react";
+import { promoteCardToSubboard } from "@/actions/boards";
 import { MoveToBoardDialog } from "./card/move-to-board-dialog";
 import { MarkdownView } from "@/components/markdown";
 import {
@@ -476,6 +478,7 @@ export function CardModal({
   const lastSavedDesc = useRef(card.description ?? "");
   const lastSavedTitle = useRef(card.title);
   const lazyHistory = useWorkspaceFlag("lazy_card_history", false);
+  const subboardsEnabled = useWorkspaceFlag("subboards_enabled", true);
 
   useEffect(() => {
     return () => {
@@ -730,6 +733,32 @@ export function CardModal({
       : null;
 
   const updateCardLocal = useStore(boardStore!, (s) => s.updateCard);
+  // Sub-board pointer: card has at most one attached child board (1:1
+  // enforced by partial unique idx on boards.parent_card_id). Used to
+  // surface the drill-in link + "Make sub-board" promote action.
+  const cardSubboards = useStore(boardStore!, (s) => s.cardSubboards);
+  const upsertCardSubboard = useStore(boardStore!, (s) => s.upsertCardSubboard);
+  const attachedSubboard = cardSubboards.find((x) => x.cardId === card.id);
+  const [promotingSubboard, setPromotingSubboard] = useState(false);
+  const handlePromoteToSubboard = () => {
+    if (attachedSubboard || promotingSubboard) return;
+    setPromotingSubboard(true);
+    promoteCardToSubboard({ cardId: card.id })
+      .then((board) => {
+        upsertCardSubboard({
+          cardId: card.id,
+          subBoardId: board.id,
+          title: board.title,
+        });
+        toast.success("Sub-board created");
+      })
+      .catch((err) => {
+        const m = (err as Error).message;
+        toast.error(m);
+        errorBus.push({ message: `Sub-board create failed: ${m}` });
+      })
+      .finally(() => setPromotingSubboard(false));
+  };
   // Live completion state: prefer the store row (kept current via realtime
   // and optimistic updates) so the toggle's visual flips immediately.
   // Fall back to the SSR prop on the standalone card page when the store
@@ -919,6 +948,42 @@ export function CardModal({
             This retired card type has been migrated to a sub-board. Open it
             from the workspace board list.
           </div>
+        )}
+        {attachedSubboard ? (
+          <div
+            data-testid="card-modal-subboard-open"
+            className="flex items-center gap-2 rounded-xl border border-hairline bg-[color:var(--surface)] px-3 py-2 text-sm"
+          >
+            <Layers3 className="size-4 text-fg-muted" aria-hidden />
+            <span className="text-fg-muted">Sub-board:</span>
+            <Link
+              href={`/b/${attachedSubboard.subBoardId}`}
+              className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg hover:text-fg"
+            >
+              {attachedSubboard.title}
+              <ArrowRight className="size-3" aria-hidden />
+            </Link>
+          </div>
+        ) : (
+          subboardsEnabled && (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handlePromoteToSubboard}
+                disabled={promotingSubboard}
+                data-testid="card-modal-subboard-promote"
+                className="inline-flex items-center gap-1.5"
+              >
+                <Layers3 className="size-3.5" aria-hidden />
+                {promotingSubboard ? "Creating…" : "Make sub-board"}
+              </Button>
+              <span className="mono-meta-sm text-fg-faint">
+                Adds a child board anchored to this card.
+              </span>
+            </div>
+          )
         )}
       </div>
 

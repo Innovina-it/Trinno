@@ -24,6 +24,7 @@ import type {
   CardVersionRow,
   BoardProfile,
   BoardMemberRole,
+  CardSubboardRow,
 } from "@/lib/queries/board-snapshot";
 
 export type BoardSnapshotInit = {
@@ -44,6 +45,7 @@ export type BoardSnapshotInit = {
   boardProfiles: BoardProfile[];
   boardMembers: BoardMemberRole[];
   workspaceProfiles: BoardProfile[];
+  cardSubboards: CardSubboardRow[];
 };
 
 export type BoardState = {
@@ -64,6 +66,10 @@ export type BoardState = {
   boardProfiles: BoardProfile[];
   boardMembers: BoardMemberRole[];
   workspaceProfiles: BoardProfile[];
+  cardSubboards: CardSubboardRow[];
+
+  upsertCardSubboard: (row: CardSubboardRow) => void;
+  removeCardSubboard: (cardId: string) => void;
 
   // Plan #16b-γ-D (#8) — ephemeral multi-select state. Lives only on the
   // current board view; cleared on navigation by the consumer remounting
@@ -164,6 +170,20 @@ export function createBoardStore(initial: BoardSnapshotInit) {
     boardProfiles: initial.boardProfiles,
     boardMembers: initial.boardMembers,
     workspaceProfiles: initial.workspaceProfiles,
+    cardSubboards: initial.cardSubboards,
+
+    upsertCardSubboard: (row) =>
+      set((state) => ({
+        cardSubboards: state.cardSubboards.some((x) => x.cardId === row.cardId)
+          ? state.cardSubboards.map((x) =>
+              x.cardId === row.cardId ? row : x,
+            )
+          : [...state.cardSubboards, row],
+      })),
+    removeCardSubboard: (cardId) =>
+      set((state) => ({
+        cardSubboards: state.cardSubboards.filter((x) => x.cardId !== cardId),
+      })),
 
     selectedCardIds: new Set<string>(),
     lastSelectedCardId: null,
@@ -231,6 +251,7 @@ export function createBoardStore(initial: BoardSnapshotInit) {
         boardProfiles: s.boardProfiles,
         boardMembers: s.boardMembers,
         workspaceProfiles: s.workspaceProfiles,
+        cardSubboards: s.cardSubboards,
       }),
 
     addList: (list) =>

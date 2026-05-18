@@ -78,6 +78,9 @@ export type WorkspaceState = {
     versionId: string,
     kind: string,
   ) => void;
+
+  upsertSubBoard: (sb: SubBoard) => void;
+  removeSubBoard: (id: string) => void;
 };
 
 export function createWorkspaceStore(initial: WorkspaceSnapshot) {
@@ -229,6 +232,17 @@ export function createWorkspaceStore(initial: WorkspaceSnapshot) {
               cv.kind === kind
             ),
         ),
+      })),
+
+    upsertSubBoard: (sb) =>
+      set((st) => ({
+        subBoards: st.subBoards.some((x) => x.id === sb.id)
+          ? st.subBoards.map((x) => (x.id === sb.id ? sb : x))
+          : [...st.subBoards, sb],
+      })),
+    removeSubBoard: (id) =>
+      set((st) => ({
+        subBoards: st.subBoards.filter((x) => x.id !== id),
       })),
   }));
 }

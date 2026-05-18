@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { boards, boardMembers, lists } from "@/lib/db/schema";
+import { boards, boardMembers, lists, cards } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
   listBoardsWithLists,
@@ -11,7 +11,9 @@ import {
 import {
   CreateBoardInput,
   CreateBoardFromTemplateInput,
+  CreateSubboardInput,
   DeleteBoardInput,
+  PromoteCardToSubboardInput,
   RenameBoardInput,
   SetBoardArchivedInput,
 } from "@/lib/validation";
@@ -235,6 +237,127 @@ export async function createBoardFromTemplateImpl(
   return { board, listIds };
 }
 
+/**
+ * Create a sub-board anchored to an existing card on a parent board.
+ *
+ * Sub-board = a board with both:
+ *   parent_board_id  → the board the anchor card lives on
+ *   parent_card_id   → the anchor card (1:1; enforced by partial unique idx)
+ *
+ * The new board inherits workspace + visibility from the parent board and
+ * seeds default lists. Creator is added as board admin so the same
+ * boards_admin_write RLS path used by `createBoardImpl` applies.
+ *
+ * Caller must hold workspace owner/admin OR parent board admin role —
+ * `boards_admin_write` enforces this; we pre-check workspace role to fail
+ * fast with a readable message in the common "member tried to promote"
+ * case (parity with createBoardImpl).
+ */
+export async function createSubboardImpl(
+  token: string,
+  input: { parentBoardId: string; parentCardId: string; title: string },
+) {
+  const parsed = CreateSubboardInput.parse(input);
+  const createdBy = decodeSub(token);
+  return dbAsUser(token, async (tx) => {
+    const [parent] = await tx
+      .select({
+        id: boards.id,
+        workspaceId: boards.workspaceId,
+        backgroundKind: boards.backgroundKind,
+        backgroundValue: boards.backgroundValue,
+        visibility: boards.visibility,
+      })
+      .from(boards)
+      .where(eq(boards.id, parsed.parentBoardId));
+    if (!parent) throw new Error("Parent board not found.");
+
+    const [anchor] = await tx
+      .select({ id: cards.id, boardId: cards.boardId })
+      .from(cards)
+      .where(eq(cards.id, parsed.parentCardId));
+    if (!anchor) throw new Error("Anchor card not found.");
+    if (anchor.boardId !== parent.id) {
+      throw new Error("Anchor card does not belong to the parent board.");
+    }
+
+    const [membership] = await tx
+      .select({ role: workspaceMembers.role })
+      .from(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, parent.workspaceId),
+          eq(workspaceMembers.userId, createdBy),
+        ),
+      );
+    if (
+      !membership ||
+      (membership.role !== "owner" && membership.role !== "admin")
+    ) {
+      throw new Error(
+        "Only workspace owners and admins can create sub-boards.",
+      );
+    }
+
+    const [b] = await tx
+      .insert(boards)
+      .values({
+        workspaceId: parent.workspaceId,
+        title: parsed.title,
+        backgroundKind: parent.backgroundKind,
+        backgroundValue: parent.backgroundValue,
+        visibility: parent.visibility,
+        parentBoardId: parent.id,
+        parentCardId: anchor.id,
+        createdBy,
+      })
+      .returning();
+    if (!b) throw new Error("Forbidden");
+    await tx.insert(boardMembers).values({
+      boardId: b.id,
+      userId: createdBy,
+      role: "admin",
+    });
+    if (DEFAULT_LIST_TEMPLATES.length > 0) {
+      const positions = positionsBetween(null, null, DEFAULT_LIST_TEMPLATES.length);
+      await tx.insert(lists).values(
+        DEFAULT_LIST_TEMPLATES.map((list, position) => ({
+          boardId: b.id,
+          title: list.name,
+          position: positions[position],
+        })),
+      );
+    }
+    return b;
+  });
+}
+
+/**
+ * Promote an existing card into a sub-board anchor. Looks up the card's
+ * board + title, then delegates to `createSubboardImpl`. Idempotency is
+ * enforced by the partial unique index on `boards.parent_card_id` — a
+ * second call for the same card surfaces as a uniqueness error.
+ */
+export async function promoteCardToSubboardImpl(
+  token: string,
+  input: { cardId: string },
+) {
+  const parsed = PromoteCardToSubboardInput.parse(input);
+  const anchor = await dbAsUser(token, async (tx) => {
+    const [row] = await tx
+      .select({ id: cards.id, boardId: cards.boardId, title: cards.title })
+      .from(cards)
+      .where(eq(cards.id, parsed.cardId));
+    return row ?? null;
+  });
+  if (!anchor) throw new Error("Card not found.");
+  return createSubboardImpl(token, {
+    parentBoardId: anchor.boardId,
+    parentCardId: anchor.id,
+    title: anchor.title,
+  });
+}
+
 export async function createBoard(
   input: Parameters<typeof createBoardImpl>[1],
 ) {
@@ -253,6 +376,28 @@ export async function createBoardFromTemplate(
   const r = await createBoardFromTemplateImpl(token, input);
   revalidatePath(`/w/${input.workspaceId}`);
   return r;
+}
+
+export async function createSubboard(
+  input: Parameters<typeof createSubboardImpl>[1],
+) {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  const b = await createSubboardImpl(token, input);
+  revalidatePath(`/b/${input.parentBoardId}`);
+  revalidatePath(`/b/${b.id}`);
+  return b;
+}
+
+export async function promoteCardToSubboard(
+  input: Parameters<typeof promoteCardToSubboardImpl>[1],
+) {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  const b = await promoteCardToSubboardImpl(token, input);
+  if (b.parentBoardId) revalidatePath(`/b/${b.parentBoardId}`);
+  revalidatePath(`/b/${b.id}`);
+  return b;
 }
 
 export async function renameBoard(

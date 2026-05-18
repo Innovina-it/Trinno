@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { BookOpen, Bug, CheckSquare, Square } from "lucide-react";
+import { Bug, Layers3, Square } from "lucide-react";
 import { AssigneePicker } from "./assignee-picker";
 import { createCard, updateCard } from "@/actions/cards";
+import { promoteCardToSubboard } from "@/actions/boards";
 import { toggleCardMember } from "@/actions/card-members";
+import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import {
@@ -44,11 +46,20 @@ function plus14ISO(): string {
   return d.toISOString().slice(0, 10);
 }
 
-type CardType = "story" | "task" | "subtask" | "bug";
+// Subtask is no longer a top-level creatable type — child cards live as
+// rows under their parent (Subtasks section), not as a peer type chosen
+// at creation. Existing rows with type='subtask' continue to render via
+// the card-quick-view legacy fallback.
+//
+// "sub-board" is a UX-only value: picking it creates a regular task card
+// AND promotes it to a sub-board. The DB column `cards.type` still gets
+// 'task' — sub-boardness lives on `boards.parent_card_id`.
+type CardType = "task" | "bug" | "sub-board";
 type TypeOption = {
   value: CardType;
   label: string;
-  Icon: typeof Square;
+  // Optional — Story is icon-less so the chip stays compact.
+  Icon?: typeof Square;
   // Tailwind classes — text color baseline + selected-state ring/bg.
   text: string;
   ringSelected: string;
@@ -56,28 +67,22 @@ type TypeOption = {
 };
 const TYPE_OPTIONS: TypeOption[] = [
   {
-    value: "story", label: "Story", Icon: BookOpen,
-    text: "text-sky-300",
-    ringSelected: "ring-sky-400/60",
-    bgSelected: "bg-sky-500/15",
-  },
-  {
     value: "task", label: "Task", Icon: Square,
     text: "text-fg-muted",
     ringSelected: "ring-fg/40",
     bgSelected: "bg-[rgb(255_255_255/0.10)]",
   },
   {
-    value: "subtask", label: "Subtask", Icon: CheckSquare,
-    text: "text-emerald-300",
-    ringSelected: "ring-emerald-400/60",
-    bgSelected: "bg-emerald-500/15",
-  },
-  {
     value: "bug", label: "Bug", Icon: Bug,
     text: "text-rose-300",
     ringSelected: "ring-rose-400/60",
     bgSelected: "bg-rose-500/15",
+  },
+  {
+    value: "sub-board", label: "Sub-board", Icon: Layers3,
+    text: "text-violet-300",
+    ringSelected: "ring-violet-400/60",
+    bgSelected: "bg-violet-500/15",
   },
 ];
 
@@ -103,6 +108,10 @@ export function NewCardDialog({
 }) {
   const [title, setTitle] = useState("");
   const [type, setType] = useState<CardType>("task");
+  // Sub-board is a UX-only type. Picking it creates a task and promotes
+  // the new card to a sub-board. Hidden entirely when the workspace flag
+  // is off, so the picker degrades to 3 options.
+  const subboardsEnabled = useWorkspaceFlag("subboards_enabled", true);
   const [boardId, setBoardId] = useState(defaultBoard ?? "");
   const [listId, setListId] = useState(defaultList ?? "");
   // Optional parent card. Roadmap paints/chip drags can pre-resolve the
@@ -283,10 +292,6 @@ export function NewCardDialog({
       toast.error("Start must be on or before target");
       return;
     }
-    if (type === "subtask" && !parentId) {
-      toast.error("Pick a parent card before creating a subtask");
-      return;
-    }
     const startISO = new Date(`${start}T00:00:00.000Z`).toISOString();
     const targetISO = new Date(`${target}T00:00:00.000Z`).toISOString();
     const parentCardId = parentId || null;
@@ -306,10 +311,10 @@ export function NewCardDialog({
               ? { ownerId: currentUserId }
               : {}),
         });
-        // `type` still needs a post-create patch — createCardImpl doesn't
-        // accept it. Only thread when the user picked something other than
-        // the default to keep the patch minimal.
-        if (type !== "task") {
+        // `type` needs a post-create patch — createCardImpl doesn't accept
+        // it. "sub-board" is UX-only so we never write it as `cards.type`;
+        // a sub-board card lives as a regular task with a 1:1 child board.
+        if (type !== "task" && type !== "sub-board") {
           await updateCard({ id: created.id, type });
         }
         // Pre-assign members. Fire each one sequentially so per-call
@@ -324,7 +329,21 @@ export function NewCardDialog({
             );
           }
         }
-        toast.success(`Created card "${t}"`);
+        if (type === "sub-board") {
+          try {
+            await promoteCardToSubboard({ cardId: created.id });
+          } catch (err) {
+            toast.error(
+              "Saved card, but sub-board create failed: " +
+                (err as Error).message,
+            );
+          }
+        }
+        toast.success(
+          type === "sub-board"
+            ? `Created sub-board "${t}"`
+            : `Created card "${t}"`,
+        );
         onOpenChange(false);
         reset();
       } catch (err) {
@@ -357,12 +376,18 @@ export function NewCardDialog({
           <div className="space-y-1 text-xs">
             <span className="mono-meta-sm text-fg-faint">TYPE</span>
             <div
-              className="grid grid-cols-4 gap-1.5"
+              className={
+                subboardsEnabled
+                  ? "grid grid-cols-3 gap-1.5"
+                  : "grid grid-cols-2 gap-1.5"
+              }
               role="radiogroup"
               aria-label="Card type"
               data-testid="roadmap-new-card-type"
             >
-              {TYPE_OPTIONS.map((opt) => {
+              {TYPE_OPTIONS.filter(
+                (opt) => subboardsEnabled || opt.value !== "sub-board",
+              ).map((opt) => {
                 const selected = type === opt.value;
                 return (
                   <button
@@ -384,7 +409,7 @@ export function NewCardDialog({
                         : "",
                     ].join(" ")}
                   >
-                    <opt.Icon className="size-3.5" aria-hidden />
+                    {opt.Icon && <opt.Icon className="size-3.5" aria-hidden />}
                     <span className={selected ? "text-fg" : ""}>{opt.label}</span>
                   </button>
                 );

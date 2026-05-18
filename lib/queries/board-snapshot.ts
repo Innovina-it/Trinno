@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { eq, asc, and, inArray, sql } from "drizzle-orm";
+import { eq, asc, and, inArray, isNotNull, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import {
   boards,
@@ -46,6 +46,15 @@ export type BoardMemberRole = {
   role: "admin" | "member" | "observer";
 };
 
+// Sub-board pointer surfaced on the parent board snapshot. One row per
+// child board with parent_card_id set (1:1 with the anchor card). The
+// kanban tile uses this to render a "drill into sub-board" affordance.
+export type CardSubboardRow = {
+  cardId: string;
+  subBoardId: string;
+  title: string;
+};
+
 export type BoardSnapshot = {
   board: BoardRow;
   lists: ListRow[];
@@ -64,6 +73,7 @@ export type BoardSnapshot = {
   boardProfiles: BoardProfile[];
   boardMembers: BoardMemberRole[];
   workspaceProfiles: BoardProfile[];
+  cardSubboards: CardSubboardRow[];
 };
 
 async function listCommentsCompat(
@@ -159,6 +169,7 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
       cardComponentRows,
       cardVersionRows,
       workspaceMemberRows,
+      subBoardRows,
     ] = await Promise.all([
       tx
         .select()
@@ -217,6 +228,20 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
         .select({ userId: workspaceMembers.userId })
         .from(workspaceMembers)
         .where(eq(workspaceMembers.workspaceId, board.workspaceId)),
+      tx
+        .select({
+          subBoardId: boards.id,
+          cardId: boards.parentCardId,
+          title: boards.title,
+        })
+        .from(boards)
+        .where(
+          and(
+            eq(boards.parentBoardId, boardId),
+            isNotNull(boards.parentCardId),
+            eq(boards.archived, false),
+          ),
+        ),
     ]);
 
     const allMemberIds = Array.from(
@@ -260,6 +285,15 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
       boardProfiles: profileRows,
       boardMembers: memberRows,
       workspaceProfiles: workspaceProfileRows,
+      cardSubboards: subBoardRows
+        .filter((r): r is { subBoardId: string; cardId: string; title: string } =>
+          r.cardId !== null,
+        )
+        .map((r) => ({
+          cardId: r.cardId,
+          subBoardId: r.subBoardId,
+          title: r.title,
+        })),
     };
   });
 });

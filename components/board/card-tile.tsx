@@ -564,6 +564,13 @@ function CardMetaRow({
   const hasStatus = showStatus && !!statusKind;
   const hasDue = !!card.dueDate;
   const hasPriority = !!card.priority;
+  // Sub-board pointer for the tile drill-in chip. Subscribed inside this
+  // child row (rather than passed via prop) to stay parallel with the
+  // other store-driven chips above (StoryPointsChip / TimeChip).
+  const attachedSubboard = useBoardStore((s) =>
+    s.cardSubboards.find((x) => x.cardId === card.id) ?? null,
+  );
+  const metaRouter = useRouter();
   // Two primitive selectors instead of one returning a new {total, completed}
   // object — the latter triggered Zustand's "getSnapshot should be cached"
   // warning and an infinite re-render loop because every selector run
@@ -622,6 +629,21 @@ function CardMetaRow({
       <StoryPointsChip cardId={card.id} />
       <TimeChip cardId={card.id} />
       <SubtaskBadge cardId={card.id} />
+      {attachedSubboard && (
+        <button
+          type="button"
+          data-testid="tile-subboard-chip"
+          title={`Open sub-board: ${attachedSubboard.title}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            metaRouter.push(`/b/${attachedSubboard.subBoardId}`);
+          }}
+          className="chip mono-meta-sm inline-flex items-center gap-1 text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
+        >
+          <Layers3 className="size-3" aria-hidden />
+          SUB-BOARD
+        </button>
+      )}
       <TileIndicators cardId={card.id} />
     </div>
   );

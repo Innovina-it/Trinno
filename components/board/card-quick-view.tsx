@@ -1,8 +1,10 @@
 "use client";
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
-  BookOpen,
+  ArrowRight,
   Bug,
   CheckSquare,
   CircleDot,
@@ -25,6 +27,10 @@ import { Button } from "@/components/ui/button";
 import { PriorityChip, type CardPriority } from "./card/priority-picker";
 import { formatDate } from "@/lib/format-date";
 import { BoardStoreContext } from "@/stores/board-store";
+import { WorkspaceStoreContext } from "@/stores/workspace-store";
+import { promoteCardToSubboard } from "@/actions/boards";
+import { errorBus } from "@/lib/errors/error-bus";
+import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
 
 // Plan: Quick card view on double-click. Editable summary surfaced from the
 // board / workspace store. All fields are inline-editable when the parent
@@ -90,29 +96,22 @@ export type PatchInput = {
 type TypeOption = {
   value: string;
   label: string;
-  Icon: typeof Square;
+  // Optional — Story is icon-less. Legacy fallbacks and the other types
+  // still carry their distinguishing glyph.
+  Icon?: typeof Square;
   text: string;
   ringSelected: string;
   bgSelected: string;
 };
+// Subtask is no longer a selectable type. Existing rows with
+// type='subtask' resolve via LEGACY_SUBTASK_OPTION below so the chip
+// still renders with the correct label / icon.
 const TYPE_OPTIONS: TypeOption[] = [
-  {
-    value: "story", label: "Story", Icon: BookOpen,
-    text: "text-sky-300",
-    ringSelected: "ring-sky-400/60",
-    bgSelected: "bg-sky-500/15",
-  },
   {
     value: "task", label: "Task", Icon: Square,
     text: "text-fg-muted",
     ringSelected: "ring-fg/40",
     bgSelected: "bg-[rgb(255_255_255/0.10)]",
-  },
-  {
-    value: "subtask", label: "Subtask", Icon: CheckSquare,
-    text: "text-emerald-300",
-    ringSelected: "ring-emerald-400/60",
-    bgSelected: "bg-emerald-500/15",
   },
   {
     value: "bug", label: "Bug", Icon: Bug,
@@ -123,6 +122,31 @@ const TYPE_OPTIONS: TypeOption[] = [
 ];
 const LEGACY_SUBBOARD_OPTION: TypeOption = {
   value: "legacy-subboard",
+  label: "Sub-board",
+  Icon: Layers3,
+  text: "text-violet-300",
+  ringSelected: "ring-violet-400/60",
+  bgSelected: "bg-violet-500/15",
+};
+const LEGACY_SUBTASK_OPTION: TypeOption = {
+  value: "subtask",
+  label: "Subtask",
+  Icon: CheckSquare,
+  text: "text-emerald-300",
+  ringSelected: "ring-emerald-400/60",
+  bgSelected: "bg-emerald-500/15",
+};
+const LEGACY_STORY_OPTION: TypeOption = {
+  value: "story",
+  label: "Story",
+  text: "text-sky-300",
+  ringSelected: "ring-sky-400/60",
+  bgSelected: "bg-sky-500/15",
+};
+// UX-only option in the picker. Selected ↔ card has 1:1 sub-board
+// attached. Click handler promotes; never written to `cards.type`.
+const SUBBOARD_TYPE_OPTION: TypeOption = {
+  value: "sub-board",
   label: "Sub-board",
   Icon: Layers3,
   text: "text-violet-300",
@@ -186,6 +210,23 @@ export function CardQuickView({
   const membersEditable = typeof onToggleMember === "function";
   const subtaskCreatable = typeof onCreateSubtask === "function";
 
+  // Shared between wrapper + body so the wrapper can intercept dialog
+  // dismiss attempts (X icon, Esc, outside click) when the body has
+  // unsaved drafts and force the user through the confirm phase.
+  const dirtyRef = useRef(false);
+  const enterConfirmRef = useRef<() => void>(() => {});
+
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      if (!next && dirtyRef.current) {
+        enterConfirmRef.current();
+        return;
+      }
+      onOpenChange(next);
+    },
+    [onOpenChange],
+  );
+
   if (!card) {
     // Defensive: card was removed between the tile rendering and the
     // dialog opening. Render an empty dialog content so the parent can
@@ -211,8 +252,12 @@ export function CardQuickView({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="card-quick-view" className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        data-testid="card-quick-view"
+        className="sm:max-w-md"
+        showCloseButton={false}
+      >
         <CardQuickViewBody
           card={card}
           memberProfiles={memberProfiles}
@@ -228,6 +273,8 @@ export function CardQuickView({
           onCreateSubtask={onCreateSubtask}
           onClose={() => onOpenChange(false)}
           router={router}
+          dirtyRef={dirtyRef}
+          enterConfirmRef={enterConfirmRef}
         />
       </DialogContent>
     </Dialog>
@@ -237,6 +284,13 @@ export function CardQuickView({
 // Body is split out so its local hooks unmount/remount cleanly when the
 // dialog is reopened against a different card. Avoids stale draft values
 // leaking across cards.
+//
+// Deferred-commit model (2026-05-15): field edits write to local drafts
+// only. The footer Close button morphs into "Save" when any draft differs
+// from the card prop. Save → confirm phase → onPatch + close. Discard
+// → revert drafts + close. The dirty state is exposed up to the wrapper
+// via dirtyRef so dismiss attempts (X, Esc, outside-click) also funnel
+// into the confirm phase instead of silently dropping edits.
 function CardQuickViewBody({
   card,
   memberProfiles,
@@ -252,6 +306,8 @@ function CardQuickViewBody({
   onCreateSubtask,
   onClose,
   router,
+  dirtyRef,
+  enterConfirmRef,
 }: {
   card: QuickViewCard;
   memberProfiles: QuickViewProfile[];
@@ -267,84 +323,208 @@ function CardQuickViewBody({
   onCreateSubtask?: (title: string) => Promise<void> | void;
   onClose: () => void;
   router: ReturnType<typeof useRouter>;
+  dirtyRef: React.MutableRefObject<boolean>;
+  enterConfirmRef: React.MutableRefObject<() => void>;
 }) {
-  const completed = card.completedAt != null || card.dueComplete;
+  const baseCompleted = card.completedAt != null || card.dueComplete;
+  const baseDescription = card.description ?? "";
+  const basePriority = (card.priority ?? null) as CardPriority | null;
   const cardType = card.type ?? "task";
-  const typeOptions = TYPE_OPTIONS.some((opt) => opt.value === cardType)
-    ? TYPE_OPTIONS
-    : [{ ...LEGACY_SUBBOARD_OPTION, value: cardType }, ...TYPE_OPTIONS];
-  const currentPriority = (card.priority ?? null) as CardPriority | null;
+  // Resolve type options. If the card's type isn't in TYPE_OPTIONS (e.g.
+  // it's a legacy 'subtask' row created before subtask was retired from
+  // the picker, or an epic-era 'legacy-subboard' value), prepend a
+  // display-only legacy entry so the chip renders with the right label.
+  const legacyOption =
+    cardType === "subtask"
+      ? LEGACY_SUBTASK_OPTION
+      : cardType === "story"
+        ? LEGACY_STORY_OPTION
+        : { ...LEGACY_SUBBOARD_OPTION, value: cardType };
+  // Sub-board promote affordance lives inline in the TYPE picker too,
+  // gated on the workspace flag + presence of BoardStoreContext. When the
+  // qv is opened from the roadmap (no store), the option is hidden.
+  const subboardCtx = useQuickViewSubboardContext(card.id);
+  const subboardsEnabled = useWorkspaceFlag("subboards_enabled", true);
+  const showSubboardOption = subboardCtx !== null && subboardsEnabled;
+  const baseOptions = showSubboardOption
+    ? [...TYPE_OPTIONS, SUBBOARD_TYPE_OPTION]
+    : TYPE_OPTIONS;
+  const typeOptions = baseOptions.some((opt) => opt.value === cardType)
+    ? baseOptions
+    : [legacyOption, ...baseOptions];
   const subtaskRows = useQuickViewSubtasks(card.id);
 
-  // === TITLE — inline edit on click; commit on blur or Enter; cancel on Esc ===
-  const [titleEditing, setTitleEditing] = useState(false);
+  // === Local drafts (deferred commit) ===
   const [titleDraft, setTitleDraft] = useState(card.title);
-  const titleCommitRef = useRef(false);
-  // Sync draft when the prop changes (parent store mutated externally).
-  useEffect(() => {
-    if (!titleEditing) setTitleDraft(card.title);
-  }, [card.title, titleEditing]);
+  const [descDraft, setDescDraft] = useState(baseDescription);
+  const [priorityDraft, setPriorityDraft] =
+    useState<CardPriority | null>(basePriority);
+  const [completedDraft, setCompletedDraft] = useState(baseCompleted);
+  const [typeDraft, setTypeDraft] = useState<QuickViewCardType>(
+    cardType as QuickViewCardType,
+  );
+  const [startDraft, setStartDraft] =
+    useState<Date | string | null>(card.startDate);
+  const [targetDraft, setTargetDraft] =
+    useState<Date | string | null>(card.targetDate);
 
-  const commitTitle = useCallback(() => {
+  const [titleEditing, setTitleEditing] = useState(false);
+  const titleCommitRef = useRef(false);
+  const [descEditing, setDescEditing] = useState(false);
+
+  const [confirming, setConfirming] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const exitTitleEdit = useCallback(() => {
     titleCommitRef.current = true;
     setTitleEditing(false);
-    const next = titleDraft.trim();
-    if (!next || next === card.title) {
-      setTitleDraft(card.title);
-      return;
-    }
-    void onPatch?.({ title: next });
-  }, [titleDraft, card.title, onPatch]);
-
+  }, []);
   const cancelTitle = useCallback(() => {
+    // Esc reverts the in-progress edit to the last persisted value.
     titleCommitRef.current = true;
     setTitleEditing(false);
     setTitleDraft(card.title);
   }, [card.title]);
 
-  // === DESCRIPTION — textarea; commit on blur ===
-  const [descEditing, setDescEditing] = useState(false);
-  const [descDraft, setDescDraft] = useState(card.description ?? "");
+  // === Dirty diff (drafts vs card props) ===
+  const dateMs = (v: Date | string | null) => {
+    const d = toDateValue(v);
+    return d ? d.getTime() : null;
+  };
+  const trimmedTitle = titleDraft.trim();
+  const titleChanged =
+    trimmedTitle.length > 0 && trimmedTitle !== card.title;
+  const descChanged = descDraft !== baseDescription;
+  const priorityChanged = priorityDraft !== basePriority;
+  const completedChanged = completedDraft !== baseCompleted;
+  const typeChanged = typeDraft !== cardType;
+  const startChanged = dateMs(startDraft) !== dateMs(card.startDate);
+  const targetChanged = dateMs(targetDraft) !== dateMs(card.targetDate);
+  const dirty =
+    titleChanged ||
+    descChanged ||
+    priorityChanged ||
+    completedChanged ||
+    typeChanged ||
+    startChanged ||
+    targetChanged;
+
+  // Surface dirty + confirm hook to the wrapper so dismiss attempts
+  // (X icon, Esc, outside-click) divert into the confirm phase.
   useEffect(() => {
-    if (!descEditing) setDescDraft(card.description ?? "");
-  }, [card.description, descEditing]);
+    dirtyRef.current = dirty;
+  }, [dirty, dirtyRef]);
+  useEffect(() => {
+    enterConfirmRef.current = () => setConfirming(true);
+  }, [enterConfirmRef]);
+  useEffect(() => {
+    return () => {
+      dirtyRef.current = false;
+    };
+  }, [dirtyRef]);
 
-  const commitDesc = useCallback(() => {
+  const resetDrafts = useCallback(() => {
+    setTitleDraft(card.title);
+    setDescDraft(baseDescription);
+    setPriorityDraft(basePriority);
+    setCompletedDraft(baseCompleted);
+    setTypeDraft(cardType as QuickViewCardType);
+    setStartDraft(card.startDate);
+    setTargetDraft(card.targetDate);
+    setTitleEditing(false);
     setDescEditing(false);
-    const next = descDraft;
-    const prev = card.description ?? "";
-    if (next === prev) return;
-    void onPatch?.({ description: next.length === 0 ? null : next });
-  }, [descDraft, card.description, onPatch]);
+    setConfirming(false);
+    dirtyRef.current = false;
+  }, [
+    card.title,
+    card.startDate,
+    card.targetDate,
+    baseDescription,
+    basePriority,
+    baseCompleted,
+    cardType,
+    dirtyRef,
+  ]);
 
-  // === Helpers for select / date / chip handlers ===
+  const onSaveClick = useCallback(() => {
+    if (!dirty) {
+      onClose();
+      return;
+    }
+    setConfirming(true);
+  }, [dirty, onClose]);
+
+  const commitSave = useCallback(async () => {
+    if (saving) return;
+    const patch: PatchInput = {};
+    if (titleChanged) patch.title = trimmedTitle;
+    if (descChanged) patch.description = descDraft.length === 0 ? null : descDraft;
+    if (priorityChanged) patch.priority = priorityDraft;
+    if (completedChanged) patch.completed = completedDraft;
+    if (typeChanged) patch.type = typeDraft;
+    if (startChanged) patch.startDate = startDraft;
+    if (targetChanged) patch.targetDate = targetDraft;
+    if (Object.keys(patch).length === 0) {
+      setConfirming(false);
+      onClose();
+      return;
+    }
+    setSaving(true);
+    try {
+      await onPatch?.(patch);
+      dirtyRef.current = false;
+      setConfirming(false);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    saving,
+    titleChanged,
+    descChanged,
+    priorityChanged,
+    completedChanged,
+    typeChanged,
+    startChanged,
+    targetChanged,
+    trimmedTitle,
+    descDraft,
+    priorityDraft,
+    completedDraft,
+    typeDraft,
+    startDraft,
+    targetDraft,
+    onPatch,
+    onClose,
+    dirtyRef,
+  ]);
+
+  const discardAndClose = useCallback(() => {
+    resetDrafts();
+    onClose();
+  }, [resetDrafts, onClose]);
+
+  // === Field setters write to drafts (no server call) ===
   // Type is intentionally NOT editable here — same rationale as TypePicker
   // (2026-05-14). Changing type after creation violates DB invariants and
   // surfaces opaque errors; the TYPE row below renders as a static chip.
-  const setPriority = useCallback(
-    (p: CardPriority | null) => {
-      if (p === currentPriority) return;
-      void onPatch?.({ priority: p });
-    },
-    [currentPriority, onPatch],
-  );
-
+  const setPriority = useCallback((p: CardPriority | null) => {
+    setPriorityDraft(p);
+  }, []);
   const toggleCompleted = useCallback(() => {
-    void onPatch?.({ completed: !completed });
-  }, [completed, onPatch]);
+    setCompletedDraft((prev) => !prev);
+  }, []);
+  const setStartDate = useCallback((v: Date | null) => {
+    setStartDraft(v);
+  }, []);
+  const setTargetDate = useCallback((v: Date | null) => {
+    setTargetDraft(v);
+  }, []);
 
-  const setStartDate = useCallback(
-    (v: Date | null) => {
-      void onPatch?.({ startDate: v });
-    },
-    [onPatch],
-  );
-  const setTargetDate = useCallback(
-    (v: Date | null) => {
-      void onPatch?.({ targetDate: v });
-    },
-    [onPatch],
-  );
+  // Derived view values
+  const completed = completedDraft;
+  const currentPriority = priorityDraft;
+
   function openAdvanced(e?: React.MouseEvent<HTMLButtonElement>) {
     e?.preventDefault();
     e?.stopPropagation();
@@ -385,12 +565,12 @@ function CardQuickViewBody({
                   titleCommitRef.current = false;
                   return;
                 }
-                commitTitle();
+                exitTitleEdit();
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  commitTitle();
+                  exitTitleEdit();
                 } else if (e.key === "Escape") {
                   e.preventDefault();
                   cancelTitle();
@@ -402,43 +582,87 @@ function CardQuickViewBody({
           ) : (
             <span
               onClick={() => editable && setTitleEditing(true)}
-              title={card.title}
+              title={titleDraft}
               className={`block min-w-0 max-w-full truncate ${editable ? "cursor-text" : ""}`}
               style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
             >
-              {card.title}
+              {titleDraft}
             </span>
           )}
         </DialogTitle>
       </DialogHeader>
 
       <div className="space-y-3">
-        {/* TYPE row — display-only chip. Type is fixed at creation; see
-            TypePicker for rationale. */}
+        {/* TYPE row — clickable when editable. Drafts roll into the
+            confirm-save phase like every other field. Legacy options
+            (subtask/story/sub-board) render as chips for back-compat but
+            stay non-selectable: users can flip OUT of a legacy type but
+            not INTO one from the picker. */}
         <div className="space-y-1 text-xs">
           <span className="mono-meta-sm text-fg-faint">TYPE</span>
           <div className="grid grid-cols-4 gap-1.5" aria-label="Card type">
             {typeOptions.map((opt) => {
-              const selected = cardType === opt.value;
-              return (
+              const isSubboardOpt = opt.value === "sub-board";
+              const subboardSelected = isSubboardOpt && !!subboardCtx?.attached;
+              const selected =
+                isSubboardOpt
+                  ? subboardSelected
+                  : (editable ? typeDraft : cardType) === opt.value;
+              const isLegacy =
+                !isSubboardOpt &&
+                !TYPE_OPTIONS.some((x) => x.value === opt.value);
+              const clickable =
+                isSubboardOpt
+                  ? !!subboardCtx && !subboardSelected && !subboardCtx.promoting
+                  : editable && !isLegacy;
+              const onClick = isSubboardOpt
+                ? subboardCtx
+                  ? () => subboardCtx.promote()
+                  : undefined
+                : clickable
+                  ? () => setTypeDraft(opt.value as QuickViewCardType)
+                  : undefined;
+              const commonClass = [
+                "inline-flex items-center justify-center gap-1.5",
+                "rounded-full border px-2.5 py-1.5",
+                "mono-meta-sm whitespace-nowrap",
+                opt.text,
+                selected
+                  ? `ring-1 ${opt.ringSelected} ${opt.bgSelected} border-transparent`
+                  : "opacity-80 border-hairline",
+                clickable ? "cursor-pointer hover:opacity-100" : "cursor-default",
+              ].join(" ");
+              const dataProps = {
+                "data-selected": selected ? "true" : undefined,
+                "data-active": selected ? "true" : "false",
+                "data-testid": selected ? "card-quick-view-type" : undefined,
+              } as const;
+              const inner = (
+                <>
+                  {opt.Icon && <opt.Icon className="size-3.5" aria-hidden />}
+                  <span>{opt.label.toUpperCase()}</span>
+                </>
+              );
+              return clickable ? (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={onClick}
+                  className={commonClass}
+                  {...dataProps}
+                >
+                  {inner}
+                </button>
+              ) : (
                 <span
                   key={opt.value}
-                  data-selected={selected ? "true" : undefined}
-                  data-active={selected ? "true" : "false"}
-                  data-testid={selected ? "card-quick-view-type" : undefined}
-                  title="Type is fixed at creation"
-                  className={[
-                    "inline-flex items-center justify-center gap-1.5",
-                    "rounded-full border px-2.5 py-1.5",
-                    "mono-meta-sm cursor-default",
-                    opt.text,
-                    selected
-                      ? `ring-1 ${opt.ringSelected} ${opt.bgSelected} border-transparent`
-                      : "opacity-80 border-hairline",
-                  ].join(" ")}
+                  title={isLegacy ? "Legacy type — change to a current one to update" : undefined}
+                  className={commonClass}
+                  {...dataProps}
                 >
-                  <opt.Icon className="size-3.5" aria-hidden />
-                  <span>{opt.label.toUpperCase()}</span>
+                  {inner}
                 </span>
               );
             })}
@@ -525,14 +749,14 @@ function CardQuickViewBody({
         {/* START / TARGET — two-column date row, parallels new-card dialog.
             Rendered when editing is on (so users can fill them in) or when
             either date is set. */}
-        {(editable || card.startDate || card.targetDate) && (
+        {(editable || startDraft || targetDraft) && (
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div className="space-y-1.5">
               <span className="mono-meta-sm text-fg-faint">START</span>
               {editable ? (
                 <div data-testid="card-quick-view-start-edit">
                   <DatePicker
-                    value={toDateValue(card.startDate)}
+                    value={toDateValue(startDraft)}
                     onChange={setStartDate}
                     triggerLabel="Set start"
                     inputLabel="Start date"
@@ -540,7 +764,7 @@ function CardQuickViewBody({
                 </div>
               ) : (
                 <div className="flex h-8 items-center rounded-md border border-hairline bg-transparent px-2 text-fg tabular-nums">
-                  {card.startDate ? formatDate(card.startDate) : "—"}
+                  {startDraft ? formatDate(startDraft) : "—"}
                 </div>
               )}
             </div>
@@ -549,7 +773,7 @@ function CardQuickViewBody({
               {editable ? (
                 <div data-testid="card-quick-view-target-edit">
                   <DatePicker
-                    value={toDateValue(card.targetDate)}
+                    value={toDateValue(targetDraft)}
                     onChange={setTargetDate}
                     triggerLabel="Set target"
                     inputLabel="Target date"
@@ -557,7 +781,7 @@ function CardQuickViewBody({
                 </div>
               ) : (
                 <div className="flex h-8 items-center rounded-md border border-hairline bg-transparent px-2 text-fg tabular-nums">
-                  {card.targetDate ? formatDate(card.targetDate) : "—"}
+                  {targetDraft ? formatDate(targetDraft) : "—"}
                 </div>
               )}
             </div>
@@ -612,6 +836,11 @@ function CardQuickViewBody({
           )}
         </div>
 
+        {/* SUB-BOARD — only mounted when BoardStoreContext is available.
+            The qv is also rendered from the roadmap page where there is
+            no board store, so the hooks must live inside this child. */}
+        <QuickViewSubboardSection cardId={card.id} />
+
         {/* SUBTASKS — child rows + inline add affordance. */}
         {(subtaskTotal > 0 || subtaskCreatable) && (
           <SubtaskSection
@@ -626,7 +855,7 @@ function CardQuickViewBody({
         )}
 
         {/* DESCRIPTION — textarea when editing; preview when not. */}
-        {(editable || (card.description ?? "").length > 0) && (
+        {(editable || descDraft.length > 0) && (
           <div className="space-y-1 text-xs">
             <span className="mono-meta-sm text-fg-faint">DESCRIPTION</span>
             {editable ? (
@@ -636,7 +865,7 @@ function CardQuickViewBody({
                 rows={3}
                 onFocus={() => setDescEditing(true)}
                 onChange={(e) => setDescDraft(e.target.value)}
-                onBlur={commitDesc}
+                onBlur={() => setDescEditing(false)}
                 placeholder="Add a description…"
                 className="block w-full resize-y rounded-md border border-hairline bg-transparent px-2 py-1.5 text-xs leading-relaxed text-fg-muted outline-none focus:border-hairline-hi"
               />
@@ -646,7 +875,7 @@ function CardQuickViewBody({
                 className="rounded-md border border-hairline bg-transparent px-2 py-1.5"
               >
                 <p className="text-xs leading-relaxed text-fg-muted whitespace-pre-wrap break-words">
-                  {card.description ?? ""}
+                  {descDraft}
                 </p>
               </div>
             )}
@@ -654,24 +883,180 @@ function CardQuickViewBody({
         )}
       </div>
 
-      <DialogFooter className="items-center justify-between !px-2 sm:justify-between">
-        <Button
-          type="button"
-          onClick={openAdvanced}
-          data-testid="card-quick-view-open-advanced"
-        >
-          Open advanced settings
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onClose}
-          data-testid="card-quick-view-close"
-        >
-          Close
-        </Button>
+      <DialogFooter
+        className="items-center justify-between !px-2 sm:justify-between"
+        data-dirty={dirty ? "true" : "false"}
+        data-confirming={confirming ? "true" : "false"}
+      >
+        {confirming ? (
+          <>
+            <span
+              className="mono-meta-sm text-fg-muted"
+              data-testid="card-quick-view-confirm-prompt"
+            >
+              Save changes?
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={discardAndClose}
+                disabled={saving}
+                data-testid="card-quick-view-discard"
+              >
+                Discard
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void commitSave()}
+                disabled={saving}
+                data-testid="card-quick-view-confirm-save"
+              >
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <Button
+              type="button"
+              onClick={openAdvanced}
+              data-testid="card-quick-view-open-advanced"
+            >
+              Open advanced settings
+            </Button>
+            <Button
+              type="button"
+              variant={dirty ? "default" : "outline"}
+              onClick={dirty ? onSaveClick : onClose}
+              data-testid="card-quick-view-close"
+              data-dirty={dirty ? "true" : "false"}
+            >
+              {dirty ? "Save" : "Close"}
+            </Button>
+          </>
+        )}
       </DialogFooter>
     </>
+  );
+}
+
+/**
+ * Sub-board context for the quick-view. Returns null when the qv is
+ * rendered outside a BoardStoreProvider (roadmap usage). Hooks are always
+ * called in the same order — the early null return happens after every
+ * hook invocation.
+ */
+type QuickViewSubboardContext = {
+  attached: { cardId: string; subBoardId: string; title: string } | null;
+  promote: () => void;
+  promoting: boolean;
+};
+function useQuickViewSubboardContext(
+  cardId: string,
+): QuickViewSubboardContext | null {
+  const boardStore = useContext(BoardStoreContext);
+  const wsStore = useContext(WorkspaceStoreContext);
+
+  // Subscribe to whichever store is present. BoardStore wins (freshness in
+  // kanban context); WorkspaceStore is the roadmap fallback so the qv can
+  // still surface promote + Open from a board-less view.
+  const subscribeBoard = useCallback(
+    (cb: () => void) => boardStore?.subscribe(cb) ?? (() => {}),
+    [boardStore],
+  );
+  const getBoardAttached = useCallback(
+    () =>
+      boardStore
+        ?.getState()
+        .cardSubboards.find((x) => x.cardId === cardId) ?? null,
+    [boardStore, cardId],
+  );
+  const boardAttached = useSyncExternalStore(
+    subscribeBoard,
+    getBoardAttached,
+    getBoardAttached,
+  );
+
+  const subscribeWs = useCallback(
+    (cb: () => void) => wsStore?.subscribe(cb) ?? (() => {}),
+    [wsStore],
+  );
+  const getWsAttached = useCallback(
+    () =>
+      wsStore
+        ?.getState()
+        .subBoards.find((x) => x.parentCardId === cardId) ?? null,
+    [wsStore, cardId],
+  );
+  const wsSubBoard = useSyncExternalStore(
+    subscribeWs,
+    getWsAttached,
+    getWsAttached,
+  );
+  const wsAttached = useMemo(
+    () =>
+      wsSubBoard
+        ? { cardId, subBoardId: wsSubBoard.id, title: wsSubBoard.title }
+        : null,
+    [wsSubBoard, cardId],
+  );
+
+  const attached = boardAttached ?? wsAttached;
+  const [promoting, setPromoting] = useState(false);
+  const promote = useCallback(() => {
+    if ((!boardStore && !wsStore) || attached || promoting) return;
+    setPromoting(true);
+    promoteCardToSubboard({ cardId })
+      .then((board) => {
+        boardStore?.getState().upsertCardSubboard({
+          cardId,
+          subBoardId: board.id,
+          title: board.title,
+        });
+        wsStore?.getState().upsertSubBoard({
+          id: board.id,
+          title: board.title,
+          parentCardId: cardId,
+        });
+        toast.success("Sub-board created");
+      })
+      .catch((err) => {
+        const m = (err as Error).message;
+        toast.error(m);
+        errorBus.push({ message: `Sub-board create failed: ${m}` });
+      })
+      .finally(() => setPromoting(false));
+  }, [boardStore, wsStore, attached, promoting, cardId]);
+
+  if (!boardStore && !wsStore) return null;
+  return { attached, promote, promoting };
+}
+
+/**
+ * Open link for an attached sub-board. The Promote action moved into the
+ * TYPE picker — clicking the SUB-BOARD chip there creates the child board.
+ * This section now only surfaces the navigation affordance when a card
+ * already has one attached.
+ */
+function QuickViewSubboardSection({ cardId }: { cardId: string }) {
+  const ctx = useQuickViewSubboardContext(cardId);
+  if (!ctx?.attached) return null;
+  return (
+    <div
+      data-testid="card-quick-view-subboard-open"
+      className="flex items-center gap-2 rounded-md border border-hairline px-2 py-1.5 text-xs"
+    >
+      <Layers3 className="size-3.5 text-fg-muted" aria-hidden />
+      <span className="mono-meta-sm text-fg-faint">SUB-BOARD</span>
+      <Link
+        href={`/b/${ctx.attached.subBoardId}`}
+        className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg hover:text-fg"
+      >
+        {ctx.attached.title}
+        <ArrowRight className="size-3" aria-hidden />
+      </Link>
+    </div>
   );
 }
 

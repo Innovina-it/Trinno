@@ -2,7 +2,7 @@
 import { useContext, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "zustand";
-import { Plus } from "lucide-react";
+import { Layers3, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -16,8 +16,9 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { BoardStoreContext, type BoardStore } from "@/stores/board-store";
 import { createCard } from "@/actions/cards";
-import { getBoardsWithLists } from "@/actions/boards";
+import { getBoardsWithLists, promoteCardToSubboard } from "@/actions/boards";
 import { errorBus } from "@/lib/errors/error-bus";
+import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
 
 type BoardWithLists = Awaited<ReturnType<typeof getBoardsWithLists>>[number];
 
@@ -63,6 +64,8 @@ function BoardModeDialog({
   const boardLists = useStore(boardStore, (s) => s.lists);
   const [listId, setListId] = useState<string>("");
   const [title, setTitle] = useState("");
+  const [asSubboard, setAsSubboard] = useState(false);
+  const subboardsEnabled = useWorkspaceFlag("subboards_enabled", true);
   const [pending, start] = useTransition();
 
   useEffect(() => {
@@ -77,9 +80,20 @@ function BoardModeDialog({
     if (!trimmed || !listId) return;
     start(async () => {
       try {
-        await createCard({ listId, title: trimmed });
+        const created = await createCard({ listId, title: trimmed });
+        if (asSubboard) {
+          try {
+            await promoteCardToSubboard({ cardId: created.id });
+          } catch (err) {
+            toast.error(
+              "Saved card, but sub-board create failed: " +
+                (err as Error).message,
+            );
+          }
+        }
         setTitle("");
-        toast.success("Card added");
+        setAsSubboard(false);
+        toast.success(asSubboard ? "Card + sub-board added" : "Card added");
         router.refresh();
       } catch (err) {
         const m = (err as Error).message;
@@ -126,6 +140,19 @@ function BoardModeDialog({
                   data-testid="quick-add-title"
                 />
               </div>
+              {subboardsEnabled && (
+                <label className="flex items-center gap-2 text-sm select-none">
+                  <input
+                    type="checkbox"
+                    checked={asSubboard}
+                    onChange={(e) => setAsSubboard(e.target.checked)}
+                    data-testid="quick-add-subboard"
+                    className="size-3.5 cursor-pointer accent-[color:var(--accent-cyan)]"
+                  />
+                  <Layers3 className="size-3.5 text-fg-muted" aria-hidden />
+                  <span className="text-fg-muted">Create as sub-board</span>
+                </label>
+              )}
               <div className="flex justify-end gap-2 pt-2">
                 <Button
                   type="button"
@@ -164,6 +191,8 @@ function GlobalModeDialog({
   const [boardId, setBoardId] = useState("");
   const [listId, setListId] = useState("");
   const [title, setTitle] = useState("");
+  const [asSubboard, setAsSubboard] = useState(false);
+  const subboardsEnabled = useWorkspaceFlag("subboards_enabled", true);
   const [pending, start] = useTransition();
 
   useEffect(() => {
@@ -211,9 +240,20 @@ function GlobalModeDialog({
     if (!trimmed || !listId) return;
     start(async () => {
       try {
-        await createCard({ listId, title: trimmed });
+        const created = await createCard({ listId, title: trimmed });
+        if (asSubboard) {
+          try {
+            await promoteCardToSubboard({ cardId: created.id });
+          } catch (err) {
+            toast.error(
+              "Saved card, but sub-board create failed: " +
+                (err as Error).message,
+            );
+          }
+        }
         setTitle("");
-        toast.success("Card added");
+        setAsSubboard(false);
+        toast.success(asSubboard ? "Card + sub-board added" : "Card added");
         router.refresh();
       } catch (err) {
         const m = (err as Error).message;
@@ -282,6 +322,19 @@ function GlobalModeDialog({
                 data-testid="quick-add-title"
               />
             </div>
+            {subboardsEnabled && (
+              <label className="flex items-center gap-2 text-sm select-none">
+                <input
+                  type="checkbox"
+                  checked={asSubboard}
+                  onChange={(e) => setAsSubboard(e.target.checked)}
+                  data-testid="quick-add-subboard"
+                  className="size-3.5 cursor-pointer accent-[color:var(--accent-cyan)]"
+                />
+                <Layers3 className="size-3.5 text-fg-muted" aria-hidden />
+                <span className="text-fg-muted">Create as sub-board</span>
+              </label>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <Button
                 type="button"
