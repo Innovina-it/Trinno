@@ -110,11 +110,10 @@ const WORKSPACE_FEATURE_FLAGS = {
   lazy_card_history: false,
 };
 
-const DEFAULT_LISTS = [
-  { title: "Todo", statusKind: "todo" },
-  { title: "In Progress", statusKind: "in_progress" },
-  { title: "Done", statusKind: "done" },
-];
+// Single neutral list per board — no status_kind so the roadmap renders
+// bars as plain content (no Todo/In Progress/Done tint). Status routing
+// removed for this fixture; cards show as title + dates only.
+const NEUTRAL_LIST_TITLE = "Items";
 
 // ---------------------------------------------------------------------------
 // Content — AIWEPI project plan, 5 WPs, 11 tasks, 11 deliverables, 5 milestones.
@@ -487,18 +486,14 @@ async function seed() {
   });
   console.log(`Parent board: ${parentBoard.id} (${PARENT_BOARD_TITLE})`);
 
-  // Parent board lists — WP anchor cards live here so they show as the
-  // roadmap lane headers. Their child sub-boards carry the actual tasks.
-  const parentBoardLists = {};
-  for (const [i, l] of DEFAULT_LISTS.entries()) {
-    const [row] = await call("lists", {
-      board_id: parentBoard.id,
-      title: l.title,
-      position: `a${String(i + 1).padStart(6, "0")}`,
-      status_kind: l.statusKind,
-    });
-    parentBoardLists[l.statusKind] = row.id;
-  }
+  // Parent board: single neutral list. Anchor cards land here. No
+  // status_kind, no Todo/In Progress/Done routing — roadmap renders
+  // plain bars with title + dates.
+  const [parentList] = await call("lists", {
+    board_id: parentBoard.id,
+    title: NEUTRAL_LIST_TITLE,
+    position: "a000001",
+  });
 
   // For each WP: an anchor card on the parent board + a sub-board linked
   // 1:1 via boards.parent_card_id (migration 0105). The roadmap's
@@ -506,11 +501,9 @@ async function seed() {
   // each sub-board's anchor card as the lane header.
   positionCounter = 0;
   for (const wp of WORK_PACKAGES) {
-    const wpStatus = statusFor(wp.startMonth, wp.endMonth);
-
     // 1. Anchor card on the parent board.
     const [anchorCard] = await call("cards", {
-      list_id: parentBoardLists[wpStatus],
+      list_id: parentList.id,
       board_id: parentBoard.id,
       title: wp.title,
       position: nextPos(),
@@ -519,8 +512,6 @@ async function seed() {
       description: `**${wp.kind}** · M${wp.startMonth}–M${wp.endMonth}\n\n${wp.description}`,
       start_date: monthDateStr(wp.startMonth),
       target_date: monthDateStr(wp.endMonth),
-      completed_at:
-        wpStatus === "done" ? monthStart(wp.endMonth).toISOString() : null,
     });
 
     // 2. Sub-board anchored to that card.
@@ -541,16 +532,11 @@ async function seed() {
       `  ${wp.code} sub-board: ${subBoard.id} (anchor card ${anchorCard.id})`,
     );
 
-    const subLists = {};
-    for (const [i, l] of DEFAULT_LISTS.entries()) {
-      const [row] = await call("lists", {
-        board_id: subBoard.id,
-        title: l.title,
-        position: `a${String(i + 1).padStart(6, "0")}`,
-        status_kind: l.statusKind,
-      });
-      subLists[l.statusKind] = row.id;
-    }
+    const [subList] = await call("lists", {
+      board_id: subBoard.id,
+      title: NEUTRAL_LIST_TITLE,
+      position: "a000001",
+    });
 
     // Tasks — homed in the sub-board. They DON'T set parent_card_id to the
     // anchor card: the anchor lives on the parent board and migration
@@ -571,9 +557,8 @@ async function seed() {
       );
       const taskStart = Math.round(range.startMonth);
       const taskEnd = Math.round(range.endMonth);
-      const status = statusFor(taskStart, taskEnd);
       const [row] = await call("cards", {
-        list_id: subLists[status],
+        list_id: subList.id,
         board_id: subBoard.id,
         title: t.title,
         position: nextPos(),
@@ -582,8 +567,6 @@ async function seed() {
         description: t.description,
         start_date: monthDateStr(taskStart),
         target_date: monthDateStr(taskEnd),
-        completed_at:
-          status === "done" ? monthStart(taskEnd).toISOString() : null,
       });
       taskRows.push({ row, taskStart, taskEnd });
     }
@@ -594,9 +577,8 @@ async function seed() {
       const parent = taskRows[d.underTaskIndex ?? 0];
       if (!parent)
         throw new Error(`${wp.code} ${d.code}: underTaskIndex out of bounds`);
-      const status = statusFor(parent.taskStart, parent.taskEnd);
       await call("cards", {
-        list_id: subLists[status],
+        list_id: subList.id,
         board_id: subBoard.id,
         title: d.title,
         position: nextPos(),
@@ -605,8 +587,6 @@ async function seed() {
         parent_card_id: parent.row.id,
         description: d.description,
         target_date: monthDateStr(parent.taskEnd),
-        completed_at:
-          status === "done" ? monthStart(parent.taskEnd).toISOString() : null,
       });
     }
   }
