@@ -329,7 +329,7 @@ test("G8.2 reparent across epics via vertical bar drag", async ({ page }) => {
   // Resolve Epic B's lane vertical range via its lane-row bbox.
   const epicBLane = page
     .getByTestId("roadmap-lane-row")
-    .filter({ has: page.getByTestId("lane-epic-header-link").filter({ hasText: "Epic B" }) })
+    .filter({ has: page.getByTestId("lane-header-label").filter({ hasText: "Epic B" }) })
     .first();
   await expect(epicBLane).toBeVisible({ timeout: 5000 });
 
@@ -368,7 +368,7 @@ test("G8.2 reparent across epics via vertical bar drag", async ({ page }) => {
   const epicBLane2 = page
     .getByTestId("roadmap-lane-row")
     .filter({
-      has: page.getByTestId("lane-epic-header-link").filter({ hasText: "Epic B" }),
+      has: page.getByTestId("lane-header-label").filter({ hasText: "Epic B" }),
     })
     .first();
   const barBox2 = await storyBar2.boundingBox();
@@ -419,7 +419,7 @@ test("G8.3 drag-paint on empty canvas opens prefilled new-card dialog", async ({
   const epicLane = page
     .getByTestId("roadmap-lane-row")
     .filter({
-      has: page.getByTestId("lane-epic-header-link").filter({ hasText: "Epic Alpha" }),
+      has: page.getByTestId("lane-header-label").filter({ hasText: "Epic Alpha" }),
     })
     .first();
   await expect(epicLane).toBeVisible({ timeout: 5000 });
@@ -740,7 +740,7 @@ test("G8.6 dragging the NEW CARD chip onto an epic row creates a child", async (
   const epicLane = page
     .getByTestId("roadmap-lane-row")
     .filter({
-      has: page.getByTestId("lane-epic-header-link").filter({ hasText: "Epic Drop" }),
+      has: page.getByTestId("lane-header-label").filter({ hasText: "Epic Drop" }),
     })
     .first();
   await expect(epicLane).toBeVisible({ timeout: 5000 });
@@ -795,7 +795,7 @@ test("G8.6 dragging the NEW CARD chip onto an epic row creates a child", async (
   const epicLane2 = page
     .getByTestId("roadmap-lane-row")
     .filter({
-      has: page.getByTestId("lane-epic-header-link").filter({ hasText: "Epic Drop" }),
+      has: page.getByTestId("lane-header-label").filter({ hasText: "Epic Drop" }),
     })
     .first();
   const laneBox2 = await epicLane2.boundingBox();

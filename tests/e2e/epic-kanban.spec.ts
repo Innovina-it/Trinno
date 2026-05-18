@@ -91,7 +91,7 @@ test("epic-kanban: drag a child from todo to done, persists across reload", asyn
   }
 
   // Click the first epic-lane header link → routes to epic-kanban.
-  const epicLink = page.getByTestId("lane-epic-header-link").first();
+  const epicLink = page.getByTestId("lane-header-label").first();
   await epicLink.waitFor({ state: "visible", timeout: 10_000 });
   await epicLink.click();
   await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}\/e\/[0-9a-f-]{36}/);

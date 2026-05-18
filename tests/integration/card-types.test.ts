@@ -7,6 +7,7 @@ import { createWorkspaceImpl } from "@/actions/workspaces";
 import { createBoardImpl } from "@/actions/boards";
 import { createListImpl } from "@/actions/lists";
 import { createCardImpl, updateCardImpl } from "@/actions/cards";
+import { CardType } from "@/lib/validation";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -39,9 +40,13 @@ describe("card types + hierarchy", () => {
     const { l } = await setup(u.jwt);
     const c = await createCardImpl(u.jwt, { listId: l.id, title: "C" });
     expect((c as { type: string }).type).toBe("task");
-    await expect(updateCardImpl(u.jwt, { id: c.id, type: "epic" })).rejects.toThrow(
-      /sub-boards/i,
-    );
+    // Epic was removed from the CardType enum (migration 0106); Zod parse
+    // fails before the action body runs.
+    expect(CardType.safeParse("epic").success).toBe(false);
+    await expect(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      updateCardImpl(u.jwt, { id: c.id, type: "epic" as any }),
+    ).rejects.toThrow();
   });
 
   it("rejects subtask without parent", async () => {
