@@ -23,7 +23,7 @@ const SEARCH_THRESHOLD = 5;
 
 // Subsections under `/w/{id}/...` that are workspace-agnostic and
 // safe to preserve when switching workspaces. Detail routes that take
-// workspace-scoped IDs (e/{epicId}, sprints/{sprintId}, versions/{versionId})
+// workspace-scoped IDs (sprints/{sprintId}, versions/{versionId})
 // are deliberately excluded — the ID wouldn't exist in the target
 // workspace, so we drop to the section root or the workspace root.
 const PRESERVED_SUBSECTIONS = new Set([
