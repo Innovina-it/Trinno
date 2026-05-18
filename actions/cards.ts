@@ -189,7 +189,7 @@ export async function updateCardImpl(token: string, input: {
   description?: string | null;
   dueDate?: Date | string | null;
   dueComplete?: boolean;
-  type?: "epic" | "story" | "task" | "subtask" | "bug";
+  type?: "story" | "task" | "subtask" | "bug";
   parentCardId?: string | null;
   storyPoints?: number | null;
   estimateMin?: number | null;
@@ -215,9 +215,6 @@ export async function updateCardImpl(token: string, input: {
           : new Date(parsed.dueDate);
   }
   if (parsed.dueComplete !== undefined) patch.dueComplete = parsed.dueComplete;
-  if (parsed.type === "epic") {
-    throw new Error("Epic cards have been migrated to sub-boards.");
-  }
   if (parsed.type !== undefined) patch.type = parsed.type;
   if (parsed.parentCardId !== undefined) patch.parentCardId = parsed.parentCardId;
   if (parsed.storyPoints !== undefined) patch.storyPoints = parsed.storyPoints;
