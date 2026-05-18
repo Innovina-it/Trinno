@@ -28,7 +28,11 @@ import { PriorityChip, type CardPriority } from "./card/priority-picker";
 import { formatDate } from "@/lib/format-date";
 import { BoardStoreContext } from "@/stores/board-store";
 import { WorkspaceStoreContext } from "@/stores/workspace-store";
-import { promoteCardToSubboard } from "@/actions/boards";
+import {
+  promoteCardToSubboard,
+  detachCardSubboard,
+  deleteBoard,
+} from "@/actions/boards";
 import { errorBus } from "@/lib/errors/error-bus";
 import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
 
@@ -145,10 +149,10 @@ const LEGACY_STORY_OPTION: TypeOption = {
 };
 // UX-only option in the picker. Selected ↔ card has 1:1 sub-board
 // attached. Click handler promotes; never written to `cards.type`.
+// Icon-less like Story — label alone reads cleaner at chip size.
 const SUBBOARD_TYPE_OPTION: TypeOption = {
   value: "sub-board",
   label: "Sub-board",
-  Icon: Layers3,
   text: "text-violet-300",
   ringSelected: "ring-violet-400/60",
   bgSelected: "bg-violet-500/15",
@@ -345,6 +349,10 @@ function CardQuickViewBody({
   // qv is opened from the roadmap (no store), the option is hidden.
   const subboardCtx = useQuickViewSubboardContext(card.id);
   const subboardsEnabled = useWorkspaceFlag("subboards_enabled", true);
+  // Confirm modal for detaching the attached sub-board. Replaces the
+  // previous window.confirm — same prompt body, two action paths
+  // (Detach / Detach + Delete).
+  const [subboardConfirmOpen, setSubboardConfirmOpen] = useState(false);
   const showSubboardOption = subboardCtx !== null && subboardsEnabled;
   const baseOptions = showSubboardOption
     ? [...TYPE_OPTIONS, SUBBOARD_TYPE_OPTION]
@@ -613,11 +621,14 @@ function CardQuickViewBody({
                 !TYPE_OPTIONS.some((x) => x.value === opt.value);
               const clickable =
                 isSubboardOpt
-                  ? !!subboardCtx && !subboardSelected && !subboardCtx.promoting
+                  ? !!subboardCtx && !subboardCtx.busy
                   : editable && !isLegacy;
               const onClick = isSubboardOpt
                 ? subboardCtx
-                  ? () => subboardCtx.promote()
+                  ? () =>
+                      subboardSelected
+                        ? setSubboardConfirmOpen(true)
+                        : subboardCtx.promote()
                   : undefined
                 : clickable
                   ? () => setTypeDraft(opt.value as QuickViewCardType)
@@ -937,7 +948,96 @@ function CardQuickViewBody({
           </>
         )}
       </DialogFooter>
+      {subboardCtx?.attached && (
+        <SubboardDetachConfirm
+          open={subboardConfirmOpen}
+          onOpenChange={setSubboardConfirmOpen}
+          title={subboardCtx.attached.title}
+          busy={subboardCtx.busy}
+          onDetach={async () => {
+            await subboardCtx.detach();
+            setSubboardConfirmOpen(false);
+          }}
+          onDetachAndDelete={async () => {
+            await subboardCtx.detach({ alsoDelete: true });
+            setSubboardConfirmOpen(false);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * Confirm modal for detaching (or deleting) the attached sub-board.
+ * Renders inside the qv's Dialog content as a small Base-UI Dialog so it
+ * stacks above the qv backdrop without `window.confirm`'s ugliness.
+ */
+function SubboardDetachConfirm({
+  open,
+  onOpenChange,
+  title,
+  busy,
+  onDetach,
+  onDetachAndDelete,
+}: {
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+  title: string;
+  busy: boolean;
+  onDetach: () => void | Promise<void>;
+  onDetachAndDelete: () => void | Promise<void>;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        data-testid="card-quick-view-subboard-detach-confirm"
+        className="sm:max-w-sm"
+      >
+        <DialogHeader>
+          <DialogTitle>Detach sub-board?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-fg-muted">
+          The card will no longer surface{" "}
+          <span className="font-semibold text-fg">{title}</span> as its
+          sub-board. The sub-board itself stays in the workspace board list
+          unless you also choose to delete it.
+        </p>
+        <p className="text-xs text-fg-faint">
+          <span className="font-semibold">Delete</span> drops the sub-board and
+          all its lists / cards. This cannot be undone.
+        </p>
+        <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={busy}
+            data-testid="card-quick-view-subboard-detach-cancel"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void onDetach()}
+            disabled={busy}
+            data-testid="card-quick-view-subboard-detach-only"
+          >
+            Detach
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void onDetachAndDelete()}
+            disabled={busy}
+            data-testid="card-quick-view-subboard-detach-and-delete"
+          >
+            Detach + Delete
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -950,7 +1050,8 @@ function CardQuickViewBody({
 type QuickViewSubboardContext = {
   attached: { cardId: string; subBoardId: string; title: string } | null;
   promote: () => void;
-  promoting: boolean;
+  detach: (opts?: { alsoDelete?: boolean }) => Promise<void>;
+  busy: boolean;
 };
 function useQuickViewSubboardContext(
   cardId: string,
@@ -1003,10 +1104,10 @@ function useQuickViewSubboardContext(
   );
 
   const attached = boardAttached ?? wsAttached;
-  const [promoting, setPromoting] = useState(false);
+  const [busy, setBusy] = useState(false);
   const promote = useCallback(() => {
-    if ((!boardStore && !wsStore) || attached || promoting) return;
-    setPromoting(true);
+    if ((!boardStore && !wsStore) || attached || busy) return;
+    setBusy(true);
     promoteCardToSubboard({ cardId })
       .then((board) => {
         boardStore?.getState().upsertCardSubboard({
@@ -1026,11 +1127,55 @@ function useQuickViewSubboardContext(
         toast.error(m);
         errorBus.push({ message: `Sub-board create failed: ${m}` });
       })
-      .finally(() => setPromoting(false));
-  }, [boardStore, wsStore, attached, promoting, cardId]);
+      .finally(() => setBusy(false));
+  }, [boardStore, wsStore, attached, busy, cardId]);
+
+  const detach = useCallback(
+    async ({ alsoDelete }: { alsoDelete?: boolean } = {}) => {
+      if ((!boardStore && !wsStore) || !attached || busy) return;
+      setBusy(true);
+      const subBoardId = attached.subBoardId;
+      const subBoardTitle = attached.title;
+      try {
+        await detachCardSubboard({ cardId });
+        boardStore?.getState().removeCardSubboard(cardId);
+        if (alsoDelete) {
+          try {
+            await deleteBoard({ id: subBoardId });
+            wsStore?.getState().removeSubBoard(subBoardId);
+            toast.success("Sub-board detached + deleted");
+          } catch (err) {
+            const m = (err as Error).message;
+            toast.error("Detached, but delete failed: " + m);
+            errorBus.push({ message: `Sub-board delete failed: ${m}` });
+            // Leave orphan record in ws store with parent_card_id=null.
+            wsStore?.getState().upsertSubBoard({
+              id: subBoardId,
+              title: subBoardTitle,
+              parentCardId: null,
+            });
+          }
+        } else {
+          wsStore?.getState().upsertSubBoard({
+            id: subBoardId,
+            title: subBoardTitle,
+            parentCardId: null,
+          });
+          toast.success("Sub-board detached");
+        }
+      } catch (err) {
+        const m = (err as Error).message;
+        toast.error(m);
+        errorBus.push({ message: `Sub-board detach failed: ${m}` });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [boardStore, wsStore, attached, busy, cardId],
+  );
 
   if (!boardStore && !wsStore) return null;
-  return { attached, promote, promoting };
+  return { attached, promote, detach, busy };
 }
 
 /**

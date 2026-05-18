@@ -13,6 +13,7 @@ import {
   CreateBoardFromTemplateInput,
   CreateSubboardInput,
   DeleteBoardInput,
+  DetachCardSubboardInput,
   PromoteCardToSubboardInput,
   RenameBoardInput,
   SetBoardArchivedInput,
@@ -358,6 +359,29 @@ export async function promoteCardToSubboardImpl(
   });
 }
 
+/**
+ * Detach a card's sub-board pointer. Clears `boards.parent_card_id` so
+ * the child board becomes orphaned (still accessible from the workspace
+ * board list) instead of cascade-deleted. Reversible: re-promoting the
+ * card creates a fresh sub-board.
+ *
+ * Returns the affected sub-board id (or null when nothing was attached).
+ */
+export async function detachCardSubboardImpl(
+  token: string,
+  input: { cardId: string },
+) {
+  const parsed = DetachCardSubboardInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const [row] = await tx
+      .update(boards)
+      .set({ parentCardId: null })
+      .where(eq(boards.parentCardId, parsed.cardId))
+      .returning({ id: boards.id, parentBoardId: boards.parentBoardId });
+    return row ?? null;
+  });
+}
+
 export async function createBoard(
   input: Parameters<typeof createBoardImpl>[1],
 ) {
@@ -398,6 +422,16 @@ export async function promoteCardToSubboard(
   if (b.parentBoardId) revalidatePath(`/b/${b.parentBoardId}`);
   revalidatePath(`/b/${b.id}`);
   return b;
+}
+
+export async function detachCardSubboard(
+  input: Parameters<typeof detachCardSubboardImpl>[1],
+) {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  const row = await detachCardSubboardImpl(token, input);
+  if (row?.parentBoardId) revalidatePath(`/b/${row.parentBoardId}`);
+  return row;
 }
 
 export async function renameBoard(

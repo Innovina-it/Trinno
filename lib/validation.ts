@@ -94,6 +94,7 @@ export const CreateSubboardInput = z.object({
   title: Title,
 });
 export const PromoteCardToSubboardInput = z.object({ cardId: Uuid });
+export const DetachCardSubboardInput = z.object({ cardId: Uuid });
 
 export const RenameBoardInput = z.object({ id: Uuid, title: Title });
 export const SetBoardArchivedInput = z.object({ id: Uuid, archived: z.boolean() });
