@@ -71,7 +71,7 @@ export type RuleAction =
   | { kind: "assign"; user_id: string }
   | { kind: "unassign"; user_id: string }
   | { kind: "move_to_list"; list_id: string }
-  | { kind: "set_type"; value: "epic" | "story" | "task" | "subtask" | "bug" }
+  | { kind: "set_type"; value: "story" | "task" | "subtask" | "bug" }
   | { kind: "add_comment"; body: string }
   | { kind: "set_due_complete"; value: boolean }
   | { kind: "webhook_post"; url: string; secret?: string };

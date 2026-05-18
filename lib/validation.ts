@@ -88,6 +88,13 @@ export const BoardTemplateIdZ = z.enum([
 export const CreateBoardFromTemplateInput = CreateBoardInput.extend({
   templateId: BoardTemplateIdZ,
 });
+export const CreateSubboardInput = z.object({
+  parentBoardId: Uuid,
+  parentCardId: Uuid,
+  title: Title,
+});
+export const PromoteCardToSubboardInput = z.object({ cardId: Uuid });
+
 export const RenameBoardInput = z.object({ id: Uuid, title: Title });
 export const SetBoardArchivedInput = z.object({ id: Uuid, archived: z.boolean() });
 export const DeleteBoardInput = z.object({ id: Uuid });
@@ -157,14 +164,14 @@ export const CreateCardInput = z.object({
   // roadmap. Quick-add on the board can leave these blank.
   startDate: z.union([z.string(), z.date()]).nullable().optional(),
   targetDate: z.union([z.string(), z.date()]).nullable().optional(),
-  // Optional parent epic. When set, child inherits parent's dates if its
+  // Optional parent card. When set, child inherits parent's dates if its
   // own are blank.
   parentCardId: Uuid.nullable().optional(),
   // Optional initial owner. Skips the post-create owner-claim trigger;
   // the owner-change trigger only fires on UPDATE.
   ownerId: Uuid.nullable().optional(),
 });
-export const CardType = z.enum(["epic", "story", "task", "subtask", "bug"]);
+export const CardType = z.enum(["story", "task", "subtask", "bug"]);
 // Plan #16b-γ-C (#1) — card priority. Mirrors the SQL enum.
 export const CardPriority = z.enum(["p0", "p1", "p2", "p3", "p4"]);
 export const UpdateCardInput = z.object({
