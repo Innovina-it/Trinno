@@ -1,6 +1,7 @@
 "use client";
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useTransition,
@@ -227,8 +228,48 @@ export function RoadmapBar({
     setMenu({ x: rect.left, y: rect.bottom + 4 });
   }
 
+  // Adjusted menu position after measuring the rendered menu's size.
+  // The raw click coordinates can push the menu past the viewport edges
+  // (especially the bottom row of cards in the roadmap), so we flip
+  // up/left when the natural placement would overflow.
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(
+    null,
+  );
+  useLayoutEffect(() => {
+    if (!menu) {
+      setMenuPos(null);
+      return;
+    }
+    const node = menuRef.current;
+    if (!node) {
+      setMenuPos({ top: menu.y, left: menu.x });
+      return;
+    }
+    const rect = node.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const margin = 8;
+    let top = menu.y;
+    let left = menu.x;
+    if (top + rect.height + margin > vh) {
+      top = Math.max(margin, menu.y - rect.height);
+    }
+    if (left + rect.width + margin > vw) {
+      left = Math.max(margin, menu.x - rect.width);
+    }
+    setMenuPos({ top, left });
+  }, [menu]);
   const menuStyle: CSSProperties | undefined = menu
-    ? { position: "fixed", top: menu.y, left: menu.x, zIndex: 100 }
+    ? {
+        position: "fixed",
+        // Render off-screen on the first paint (before measurement) so the
+        // menu never flashes at the overflowing coords. Once useLayoutEffect
+        // runs, we apply the corrected position synchronously.
+        top: menuPos?.top ?? -9999,
+        left: menuPos?.left ?? -9999,
+        zIndex: 100,
+        visibility: menuPos ? "visible" : "hidden",
+      }
     : undefined;
 
   function handleOpenCard() {
@@ -544,7 +585,7 @@ export function RoadmapBar({
           // (often the user clicking "Save" in a follow-on dialog) and
           // pops open the new-card dialog over the user's actual save.
           onPointerDown={(e) => e.stopPropagation()}
-          className="min-w-48 rounded-md border border-hairline-hi bg-[color:var(--popover)] shadow-xl py-1 text-sm"
+          className="min-w-48 max-h-[calc(100vh-16px)] overflow-y-auto rounded-md border border-hairline-hi bg-[color:var(--popover)] shadow-xl py-1 text-sm"
         >
           <button
             type="button"
