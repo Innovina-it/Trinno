@@ -16,7 +16,7 @@ import {
   startOfDay,
 } from "@/lib/roadmap/dates";
 import type { Lane, PlacedCard } from "@/lib/roadmap/layout";
-import { updateCard, reorderRoadmapRow } from "@/actions/cards";
+import { updateCard, reorderRoadmapRow, moveCardToBoard } from "@/actions/cards";
 import { errorBus } from "@/lib/errors/error-bus";
 import { PRIORITIES } from "./priority-gutter";
 import type { CardPriority } from "@/components/board/card/priority-picker";
@@ -715,57 +715,76 @@ export function useRoadmapDragHarness(
       const origCard = storeCardsRef.current.find((c) => c.id === d.cardId);
       const origParentId = origCard?.parentCardId ?? null;
       const origBoardId = origCard?.boardId ?? null;
-      // Cross-board reparent: server snaps the card onto a list on the
-      // parent's board. Mirror that boardId change optimistically so the
-      // groupBySubBoard pass moves the card into the new lane before CDC
-      // catches up. Lane grouping keys off boardId, not parentCardId, so
-      // without this the bar would visually stay in the old lane.
-      const targetBoardId = targetAnchor?.boardId ?? null;
-      const optimisticPatch: { parentCardId: string | null; boardId?: string } = {
-        parentCardId: targetLaneAnchorId,
-      };
-      if (targetBoardId && origBoardId && targetBoardId !== origBoardId) {
-        optimisticPatch.boardId = targetBoardId;
-      }
-      patchCardInStore(d.cardId, optimisticPatch);
+      // Lane semantics:
+      //   • sub_board lane → lane.id IS the sub-board's board id, and
+      //     groupBySubBoard puts cards into the lane by boardId match.
+      //     Dropping a card onto the lane means "move this card into
+      //     that sub-board". parent_card_id is intentionally NOT touched
+      //     here — the visual grouping is board-driven, and forcing a
+      //     subtask relationship would also require a same-board parent.
+      //   • uncategorized (orphan self-lane) → headerCard is the orphan
+      //     itself; dropping another card onto it expresses a subtask
+      //     relationship (parent_card_id = anchor). Cross-board uses
+      //     updateCard's existing list-snap to keep boards aligned.
+      const isSubBoardLane = targetLane?.lane.kind === "sub_board";
       const cardId = d.cardId;
-      startTransition(() => {
-        void (async () => {
-          try {
-            await updateCard({ id: cardId, parentCardId: targetLaneAnchorId });
-          } catch (err) {
-            const rollback: { parentCardId: string | null; boardId?: string } = {
-              parentCardId: origParentId,
-            };
-            if (optimisticPatch.boardId && origBoardId) {
-              rollback.boardId = origBoardId;
+      if (isSubBoardLane && targetLane) {
+        const toBoardId = targetLane.lane.id;
+        if (origBoardId && origBoardId !== toBoardId) {
+          patchCardInStore(d.cardId, { boardId: toBoardId });
+        }
+        startTransition(() => {
+          void (async () => {
+            try {
+              await moveCardToBoard({ cardId, toBoardId });
+            } catch (err) {
+              if (origBoardId) patchCardInStore(cardId, { boardId: origBoardId });
+              const e = err as { message?: string; cause?: { message?: string } };
+              const causeMsg = e?.cause?.message;
+              const raw = causeMsg ?? e?.message ?? "Move failed";
+              const topMsg = e?.message ?? "";
+              const isNoList = topMsg.startsWith("CROSS_BOARD_NO_LIST");
+              const isSubtask = topMsg.startsWith("CROSS_BOARD_SUBTASK_BLOCKED");
+              const message = isNoList
+                ? `Cannot move card into ${targetTitle} — destination has no list to receive it.`
+                : isSubtask
+                  ? `Cannot move a subtask into ${targetTitle} — subtasks stay with their parent's board.`
+                  : `Move failed: ${raw}`;
+              errorBus.push({ message });
             }
-            patchCardInStore(cardId, rollback);
-            const e = err as { message?: string; cause?: { message?: string } };
-            // Drizzle wraps pg errors so the actual cause sits on `err.cause`.
-            // Surface that when present so users see "FK violation"/"row not
-            // found" instead of an opaque SQL dump.
-            const causeMsg = e?.cause?.message;
-            const raw = causeMsg ?? e?.message ?? "Reparent failed";
-            const topMsg = e?.message ?? "";
-            const isCycle =
-              topMsg.startsWith("PARENT_CYCLE") ||
-              (causeMsg ?? "").toLowerCase().includes("parent cycle");
-            const isCrossBoard =
-              topMsg.startsWith("CROSS_BOARD_PARENT") ||
-              (causeMsg ?? "").toLowerCase().includes("parent must be in same board");
-            const isNoList = topMsg.startsWith("CROSS_BOARD_NO_LIST");
-            const message = isCycle
-              ? `Cannot move card under ${targetTitle} — cycle detected.`
-              : isNoList
-                ? `Cannot move card under ${targetTitle} — destination board has no list to receive it.`
-                : isCrossBoard
-                  ? `Cannot move card under ${targetTitle} — parent must be on the same board.`
-                  : `Reparent failed: ${raw}`;
-            errorBus.push({ message });
-          }
-        })();
-      });
+          })();
+        });
+      } else {
+        patchCardInStore(d.cardId, { parentCardId: targetLaneAnchorId });
+        startTransition(() => {
+          void (async () => {
+            try {
+              await updateCard({ id: cardId, parentCardId: targetLaneAnchorId });
+            } catch (err) {
+              patchCardInStore(cardId, { parentCardId: origParentId });
+              const e = err as { message?: string; cause?: { message?: string } };
+              const causeMsg = e?.cause?.message;
+              const raw = causeMsg ?? e?.message ?? "Reparent failed";
+              const topMsg = e?.message ?? "";
+              const isCycle =
+                topMsg.startsWith("PARENT_CYCLE") ||
+                (causeMsg ?? "").toLowerCase().includes("parent cycle");
+              const isCrossBoard =
+                topMsg.startsWith("CROSS_BOARD_PARENT") ||
+                (causeMsg ?? "").toLowerCase().includes("parent must be in same board");
+              const isNoList = topMsg.startsWith("CROSS_BOARD_NO_LIST");
+              const message = isCycle
+                ? `Cannot move card under ${targetTitle} — cycle detected.`
+                : isNoList
+                  ? `Cannot move card under ${targetTitle} — destination board has no list to receive it.`
+                  : isCrossBoard
+                    ? `Cannot move card under ${targetTitle} — parent must be on the same board.`
+                    : `Reparent failed: ${raw}`;
+              errorBus.push({ message });
+            }
+          })();
+        });
+      }
     }
     if (noOp) return;
 

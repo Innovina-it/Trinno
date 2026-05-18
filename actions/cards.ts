@@ -56,6 +56,15 @@ const MoveCardCrossBoardInput = z.object({
   toListId: Uuid,
 });
 
+// Roadmap cross-lane drop into a sub_board lane. The lane id IS the
+// sub_board's board id, but the client doesn't know which list on that
+// board to land in. Server picks a todo-kind list (falling back to the
+// first active list).
+const MoveCardToBoardInput = z.object({
+  cardId: Uuid,
+  toBoardId: Uuid,
+});
+
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
   return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
@@ -811,6 +820,103 @@ export async function moveCardCrossBoardImpl(
       position: row.position,
     };
   });
+}
+
+export async function moveCardToBoardImpl(
+  token: string,
+  input: { cardId: string; toBoardId: string },
+): Promise<{
+  id: string;
+  boardId: string;
+  fromBoardId: string;
+  listId: string;
+  position: string;
+}> {
+  const p = MoveCardToBoardInput.parse(input);
+  return dbAsUser(token, async (tx) => {
+    const candidates = await tx
+      .select({
+        id: lists.id,
+        statusKind: lists.statusKind,
+        position: lists.position,
+      })
+      .from(lists)
+      .where(and(eq(lists.boardId, p.toBoardId), eq(lists.archived, false)))
+      .orderBy(asc(lists.position));
+    const target =
+      candidates.find((l) => l.statusKind === "todo") ?? candidates[0];
+    if (!target) {
+      throw new Error(
+        "CROSS_BOARD_NO_LIST: destination board has no list to receive the card",
+      );
+    }
+    const [src] = await tx
+      .select({ boardId: cards.boardId, parentCardId: cards.parentCardId, type: cards.type })
+      .from(cards)
+      .where(eq(cards.id, p.cardId));
+    if (!src) throw new Error("Forbidden");
+    const [last] = await tx
+      .select({ position: cards.position })
+      .from(cards)
+      .where(eq(cards.listId, target.id))
+      .orderBy(desc(cards.position))
+      .limit(1);
+    const pos = positionBetween(last?.position ?? null, null);
+    // Cross-board move must respect `cards_validate_parent` (same-board
+    // parent). If the card has a parent on the OLD board, the parent
+    // link no longer applies — clear it. Keep it only when the parent
+    // already lives on the destination board. Subtasks REQUIRE a
+    // parent (cards_subtask_parent_check); clearing would break the
+    // check, so reject the move instead of silently corrupting state.
+    const updates: {
+      listId: string;
+      boardId: string;
+      position: string;
+      parentCardId?: string | null;
+    } = { listId: target.id, boardId: p.toBoardId, position: pos };
+    if (src.parentCardId) {
+      const [parent] = await tx
+        .select({ boardId: cards.boardId })
+        .from(cards)
+        .where(eq(cards.id, src.parentCardId))
+        .limit(1);
+      if (parent?.boardId !== p.toBoardId) {
+        if (src.type === "subtask") {
+          throw new Error(
+            "CROSS_BOARD_SUBTASK_BLOCKED: cannot move a subtask away from its parent's board",
+          );
+        }
+        updates.parentCardId = null;
+      }
+    }
+    const [row] = await tx
+      .update(cards)
+      .set(updates)
+      .where(eq(cards.id, p.cardId))
+      .returning();
+    if (!row) throw new Error("Forbidden");
+    return {
+      id: row.id,
+      boardId: row.boardId,
+      fromBoardId: src.boardId,
+      listId: row.listId,
+      position: row.position,
+    };
+  });
+}
+
+export async function moveCardToBoard(input: {
+  cardId: string;
+  toBoardId: string;
+}) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const r = await moveCardToBoardImpl(t, input);
+  revalidatePath(`/b/${r.boardId}`);
+  if (r.fromBoardId !== r.boardId) {
+    revalidatePath(`/b/${r.fromBoardId}`);
+  }
+  return r;
 }
 
 export async function moveCardCrossBoard(input: {
