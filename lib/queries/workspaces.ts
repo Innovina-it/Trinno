@@ -95,6 +95,7 @@ export async function listBoardsInWorkspace(
         backgroundValue: boards.backgroundValue,
         archived: boards.archived,
         createdAt: boards.createdAt,
+        parentBoardId: boards.parentBoardId,
       })
       .from(boards)
       .where(eq(boards.workspaceId, workspaceId))
@@ -102,43 +103,3 @@ export async function listBoardsInWorkspace(
   );
 }
 
-export type EpicTile = {
-  id: string;
-  title: string;
-  boardId: string;
-  archived: boolean;
-};
-
-export async function listEpicsInWorkspace(
-  token: string,
-  workspaceId: string,
-): Promise<EpicTile[]> {
-  const { cards } = await import("@/lib/db/schema");
-  const { and, eq: eqOp, inArray } = await import("drizzle-orm");
-  return dbAsUser(token, async (tx) => {
-    // First get all board ids in this workspace.
-    const boardRows = await tx
-      .select({ id: boards.id })
-      .from(boards)
-      .where(eq(boards.workspaceId, workspaceId));
-    if (boardRows.length === 0) return [];
-    const boardIds = boardRows.map((b) => b.id);
-
-    const rows = await tx
-      .select({
-        id: cards.id,
-        title: cards.title,
-        boardId: cards.boardId,
-        archived: cards.archived,
-      })
-      .from(cards)
-      .where(
-        and(
-          inArray(cards.boardId, boardIds),
-          eqOp(cards.type, "epic"),
-        ),
-      )
-      .orderBy(desc(cards.id));
-    return rows;
-  });
-}

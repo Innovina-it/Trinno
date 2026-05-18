@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
-import { getWorkspace, getWorkspaceRole, listBoardsInWorkspace, listEpicsInWorkspace } from "@/lib/queries/workspaces";
+import { getWorkspace, getWorkspaceRole, listBoardsInWorkspace } from "@/lib/queries/workspaces";
 import { BoardGrid } from "@/components/workspace/board-grid";
 import { BoardListRealtime } from "@/components/workspace/board-list-realtime";
 import { CreateBoardButton } from "@/components/workspace/create-board-dialog";
@@ -17,9 +17,8 @@ export default async function WorkspacePage({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
-  const [boards, epics, favoritedIds, role] = await Promise.all([
+  const [boards, favoritedIds, role] = await Promise.all([
     listBoardsInWorkspace(token, workspaceId),
-    listEpicsInWorkspace(token, workspaceId),
     listFavoriteBoardIds(token),
     getWorkspaceRole(token, workspaceId, user.id),
   ]);
@@ -55,7 +54,7 @@ export default async function WorkspacePage({
         </div>
       </header>
 
-      <BoardGrid boards={boards} epics={epics} favoritedIds={favoritedIds} />
+      <BoardGrid boards={boards} favoritedIds={favoritedIds} />
       <BoardListRealtime workspaceId={workspaceId} />
     </div>
   );
