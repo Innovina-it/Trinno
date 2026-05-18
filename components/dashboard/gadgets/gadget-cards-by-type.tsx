@@ -1,4 +1,4 @@
-const TYPE_ORDER = ["epic", "story", "task", "subtask", "bug"] as const;
+const TYPE_ORDER = ["story", "task", "subtask", "bug"] as const;
 
 export function GadgetCardsByType({
   data,
