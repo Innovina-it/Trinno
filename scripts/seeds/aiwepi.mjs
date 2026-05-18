@@ -110,10 +110,15 @@ const WORKSPACE_FEATURE_FLAGS = {
   lazy_card_history: false,
 };
 
-// Single neutral list per board — no status_kind so the roadmap renders
-// bars as plain content (no Todo/In Progress/Done tint). Status routing
-// removed for this fixture; cards show as title + dates only.
-const NEUTRAL_LIST_TITLE = "Items";
+// Standard Todo / In Progress / Done lists on every board (parent + each
+// sub-board). All seeded cards land in the Todo list so the roadmap
+// renders bars with a uniform Todo tint and the kanban shows real
+// columns the user can drag work across.
+const DEFAULT_LISTS = [
+  { title: "Todo", statusKind: "todo" },
+  { title: "In Progress", statusKind: "in_progress" },
+  { title: "Done", statusKind: "done" },
+];
 
 // ---------------------------------------------------------------------------
 // Content — AIWEPI project plan, 5 WPs, 11 tasks, 11 deliverables, 5 milestones.
@@ -486,14 +491,19 @@ async function seed() {
   });
   console.log(`Parent board: ${parentBoard.id} (${PARENT_BOARD_TITLE})`);
 
-  // Parent board: single neutral list. Anchor cards land here. No
-  // status_kind, no Todo/In Progress/Done routing — roadmap renders
-  // plain bars with title + dates.
-  const [parentList] = await call("lists", {
-    board_id: parentBoard.id,
-    title: NEUTRAL_LIST_TITLE,
-    position: "a000001",
-  });
+  // Parent board: Todo/In Progress/Done lists. Anchor cards land in the
+  // Todo list so the roadmap tint is uniform.
+  const parentLists = {};
+  for (const [i, l] of DEFAULT_LISTS.entries()) {
+    const [row] = await call("lists", {
+      board_id: parentBoard.id,
+      title: l.title,
+      position: `a${String(i + 1).padStart(6, "0")}`,
+      status_kind: l.statusKind,
+    });
+    parentLists[l.statusKind] = row.id;
+  }
+  const parentList = { id: parentLists.todo };
 
   // For each WP: an anchor card on the parent board + a sub-board linked
   // 1:1 via boards.parent_card_id (migration 0105). The roadmap's
@@ -532,11 +542,17 @@ async function seed() {
       `  ${wp.code} sub-board: ${subBoard.id} (anchor card ${anchorCard.id})`,
     );
 
-    const [subList] = await call("lists", {
-      board_id: subBoard.id,
-      title: NEUTRAL_LIST_TITLE,
-      position: "a000001",
-    });
+    const subLists = {};
+    for (const [i, l] of DEFAULT_LISTS.entries()) {
+      const [row] = await call("lists", {
+        board_id: subBoard.id,
+        title: l.title,
+        position: `a${String(i + 1).padStart(6, "0")}`,
+        status_kind: l.statusKind,
+      });
+      subLists[l.statusKind] = row.id;
+    }
+    const subList = { id: subLists.todo };
 
     // Tasks — homed in the sub-board. They DON'T set parent_card_id to the
     // anchor card: the anchor lives on the parent board and migration
