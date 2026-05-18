@@ -542,8 +542,14 @@ async function seed() {
       subLists[l.statusKind] = row.id;
     }
 
-    // Tasks — parented to the anchor card, homed in the sub-board. Each
-    // task gets its own date segment so the roadmap shows individual bars.
+    // Tasks — homed in the sub-board. They DON'T set parent_card_id to the
+    // anchor card: the anchor lives on the parent board and migration
+    // 0018's `cards_validate_parent` trigger enforces parent_card_id ↔
+    // board_id co-location. The sub-board membership itself is the link
+    // back to the anchor (boards.parent_card_id = anchorCard.id), which
+    // `groupBySubBoard` reads to build the roadmap lane. Each task gets
+    // its own date segment so the roadmap shows individual bars under the
+    // anchor's lane.
     const taskRows = [];
     for (let i = 0; i < wp.tasks.length; i++) {
       const t = wp.tasks[i];
@@ -563,7 +569,6 @@ async function seed() {
         position: nextPos(),
         type: "task",
         owner_id: null,
-        parent_card_id: anchorCard.id,
         description: t.description,
         start_date: monthDateStr(taskStart),
         target_date: monthDateStr(taskEnd),
