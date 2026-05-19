@@ -77,13 +77,18 @@ export type QuickViewCard = {
 };
 
 export type QuickViewCardType = "story" | "task" | "subtask" | "bug";
-type QuickViewSubtask = {
+export type QuickViewSubtask = {
   id: string;
   title: string;
   type?: string | null;
   completedAt?: Date | string | null;
   dueComplete?: boolean;
   position?: string;
+  /** Subtask's own boardId. Required for cross-board navigation
+   *  (subtasks can live on a different board than their parent when the
+   *  parent owns a sub-board). When absent, the qv falls back to the
+   *  parent card's boardId prop. */
+  boardId?: string;
 };
 
 export type PatchInput = {
@@ -185,12 +190,14 @@ export function CardQuickView({
   availableMembers,
   subtaskTotal,
   subtaskDone,
+  subtaskRows,
   boardId,
   open,
   onOpenChange,
   onPatch,
   onToggleMember,
   onCreateSubtask,
+  onOpenSubtask,
 }: {
   card: QuickViewCard | null;
   memberProfiles: QuickViewProfile[];
@@ -199,6 +206,10 @@ export function CardQuickView({
   availableMembers?: QuickViewMember[];
   subtaskTotal: number;
   subtaskDone: number;
+  /** Optional pre-resolved subtask rows. When provided, takes precedence
+   *  over the internal BoardStoreContext selector — required for callers
+   *  that mount the qv outside the board surface (e.g. roadmap). */
+  subtaskRows?: QuickViewSubtask[];
   boardId: string;
   open: boolean;
   onOpenChange: (next: boolean) => void;
@@ -209,6 +220,11 @@ export function CardQuickView({
   onToggleMember?: (userId: string) => Promise<void> | void;
   /** When provided, inline "Add subtask" affordance is rendered. */
   onCreateSubtask?: (title: string) => Promise<void> | void;
+  /** When provided, clicking a subtask row opens that subtask in place
+   *  (Google-Calendar-style detail swap) instead of navigating to a card
+   *  detail route. Roadmap supplies this so the qv stays mounted in the
+   *  workspace-scoped surface (where /b/:id/c/:id would unmount it). */
+  onOpenSubtask?: (subtaskId: string) => void;
 }) {
   const router = useRouter();
   const editable = typeof onPatch === "function";
@@ -264,17 +280,25 @@ export function CardQuickView({
         showCloseButton={false}
       >
         <CardQuickViewBody
+          // Force a fresh body instance when the underlying card swaps
+          // (Google-Calendar-style subtask navigation). The body keeps
+          // local drafts in useState, so a continuous mount would treat
+          // the new card's field values as "edits" and show Save instead
+          // of Close.
+          key={card.id}
           card={card}
           memberProfiles={memberProfiles}
           availableMembers={availableMembers}
           subtaskTotal={subtaskTotal}
           subtaskDone={subtaskDone}
+          subtaskRows={subtaskRows}
           boardId={boardId}
           editable={editable}
           membersEditable={membersEditable}
           subtaskCreatable={subtaskCreatable}
           onPatch={onPatch}
           onToggleMember={onToggleMember}
+          onOpenSubtask={onOpenSubtask}
           onCreateSubtask={onCreateSubtask}
           onClose={() => onOpenChange(false)}
           router={router}
@@ -302,6 +326,7 @@ function CardQuickViewBody({
   availableMembers,
   subtaskTotal,
   subtaskDone,
+  subtaskRows: subtaskRowsProp,
   boardId,
   editable,
   membersEditable,
@@ -309,6 +334,7 @@ function CardQuickViewBody({
   onPatch,
   onToggleMember,
   onCreateSubtask,
+  onOpenSubtask,
   onClose,
   router,
   dirtyRef,
@@ -319,6 +345,7 @@ function CardQuickViewBody({
   availableMembers?: QuickViewMember[];
   subtaskTotal: number;
   subtaskDone: number;
+  subtaskRows?: QuickViewSubtask[];
   boardId: string;
   editable: boolean;
   membersEditable: boolean;
@@ -326,6 +353,7 @@ function CardQuickViewBody({
   onPatch?: (patch: PatchInput) => Promise<void> | void;
   onToggleMember?: (userId: string) => Promise<void> | void;
   onCreateSubtask?: (title: string) => Promise<void> | void;
+  onOpenSubtask?: (subtaskId: string) => void;
   onClose: () => void;
   router: ReturnType<typeof useRouter>;
   dirtyRef: React.MutableRefObject<boolean>;
@@ -361,7 +389,11 @@ function CardQuickViewBody({
   const typeOptions = baseOptions.some((opt) => opt.value === cardType)
     ? baseOptions
     : [legacyOption, ...baseOptions];
-  const subtaskRows = useQuickViewSubtasks(card.id);
+  const storeSubtaskRows = useQuickViewSubtasks(card.id);
+  // Prefer rows supplied by the caller (roadmap mounts qv outside the
+  // board store). Fall back to the BoardStoreContext-backed selector
+  // used by card-tile.
+  const subtaskRows = subtaskRowsProp ?? storeSubtaskRows;
 
   // === Local drafts (deferred commit) ===
   const [titleDraft, setTitleDraft] = useState(card.title);
@@ -454,14 +486,6 @@ function CardQuickViewBody({
     cardType,
     dirtyRef,
   ]);
-
-  const onSaveClick = useCallback(() => {
-    if (!dirty) {
-      onClose();
-      return;
-    }
-    setConfirming(true);
-  }, [dirty, onClose]);
 
   const commitSave = useCallback(async () => {
     if (saving) return;
@@ -601,7 +625,7 @@ function CardQuickViewBody({
         </DialogTitle>
       </DialogHeader>
 
-      <div className="space-y-3">
+      <div className="min-w-0 space-y-3">
         {/* TYPE row — clickable when editable. Drafts roll into the
             confirm-save phase like every other field. Legacy options
             (subtask/story/sub-board) render as chips for back-compat but
@@ -861,6 +885,25 @@ function CardQuickViewBody({
             subtasks={subtaskRows}
             creatable={subtaskCreatable}
             onCreateSubtask={onCreateSubtask}
+            onOpenSubtask={
+              onOpenSubtask
+                ? (subtaskId) => {
+                    // Guard against silently dropping unsaved drafts
+                    // when the user clicks a subtask while editing the
+                    // parent card. Body remounts on card.id swap (key=
+                    // card.id), which would discard draft state. Surface
+                    // the same confirm modal used for Esc/X/outside.
+                    if (dirty) {
+                      enterConfirmRef.current();
+                      toast.message(
+                        "Save or discard your edits first, then click the sub-task again",
+                      );
+                      return;
+                    }
+                    onOpenSubtask(subtaskId);
+                  }
+                : undefined
+            }
             boardId={boardId}
             router={router}
           />
@@ -940,11 +983,12 @@ function CardQuickViewBody({
             <Button
               type="button"
               variant={dirty ? "default" : "outline"}
-              onClick={dirty ? onSaveClick : onClose}
+              onClick={dirty ? () => void commitSave() : onClose}
+              disabled={saving}
               data-testid="card-quick-view-close"
               data-dirty={dirty ? "true" : "false"}
             >
-              {dirty ? "Save" : "Close"}
+              {dirty ? (saving ? "Saving…" : "Save") : "Close"}
             </Button>
           </>
         )}
@@ -1191,17 +1235,18 @@ function QuickViewSubboardSection({ cardId }: { cardId: string }) {
   return (
     <div
       data-testid="card-quick-view-subboard-open"
-      className="flex items-center gap-2 rounded-md border border-hairline px-2 py-1.5 text-xs"
+      className="flex min-w-0 items-center gap-2 rounded-md border border-hairline px-2 py-1.5 text-xs"
     >
-      <FolderKanban className="size-3.5 text-violet-300" aria-hidden />
-      <span className="mono-meta-sm text-violet-300">SUB-BOARD</span>
-      <span className="mono-meta-sm text-fg-faint">·</span>
+      <FolderKanban className="size-3.5 shrink-0 text-violet-300" aria-hidden />
+      <span className="mono-meta-sm shrink-0 text-violet-300">SUB-BOARD</span>
+      <span className="mono-meta-sm shrink-0 text-fg-faint">·</span>
       <Link
         href={`/b/${ctx.attached.subBoardId}`}
-        className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg hover:text-fg"
+        title={ctx.attached.title}
+        className="chip mono-meta-sm inline-flex min-w-0 flex-1 items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg hover:text-fg"
       >
-        {ctx.attached.title}
-        <ArrowRight className="size-3" aria-hidden />
+        <span className="min-w-0 flex-1 truncate">{ctx.attached.title}</span>
+        <ArrowRight className="size-3 shrink-0" aria-hidden />
       </Link>
     </div>
   );
@@ -1222,6 +1267,7 @@ function useQuickViewSubtasks(cardId: string): QuickViewSubtask[] {
         completedAt: c.completedAt,
         dueComplete: c.dueComplete,
         position: c.position,
+        boardId: c.boardId,
       }))
       .sort((a, b) => ((a.position ?? "") < (b.position ?? "") ? -1 : 1));
   }, [cardId, store]);
@@ -1247,6 +1293,7 @@ function SubtaskSection({
   subtasks,
   creatable,
   onCreateSubtask,
+  onOpenSubtask,
   boardId,
   router,
 }: {
@@ -1255,6 +1302,7 @@ function SubtaskSection({
   subtasks: QuickViewSubtask[];
   creatable: boolean;
   onCreateSubtask?: (title: string) => Promise<void> | void;
+  onOpenSubtask?: (subtaskId: string) => void;
   boardId: string;
   router: ReturnType<typeof useRouter>;
 }) {
@@ -1308,9 +1356,21 @@ function SubtaskSection({
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          router.push(`/b/${boardId}/c/${subtask.id}`, {
-                            scroll: false,
-                          });
+                          if (onOpenSubtask) {
+                            onOpenSubtask(subtask.id);
+                            return;
+                          }
+                          // Fall back to navigating to the card detail
+                          // route. Use the subtask's own boardId when we
+                          // have it — the parent card's boardId can
+                          // differ when the parent owns a sub-board, and
+                          // routing to the wrong board explodes the
+                          // BoardLayout snapshot query.
+                          const targetBoardId = subtask.boardId ?? boardId;
+                          router.push(
+                            `/b/${targetBoardId}/c/${subtask.id}`,
+                            { scroll: false },
+                          );
                         }}
                       >
                         <ListTodo className="size-3 text-fg-faint" aria-hidden />
