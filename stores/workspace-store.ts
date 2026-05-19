@@ -286,7 +286,8 @@ export function WorkspaceStoreProvider({
       cur.workspaceProfiles.some(
         (p, i) =>
           p.id !== initial.workspaceProfiles[i]?.id ||
-          p.displayName !== initial.workspaceProfiles[i]?.displayName,
+          p.displayName !== initial.workspaceProfiles[i]?.displayName ||
+          p.avatarUrl !== initial.workspaceProfiles[i]?.avatarUrl,
       );
     if (changed) {
       s.setState({ workspaceProfiles: initial.workspaceProfiles });

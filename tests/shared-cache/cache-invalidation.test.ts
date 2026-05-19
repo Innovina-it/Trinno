@@ -71,7 +71,7 @@ function makeSnapshot(title: string): SharedWorkspaceSnapshot {
     cardVersions: [],
     cardLinks: [],
     cardMembers: [],
-    workspaceProfiles: [{ id: "u1", displayName: "Ada" }],
+    workspaceProfiles: [{ id: "u1", displayName: "Ada", avatarUrl: null }],
     subBoards: [],
   };
 }

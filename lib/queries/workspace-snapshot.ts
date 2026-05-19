@@ -101,7 +101,11 @@ export type WorkspaceSnapshot = {
     boardId: string;
   }>;
   cardMembers: Array<{ cardId: string; userId: string }>;
-  workspaceProfiles: Array<{ id: string; displayName: string }>;
+  workspaceProfiles: Array<{
+    id: string;
+    displayName: string;
+    avatarUrl: string | null;
+  }>;
   // Sub-boards in the workspace, keyed by anchor card via boards.parent_card_id
   // (migration 0105). Consumed by the roadmap's `groupBySubBoard` to build
   // sub-board lanes whose header is the anchor card.
@@ -135,7 +139,11 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         memberRows.length === 0
           ? []
           : await tx
-              .select({ id: profiles.id, displayName: profiles.displayName })
+              .select({
+                id: profiles.id,
+                displayName: profiles.displayName,
+                avatarUrl: profiles.avatarUrl,
+              })
               .from(profiles)
               .where(
                 inArray(
@@ -310,7 +318,11 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
       memberRows.length === 0
         ? []
         : await tx
-            .select({ id: profiles.id, displayName: profiles.displayName })
+            .select({
+              id: profiles.id,
+              displayName: profiles.displayName,
+              avatarUrl: profiles.avatarUrl,
+            })
             .from(profiles)
             .where(
               inArray(
