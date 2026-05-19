@@ -9,6 +9,7 @@ import {
   primaryKey,
   pgEnum,
   check,
+  date,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -80,6 +81,7 @@ export const boards = pgTable(
       .defaultNow(),
     parentBoardId: uuid("parent_board_id"),
     parentCardId: uuid("parent_card_id"),
+    position: integer("position").notNull().default(0),
   },
   (t) => ({
     backgroundKindCheck: check(
@@ -278,6 +280,28 @@ export const sprintState = pgEnum("sprint_state", [
   "active",
   "completed",
 ]);
+
+// Migration 0108 — per-workspace holiday calendar overrides. Defaults
+// live in lib/holidays/it.ts; this table only stores deltas. A row with
+// `name IS NULL` mutes the preset on that date; a row with non-null
+// `name` either adds a custom day or renames the preset on that date.
+export const workspaceHolidays = pgTable(
+  "workspace_holidays",
+  {
+    workspaceId: uuid("workspace_id").notNull(),
+    isoDate: date("iso_date").notNull(),
+    name: text("name"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.workspaceId, t.isoDate] }),
+  }),
+);
 
 export const sprints = pgTable("sprints", {
   id: uuid("id").primaryKey().defaultRandom(),

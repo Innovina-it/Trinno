@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { boards, boardMembers, lists, cards } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
@@ -16,6 +16,7 @@ import {
   DetachCardSubboardInput,
   PromoteCardToSubboardInput,
   RenameBoardInput,
+  ReorderBoardsInput,
   SetBoardArchivedInput,
 } from "@/lib/validation";
 import {
@@ -70,6 +71,13 @@ export async function createBoardImpl(
         "Only workspace owners and admins can create boards in this workspace.",
       );
     }
+    const [tail] = await tx
+      .select({ position: boards.position })
+      .from(boards)
+      .where(eq(boards.workspaceId, parsed.workspaceId))
+      .orderBy(desc(boards.position))
+      .limit(1);
+    const nextPosition = (tail?.position ?? 0) + 1024;
     const [b] = await tx
       .insert(boards)
       .values({
@@ -78,6 +86,7 @@ export async function createBoardImpl(
         backgroundKind: parsed.backgroundKind,
         backgroundValue: parsed.backgroundValue,
         createdBy,
+        position: nextPosition,
       })
       .returning();
     if (!b) throw new Error("Forbidden");
@@ -300,6 +309,13 @@ export async function createSubboardImpl(
       );
     }
 
+    const [subTail] = await tx
+      .select({ position: boards.position })
+      .from(boards)
+      .where(eq(boards.workspaceId, parent.workspaceId))
+      .orderBy(desc(boards.position))
+      .limit(1);
+    const subPosition = (subTail?.position ?? 0) + 1024;
     const [b] = await tx
       .insert(boards)
       .values({
@@ -311,6 +327,7 @@ export async function createSubboardImpl(
         parentBoardId: parent.id,
         parentCardId: anchor.id,
         createdBy,
+        position: subPosition,
       })
       .returning();
     if (!b) throw new Error("Forbidden");
@@ -460,6 +477,69 @@ export async function deleteBoard(
   await requireUser();
   const token = (await getSessionToken())!;
   await deleteBoardImpl(token, input);
+}
+
+/**
+ * Renumber the boards in a workspace to match the supplied id order. The
+ * caller passes the visible boards in their new order; each receives a
+ * fresh position `(index + 1) * 1024`. Archived/omitted boards keep their
+ * stored position and naturally sort outside the renumbered band.
+ *
+ * RLS (`boards_admin_write`) gates per-row writes — workspace members
+ * without admin on a given board will see that row's UPDATE return zero
+ * rows. We validate ownership up front via workspace role to fail fast.
+ */
+export async function reorderBoardsImpl(
+  token: string,
+  input: { workspaceId: string; orderedIds: string[] },
+) {
+  const parsed = ReorderBoardsInput.parse(input);
+  const callerId = decodeSub(token);
+  return dbAsUser(token, async (tx) => {
+    const [membership] = await tx
+      .select({ role: workspaceMembers.role })
+      .from(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, parsed.workspaceId),
+          eq(workspaceMembers.userId, callerId),
+        ),
+      );
+    if (!membership) {
+      throw new Error("Not a member of this workspace.");
+    }
+
+    const existing = await tx
+      .select({ id: boards.id, workspaceId: boards.workspaceId })
+      .from(boards)
+      .where(inArray(boards.id, parsed.orderedIds));
+    const valid = new Set(
+      existing
+        .filter((r) => r.workspaceId === parsed.workspaceId)
+        .map((r) => r.id),
+    );
+    const ids = parsed.orderedIds.filter((id) => valid.has(id));
+    if (ids.length === 0) return { updated: 0 };
+
+    for (let i = 0; i < ids.length; i++) {
+      await tx
+        .update(boards)
+        .set({ position: (i + 1) * 1024 })
+        .where(eq(boards.id, ids[i]));
+    }
+    return { updated: ids.length };
+  });
+}
+
+export async function reorderBoards(
+  input: Parameters<typeof reorderBoardsImpl>[1],
+) {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  const r = await reorderBoardsImpl(token, input);
+  revalidatePath(`/w/${input.workspaceId}`);
+  revalidatePath(`/w/${input.workspaceId}/boards`);
+  return r;
 }
 
 // Plan #16b-γ-D (#6, #37, #38) — server action wrapper around

@@ -99,6 +99,10 @@ export const DetachCardSubboardInput = z.object({ cardId: Uuid });
 export const RenameBoardInput = z.object({ id: Uuid, title: Title });
 export const SetBoardArchivedInput = z.object({ id: Uuid, archived: z.boolean() });
 export const DeleteBoardInput = z.object({ id: Uuid });
+export const ReorderBoardsInput = z.object({
+  workspaceId: Uuid,
+  orderedIds: z.array(Uuid).min(1).max(500),
+});
 
 export const CreateListInput = z.object({
   boardId: Uuid, title: Title,
@@ -575,3 +579,28 @@ export const UpdateMilestoneInput = z.object({
   icon: z.string().trim().max(50).nullable().optional(),
 });
 export const DeleteMilestoneInput = z.object({ id: Uuid });
+
+// Workspace Holidays (Migration 0108). Date must be a YYYY-MM-DD string
+// (UTC-anchored on the server so timezone never shifts the value).
+const IsoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD");
+const HolidayName = z.string().trim().min(1).max(120);
+
+export const UpsertWorkspaceHolidayInput = z.object({
+  workspaceId: Uuid,
+  isoDate: IsoDate,
+  name: HolidayName,
+});
+export const MuteWorkspaceHolidayInput = z.object({
+  workspaceId: Uuid,
+  isoDate: IsoDate,
+});
+export const UnmuteWorkspaceHolidayInput = z.object({
+  workspaceId: Uuid,
+  isoDate: IsoDate,
+});
+export const DeleteWorkspaceHolidayInput = z.object({
+  workspaceId: Uuid,
+  isoDate: IsoDate,
+});

@@ -4,6 +4,7 @@ import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace, getWorkspaceRole, listBoardsInWorkspace } from "@/lib/queries/workspaces";
 import { BoardGrid } from "@/components/workspace/board-grid";
 import { BoardListRealtime } from "@/components/workspace/board-list-realtime";
+import { WorkspaceActiveTabMarker } from "@/components/workspace/workspace-active-tab-marker";
 import { CreateBoardButton } from "@/components/workspace/create-board-dialog";
 import { Button } from "@/components/ui/button";
 import { shortDate } from "@/lib/format";
@@ -28,6 +29,7 @@ export default async function WorkspacePage({
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-3 sm:px-4 md:px-6 py-6 md:py-8">
+      <WorkspaceActiveTabMarker workspaceId={workspaceId} tab="board" />
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-hairline pb-4">
         <div className="space-y-1 min-w-0">
           <span className="mono-meta-sm text-fg-faint">
@@ -54,7 +56,11 @@ export default async function WorkspacePage({
         </div>
       </header>
 
-      <BoardGrid boards={boards} favoritedIds={favoritedIds} />
+      <BoardGrid
+        boards={boards}
+        favoritedIds={favoritedIds}
+        workspaceId={workspaceId}
+      />
       <BoardListRealtime workspaceId={workspaceId} />
     </div>
   );

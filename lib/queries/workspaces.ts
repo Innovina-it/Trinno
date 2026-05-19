@@ -1,4 +1,4 @@
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, asc } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import {
   workspaces,
@@ -96,10 +96,11 @@ export async function listBoardsInWorkspace(
         archived: boards.archived,
         createdAt: boards.createdAt,
         parentBoardId: boards.parentBoardId,
+        position: boards.position,
       })
       .from(boards)
       .where(eq(boards.workspaceId, workspaceId))
-      .orderBy(desc(boards.createdAt)),
+      .orderBy(asc(boards.position), desc(boards.createdAt)),
   );
 }
 
