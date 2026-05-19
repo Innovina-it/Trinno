@@ -1955,7 +1955,7 @@ export function RoadmapView({
                       data-holiday-name={h.name}
                       aria-hidden
                       title={h.name}
-                      className="absolute pointer-events-none bg-fg/[0.05]"
+                      className="absolute pointer-events-none bg-fg/[0.10]"
                       style={{
                         left: x,
                         top: HEADER_STRIP_HEIGHT,

@@ -13,6 +13,11 @@ import {
 import type { WorkspaceHolidayRow } from "@/lib/queries/workspace-holidays";
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+const WD = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+function weekdayAbbr(iso: string): string {
+  const d = new Date(iso + "T00:00:00Z");
+  return WD[d.getUTCDay()];
+}
 
 export function WorkspaceCalendarPanel({
   workspaceId,
@@ -297,8 +302,11 @@ export function WorkspaceCalendarPanel({
                       row.muted ? "opacity-50" : ""
                     }`}
                   >
-                    <span className="mono-meta text-fg-muted">
+                    <span className="mono-meta text-fg-muted whitespace-nowrap">
                       {row.isoDate}
+                      <span className="ml-1.5 text-fg-faint tracking-[0.1em]">
+                        {weekdayAbbr(row.isoDate)}
+                      </span>
                     </span>
                     {isEditing ? (
                       <Input

@@ -40,7 +40,7 @@ async function assertCanManageCalendar(
 
 function revalidateAfterWrite(workspaceId: string) {
   revalidatePath(`/w/${workspaceId}/settings`);
-  revalidatePath(`/w/${workspaceId}/r`);
+  revalidatePath(`/w/${workspaceId}/roadmap`);
   revalidatePath(`/w/${workspaceId}`);
 }
 
