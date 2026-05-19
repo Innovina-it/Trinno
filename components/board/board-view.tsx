@@ -56,13 +56,18 @@ import {
   applyFilters,
   partitionLanes,
   isFilterActive,
+  FILTER_QUERY_KEYS,
+  hasExplicitFilterParams,
+  preserveNonFilterParams,
+  serializeFilters,
   type LaneMode,
 } from "@/lib/board-filters";
-
-// Plan #16b-γ-Master-D D1 — localStorage key for the sprint drop strip
-// toggle. Lives on the board view; Roadmap has its own UI for sprint
-// assignment.
-const SPRINT_STRIP_KEY = "board.sprintStrip";
+import { useUserPreferences } from "@/lib/preferences/provider";
+import {
+  getBoardPreferences,
+  patchBoardPreferences,
+  patchWorkspacePreferences,
+} from "@/lib/preferences/scoped";
 
 function decodeId(
   sortableId: string,
@@ -88,6 +93,8 @@ export function BoardView({
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
+  const { preferences, setPreferences } = useUserPreferences();
+  const boardPreferences = getBoardPreferences(preferences, board.id);
   const lists = useBoardStore((s) => s.lists);
   const cards = useBoardStore((s) => s.cards);
   const cardLabels = useBoardStore((s) => s.cardLabels);
@@ -123,33 +130,23 @@ export function BoardView({
     logWorkspaceTabSwitchLatency("board", board.workspaceId);
   }, [board.workspaceId]);
 
-  // Plan #16b-γ-Master-D D1 — toggle for the sprint drop strip. Persisted
-  // to localStorage so the user's preference survives navigation. Initial
-  // read happens lazily so SSR doesn't crash.
-  // Default to false so SSR + first client paint match. Hydrate the
-  // persisted preference in an effect; otherwise React flags an
-  // aria-pressed/className mismatch on the toggle button.
-  const [showSprintStrip, setShowSprintStrip] = useState(false);
   useEffect(() => {
-    try {
-      if (window.localStorage.getItem(SPRINT_STRIP_KEY) === "1") {
-        setShowSprintStrip(true);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
+    setPreferences((current) =>
+      patchWorkspacePreferences(current, board.workspaceId, {
+        activeTab: "board",
+      }),
+    );
+  }, [board.workspaceId, setPreferences]);
+
+  const showSprintStrip = boardPreferences.sprintStripVisible === true;
   const toggleSprintStrip = useCallback(() => {
-    setShowSprintStrip((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem(SPRINT_STRIP_KEY, next ? "1" : "0");
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }, []);
+    setPreferences((current) =>
+      patchBoardPreferences(current, board.id, {
+        sprintStripVisible:
+          !(getBoardPreferences(current, board.id).sprintStripVisible === true),
+      }),
+    );
+  }, [board.id, setPreferences]);
 
   useBoardRealtime(board.id, board.workspaceId);
   useWorkspaceRealtime(board.workspaceId);
@@ -168,6 +165,19 @@ export function BoardView({
     () => parseFilters(new URLSearchParams(sp.toString())),
     [sp],
   );
+  const savedFilters = boardPreferences.filters;
+
+  useEffect(() => {
+    if (!savedFilters) return;
+    const params = new URLSearchParams(sp.toString());
+    if (hasExplicitFilterParams(params)) return;
+    const nextParams = preserveNonFilterParams(
+      params,
+      serializeFilters(savedFilters),
+    );
+    const qs = nextParams.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [pathname, router, savedFilters, sp]);
   const laneMode = ((sp.get("lanes") as LaneMode | null) ?? "none") as LaneMode;
 
   const visibleCards = useMemo(
@@ -429,8 +439,6 @@ export function BoardView({
           </div>
           <div className="flex items-center gap-2">
             <PresenceAvatars viewers={viewers} />
-            <AssigneeFilterRow />
-            <BoardFilterBar currentUserId={currentUser.userId} />
             <button
               type="button"
               onClick={toggleSprintStrip}
@@ -459,6 +467,13 @@ export function BoardView({
               Settings
             </Button>
           </div>
+        </div>
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <AssigneeFilterRow boardId={board.id} />
+          <BoardFilterBar
+            boardId={board.id}
+            currentUserId={currentUser.userId}
+          />
         </div>
       </div>
 
@@ -493,17 +508,25 @@ export function BoardView({
                     type="button"
                     onClick={() => {
                       const params = new URLSearchParams(sp.toString());
-                      for (const k of [
-                        "types",
-                        "labels",
-                        "due",
-                        "mine",
-                        "scheduled",
-                      ]) {
+                      for (const k of FILTER_QUERY_KEYS) {
                         params.delete(k);
                       }
                       const qs = params.toString();
                       router.replace(qs ? `${pathname}?${qs}` : pathname);
+                      setPreferences((current) =>
+                        patchBoardPreferences(current, board.id, {
+                          filters: {
+                            types: [],
+                            labelIds: [],
+                            due: null,
+                            assignedToMe: false,
+                            unassigned: false,
+                            scheduled: false,
+                            hideCompleted: false,
+                          },
+                          dataVisibilityFilters: { assignee: "all" },
+                        }),
+                      );
                     }}
                     className="mono-meta-sm text-fg-muted hover:text-fg"
                   >

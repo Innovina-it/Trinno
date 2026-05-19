@@ -37,6 +37,14 @@ const PRESERVED_SUBSECTIONS = new Set([
   "versions",
 ]);
 
+const PERSONAL_ROUTES = [
+  "/me",
+  "/inbox",
+  "/timeline",
+  "/dashboards",
+  "/workload",
+] as const;
+
 /**
  * Switch between workspaces, plus create a new one. Settings/members
  * moved out of this trigger; they live on the workspace-settings page,
@@ -57,6 +65,14 @@ export function WorkspaceSwitcher({
   const [q, setQ] = useState("");
 
   function targetFor(newId: string): string {
+    if (
+      pathname &&
+      PERSONAL_ROUTES.some(
+        (route) => pathname === route || pathname.startsWith(route + "/"),
+      )
+    ) {
+      return pathname;
+    }
     const m = pathname?.match(/^\/w\/[^/]+\/([^/?#]+)/);
     const sub = m?.[1];
     if (sub && PRESERVED_SUBSECTIONS.has(sub)) {

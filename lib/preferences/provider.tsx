@@ -96,8 +96,9 @@ export function UserPreferencesProvider({
   useEffect(() => {
     return () => {
       if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
+      flushPending();
     };
-  }, []);
+  }, [flushPending]);
 
   const value = useMemo(
     () => ({ preferences, setPreferences }),

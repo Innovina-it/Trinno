@@ -1,14 +1,17 @@
 "use client";
-import { useMemo, useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useMemo } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { UserRound } from "lucide-react";
 import {
   getAssigneeMode,
   parseFilters,
+  preserveNonFilterParams,
   serializeFilters,
   withAssigneeMode,
   type AssigneeMode,
 } from "@/lib/board-filters";
+import { useUserPreferences } from "@/lib/preferences/provider";
+import { patchBoardPreferences } from "@/lib/preferences/scoped";
 
 // Prominent top-row assignee filter. Promoted out of the filter dropdown
 // cluster so the operator's primary axis (mine vs all vs unassigned) is
@@ -36,16 +39,17 @@ const SEGMENTS: { value: AssigneeMode; label: string; title: string }[] = [
 ];
 
 export function AssigneeFilterRow({
+  boardId,
   className,
   hiddenCount = 0,
 }: {
+  boardId?: string;
   className?: string;
   hiddenCount?: number;
 }) {
-  const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
-  const [, start] = useTransition();
+  const { setPreferences } = useUserPreferences();
 
   const filters = useMemo(
     () => parseFilters(new URLSearchParams(sp.toString())),
@@ -55,13 +59,24 @@ export function AssigneeFilterRow({
 
   function setMode(next: AssigneeMode) {
     if (next === mode) return;
-    const params = serializeFilters(withAssigneeMode(filters, next));
-    // Preserve any non-filter params already on the URL (lanes, zoom, view).
-    for (const [k, v] of sp.entries()) {
-      if (!params.has(k)) params.set(k, v);
-    }
+    const nextFilters = withAssigneeMode(filters, next);
+    const params = preserveNonFilterParams(
+      new URLSearchParams(sp.toString()),
+      serializeFilters(nextFilters),
+    );
     const qs = params.toString();
-    start(() => router.replace(qs ? `${pathname}?${qs}` : pathname));
+    // Shallow URL update: avoids RSC refetch of board-snapshot. Next 15
+    // syncs window.history.replaceState with useSearchParams. Filter is
+    // applied client-side, so a server roundtrip is wasted work.
+    window.history.replaceState(null, "", qs ? `${pathname}?${qs}` : pathname);
+    if (boardId) {
+      setPreferences((current) =>
+        patchBoardPreferences(current, boardId, {
+          filters: nextFilters,
+          dataVisibilityFilters: { assignee: next },
+        }),
+      );
+    }
   }
 
   return (

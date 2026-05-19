@@ -3,10 +3,14 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useTransition, useMemo } from "react";
 import { useBoardStore } from "@/stores/board-store";
 import {
+  getAssigneeMode,
   parseFilters,
+  preserveNonFilterParams,
   serializeFilters,
   isFilterActive,
 } from "@/lib/board-filters";
+import { useUserPreferences } from "@/lib/preferences/provider";
+import { patchBoardPreferences } from "@/lib/preferences/scoped";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -30,10 +34,17 @@ import {
 
 const TYPE_OPTIONS = ["task", "subtask", "bug"] as const;
 
-export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
+export function BoardFilterBar({
+  boardId,
+  currentUserId,
+}: {
+  boardId: string;
+  currentUserId: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
+  const { setPreferences } = useUserPreferences();
   const labels = useBoardStore((s) => s.labels);
   const filters = useMemo(
     () => parseFilters(new URLSearchParams(sp.toString())),
@@ -43,9 +54,20 @@ export function BoardFilterBar({ currentUserId }: { currentUserId: string }) {
   void currentUserId;
 
   function update(next: typeof filters) {
-    const params = serializeFilters(next);
+    const params = preserveNonFilterParams(
+      new URLSearchParams(sp.toString()),
+      serializeFilters(next),
+    );
     const qs = params.toString();
-    start(() => router.replace(qs ? `${pathname}?${qs}` : pathname));
+    start(() =>
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false }),
+    );
+    setPreferences((current) =>
+      patchBoardPreferences(current, boardId, {
+        filters: next,
+        dataVisibilityFilters: { assignee: getAssigneeMode(next) },
+      }),
+    );
   }
   function toggleType(t: string) {
     const has = filters.types.includes(t);

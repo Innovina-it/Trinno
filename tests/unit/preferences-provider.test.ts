@@ -75,4 +75,24 @@ describe("UserPreferencesProvider", () => {
       sidebarCollapsed: false,
     });
   });
+
+  it("flushes a pending preference update on unmount", async () => {
+    const { unmount } = render(
+      React.createElement(
+        UserPreferencesProvider,
+        { initial: { sidebarCollapsed: true } },
+        React.createElement(SidebarPreferenceProbe),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+    expect(mocks.setUserPreferences).not.toHaveBeenCalled();
+
+    unmount();
+
+    expect(mocks.setUserPreferences).toHaveBeenCalledTimes(1);
+    expect(mocks.setUserPreferences).toHaveBeenCalledWith({
+      sidebarCollapsed: false,
+    });
+  });
 });

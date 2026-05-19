@@ -21,6 +21,31 @@ export type Filters = {
   hideCompleted: boolean;
 };
 
+export const FILTER_QUERY_KEYS = [
+  "type",
+  "label",
+  "due",
+  "assignee",
+  "scheduled",
+  "done",
+] as const;
+
+export function hasExplicitFilterParams(sp: URLSearchParams): boolean {
+  return FILTER_QUERY_KEYS.some((key) => sp.has(key));
+}
+
+export function preserveNonFilterParams(
+  source: URLSearchParams,
+  target: URLSearchParams,
+): URLSearchParams {
+  for (const [key, value] of source.entries()) {
+    if (!(FILTER_QUERY_KEYS as readonly string[]).includes(key)) {
+      target.set(key, value);
+    }
+  }
+  return target;
+}
+
 type FilterCard = {
   id: string; title: string; archived: boolean;
   type?: string | null;
