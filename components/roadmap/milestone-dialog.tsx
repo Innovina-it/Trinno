@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -76,13 +76,15 @@ export function MilestoneDialog({
 }: MilestoneDialogProps) {
   const isEdit = Boolean(milestone);
   const [pending, startTransition] = useTransition();
+  const [confirming, setConfirming] = useState(false);
+  const dirtyRef = useRef(false);
 
   const {
     register,
     handleSubmit,
     reset,
     control,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
     defaultValues: {
@@ -106,44 +108,79 @@ export function MilestoneDialog({
         color: milestone?.color ?? "#6366f1",
         icon: milestone?.icon ?? "",
       });
+      setConfirming(false);
     }
   }, [open, milestone, reset]);
 
-  function submit(values: FormValues) {
-    startTransition(async () => {
-      try {
-        let saved: MilestoneRow;
-        if (isEdit && milestone) {
-          saved = (await updateMilestone({
-            id: milestone.id,
-            name: values.name,
-            date: values.date,
-            description: values.description || null,
-            color: values.color || "#6366f1",
-            icon: values.icon || null,
-          })) as MilestoneRow;
-        } else {
-          saved = (await createMilestone({
-            workspaceId,
-            boardId: boardId ?? null,
-            name: values.name,
-            date: values.date,
-            description: values.description || null,
-            color: values.color || "#6366f1",
-            icon: values.icon || null,
-          })) as MilestoneRow;
+  // Mirror dirty into ref so dismiss interceptor reads fresh value without
+  // re-binding the handler.
+  useEffect(() => {
+    dirtyRef.current = isDirty;
+  }, [isDirty]);
+
+  const submit = useCallback(
+    (values: FormValues) => {
+      startTransition(async () => {
+        try {
+          let saved: MilestoneRow;
+          if (isEdit && milestone) {
+            saved = (await updateMilestone({
+              id: milestone.id,
+              name: values.name,
+              date: values.date,
+              description: values.description || null,
+              color: values.color || "#6366f1",
+              icon: values.icon || null,
+            })) as MilestoneRow;
+          } else {
+            saved = (await createMilestone({
+              workspaceId,
+              boardId: boardId ?? null,
+              name: values.name,
+              date: values.date,
+              description: values.description || null,
+              color: values.color || "#6366f1",
+              icon: values.icon || null,
+            })) as MilestoneRow;
+          }
+          onSaved(saved);
+          dirtyRef.current = false;
+          setConfirming(false);
+          onOpenChange(false);
+          toast.success(isEdit ? "Milestone updated" : "Milestone created");
+        } catch {
+          toast.error("Failed to save milestone");
         }
-        onSaved(saved);
-        onOpenChange(false);
-        toast.success(isEdit ? "Milestone updated" : "Milestone created");
-      } catch {
-        toast.error("Failed to save milestone");
+      });
+    },
+    [isEdit, milestone, workspaceId, boardId, onSaved, onOpenChange],
+  );
+
+  const commitSave = useCallback(() => {
+    void handleSubmit(submit)();
+  }, [handleSubmit, submit]);
+
+  const discardAndClose = useCallback(() => {
+    dirtyRef.current = false;
+    setConfirming(false);
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  // Intercept dismiss attempts (X, Esc, outside-click) when dirty so edits
+  // funnel through the confirm phase instead of silently dropping.
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      if (!next && dirtyRef.current) {
+        setConfirming(true);
+        return;
       }
-    });
-  }
+      onOpenChange(next);
+    },
+    [onOpenChange],
+  );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent data-testid="milestone-dialog" className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit milestone" : "Add milestone"}</DialogTitle>
@@ -213,18 +250,58 @@ export function MilestoneDialog({
             </div>
           </div>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Saving…" : isEdit ? "Save changes" : "Add milestone"}
-            </Button>
+          <DialogFooter
+            className="items-center justify-between sm:justify-between"
+            data-dirty={isDirty ? "true" : "false"}
+            data-confirming={confirming ? "true" : "false"}
+          >
+            {confirming ? (
+              <>
+                <span
+                  className="mono-meta-sm text-fg-muted"
+                  data-testid="milestone-dialog-confirm-prompt"
+                >
+                  Save changes?
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={discardAndClose}
+                    disabled={pending}
+                    data-testid="milestone-dialog-discard"
+                  >
+                    Discard
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={commitSave}
+                    disabled={pending}
+                    data-testid="milestone-dialog-confirm-save"
+                  >
+                    {pending ? "Saving…" : "Save"}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant={isDirty ? "default" : "outline"}
+                onClick={isDirty ? commitSave : () => onOpenChange(false)}
+                disabled={pending}
+                data-testid="milestone-dialog-close"
+                data-dirty={isDirty ? "true" : "false"}
+                className="ml-auto"
+              >
+                {isDirty
+                  ? pending
+                    ? "Saving…"
+                    : isEdit
+                      ? "Save"
+                      : "Add milestone"
+                  : "Close"}
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

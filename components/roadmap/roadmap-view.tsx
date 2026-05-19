@@ -31,15 +31,15 @@ import {
   groupByAssignee,
   groupByComponent,
   groupBySubBoard,
-  stackInLane,
   UNCATEGORIZED_LANE_ID,
   type SubBoardRef,
 } from "@/lib/roadmap/layout";
+import { holidaysInRange } from "@/lib/holidays/merge";
 import { getCardStatusKind, type StatusKind } from "@/lib/status";
 import { criticalPath, type Link as CritLink } from "@/lib/roadmap/critical-path";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
-import { RoadmapBar } from "./roadmap-bar";
+import { RoadmapBar, type RoadmapBarAssignee } from "./roadmap-bar";
 import { PriorityGutter } from "./priority-gutter";
 import { DependencyArrows, type BarBox } from "./dependency-arrows";
 import { CriticalPathOverlay } from "./critical-path-overlay";
@@ -69,9 +69,15 @@ import {
   type ViewMode,
 } from "./roadmap-header";
 import { RoadmapListView } from "./roadmap-list-view";
+import { useUserPreferences } from "@/lib/preferences/provider";
+import {
+  getWorkspacePreferences,
+  patchWorkspacePreferences,
+} from "@/lib/preferences/scoped";
 import {
   CardQuickView,
   type PatchInput as QuickViewPatchInput,
+  type QuickViewSubtask,
 } from "@/components/board/card-quick-view";
 import { parseFilters } from "@/lib/board-filters";
 import { useRoadmapDragHarness } from "./use-roadmap-drag-harness";
@@ -178,24 +184,24 @@ function buildHeaderTicks(
 export function RoadmapView({
   workspaceId,
   viewerId,
+  holidays: holidayDefs = [],
 }: {
   workspaceId: string;
   /** Used for assignee/unassigned filter. Pass null/undefined for anonymous. */
   viewerId?: string | null;
+  /** Effective holiday list (presets merged with workspace overrides).
+   *  Server-fetched in the page; defaults to empty for safety. */
+  holidays?: ReadonlyArray<{ iso: string; name: string }>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
+  const { preferences, setPreferences } = useUserPreferences();
+  const workspacePreferences = getWorkspacePreferences(preferences, workspaceId);
   const zoomParam = sp.get("zoom");
-  // Client-side fallback applied from localStorage during the hydration
-  // effect below. Lets us honor a saved zoom without forcing a
-  // router.replace → second RSC fetch on every roadmap mount (perf hot-
-  // path: TB-10 measured the redirect at ~300 ms p95 on prod). URL still
-  // wins when explicitly set so deep-linked zoom remains bookmarkable.
-  const [clientZoomOverride, setClientZoomOverride] = useState<Zoom | null>(null);
   const zoom: Zoom = (ZOOMS as string[]).includes(zoomParam ?? "")
     ? (zoomParam as Zoom)
-    : (clientZoomOverride ?? "fit");
+    : (workspacePreferences.roadmapZoom ?? "fit");
   const lanesParam = sp.get("lanes");
   const laneMode: LaneMode = (LANE_MODES as string[]).includes(lanesParam ?? "")
     ? (lanesParam as LaneMode)
@@ -203,7 +209,7 @@ export function RoadmapView({
   const viewParam = sp.get("view");
   const viewMode: ViewMode = (VIEW_MODES as string[]).includes(viewParam ?? "")
     ? (viewParam as ViewMode)
-    : "gantt";
+    : (workspacePreferences.roadmapViewMode ?? "gantt");
   const focusParam = sp.get("focus");
   const queryParam = sp.get("q") ?? "";
   // Plan #16b-γ-G G4 — priority-gutter URL toggle. Default off (param
@@ -527,6 +533,12 @@ export function RoadmapView({
     logWorkspaceTabSwitchLatency("roadmap", workspaceId);
   }, [workspaceId]);
 
+  useEffect(() => {
+    setPreferences((current) =>
+      patchWorkspacePreferences(current, workspaceId, { activeTab: "roadmap" }),
+    );
+  }, [setPreferences, workspaceId]);
+
   // Plan #16b-γ-A (#2) — index card → status kind via list mapping. We
   // recompute when either list mappings or the visible cards change.
   const cardStatusById = useMemo(() => {
@@ -551,6 +563,26 @@ export function RoadmapView({
     }
     return out;
   }, [storeCards, storeSprints]);
+  // Per-card assignee profiles for the gantt-bar avatar stack. Built once
+  // from `cardMembers` + `workspaceProfiles`; rebuilt only when those store
+  // slices change, so RoadmapBar receives stable arrays per card.
+  const cardAssigneesById = useMemo(() => {
+    const profileById = new Map(storeProfilesRaw.map((p) => [p.id, p]));
+    const out = new Map<string, RoadmapBarAssignee[]>();
+    for (const cm of storeCardMembers) {
+      const p = profileById.get(cm.userId);
+      if (!p) continue;
+      const arr = out.get(cm.cardId);
+      const entry: RoadmapBarAssignee = {
+        id: p.id,
+        displayName: p.displayName,
+        avatarUrl: p.avatarUrl,
+      };
+      if (arr) arr.push(entry);
+      else out.set(cm.cardId, [entry]);
+    }
+    return out;
+  }, [storeCardMembers, storeProfilesRaw]);
 
   const cards = useMemo<RoadmapCard[]>(() => {
     const boardTitleById = new Map(storeBoards.map((b) => [b.id, b.title]));
@@ -602,6 +634,23 @@ export function RoadmapView({
         cur = parent;
       }
     }
+    // Pull sub-board anchor cards too. Without this a "Mine" / unassigned
+    // filter that excludes the anchor card collapses its sub-board lane —
+    // groupBySubBoard then drops the children to orphan self-lanes whose
+    // title is the task's own name instead of the anchor's.
+    const anchorByBoardId = new Map<string, string>();
+    for (const sb of storeSubBoards) {
+      if (sb.parentCardId) anchorByBoardId.set(sb.id, sb.parentCardId);
+    }
+    for (const id of [...passSet]) {
+      const c = cardById.get(id);
+      if (!c) continue;
+      const anchorId = anchorByBoardId.get(c.boardId);
+      if (!anchorId || passSet.has(anchorId)) continue;
+      const anchor = cardById.get(anchorId);
+      if (!anchor || !baseEligible(anchor)) continue;
+      passSet.add(anchorId);
+    }
 
     return storeCards
       .filter((c) => passSet.has(c.id))
@@ -627,7 +676,7 @@ export function RoadmapView({
               : new Date(c.completedAt)
             : null,
       }));
-  }, [storeCards, storeBoards, storeCardMembers, queryNorm, filters, sprintFilter, viewerId]);
+  }, [storeCards, storeBoards, storeCardMembers, storeSubBoards, queryNorm, filters, sprintFilter, viewerId]);
 
   const mineHiddenCount = useMemo(() => {
     const memberByCard = new Map<string, Set<string>>();
@@ -720,6 +769,19 @@ export function RoadmapView({
     [storeLinks],
   );
 
+  // Earliest task start across the workspace — used to clamp milestone
+  // drag so a milestone can never be moved before the first task begins.
+  const earliestCardStart = useMemo<Date | null>(() => {
+    let min: number | null = null;
+    for (const c of storeCards) {
+      if (c.archived) continue;
+      if (!c.startDate) continue;
+      const t = (c.startDate instanceof Date ? c.startDate : new Date(c.startDate)).getTime();
+      if (min === null || t < min) min = t;
+    }
+    return min === null ? null : new Date(min);
+  }, [storeCards]);
+
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
 
@@ -751,10 +813,21 @@ export function RoadmapView({
     return () => ro.disconnect();
   }, []); // scrollerRef is stable; no deps needed
 
+  // Continuous-zoom override pushed up from the mini-map resize handles.
+  // While the user is dragging an edge of the viewport bar, this holds
+  // the live pixels-per-day so canvas + headers + overlays all scale in
+  // real time. Cleared when the user changes the discrete zoom from the
+  // header, or programmatically by mini-map on pointerup if it commits a
+  // snap.
+  const [dragPpdOverride, setDragPpdOverride] = useState<number | null>(null);
+
   // Resolve effective pixels-per-day.
   // For fixed zoom levels this is the static value from pixelsPerDay().
   // For "fit" we compute it so 180 days fill the available canvas width.
+  // dragPpdOverride wins over both — used by the mini-map for continuous
+  // resize-to-zoom.
   const effectivePpd = useMemo(() => {
+    if (dragPpdOverride !== null) return dragPpdOverride;
     if (zoom !== "fit") return pixelsPerDay(zoom);
     if (containerWidth === 0) return 8; // pre-mount fallback
     // scrollerRef is `flex-1` after the lane-label panel, so its clientWidth
@@ -762,7 +835,7 @@ export function RoadmapView({
     // further subtraction needed (previous code double-subtracted, leaving
     // ~200px empty on the right).
     return Math.max(2, containerWidth / 180);
-  }, [zoom, containerWidth]);
+  }, [dragPpdOverride, zoom, containerWidth]);
 
   const now = useMemo(() => new Date(), []);
   // Base origin = current period (week/month/quarter). If any card starts
@@ -789,8 +862,18 @@ export function RoadmapView({
   }, [cards, gridStart, zoom]);
   const totalDays = Math.max(1, dayDiff(gridStart, gridEnd));
   const width = totalDays * effectivePpd;
+  // Workspace-effective holidays (presets + overrides) falling within
+  // the current grid. Memoised so the linear scan only re-runs when the
+  // viewport range or the input list changes.
+  const holidays = useMemo(
+    () => holidaysInRange(holidayDefs, gridStart, gridEnd),
+    [holidayDefs, gridStart, gridEnd],
+  );
 
   // Plan #16b-β — expanded parent state lifted into RoadmapView.
+  // Default = every parent with subtasks is expanded; the user can collapse
+  // individual rows via the chevron. Pre-fill happens once on first render
+  // after lanes populate; manual toggles after that take precedence.
   const [expandedParents, setExpandedParents] = useState<Set<string>>(
     () => new Set(),
   );
@@ -831,6 +914,23 @@ export function RoadmapView({
     subBoardsForLanes,
   ]);
 
+  // Default-expand every parent with subtasks once lanes first populate.
+  // Guarded by a ref so subsequent re-renders or user collapses don't
+  // re-expand. Toggles after init take precedence.
+  const didInitExpandedRef = useRef(false);
+  useEffect(() => {
+    if (didInitExpandedRef.current) return;
+    if (lanes.length === 0) return;
+    didInitExpandedRef.current = true;
+    const next = new Set<string>();
+    for (const lane of lanes) {
+      for (const parentId of Object.keys(lane.subtaskRowsByParent)) {
+        next.add(parentId);
+      }
+    }
+    if (next.size > 0) setExpandedParents(next);
+  }, [lanes]);
+
   // Per-lane stacking + total height. Each entry tracks where in the
   // canvas its body bars start, and pre-computes per-row offsets for any
   // expanded subtask groups so the bar renderer can place children
@@ -838,7 +938,14 @@ export function RoadmapView({
   const laneLayout = useMemo(() => {
     let yCursor = HEADER_STRIP_HEIGHT;
     return lanes.map((lane) => {
-      const placed = stackInLane(lane.cards);
+      // One row per task in the lane (sorted by startDate). Previous
+      // behaviour used `stackInLane` greedy-packing so non-overlapping
+      // tasks shared a row; the new lane model wants every task on its
+      // own row so the hierarchy reads top-to-bottom under each anchor.
+      const placed = lane.cards
+        .slice()
+        .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
+        .map((card, idx) => ({ card, row: idx }));
       const rowsCount =
         placed.length === 0 ? 0 : Math.max(...placed.map((p) => p.row + 1));
       const headerRows = lane.headerCard ? 1 : 0;
@@ -944,6 +1051,11 @@ export function RoadmapView({
 
   // ---- Zoom toggle (URL-synced) ----
   function setViewMode(next: ViewMode) {
+    setPreferences((current) =>
+      patchWorkspacePreferences(current, workspaceId, {
+        roadmapViewMode: next,
+      }),
+    );
     const params = new URLSearchParams(sp.toString());
     if (next === "gantt") params.delete("view");
     else params.set("view", next);
@@ -951,6 +1063,13 @@ export function RoadmapView({
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
   function setZoom(next: Zoom) {
+    // Picking a discrete zoom (header select, or programmatic) exits any
+    // continuous-resize state from the mini-map so the new zoom's native
+    // ppd takes effect immediately.
+    setDragPpdOverride(null);
+    setPreferences((current) =>
+      patchWorkspacePreferences(current, workspaceId, { roadmapZoom: next }),
+    );
     const params = new URLSearchParams(sp.toString());
     params.set("zoom", next);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
@@ -1070,6 +1189,47 @@ export function RoadmapView({
     }
     return n;
   });
+  // Child rows for the qv subtask list. The qv body has its own
+  // BoardStoreContext-backed selector, but the roadmap mounts the dialog
+  // without a board store — so we resolve the rows from the workspace
+  // store and pass them in. useShallow keeps the snapshot stable across
+  // unrelated card edits.
+  const quickViewSubtaskRowsRaw = useWorkspaceStore(
+    useShallow((s) => {
+      if (!quickViewCardId) return s.cards.slice(0, 0);
+      return s.cards.filter(
+        (c) => c.parentCardId === quickViewCardId && !c.archived,
+      );
+    }),
+  );
+  const quickViewSubtaskRows = useMemo<QuickViewSubtask[]>(
+    () =>
+      quickViewSubtaskRowsRaw
+        .map((c) => ({
+          id: c.id,
+          title: c.title,
+          type: c.type,
+          completedAt: c.completedAt,
+          dueComplete: c.dueComplete,
+          position: c.position,
+          boardId: c.boardId,
+        }))
+        .sort((a, b) => ((a.position ?? "") < (b.position ?? "") ? -1 : 1)),
+    [quickViewSubtaskRowsRaw],
+  );
+  // Google-Calendar-style detail swap: clicking a subtask re-opens the
+  // qv against that subtask in place. We resolve the subtask's own
+  // boardId here (it may differ from the parent's when the parent owns
+  // a sub-board) and reuse onOpenCard so the back-nav origin tracking
+  // matches the user's first qv entry.
+  const onOpenSubtask = useCallback(
+    (subtaskId: string) => {
+      const row = quickViewSubtaskRows.find((r) => r.id === subtaskId);
+      if (!row || !row.boardId) return;
+      onOpenCard(subtaskId, row.boardId);
+    },
+    [quickViewSubtaskRows, onOpenCard],
+  );
   const quickViewMemberProfiles = useMemo(
     () =>
       quickViewMemberIds
@@ -1078,21 +1238,18 @@ export function RoadmapView({
         .map((p) => ({
           id: p.id,
           displayName: p.displayName,
-          // workspaceProfiles carries only {id, displayName}; surface a null
-          // avatar so QuickViewProfile's shape is satisfied.
-          avatarUrl: null as string | null,
+          avatarUrl: p.avatarUrl,
         })),
     [quickViewMemberIds, quickViewProfilesRaw],
   );
   // Mirror of the assigned-only list, but built from the full workspace
-  // profile pool so users can add anyone in the workspace. `avatarUrl`
-  // is null because workspaceProfiles doesn't carry one.
+  // profile pool so users can add anyone in the workspace.
   const quickViewAvailableMembers = useMemo(
     () =>
       quickViewProfilesRaw.map((p) => ({
         id: p.id,
         displayName: p.displayName,
-        avatarUrl: null as string | null,
+        avatarUrl: p.avatarUrl,
       })),
     [quickViewProfilesRaw],
   );
@@ -1245,106 +1402,21 @@ export function RoadmapView({
   );
 
 
-  // Plan #16b-α (#17) — persist zoom + scroll-x per workspace in
-  // localStorage. On mount we read the saved viewport: the zoom is
-  // applied via URL replace (so it stays bookmarkable) UNLESS the URL
-  // already has an explicit `?zoom=` (URL wins), and the scrollX is
-  // applied to the scroller after first paint. Subsequent zoom changes
-  // and scroll events write back debounced.
-  const VIEWPORT_KEY = `roadmap:${workspaceId}:viewport`;
-  const hydratedRef = useRef(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  // Initial viewport anchor. Zoom/view preferences are server-backed; the
+  // horizontal scroll position is intentionally not persisted.
+  const initialScrollAppliedRef = useRef(false);
   useEffect(() => {
-    if (hydratedRef.current) return;
-    hydratedRef.current = true;
-    if (typeof window === "undefined") return;
-    let saved: { zoom?: Zoom; scrollX?: number } | null = null;
-    try {
-      const raw = window.localStorage.getItem(VIEWPORT_KEY);
-      if (raw) saved = JSON.parse(raw);
-    } catch {
-      saved = null;
-    }
-    // Apply saved zoom only if URL is silent on the matter. Use a client
-    // state override (NOT router.replace) so we don't trigger a second
-    // RSC fetch every time the user lands on the roadmap. URL also gets
-    // updated via history.replaceState so the address bar reflects the
-    // active zoom and remains shareable on demand.
-    if (saved?.zoom && !zoomParam && (ZOOMS as string[]).includes(saved.zoom)) {
-      setClientZoomOverride(saved.zoom);
-      try {
-        const params = new URLSearchParams(sp.toString());
-        params.set("zoom", saved.zoom);
-        const next = `${pathname}?${params.toString()}`;
-        window.history.replaceState(window.history.state, "", next);
-      } catch {
-        // history.replaceState can throw if the URL is invalid in some
-        // older browsers — the client state above is enough to apply the
-        // saved zoom, the address bar just won't reflect it.
-      }
-    }
-    // Apply scrollX after first paint. If nothing saved, anchor on `now` so
-    // the user lands on "today" even when the grid extends backward to
-    // cover past-dated cards.
-    if (typeof saved?.scrollX === "number") {
-      requestAnimationFrame(() => {
-        if (scrollerRef.current) {
-          scrollerRef.current.scrollLeft = saved!.scrollX!;
-        }
-      });
-    } else {
-      requestAnimationFrame(() => {
-        const sc = scrollerRef.current;
-        if (!sc) return;
-        const x = xForDate(startOfDay(now), gridStart, effectivePpd);
-        const desired = x - sc.clientWidth / 4;
-        const max = sc.scrollWidth - sc.clientWidth;
-        sc.scrollLeft = Math.max(0, Math.min(max, desired));
-      });
-    }
-    // Note: we intentionally don't include sp / pathname / router in deps —
-    // hydration runs exactly once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [VIEWPORT_KEY]);
-
-  // Persist zoom whenever it changes (URL-driven).
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!hydratedRef.current) return;
-    try {
-      const raw = window.localStorage.getItem(VIEWPORT_KEY);
-      const cur = raw ? JSON.parse(raw) : {};
-      cur.zoom = zoom;
-      window.localStorage.setItem(VIEWPORT_KEY, JSON.stringify(cur));
-    } catch {
-      /* ignore */
-    }
-  }, [zoom, VIEWPORT_KEY]);
-
-  // Debounced scroll persistence.
-  useEffect(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    function onScroll() {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => {
-        try {
-          const raw = window.localStorage.getItem(VIEWPORT_KEY);
-          const cur = raw ? JSON.parse(raw) : {};
-          cur.scrollX = scroller!.scrollLeft;
-          window.localStorage.setItem(VIEWPORT_KEY, JSON.stringify(cur));
-        } catch {
-          /* ignore */
-        }
-      }, 200);
-    }
-    scroller.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      scroller.removeEventListener("scroll", onScroll);
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  }, [VIEWPORT_KEY]);
+    if (initialScrollAppliedRef.current) return;
+    initialScrollAppliedRef.current = true;
+    requestAnimationFrame(() => {
+      const sc = scrollerRef.current;
+      if (!sc) return;
+      const x = xForDate(startOfDay(now), gridStart, effectivePpd);
+      const desired = x - sc.clientWidth / 4;
+      const max = sc.scrollWidth - sc.clientWidth;
+      sc.scrollLeft = Math.max(0, Math.min(max, desired));
+    });
+  }, [gridStart, effectivePpd, now]);
 
   // Plan #16b-α (#4) — when the URL carries `?focus=<cardId>`, scroll the
   // matching bar into view and flash a 1.5s outline ring. We re-run when the
@@ -1563,6 +1635,10 @@ export function RoadmapView({
             gridEnd={gridEnd}
             canvasWidth={width}
             scrollerRef={scrollerRef}
+            zoom={zoom}
+            onSetZoom={setZoom}
+            effectivePpd={effectivePpd}
+            onPpdOverride={setDragPpdOverride}
           />
         </div>
       )}
@@ -1862,6 +1938,33 @@ export function RoadmapView({
                   }
                   return <>{stripes}</>;
                 })()}
+              {/* Holiday shading. Same grayscale treatment as weekends, a
+                  hair stronger alpha so a holiday that falls on a Sunday
+                  reads slightly darker than the surrounding weekend. Skipped
+                  on quarter zoom alongside weekends. Native `title=` carries
+                  the name so a tap-and-hold or hover surfaces it; the
+                  Workspace Settings → Calendar tab is the source of truth
+                  for editing. */}
+              {zoom !== "quarter" &&
+                holidays.map((h) => {
+                  const x = xForDate(h.date, gridStart, effectivePpd);
+                  return (
+                    <div
+                      key={`hol-${h.date.toISOString()}`}
+                      data-testid="roadmap-holiday"
+                      data-holiday-name={h.name}
+                      aria-hidden
+                      title={h.name}
+                      className="absolute pointer-events-none bg-fg/[0.05]"
+                      style={{
+                        left: x,
+                        top: HEADER_STRIP_HEIGHT,
+                        bottom: 0,
+                        width: effectivePpd,
+                      }}
+                    />
+                  );
+                })}
               {/* Today vertical indicator line */}
               {(() => {
                 const today = startOfDay(new Date());
@@ -1932,17 +2035,28 @@ export function RoadmapView({
                 <MilestoneMarkers
                   milestones={storedMilestones}
                   zoom={zoom}
+                  ppd={effectivePpd}
                   gridStart={gridStart}
                   gridEnd={gridEnd}
                   canvasHeight={totalHeight + HEADER_STRIP_HEIGHT}
                   headerHeight={HEADER_STRIP_HEIGHT}
                   canAdmin={true}
+                  minDate={earliestCardStart}
                   onEdit={(m) => {
                     setEditingMilestone(m);
                     setMilestoneDialogOpen(true);
                   }}
                   onDeleted={(id) =>
                     setStoredMilestones((prev) => prev.filter((m) => m.id !== id))
+                  }
+                  onChanged={(row) =>
+                    setStoredMilestones((prev) => {
+                      const idx = prev.findIndex((m) => m.id === row.id);
+                      if (idx < 0) return prev;
+                      const next = [...prev];
+                      next[idx] = row;
+                      return next;
+                    })
                   }
                 />
               )}
@@ -1967,6 +2081,35 @@ export function RoadmapView({
                   if (!expandedParents.has(parentCard.id)) return 0;
                   if (subRows.length === 0) return 0;
                   subRows.forEach((rowCards, rowIdx) => {
+                    // Precompute geometry so we know each bar's right edge
+                    // and where the next bar to its right starts. Used to
+                    // suppress the trailing assignee stack when there isn't
+                    // enough gap.
+                    const geoms = rowCards.map((p) => {
+                      const sx = xForDate(
+                        startOfDay(p.card.startDate),
+                        gridStart,
+                        effectivePpd,
+                      );
+                      const sw =
+                        xForDate(
+                          startOfDay(p.card.targetDate),
+                          gridStart,
+                          effectivePpd,
+                        ) -
+                        sx +
+                        effectivePpd;
+                      return { p, sx, sw };
+                    });
+                    const sortedGeoms = [...geoms].sort((a, b) => a.sx - b.sx);
+                    const nextLeftById = new Map<string, number>();
+                    for (let i = 0; i < sortedGeoms.length; i += 1) {
+                      const nextLeft =
+                        i + 1 < sortedGeoms.length
+                          ? sortedGeoms[i + 1].sx
+                          : width;
+                      nextLeftById.set(sortedGeoms[i].p.card.id, nextLeft);
+                    }
                     renderedBars.push(
                       <div
                         key={`subrow-${parentCard.id}-${rowIdx}`}
@@ -1978,21 +2121,9 @@ export function RoadmapView({
                           height: ROW_HEIGHT,
                         }}
                       >
-                        {rowCards.map((p) => {
+                        {geoms.map(({ p, sx, sw }) => {
                           const sc = p.card;
-                          const sx = xForDate(
-                            startOfDay(sc.startDate),
-                            gridStart,
-                            effectivePpd,
-                          );
-                          const sw =
-                            xForDate(
-                              startOfDay(sc.targetDate),
-                              gridStart,
-                              effectivePpd,
-                            ) -
-                            sx +
-                            effectivePpd;
+                          const nextLeft = nextLeftById.get(sc.id) ?? width;
                           return (
                             <RoadmapBar
                               key={sc.id}
@@ -2005,6 +2136,8 @@ export function RoadmapView({
                               status={cardStatusById.get(sc.id) ?? null}
                               storyPoints={cardSpById.get(sc.id) ?? null}
                               sprintName={cardSprintNameById.get(sc.id) ?? null}
+                              assignees={cardAssigneesById.get(sc.id) ?? []}
+                              availableSpaceRight={nextLeft - (sx + sw)}
                               onMoveStart={handleMoveStart}
                               onResizeLeftStart={handleResizeLeftStart}
                               onResizeRightStart={handleResizeRightStart}
@@ -2021,6 +2154,7 @@ export function RoadmapView({
                 const renderParentBar = (
                   parentCard: RoadmapCard,
                   isHeader: boolean,
+                  nextLeft: number = width,
                 ) => {
                   const c = parentCard;
                   const x = xForDate(startOfDay(c.startDate), gridStart, effectivePpd);
@@ -2076,6 +2210,8 @@ export function RoadmapView({
                         status={cardStatusById.get(c.id) ?? null}
                         storyPoints={cardSpById.get(c.id) ?? null}
                         sprintName={cardSprintNameById.get(c.id) ?? null}
+                        assignees={cardAssigneesById.get(c.id) ?? []}
+                        availableSpaceRight={nextLeft - (x + w)}
                         onMoveStart={handleMoveStart}
                         onResizeLeftStart={handleResizeLeftStart}
                         onResizeRightStart={handleResizeRightStart}
@@ -2132,6 +2268,26 @@ export function RoadmapView({
                   }
                   const stackRowTop =
                     barRowsTop + rowCursor * ROW_HEIGHT;
+                  // Sort by left edge so we can index each bar's nearest
+                  // right neighbour for assignee-stack collision checks.
+                  const sortedRowCards = [...rowCards]
+                    .map((c) => ({
+                      c,
+                      lx: xForDate(
+                        startOfDay(c.startDate),
+                        gridStart,
+                        effectivePpd,
+                      ),
+                    }))
+                    .sort((a, b) => a.lx - b.lx);
+                  const nextLeftByCardId = new Map<string, number>();
+                  for (let i = 0; i < sortedRowCards.length; i += 1) {
+                    const nl =
+                      i + 1 < sortedRowCards.length
+                        ? sortedRowCards[i + 1].lx
+                        : width;
+                    nextLeftByCardId.set(sortedRowCards[i].c.id, nl);
+                  }
                   renderedBars.push(
                     <div
                       key={`stackrow-${ll.lane.id}-${r}`}
@@ -2143,7 +2299,13 @@ export function RoadmapView({
                         height: ROW_HEIGHT,
                       }}
                     >
-                      {rowCards.map((c) => renderParentBar(c, false))}
+                      {rowCards.map((c) =>
+                        renderParentBar(
+                          c,
+                          false,
+                          nextLeftByCardId.get(c.id) ?? width,
+                        ),
+                      )}
                     </div>,
                   );
                   rowCursor += 1;
@@ -2287,6 +2449,8 @@ export function RoadmapView({
         availableMembers={quickViewAvailableMembers}
         subtaskTotal={quickViewSubtaskTotal}
         subtaskDone={quickViewSubtaskDone}
+        subtaskRows={quickViewSubtaskRows}
+        onOpenSubtask={onOpenSubtask}
         boardId={quickViewCard?.boardId ?? ""}
         open={quickViewCard != null}
         onOpenChange={(next) => {

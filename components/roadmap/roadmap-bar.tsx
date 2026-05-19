@@ -44,6 +44,69 @@ import {
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 
+export type RoadmapBarAssignee = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+};
+
+// Stable swatch per user id for the initials fallback when avatarUrl is null.
+// Mirrors components/board/assignee-picker.tsx so the same user gets the same
+// colour everywhere.
+const ASSIGNEE_SWATCHES = [
+  "bg-emerald-500/30 text-emerald-100",
+  "bg-violet-500/30 text-violet-100",
+  "bg-amber-500/30 text-amber-100",
+  "bg-rose-500/30 text-rose-100",
+  "bg-sky-500/30 text-sky-100",
+  "bg-fuchsia-500/30 text-fuchsia-100",
+];
+
+function swatchFor(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return ASSIGNEE_SWATCHES[h % ASSIGNEE_SWATCHES.length];
+}
+
+function initials(displayName: string): string {
+  const parts = displayName.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return parts[0].slice(0, 2).toUpperCase();
+}
+
+function BarAvatar({ member }: { member: RoadmapBarAssignee }) {
+  const base =
+    "inline-flex size-4 items-center justify-center rounded-full ring-1 ring-[color:var(--surface)] overflow-hidden text-[8px] font-medium leading-none";
+  if (member.avatarUrl) {
+    return (
+      <span
+        className={base}
+        title={member.displayName}
+        aria-label={member.displayName}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={member.avatarUrl}
+          alt=""
+          className="size-full object-cover"
+          draggable={false}
+        />
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`${base} ${swatchFor(member.id)}`}
+      title={member.displayName}
+      aria-label={member.displayName}
+    >
+      {initials(member.displayName)}
+    </span>
+  );
+}
+
 const TYPE_DOT: Record<string, string> = {
   epic: "bg-fg",
   story: "bg-fg/70",
@@ -138,6 +201,8 @@ export function RoadmapBar({
   status = null,
   storyPoints = null,
   sprintName = null,
+  assignees = [],
+  availableSpaceRight = Number.POSITIVE_INFINITY,
   onMoveStart,
   onResizeLeftStart,
   onResizeRightStart,
@@ -152,6 +217,11 @@ export function RoadmapBar({
   status?: StatusKind | null;
   storyPoints?: number | null;
   sprintName?: string | null;
+  assignees?: RoadmapBarAssignee[];
+  // Pixels of empty space between this bar's right edge and the next bar
+  // (or canvas edge) in the same row. Used to suppress the assignee
+  // overflow stack when it would collide with the next bar.
+  availableSpaceRight?: number;
   onMoveStart: (e: React.PointerEvent, cardId: string) => void;
   onResizeLeftStart: (e: React.PointerEvent, cardId: string) => void;
   onResizeRightStart: (e: React.PointerEvent, cardId: string) => void;
@@ -382,6 +452,25 @@ export function RoadmapBar({
   const priority = card.priority ?? null;
   const priorityDot = priority ? PRIORITY_TINT[priority as CardPriority].dot : null;
   const isCompleted = card.completedAt != null;
+
+  // Trailing assignee stack lives OUTSIDE the bar to the right. Suppressed
+  // when there isn't enough free space before the next bar (or canvas edge)
+  // in this row. Sizes: 16px avatar, 4px overlap → 12px per additional
+  // chip. 4px gap from bar edge.
+  const shown = Math.min(assignees.length, 2);
+  const hasOverflowChip = assignees.length > 2;
+  const stackChips = shown + (hasOverflowChip ? 1 : 0);
+  const stackWidth = stackChips > 0 ? 16 + (stackChips - 1) * 12 : 0;
+  const stackRequired = stackWidth + 4;
+  const showAssignees =
+    assignees.length > 0 && availableSpaceRight >= stackRequired;
+
+  // Bars below this width can't fit a readable title + overflow trigger
+  // without colliding into a "T... ⋯" mush. Below the threshold we strip
+  // internals to a single type dot; full info comes via hover tooltip
+  // and right-click menu.
+  const compact = width < 60;
+
   return (
     <>
       <div
@@ -454,7 +543,7 @@ export function RoadmapBar({
           <span className="absolute inset-y-0 right-0 w-1.5 bg-fg/40 rounded-r-md" />
           <ChevronRight className="size-3 text-fg/80 relative" />
         </span>
-        {width < 40 ? (
+        {compact ? (
           <span
             aria-hidden
             className={`mr-1.5 inline-block size-1.5 rounded-full ${dot}`}
@@ -502,31 +591,63 @@ export function RoadmapBar({
             )}
           </button>
         )}
-        <span
-          className={`text-xs text-fg truncate ${
-            isCompleted ? "line-through" : ""
-          }`}
-        >
-          {card.title}
-        </span>
+        {!compact && (
+          <span
+            className={`text-xs text-fg truncate ${
+              isCompleted ? "line-through" : ""
+            }`}
+          >
+            {card.title}
+          </span>
+        )}
         {/* A2 — hover overflow trigger. Sits just left of the right resize
-            handle. Stops drag from starting on press. */}
-        <button
-          type="button"
-          aria-label={`Open actions menu for ${card.title}`}
-          aria-haspopup="menu"
-          aria-expanded={menu !== null}
-          data-testid="roadmap-bar-overflow"
-          onPointerDown={(e) => {
-            e.stopPropagation();
-          }}
-          onClick={openMenuFromTrigger}
-          style={{ right: 14 }}
-          className="absolute top-1/2 -translate-y-1/2 size-4 inline-flex items-center justify-center rounded text-fg/70 hover:text-fg hover:bg-[rgb(255_255_255/0.10)] opacity-0 group-hover/bar:opacity-100 focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-fg/40 cursor-pointer z-10"
-        >
-          <MoreHorizontal className="size-3" />
-        </button>
+            handle. Stops drag from starting on press. Hidden on compact
+            bars; right-click context menu replaces it. */}
+        {!compact && (
+          <button
+            type="button"
+            aria-label={`Open actions menu for ${card.title}`}
+            aria-haspopup="menu"
+            aria-expanded={menu !== null}
+            data-testid="roadmap-bar-overflow"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+            }}
+            onClick={openMenuFromTrigger}
+            style={{ right: 14 }}
+            className="absolute top-1/2 -translate-y-1/2 size-4 inline-flex items-center justify-center rounded text-fg/70 hover:text-fg hover:bg-[rgb(255_255_255/0.10)] opacity-0 group-hover/bar:opacity-100 focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-fg/40 cursor-pointer z-10"
+          >
+            <MoreHorizontal className="size-3" />
+          </button>
+        )}
       </div>
+      {showAssignees && (
+        <span
+          aria-label={`Assignees: ${assignees.map((a) => a.displayName).join(", ")}`}
+          data-testid="roadmap-bar-assignees"
+          className="absolute flex items-center -space-x-1 pointer-events-none"
+          style={{
+            left: x + Math.max(width, 12) + 4,
+            top: row * 36 + 10,
+            height: 16,
+          }}
+        >
+          {assignees.slice(0, 2).map((m) => (
+            <BarAvatar key={m.id} member={m} />
+          ))}
+          {hasOverflowChip && (
+            <span
+              className="inline-flex size-4 items-center justify-center rounded-full ring-1 ring-[color:var(--surface)] bg-fg/30 text-[8px] font-medium leading-none text-fg"
+              title={assignees
+                .slice(2)
+                .map((a) => a.displayName)
+                .join(", ")}
+            >
+              +{assignees.length - 2}
+            </span>
+          )}
+        </span>
+      )}
       {tooltipOpen && !menu && tooltipPos && typeof document !== "undefined" &&
         createPortal(
           <div

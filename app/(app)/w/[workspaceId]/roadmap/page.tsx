@@ -5,6 +5,7 @@ import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace } from "@/lib/queries/workspaces";
 import { listRoadmapCards } from "@/lib/queries/roadmap";
 import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
+import { listEffectiveWorkspaceHolidays } from "@/lib/queries/workspace-holidays";
 import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
 import { RoadmapView } from "@/components/roadmap/roadmap-view";
 
@@ -18,9 +19,10 @@ export default async function RoadmapPage({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
-  const [cards, snapshot] = await Promise.all([
+  const [cards, snapshot, holidays] = await Promise.all([
     listRoadmapCards(token, workspaceId),
     getWorkspaceSnapshot(token, workspaceId),
+    listEffectiveWorkspaceHolidays(token, workspaceId),
   ]);
 
   return (
@@ -56,7 +58,11 @@ export default async function RoadmapPage({
             {cards.length} CARDS
           </span>
         </header>
-        <RoadmapView workspaceId={workspaceId} viewerId={user.id} />
+        <RoadmapView
+          workspaceId={workspaceId}
+          viewerId={user.id}
+          holidays={holidays}
+        />
       </div>
     </WorkspaceStoreProvider>
   );

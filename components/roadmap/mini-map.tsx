@@ -1,7 +1,18 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
-import { dayDiff, startOfDay } from "@/lib/roadmap/dates";
+import { dayDiff, startOfDay, type Zoom } from "@/lib/roadmap/dates";
+
+// Continuous-zoom ppd bounds. ~120 px/day is week zoom doubled; 2 px/day
+// is well below quarter zoom (8) so the user can zoom out arbitrarily far.
+const MIN_PPD = 2;
+const MAX_PPD = 120;
 
 // Plan #16b-γ Group C, Task C6 — Compressed-overview navigational strip
 // rendered above the canvas scroller. Mirrors the pattern most pro Gantt
@@ -22,13 +33,28 @@ export function RoadmapMiniMap({
   gridEnd,
   canvasWidth,
   scrollerRef,
+  zoom,
+  onSetZoom,
+  effectivePpd,
+  onPpdOverride,
 }: {
   cards: RoadmapCard[];
   gridStart: Date;
   gridEnd: Date;
   canvasWidth: number;
   scrollerRef: React.RefObject<HTMLDivElement | null>;
+  zoom: Zoom;
+  onSetZoom: (next: Zoom) => void;
+  /** Current pixels-per-day applied to the canvas (after any override). */
+  effectivePpd: number;
+  /** Push a live pixels-per-day to the canvas. Pass null to release. */
+  onPpdOverride: (ppd: number | null) => void;
 }) {
+  // zoom + onSetZoom are unused here for now (header owns the discrete
+  // selector), but kept on the prop API so the mini-map can later commit
+  // a snap-to-discrete on release without another prop dance.
+  void zoom;
+  void onSetZoom;
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [mapWidth, setMapWidth] = useState<number>(0);
   const [scrollState, setScrollState] = useState<ScrollState>({
@@ -182,6 +208,101 @@ export function RoadmapMiniMap({
   const viewportLeft = scrollState.left * ratio;
   const viewportWidthPx = Math.max(8, scrollState.width * ratio);
 
+  // --- Continuous zoom via edge resize ------------------------------------
+  // Each pointermove computes the desired pixels-per-day from the new bar
+  // width on the mini-map and pushes it up via onPpdOverride. The parent
+  // re-renders the canvas at the new density, scrollWidth grows/shrinks,
+  // and a layout effect re-pins the scroller so the anchor day stays
+  // glued under the handle the user is dragging.
+  const resizeState = useRef<{
+    pointerId: number;
+    edge: "left" | "right";
+    startClientX: number;
+    startBarWidth: number;
+    /** Day index (since gridStart) that stays pinned under the immobile
+     *  handle. Right-edge resize pins the bar's left edge; left-edge
+     *  resize pins the bar's right edge. */
+    anchorDay: number;
+  } | null>(null);
+
+  const totalDaysCanvas = Math.max(1, dayDiff(gridStart, gridEnd));
+
+  // Capture clientWidth in a ref so pointermove can read it without
+  // re-binding listeners every render.
+  const clientWidthRef = useRef(0);
+  clientWidthRef.current = scrollState.width;
+
+  const onResizePointerDown = (
+    e: React.PointerEvent<HTMLDivElement>,
+    edge: "left" | "right",
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const scroller = scrollerRef.current;
+    if (!scroller || effectivePpd <= 0) return;
+    const anchorScrollX =
+      edge === "right" ? scroller.scrollLeft : scroller.scrollLeft + scroller.clientWidth;
+    resizeState.current = {
+      pointerId: e.pointerId,
+      edge,
+      startClientX: e.clientX,
+      startBarWidth: viewportWidthPx,
+      anchorDay: anchorScrollX / effectivePpd,
+    };
+    try {
+      (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    } catch {
+      // ignore — some browsers throw on already-captured pointers
+    }
+  };
+
+  const onResizePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rs = resizeState.current;
+    if (!rs || rs.pointerId !== e.pointerId) return;
+    if (mapWidth <= 0) return;
+    const clientWidth = clientWidthRef.current;
+    if (clientWidth <= 0) return;
+    const dx = e.clientX - rs.startClientX;
+    const deltaBar = rs.edge === "right" ? dx : -dx;
+    // Bar shrinks ⇒ canvas grows ⇒ higher ppd (zoom in). Bar can't go
+    // below a couple of pixels or above mapWidth.
+    const newBarWidth = clamp(rs.startBarWidth + deltaBar, 4, mapWidth);
+    // canvasWidth = clientWidth * mapWidth / barWidth (derived from
+    // bar = clientWidth/canvas * mapWidth).
+    const newCanvas = (clientWidth * mapWidth) / newBarWidth;
+    const newPpd = clamp(newCanvas / totalDaysCanvas, MIN_PPD, MAX_PPD);
+    onPpdOverride(newPpd);
+  };
+
+  const endResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rs = resizeState.current;
+    if (!rs || rs.pointerId !== e.pointerId) return;
+    try {
+      (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // already released
+    }
+    resizeState.current = null;
+    // Note: we deliberately keep the dragPpdOverride active so the user
+    // sees their chosen density persist after release. Picking a zoom
+    // from the header (or refreshing) clears it.
+  };
+
+  // Re-pin the scroller to the captured anchor day every time the
+  // canvas resizes during an active drag. Without this, the day under
+  // the user's pointer would drift as ppd changes.
+  useLayoutEffect(() => {
+    const rs = resizeState.current;
+    if (!rs) return;
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    const anchorPx = rs.anchorDay * effectivePpd;
+    const nextScrollLeft =
+      rs.edge === "right" ? anchorPx : anchorPx - scroller.clientWidth;
+    scroller.scrollLeft = clamp(nextScrollLeft, 0, max);
+  }, [effectivePpd, canvasWidth, scrollerRef]);
+
   // Auto-hide when canvas fits the viewport. Mini-map adds nothing when
   // there is nothing to scroll. 4px tolerance for sub-pixel rounding.
   const fits =
@@ -226,7 +347,8 @@ export function RoadmapMiniMap({
           );
         })}
 
-      {/* Viewport indicator — draggable handle. */}
+      {/* Viewport indicator — draggable + edge-resize. Pan from the body,
+          zoom from either edge handle. */}
       {ratio > 0 && scrollState.width > 0 && (
         <div
           data-testid="roadmap-mini-viewport"
@@ -252,8 +374,34 @@ export function RoadmapMiniMap({
               Math.max(8, mapWidth - clamp(viewportLeft, 0, mapWidth)),
             ),
           }}
-        />
+        >
+          <div
+            data-testid="roadmap-mini-viewport-resize-left"
+            aria-label="Resize viewport (zoom)"
+            role="separator"
+            onPointerDown={(e) => onResizePointerDown(e, "left")}
+            onPointerMove={onResizePointerMove}
+            onPointerUp={endResize}
+            onPointerCancel={endResize}
+            className="absolute inset-y-0 left-0 w-2 -translate-x-1/2 cursor-ew-resize group flex items-center justify-center"
+          >
+            <span className="block h-5 w-[2px] rounded-full bg-fg/55 group-hover:bg-fg group-active:bg-fg transition-colors" />
+          </div>
+          <div
+            data-testid="roadmap-mini-viewport-resize-right"
+            aria-label="Resize viewport (zoom)"
+            role="separator"
+            onPointerDown={(e) => onResizePointerDown(e, "right")}
+            onPointerMove={onResizePointerMove}
+            onPointerUp={endResize}
+            onPointerCancel={endResize}
+            className="absolute inset-y-0 right-0 w-2 translate-x-1/2 cursor-ew-resize group flex items-center justify-center"
+          >
+            <span className="block h-5 w-[2px] rounded-full bg-fg/55 group-hover:bg-fg group-active:bg-fg transition-colors" />
+          </div>
+        </div>
       )}
+
     </div>
   );
 }
