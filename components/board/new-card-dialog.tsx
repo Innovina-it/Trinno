@@ -164,14 +164,6 @@ export function NewCardDialog({
     () => boards.filter((b) => !b.archived),
     [boards],
   );
-  const visibleParentCards = useMemo(
-    () =>
-      cards
-        .filter((c) => c.type !== "subtask" && !c.archived)
-        .slice()
-        .sort((a, b) => a.title.localeCompare(b.title)),
-    [cards],
-  );
   // Boards that have a list mapped to status_kind="todo". Used to pick a
   // sane default when the caller did not specify a board — gantt new-card
   // should always land in a todo column.
@@ -466,20 +458,6 @@ export function NewCardDialog({
               })}
             </div>
           </div>
-          <label className="block space-y-1 text-xs">
-            <span className="mono-meta-sm text-fg-faint">PARENT CARD</span>
-            <Select
-              value={parentId}
-              onValueChange={setParentId}
-              data-testid="roadmap-new-card-parent"
-              options={[
-                { value: "", label: "— No parent —" },
-                ...visibleParentCards.map((c) => ({ value: c.id, label: c.title })),
-              ]}
-              className="w-full"
-              size="sm"
-            />
-          </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1 text-xs">
               <span className="mono-meta-sm text-fg-faint">BOARD</span>
