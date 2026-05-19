@@ -6,6 +6,8 @@ import { WorkspaceSettingsForm } from "@/components/workspace/workspace-settings
 import { MemberList } from "@/components/workspace/member-list";
 import { InviteMemberForm } from "@/components/workspace/invite-member-form";
 import { VersionsPanel } from "@/components/versions/versions-panel";
+import { WorkspaceCalendarPanel } from "@/components/workspace/workspace-calendar-panel";
+import { listWorkspaceCalendar } from "@/lib/queries/workspace-holidays";
 
 export default async function WorkspaceSettingsPage({
   params,
@@ -17,7 +19,10 @@ export default async function WorkspaceSettingsPage({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
-  const members = await listMembers(token, workspaceId);
+  const [members, calendarRows] = await Promise.all([
+    listMembers(token, workspaceId),
+    listWorkspaceCalendar(token, workspaceId),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-3 sm:px-4 md:px-6 py-6 md:py-8">
@@ -52,6 +57,16 @@ export default async function WorkspaceSettingsPage({
         <div className="rounded-xl border border-hairline bg-[color:var(--surface)] p-4 space-y-4">
           <InviteMemberForm workspaceId={workspaceId} />
           <MemberList workspaceId={workspaceId} members={members} />
+        </div>
+      </section>
+
+      <section id="calendar" className="space-y-3 scroll-mt-20">
+        <h2 className="mono-meta-sm text-fg-faint">CALENDAR</h2>
+        <div className="rounded-xl border border-hairline bg-[color:var(--surface)] p-4">
+          <WorkspaceCalendarPanel
+            workspaceId={workspaceId}
+            rows={calendarRows}
+          />
         </div>
       </section>
 
