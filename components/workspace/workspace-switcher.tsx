@@ -179,7 +179,7 @@ export function WorkspaceSwitcher({
             data-testid="workspace-switcher-timeline"
           >
             <CalendarRange className="size-3.5" />
-            <span className="text-sm">All workspaces timeline</span>
+            <span className="text-sm">Workspace timeline</span>
           </DropdownMenuItem>
           {active && (
             <DropdownMenuItem

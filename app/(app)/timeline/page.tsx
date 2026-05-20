@@ -3,29 +3,28 @@ import { requireUser, getSessionToken } from "@/lib/auth";
 import { listAllAcrossWorkspaces } from "@/lib/queries/cards";
 import { listWorkspaces } from "@/lib/queries/workspaces";
 import { MeTimelineWorkspaceFilter } from "@/components/me/me-timeline-workspace-filter";
-import { MeTimelineView } from "@/components/me/me-timeline-view";
+import { CommonRoadmapView } from "@/components/timeline/common-roadmap-view";
 
-export const metadata = { title: "All workspaces timeline" };
+export const metadata = { title: "Common roadmap" };
 
-// Common-space timeline: every workspace the caller can see, all cards
-// with start + target dates, grouped by workspace then board. Reuses the
-// MeTimelineView component (it's already workspace-grouped).
+// Common roadmap: every workspace the caller can see, rendered as a
+// cross-workspace gantt. Each workspace is a collapsible swimlane band
+// over a shared time axis. Bar grammar mirrors the per-workspace roadmap.
 export default async function CommonTimelinePage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[]>>;
 }) {
-  const user = await requireUser();
+  await requireUser();
   const token = (await getSessionToken())!;
   const sp = await searchParams;
 
   const wsParam = typeof sp.ws === "string" ? sp.ws : "";
   const selectedWsIds = wsParam ? wsParam.split(",").filter(Boolean) : [];
 
-  // Workspace filter must show EVERY workspace the caller can see, even
-  // when it has zero cards with start + target dates. Union the two
-  // sources so workspaces only reachable via board membership (no row in
-  // workspace_members) still appear, AND empty workspaces still appear.
+  // The workspace filter must list every workspace the caller can see —
+  // even ones with zero scheduled cards. Union memberships with the cards'
+  // own workspace metadata so board-only memberships still surface.
   const [allCards, memberWorkspaces] = await Promise.all([
     listAllAcrossWorkspaces(token),
     listWorkspaces(token),
@@ -42,26 +41,27 @@ export default async function CommonTimelinePage({
     selectedWsIds.length > 0
       ? allCards.filter((c) => selectedWsIds.includes(c.workspaceId))
       : allCards;
+  const scopedWorkspaces =
+    selectedWsIds.length > 0
+      ? workspaces.filter((w) => selectedWsIds.includes(w.id))
+      : workspaces;
 
   return (
-    <div className="mx-auto max-w-7xl px-3 sm:px-4 md:px-6 py-6 md:py-10 space-y-6">
-      <header className="space-y-3 border-b border-hairline pb-6">
-        <span className="chip">COMMON / TIMELINE</span>
-        <div className="flex items-baseline justify-between gap-4 flex-wrap">
-          <h1 className="serif-display text-5xl">All workspaces</h1>
-          <span className="mono-meta text-fg-muted tabular-nums">
-            {cards.length} CARDS
+    <div className="mx-auto max-w-screen-2xl px-3 sm:px-4 md:px-6 py-5 md:py-7 space-y-4">
+      <header className="flex items-end justify-between gap-4 flex-wrap">
+        <div className="space-y-1.5">
+          <span className="mono-meta-sm tracking-widest text-fg-faint">
+            COMMON / ROADMAP
           </span>
+          <h1 className="serif-display text-3xl md:text-4xl leading-none">
+            All workspaces
+          </h1>
         </div>
-        <p className="text-sm text-fg-muted max-w-2xl">
-          Every card with a start and target date, across every workspace
-          you can see. Use the filter to scope to specific workspaces.
-        </p>
         <Link
           href="/me/timeline"
-          className="mono-meta-sm text-fg-muted hover:text-fg"
+          className="mono-meta-sm tracking-widest text-fg-muted hover:text-fg"
         >
-          ← My timeline only
+          MY TIMELINE →
         </Link>
       </header>
 
@@ -70,10 +70,9 @@ export default async function CommonTimelinePage({
         selected={selectedWsIds}
       />
 
-      <MeTimelineView
+      <CommonRoadmapView
         cards={cards}
-        viewerId={user.id}
-        allWorkspaces={workspaces}
+        allWorkspaces={scopedWorkspaces}
       />
     </div>
   );
