@@ -1109,3 +1109,20 @@
     text-decoration: none !important;
   }
 }
+
+/* -------------------------------------------------------------------------
+   Compact navigation mode
+   --------------------------------------------------------------------------
+   Driven by the persisted `sidebarCollapsed` user preference (mirrored to
+   `body[data-sidebar-collapsed]` by PreferencesBodyMirror). When on, the
+   primary nav links in the top bar collapse to icon-only, freeing screen
+   width for dense workspaces. Mobile is unaffected (the drawer drives nav
+   below `lg`).
+   ------------------------------------------------------------------------ */
+body[data-sidebar-collapsed="true"] header nav[aria-label="Primary"] a > span:not([aria-hidden]),
+body[data-sidebar-collapsed="true"] header nav[aria-label="Primary"] [data-testid="nav-more"] > span:not([aria-hidden]) {
+  display: none;
+}
+body[data-sidebar-collapsed="true"] header nav[aria-label="Primary"] [data-testid="nav-more"] svg:last-child {
+  display: none;
+}

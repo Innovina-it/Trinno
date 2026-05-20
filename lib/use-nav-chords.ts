@@ -14,6 +14,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 /**
  * Vim-style nav chords. Press `g` followed by one of:
+ *   h → home
+ *   a → all-workspaces timeline
  *   r → roadmap
  *   b → boards
  *   l → backlog
@@ -79,7 +81,9 @@ export function useNavChords({
       // Primed → second-key dispatch.
       const k = e.key.toLowerCase();
       let path: string | null = null;
-      if (k === "r" && workspaceId) path = `/w/${workspaceId}/roadmap`;
+      if (k === "h") path = `/me`;
+      else if (k === "a") path = `/timeline`;
+      else if (k === "r" && workspaceId) path = `/w/${workspaceId}/roadmap`;
       else if (k === "b" && workspaceId) path = `/w/${workspaceId}/boards`;
       else if (k === "l" && workspaceId) path = `/w/${workspaceId}/backlog`;
       else if (k === "t" && workspaceId) path = `/w/${workspaceId}/all-tasks`;

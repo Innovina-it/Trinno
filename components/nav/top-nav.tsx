@@ -10,6 +10,7 @@ import {
 import { AccountMenu } from "@/components/nav/account-menu";
 import { NotificationBell } from "@/components/nav/notification-bell";
 import { MobileNavDrawer } from "@/components/nav/mobile-nav-drawer";
+import { SidebarCollapseToggle } from "@/components/nav/sidebar-collapse-toggle";
 import { useNavChords } from "@/lib/use-nav-chords";
 import { openCommandPalette } from "@/lib/use-command-palette";
 import {
@@ -278,6 +279,11 @@ export function TopNav({
             >
               <Search className="size-4" />
             </button>
+            {mounted && (
+              <div className="hidden lg:inline-flex">
+                <SidebarCollapseToggle />
+              </div>
+            )}
             {mounted && <NotificationBell userId={userId} />}
             {mounted && <AccountMenu userId={userId} email={email} />}
           </div>
