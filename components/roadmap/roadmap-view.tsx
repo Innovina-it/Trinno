@@ -57,7 +57,7 @@ import { MilestoneMarkers } from "./milestone-markers";
 import type { MilestoneRow } from "./milestone-dialog";
 import { MilestoneDialog } from "./milestone-dialog";
 import { listMilestones } from "@/actions/milestones";
-import { updateCard } from "@/actions/cards";
+import { createCard, updateCard } from "@/actions/cards";
 import { toggleCardMember } from "@/actions/card-members";
 import { toast } from "sonner";
 import {
@@ -903,7 +903,7 @@ export function RoadmapView({
     if (laneMode === "component") {
       return groupByComponent(cards, storeCardComponents, storeComponents);
     }
-    return groupBySubBoard(cards, subBoardsForLanes);
+    return groupBySubBoard(cards, subBoardsForLanes, storeBoards);
   }, [
     laneMode,
     cards,
@@ -912,6 +912,7 @@ export function RoadmapView({
     storeCardComponents,
     storeComponents,
     subBoardsForLanes,
+    storeBoards,
   ]);
 
   // Default-expand every parent with subtasks once lanes first populate.
@@ -1312,6 +1313,29 @@ export function RoadmapView({
       }
     },
     [patchCardInStore, quickViewCardIdRef],
+  );
+
+  // Inline subtask creation from the roadmap quick-view. Mirrors
+  // card-tile's `onQuickCreateSubtask` (components/board/card-tile.tsx):
+  // create in the parent's list with parentCardId so the new row inherits
+  // the parent's owner, then promote type='subtask'. CDC echo populates
+  // the workspace store; no optimistic patch needed.
+  const quickViewParentListId = quickViewStoreCard?.listId ?? null;
+  const onQuickCreateSubtask = useCallback(
+    async (title: string) => {
+      if (!quickViewCardIdRef || !quickViewParentListId) return;
+      try {
+        const created = await createCard({
+          listId: quickViewParentListId,
+          title,
+          parentCardId: quickViewCardIdRef,
+        });
+        await updateCard({ id: created.id, type: "subtask" });
+      } catch (err) {
+        toast.error((err as Error).message ?? "Failed to create subtask");
+      }
+    },
+    [quickViewCardIdRef, quickViewParentListId],
   );
 
   const onQuickToggleMember = useCallback(
@@ -2464,6 +2488,7 @@ export function RoadmapView({
         }}
         onPatch={onQuickPatch}
         onToggleMember={onQuickToggleMember}
+        onCreateSubtask={onQuickCreateSubtask}
       />
     </div>
   );

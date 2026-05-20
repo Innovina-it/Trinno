@@ -110,6 +110,31 @@ describe("groupBySubBoard", () => {
     );
     expect(lanes.map((l) => l.id)).toEqual(["s1"]);
   });
+
+  it("orphan lane title uses parent board name when boards map is supplied", () => {
+    const orphan = card({ id: "s1", title: "Some Card", boardId: "B" });
+    const lanes = groupBySubBoard(
+      [orphan],
+      [],
+      [{ id: "B", title: "General" }],
+    );
+    expect(lanes).toHaveLength(1);
+    expect(lanes[0].id).toBe("s1");
+    expect(lanes[0].title).toBe("General");
+    expect(lanes[0].headerCard?.id).toBe("s1");
+  });
+
+  it("orphan lane falls back to card title when board id is not in boards map", () => {
+    const orphan = card({ id: "s1", title: "Some Card", boardId: "B" });
+    const lanes = groupBySubBoard([orphan], [], [{ id: "OTHER", title: "X" }]);
+    expect(lanes[0].title).toBe("Some Card");
+  });
+
+  it("orphan lane falls back to card title when no boards map is supplied", () => {
+    const orphan = card({ id: "s1", title: "Some Card", boardId: "B" });
+    const lanes = groupBySubBoard([orphan], []);
+    expect(lanes[0].title).toBe("Some Card");
+  });
 });
 
 describe("groupByAssignee", () => {

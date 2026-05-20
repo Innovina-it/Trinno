@@ -30,6 +30,15 @@ export type SubBoardRef = {
   parentCardId: string | null;
 };
 
+// Minimal board shape consumed by groupBySubBoard. Used only to resolve
+// orphan-lane titles to the parent board's name (instead of the card's own
+// title), so a card sitting on a regular top-level board reads as
+// "{Board name}" rather than echoing the card itself.
+export type BoardRef = {
+  id: string;
+  title: string;
+};
+
 export type Lane<C extends RoadmapCard = RoadmapCard> = {
   id: string;
   title: string;
@@ -52,6 +61,7 @@ export const UNCATEGORIZED_LANE_ID = "uncategorized";
 export function groupBySubBoard<C extends RoadmapCard>(
   cards: C[],
   subBoards: SubBoardRef[],
+  boards: BoardRef[] = [],
 ): Lane<C>[] {
   const cardById = new Map(cards.map((c) => [c.id, c]));
 
@@ -144,6 +154,11 @@ export function groupBySubBoard<C extends RoadmapCard>(
   // Top-level cards that don't belong to any visible sub-board lane get
   // their OWN single-row self-lane, mirroring how anchor cards become lanes.
   // Subtasks remain nested under their parent via `subtaskRowsByParent`.
+  // Lane title resolves to the orphan's PARENT BOARD name (when supplied),
+  // so a card sitting on a regular top-level board reads as "{Board}"
+  // instead of echoing the card's own title. Falls back to the card title
+  // when no board map is supplied or the board id isn't in the map.
+  const boardTitleById = new Map(boards.map((b) => [b.id, b.title]));
   const orphanLanes: Lane<C>[] = orphans
     .slice()
     .sort((a, b) => {
@@ -156,7 +171,7 @@ export function groupBySubBoard<C extends RoadmapCard>(
     })
     .map<Lane<C>>((c) => ({
       id: c.id,
-      title: c.title,
+      title: boardTitleById.get(c.boardId) ?? c.title,
       kind: "uncategorized",
       headerCard: c,
       cards: [],
