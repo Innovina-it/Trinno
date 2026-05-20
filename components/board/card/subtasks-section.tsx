@@ -11,6 +11,14 @@ import Link from "next/link";
 import { CompleteToggle } from "./complete-toggle";
 import { undoBus } from "@/lib/undo-bus";
 
+// Subtask completion no longer cascades into the parent automatically.
+// Every CompleteToggle on this surface (and elsewhere on the board)
+// emits a subtaskSyncBus event that the board-mounted
+// <SubtaskParentSyncPrompt /> consumes — it opens a confirmation
+// dialog whose confirmed action calls the syncParentFromSubtask
+// server action. Migration 0109 dropped the old DB trigger that did
+// this silently.
+
 export function SubtasksSection({
   cardId, listId, boardId,
 }: { cardId: string; listId: string; boardId: string }) {

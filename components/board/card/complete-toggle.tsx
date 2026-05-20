@@ -4,6 +4,7 @@ import { Check } from "lucide-react";
 import { toast } from "sonner";
 import { updateCard } from "@/actions/cards";
 import { undoBus } from "@/lib/undo-bus";
+import { subtaskSyncBus } from "@/lib/subtask-sync-bus";
 
 // One-click "mark complete" toggle, used everywhere a card surfaces in
 // a list/row context (board tile, all-tasks, backlog, archive, etc.).
@@ -49,6 +50,10 @@ export function CompleteToggle({
     start(async () => {
       try {
         await updateCard({ id: cardId, completed: next });
+        // Fires the board-mounted prompt if the toggled card is a
+        // sub-task whose parent transition criteria are met. No-op
+        // when no listener is mounted (off-board surfaces).
+        subtaskSyncBus.emit({ cardId, completed: next });
         undoBus.push({
           message: next ? "Marked complete" : "Marked not complete",
           undo: async () => {

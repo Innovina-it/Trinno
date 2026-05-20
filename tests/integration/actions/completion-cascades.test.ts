@@ -53,8 +53,11 @@ async function readCard(jwt: string, id: string) {
   return row;
 }
 
-describe("subtask → parent autocomplete cascade", () => {
-  it("flips parent's completed_at only when the LAST open child completes", async () => {
+describe("subtask → parent autocomplete cascade (disabled — user-driven)", () => {
+  // Auto-cascade was removed in migration 0109; parent sync is now
+  // user-driven through a confirmation modal that calls a dedicated
+  // server action. The DB must NOT flip the parent on its own.
+  it("does NOT flip parent's completed_at when the last open child completes", async () => {
     const u = await makeUser("cc-all");
     const { l1 } = await setupBoardWithLists(u.jwt);
 
@@ -77,14 +80,13 @@ describe("subtask → parent autocomplete cascade", () => {
       parentCardId: parent.id,
     });
 
-    // Complete two of three children — parent should still be open.
     await updateCardImpl(u.jwt, { id: c1.id, completed: true });
     await updateCardImpl(u.jwt, { id: c2.id, completed: true });
-    expect((await readCard(u.jwt, parent.id)).completedAt).toBeNull();
-
-    // Last child flips → parent autocompletes.
     await updateCardImpl(u.jwt, { id: c3.id, completed: true });
-    expect((await readCard(u.jwt, parent.id)).completedAt).not.toBeNull();
+
+    // Even with every child complete, parent stays open — UI prompt
+    // is the only path that may flip it.
+    expect((await readCard(u.jwt, parent.id)).completedAt).toBeNull();
   });
 
   it("does NOT auto-uncomplete the parent when a child is un-checked", async () => {
@@ -112,18 +114,22 @@ describe("subtask → parent autocomplete cascade", () => {
     await updateCardImpl(u.jwt, { id: c1.id, completed: true });
     await updateCardImpl(u.jwt, { id: c2.id, completed: true });
     await updateCardImpl(u.jwt, { id: c3.id, completed: true });
+
+    // Simulate the modal-confirmed parent flip (the user-driven action
+    // would call this; here we set it directly to mirror that intent).
+    await updateCardImpl(u.jwt, { id: parent.id, completed: true });
     const completed = (await readCard(u.jwt, parent.id)).completedAt;
     expect(completed).not.toBeNull();
 
     // Un-check one child — parent must keep its completed_at exactly.
+    // (No DB cascade re-writes the stamp; reversion is also user-driven.)
     await updateCardImpl(u.jwt, { id: c1.id, completed: false });
     const after = await readCard(u.jwt, parent.id);
     expect(after.completedAt).not.toBeNull();
-    // Same instant as before — no cascade re-write of the parent's stamp.
     expect(after.completedAt!.toString()).toBe(completed!.toString());
   });
 
-  it("ignores archived children when deciding 'all done'", async () => {
+  it("never auto-flips parent regardless of archived children", async () => {
     const u = await makeUser("cc-arch");
     const { l1 } = await setupBoardWithLists(u.jwt);
 
@@ -145,16 +151,13 @@ describe("subtask → parent autocomplete cascade", () => {
       parentCardId: parent.id,
     });
 
-    // Archive c3 — it should drop out of the "all done" tally entirely.
     await archiveCardImpl(u.jwt, { id: c3.id, archived: true });
 
-    // Completing the two non-archived children should be enough.
+    // Completing every non-archived child no longer flips the parent —
+    // the client owns that decision via a confirmation modal.
     await updateCardImpl(u.jwt, { id: c1.id, completed: true });
-    expect((await readCard(u.jwt, parent.id)).completedAt).toBeNull();
-
     await updateCardImpl(u.jwt, { id: c2.id, completed: true });
-    expect((await readCard(u.jwt, parent.id)).completedAt).not.toBeNull();
-    // Archived child stays uncompleted — we never touched it.
+    expect((await readCard(u.jwt, parent.id)).completedAt).toBeNull();
     expect((await readCard(u.jwt, c3.id)).completedAt).toBeNull();
   });
 });

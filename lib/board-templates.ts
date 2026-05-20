@@ -29,10 +29,13 @@ export type BoardTemplate = {
   labels: BoardTemplateLabelSpec[];
 };
 
-export const DEFAULT_LIST_TEMPLATES: Array<{ name: string }> = [
-  { name: "Todo" },
-  { name: "In Progress" },
-  { name: "Done" },
+export const DEFAULT_LIST_TEMPLATES: Array<{
+  name: string;
+  statusKind: "todo" | "in_progress" | "done";
+}> = [
+  { name: "Todo", statusKind: "todo" },
+  { name: "In Progress", statusKind: "in_progress" },
+  { name: "Done", statusKind: "done" },
 ];
 
 export const BOARD_TEMPLATES: BoardTemplate[] = [

@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, asc, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { dbAsUser } from "@/lib/db/client";
 import { cards, lists } from "@/lib/db/schema";
@@ -125,6 +125,34 @@ export async function ensureStatusListImpl(
       )
       .limit(1);
     if (existing) return existing;
+
+    // Adoption path: an unmapped list (status_kind IS NULL) whose title
+    // matches the canonical STATUS_DEFAULT_TITLE for this kind (case-
+    // insensitive) is almost certainly the operator's intended column —
+    // claim it instead of creating a duplicate at the end of the board.
+    // The first such row by position wins.
+    const defaultTitle = STATUS_DEFAULT_TITLE[parsed.statusKind];
+    const [adoptable] = await tx
+      .select()
+      .from(lists)
+      .where(
+        and(
+          eq(lists.boardId, parsed.boardId),
+          eq(lists.archived, false),
+          isNull(lists.statusKind),
+          sql`lower(${lists.title}) = lower(${defaultTitle})`,
+        ),
+      )
+      .orderBy(asc(lists.position))
+      .limit(1);
+    if (adoptable) {
+      const [adopted] = await tx
+        .update(lists)
+        .set({ statusKind: parsed.statusKind })
+        .where(eq(lists.id, adoptable.id))
+        .returning();
+      if (adopted) return adopted;
+    }
 
     // Insert with ON CONFLICT to handle the race against a concurrent
     // call. The unique index from 0054 covers (board_id, status_kind)

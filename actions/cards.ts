@@ -1137,3 +1137,84 @@ export async function reorderRoadmapRow(input: {
     throw new Error(msg === "Forbidden" ? "Forbidden" : `Reorder failed: ${msg}`);
   }
 }
+
+// User-driven parent status sync triggered from the sub-tasks UI after
+// a confirmation modal. Replaces the DB autocomplete trigger removed in
+// migration 0109. Two intents:
+//   - 'done':        flip parent.completed_at = now AND move it to the
+//                    board's 'done'-statusKind list.
+//   - 'in_progress': clear parent.completed_at AND move it to the board's
+//                    'in_progress'-statusKind list.
+// Both calls run under the same JWT, so the activity rows emitted by
+// triggers 0086 (card.complete / card.uncomplete) and 0016/0036/0047
+// (card.move) are attributed to the actor — not to a hidden cascade.
+const SyncParentFromSubtaskInput = z.object({
+  parentCardId: Uuid,
+  intent: z.enum(["done", "in_progress"]),
+});
+
+export async function syncParentFromSubtaskImpl(
+  token: string,
+  input: { parentCardId: string; intent: "done" | "in_progress" },
+): Promise<{
+  cardId: string;
+  listId: string;
+  completedAt: Date | null;
+  boardId: string | null;
+}> {
+  const parsed = SyncParentFromSubtaskInput.parse(input);
+  const wantComplete = parsed.intent === "done";
+  const statusKind: StatusKind = wantComplete ? "done" : "in_progress";
+
+  // Step 1: completed_at flip (idempotent — no-op write if already in
+  // target state, so the 0086 activity trigger stays silent). Also
+  // returns boardId so the wrapper can revalidate without a second
+  // round-trip.
+  const { completedAt, boardId } = await dbAsUser(token, async (tx) => {
+    const [current] = await tx
+      .select({ completedAt: cards.completedAt, boardId: cards.boardId })
+      .from(cards)
+      .where(eq(cards.id, parsed.parentCardId))
+      .limit(1);
+    if (!current) throw new Error("Forbidden");
+    const isComplete = current.completedAt != null;
+    if (isComplete === wantComplete) {
+      return { completedAt: current.completedAt, boardId: current.boardId };
+    }
+    const next = wantComplete ? new Date() : null;
+    const [row] = await tx
+      .update(cards)
+      .set({ completedAt: next })
+      .where(eq(cards.id, parsed.parentCardId))
+      .returning({ completedAt: cards.completedAt, boardId: cards.boardId });
+    if (!row) throw new Error("Forbidden");
+    return { completedAt: row.completedAt, boardId: row.boardId };
+  });
+
+  // Step 2: column move. moveCardToStatusImpl is idempotent — short-
+  // circuits when the card already lives on a list of the target kind.
+  const moved = await moveCardToStatusImpl(token, {
+    cardId: parsed.parentCardId,
+    statusKind,
+  });
+
+  return { cardId: moved.cardId, listId: moved.listId, completedAt, boardId };
+}
+
+export async function syncParentFromSubtask(input: {
+  parentCardId: string;
+  intent: "done" | "in_progress";
+  /**
+   * Optional. When the caller already knows the parent's board (it
+   * usually does — the prompt is mounted inside BoardStoreProvider),
+   * pass it through to skip the extra read used for revalidatePath.
+   */
+  boardId?: string;
+}) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const r = await syncParentFromSubtaskImpl(t, input);
+  const boardId = input.boardId ?? r.boardId;
+  if (boardId) revalidatePath(`/b/${boardId}`);
+  return r;
+}

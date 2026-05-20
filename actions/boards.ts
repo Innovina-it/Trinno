@@ -102,6 +102,7 @@ export async function createBoardImpl(
           boardId: b.id,
           title: list.name,
           position: positions[position],
+          statusKind: list.statusKind,
         })),
       );
     }
