@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Bug, Layers3, Square } from "lucide-react";
 import { AssigneePicker } from "./assignee-picker";
@@ -124,6 +125,7 @@ export function NewCardDialog({
   // members up front so the roadmap card lands with full minimum metadata.
   const [assignees, setAssignees] = useState<Set<string>>(() => new Set());
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   // Task 10 — capture the signed-in user so freshly-created roadmap cards
   // own themselves out of the box (matches kanban inline create which
   // already auto-claims via the workspace `autoAssignCreator` flag).
@@ -143,6 +145,7 @@ export function NewCardDialog({
   const boards = useWorkspaceStore((s) => s.boards);
   const lists = useWorkspaceStore((s) => s.lists);
   const cards = useWorkspaceStore((s) => s.cards);
+  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   // Profile list at workspace scope mirrors `boardProfiles` on the board
   // snapshot but covers every member who's reachable from any board in
   // the workspace. Sufficient for the roadmap create dialog — the user
@@ -392,6 +395,43 @@ export function NewCardDialog({
         toast.error((err as Error).message);
       }
     });
+  }
+
+  const noBoards = visibleBoards.length === 0;
+
+  if (noBoards) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent data-testid="roadmap-new-card-dialog">
+          <DialogHeader>
+            <DialogTitle>Create a board first</DialogTitle>
+            <DialogDescription>
+              Cards live inside a board. This workspace has none yet — make one,
+              then come back to add cards to it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              data-testid="roadmap-new-card-create-board"
+              onClick={() => {
+                onOpenChange(false);
+                router.push(`/w/${workspaceId}/boards`);
+              }}
+            >
+              Create a board
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
   }
 
   return (
