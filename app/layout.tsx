@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Instrument_Serif, JetBrains_Mono } from "next/font/google";
+import { cookies } from "next/headers";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthBroadcastListener } from "./(auth)/auth-broadcast-listener";
 
@@ -41,17 +42,34 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+const DENSITY_VALUES = new Set(["compact", "comfortable", "spacious"]);
+
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // SSR body data-attrs from cookie mirror to avoid first-paint flicker.
+  // Provider keeps these cookies in sync on the client; the debounced
+  // Server Action remains the source of truth for persistence.
+  const cookieStore = await cookies();
+  const sidebarCollapsed = cookieStore.get("pref_sb")?.value === "1";
+  const densityCookie = cookieStore.get("pref_density")?.value;
+  const density =
+    densityCookie && DENSITY_VALUES.has(densityCookie)
+      ? densityCookie
+      : "comfortable";
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${jetbrainsMono.variable} ${instrumentSerif.variable}`}
     >
-      <body className="min-h-dvh bg-background text-foreground antialiased font-sans">
+      <body
+        className="min-h-dvh bg-background text-foreground antialiased font-sans"
+        data-density={density}
+        {...(sidebarCollapsed ? { "data-sidebar-collapsed": "true" } : {})}
+      >
         <AuthBroadcastListener />
         {children}
         <Toaster richColors />

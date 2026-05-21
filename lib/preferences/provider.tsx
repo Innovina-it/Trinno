@@ -30,6 +30,34 @@ type UserPreferencesContextValue = {
 const UserPreferencesContext =
   createContext<UserPreferencesContextValue | null>(null);
 
+const COOKIE_MAX_AGE_YEAR = 60 * 60 * 24 * 365;
+
+// Mirror shell-shape prefs (sidebar, density) into non-httpOnly cookies so
+// the root layout can render <body data-*> attrs at SSR and avoid the
+// first-paint flicker. The debounced Server Action remains the source of
+// truth; cookies are a render-time hint only.
+function writeShellCookieMirror(
+  patch: Partial<Preferences>,
+  next: Preferences,
+) {
+  if (typeof document === "undefined") return;
+
+  if (Object.prototype.hasOwnProperty.call(patch, "sidebarCollapsed")) {
+    if (next.sidebarCollapsed === true) {
+      document.cookie = `pref_sb=1; path=/; SameSite=Lax; max-age=${COOKIE_MAX_AGE_YEAR}`;
+    } else {
+      document.cookie = "pref_sb=; path=/; max-age=0";
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "layoutDensity")) {
+    const density = next.layoutDensity;
+    if (density) {
+      document.cookie = `pref_density=${density}; path=/; SameSite=Lax; max-age=${COOKIE_MAX_AGE_YEAR}`;
+    }
+  }
+}
+
 type UserPreferencesProviderProps = {
   children?: ReactNode;
   initial?: Preferences;
@@ -73,6 +101,7 @@ export function UserPreferencesProvider({
       stateRef.current = next;
       pendingRef.current = { ...pendingRef.current, ...patch };
       setPreferencesState(next);
+      writeShellCookieMirror(patch, next);
       scheduleWrite();
     },
     [scheduleWrite],
