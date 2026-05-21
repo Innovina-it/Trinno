@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition, useRef, useCallback } from "react";
+import { useState, useTransition, useRef, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useShallow } from "zustand/shallow";
 import { useSortable } from "@dnd-kit/sortable";
@@ -19,6 +19,7 @@ import { StoryPointsChip } from "./card/story-points-chip";
 import { TimeChip } from "./card/time-chip";
 import { PriorityChip, type CardPriority } from "./card/priority-picker";
 import { CardCover } from "./card/cover-picker";
+import { mergeMemberPool } from "./card/member-pool";
 import { CompleteToggle } from "./card/complete-toggle";
 import { cardCode } from "@/lib/format";
 import { createCard, updateCard } from "@/actions/cards";
@@ -70,6 +71,7 @@ export function CardTile({
   const updateCardLocal = useBoardStore((s) => s.updateCard);
   const storeAddMember = useBoardStore((s) => s.addCardMember);
   const storeRemoveMember = useBoardStore((s) => s.removeCardMember);
+  const upsertBoardMemberLocal = useBoardStore((s) => s.upsertBoardMember);
 
   // Inline title edit state
   const [isEditing, setIsEditing] = useState(false);
@@ -105,6 +107,20 @@ export function CardTile({
     useShallow((s) =>
       quickViewOpen ? s.boardProfiles : EMPTY_PROFILES_ARRAY,
     ),
+  );
+  // Workspace-only members (those not yet on the board) are appended
+  // to the picker pool so a freshly-added workspace member can be
+  // assigned to existing cards. Server-side trigger 0098 promotes
+  // them to board_member on assignment; we mirror that locally in
+  // onQuickToggleMember below.
+  const quickViewWorkspaceProfilesRaw = useBoardStore(
+    useShallow((s) =>
+      quickViewOpen ? s.workspaceProfiles : EMPTY_PROFILES_ARRAY,
+    ),
+  );
+  const quickViewMemberPool = useMemo(
+    () => mergeMemberPool(quickViewProfilesRaw, quickViewWorkspaceProfilesRaw),
+    [quickViewProfilesRaw, quickViewWorkspaceProfilesRaw],
   );
   // Two primitive scalar selectors — returning {total, done} as one object
   // would trip Zustand's snapshot warning. See CardMetaRow / SubtaskBadge
@@ -188,6 +204,18 @@ export function CardTile({
         storeRemoveMember(card.id, userId);
       } else {
         storeAddMember({ cardId: card.id, userId });
+        // Mirror trigger 0098: assigning a workspace-only user implies
+        // they become a board_member. Promote locally so the picker /
+        // avatar bar reflect it without waiting for a snapshot refetch.
+        const onBoard = quickViewProfilesRaw.some((p) => p.id === userId);
+        if (!onBoard) {
+          const profile = quickViewWorkspaceProfilesRaw.find(
+            (p) => p.id === userId,
+          );
+          if (profile) {
+            upsertBoardMemberLocal({ userId, role: "member" }, profile);
+          }
+        }
       }
       try {
         await toggleCardMember({ cardId: card.id, userId });
@@ -195,7 +223,15 @@ export function CardTile({
         toast.error((err as Error).message ?? "Failed to update assignees");
       }
     },
-    [card.id, quickViewMemberIds, storeAddMember, storeRemoveMember],
+    [
+      card.id,
+      quickViewMemberIds,
+      storeAddMember,
+      storeRemoveMember,
+      quickViewProfilesRaw,
+      quickViewWorkspaceProfilesRaw,
+      upsertBoardMemberLocal,
+    ],
   );
 
   // Inline create a subtask from the quick view. Lands in the same list
@@ -516,14 +552,14 @@ export function CardTile({
           targetDate: card.targetDate,
         }}
         memberProfiles={quickViewMemberIds
-          .map((id) => quickViewProfilesRaw.find((p) => p.id === id))
-          .filter((p): p is (typeof quickViewProfilesRaw)[number] => !!p)
+          .map((id) => quickViewMemberPool.find((p) => p.id === id))
+          .filter((p): p is (typeof quickViewMemberPool)[number] => !!p)
           .map((p) => ({
             id: p.id,
             displayName: p.displayName,
             avatarUrl: p.avatarUrl,
           }))}
-        availableMembers={quickViewProfilesRaw.map((p) => ({
+        availableMembers={quickViewMemberPool.map((p) => ({
           id: p.id,
           displayName: p.displayName,
           avatarUrl: p.avatarUrl,
