@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import { publishStateSync } from "@/lib/auth/broadcast";
 import {
   Archive,
   ArrowRight,
@@ -340,7 +341,9 @@ export function CommandPalette({
         sub: theme === "dark" ? "Dark → Light" : "Light → Dark",
         icon: <Sun className="size-3.5 text-fg-muted" />,
         onSelect: () => {
-          setTheme(theme === "dark" ? "light" : "dark");
+          const next = theme === "dark" ? "light" : "dark";
+          setTheme(next);
+          publishStateSync({ type: "THEME_UPDATE", theme: next });
         },
       },
       {
