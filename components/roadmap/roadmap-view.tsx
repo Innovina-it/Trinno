@@ -202,7 +202,7 @@ export function RoadmapView({
   const zoomParam = sp.get("zoom");
   const zoom: Zoom = (ZOOMS as string[]).includes(zoomParam ?? "")
     ? (zoomParam as Zoom)
-    : (workspacePreferences.roadmapZoom ?? "fit");
+    : (workspacePreferences.roadmap?.zoom ?? "fit");
   const lanesParam = sp.get("lanes");
   const laneMode: LaneMode = (LANE_MODES as string[]).includes(lanesParam ?? "")
     ? (lanesParam as LaneMode)
@@ -210,7 +210,7 @@ export function RoadmapView({
   const viewParam = sp.get("view");
   const viewMode: ViewMode = (VIEW_MODES as string[]).includes(viewParam ?? "")
     ? (viewParam as ViewMode)
-    : (workspacePreferences.roadmapViewMode ?? "gantt");
+    : (workspacePreferences.roadmap?.viewMode ?? "gantt");
   const focusParam = sp.get("focus");
   const queryParam = sp.get("q") ?? "";
   // Plan #16b-γ-G G4 — priority-gutter URL toggle. Default off (param
@@ -1055,7 +1055,7 @@ export function RoadmapView({
   function setViewMode(next: ViewMode) {
     setPreferences((current) =>
       patchWorkspacePreferences(current, workspaceId, {
-        roadmapViewMode: next,
+        roadmap: { viewMode: next },
       }),
     );
     const params = new URLSearchParams(sp.toString());
@@ -1070,7 +1070,7 @@ export function RoadmapView({
     // ppd takes effect immediately.
     setDragPpdOverride(null);
     setPreferences((current) =>
-      patchWorkspacePreferences(current, workspaceId, { roadmapZoom: next }),
+      patchWorkspacePreferences(current, workspaceId, { roadmap: { zoom: next } }),
     );
     const params = new URLSearchParams(sp.toString());
     params.set("zoom", next);
