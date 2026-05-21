@@ -56,6 +56,7 @@ export function RoadmapMiniMap({
   void zoom;
   void onSetZoom;
   const mapRef = useRef<HTMLDivElement | null>(null);
+  const mapObserverRef = useRef<ResizeObserver | null>(null);
   const [mapWidth, setMapWidth] = useState<number>(0);
   const [scrollState, setScrollState] = useState<ScrollState>({
     left: 0,
@@ -63,58 +64,9 @@ export function RoadmapMiniMap({
     scrollWidth: 0,
   });
 
-  // Track the rendered width of the mini-map container so we can scale
-  // canvas coords -> mini coords. Falls back to a sensible default for
-  // SSR / first paint.
-  useEffect(() => {
-    const el = mapRef.current;
-    if (!el) return;
-    const measure = () => setMapWidth(el.getBoundingClientRect().width);
-    measure();
-    if (typeof ResizeObserver !== "undefined") {
-      const ro = new ResizeObserver(measure);
-      ro.observe(el);
-      return () => ro.disconnect();
-    }
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, []);
-
-  // Track the canvas scroller's scrollLeft + clientWidth + scrollWidth so
-  // the viewport rect mirrors the live state.
-  useEffect(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    const handler = () => {
-      const next = {
-        left: scroller.scrollLeft,
-        width: scroller.clientWidth,
-        scrollWidth: scroller.scrollWidth,
-      };
-      setScrollState((prev) =>
-        prev.left === next.left &&
-        prev.width === next.width &&
-        prev.scrollWidth === next.scrollWidth
-          ? prev
-          : next,
-      );
-    };
-    handler();
-    scroller.addEventListener("scroll", handler, { passive: true });
-    let ro: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined") {
-      ro = new ResizeObserver(handler);
-      ro.observe(scroller);
-    }
-    return () => {
-      scroller.removeEventListener("scroll", handler);
-      if (ro) ro.disconnect();
-    };
-  }, [scrollerRef]);
-
-  // Re-snapshot scroller state when canvas width / cards change (the
-  // canvas may have grown beyond the previously-known scrollWidth).
-  useEffect(() => {
+  // Snapshot scroller dims into state. Shared by every code path that
+  // needs a fresh read (mount, scroll, observe, strip re-attach).
+  const snapshotScroller = useCallback(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
     const next = {
@@ -129,7 +81,72 @@ export function RoadmapMiniMap({
         ? prev
         : next,
     );
-  }, [canvasWidth, cards.length, scrollerRef]);
+  }, [scrollerRef]);
+
+  // Callback ref: fires on every mount + unmount of the strip div. Auto-hide
+  // toggles the strip via `return null`; without this, the ResizeObserver
+  // attached once at first mount would keep observing the detached div after
+  // the next re-show, and mapWidth would stay stale. Re-binding here also
+  // re-snapshots the scroller so the viewport rect renders at correct size
+  // the instant the strip re-appears (filter Mine→All, etc.).
+  const setMapEl = useCallback(
+    (el: HTMLDivElement | null) => {
+      mapRef.current = el;
+      if (mapObserverRef.current) {
+        mapObserverRef.current.disconnect();
+        mapObserverRef.current = null;
+      }
+      if (!el) return;
+      setMapWidth(el.getBoundingClientRect().width);
+      snapshotScroller();
+      if (typeof ResizeObserver !== "undefined") {
+        const ro = new ResizeObserver(() => {
+          const cur = mapRef.current;
+          if (!cur) return;
+          setMapWidth(cur.getBoundingClientRect().width);
+        });
+        ro.observe(el);
+        mapObserverRef.current = ro;
+      }
+    },
+    [snapshotScroller],
+  );
+
+  // Disconnect on full unmount.
+  useEffect(() => {
+    return () => {
+      if (mapObserverRef.current) {
+        mapObserverRef.current.disconnect();
+        mapObserverRef.current = null;
+      }
+    };
+  }, []);
+
+  // Track the canvas scroller's scrollLeft + clientWidth + scrollWidth so
+  // the viewport rect mirrors the live state.
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    snapshotScroller();
+    scroller.addEventListener("scroll", snapshotScroller, { passive: true });
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(snapshotScroller);
+      ro.observe(scroller);
+    }
+    return () => {
+      scroller.removeEventListener("scroll", snapshotScroller);
+      if (ro) ro.disconnect();
+    };
+  }, [scrollerRef, snapshotScroller]);
+
+  // Re-snapshot scroller state when canvas width / cards / ppd change (the
+  // canvas may have grown beyond the previously-known scrollWidth). Without
+  // `effectivePpd` here, switching filter→ppd-override→filter could leave
+  // scrollState stale because canvasWidth alone may not change.
+  useEffect(() => {
+    snapshotScroller();
+  }, [canvasWidth, cards.length, effectivePpd, snapshotScroller]);
 
   const ratio =
     canvasWidth > 0 && mapWidth > 0 ? mapWidth / canvasWidth : 0;
@@ -312,7 +329,7 @@ export function RoadmapMiniMap({
 
   return (
     <div
-      ref={mapRef}
+      ref={setMapEl}
       className="relative h-12 rounded-md border border-hairline bg-fg/[0.02] overflow-hidden cursor-pointer select-none"
       data-testid="roadmap-mini-map"
       onPointerDown={onBackgroundPointerDown}
