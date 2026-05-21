@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import Link from "next/link";
 import { useShallow } from "zustand/shallow";
 import {
   Dialog,
@@ -1753,6 +1754,17 @@ export function RoadmapView({
                 ll.lane.kind === "uncategorized"
                   ? `${count} ${count === 1 ? "ORPHAN" : "ORPHANS"}`
                   : `${count} ${count === 1 ? "CARD" : "CARDS"}`;
+              // Lane titles link to the board the lane represents:
+              // sub_board → the sub-board itself (lane.id is its board id);
+              // uncategorized (orphan) → the orphan's home board (title
+              // already resolves to that board's name). Assignee/component
+              // lanes have no board target and remain plain text.
+              const boardHref =
+                ll.lane.kind === "sub_board"
+                  ? `/b/${ll.lane.id}`
+                  : ll.lane.kind === "uncategorized" && laneHeaderCard
+                    ? `/b/${laneHeaderCard.boardId}`
+                    : null;
               return (
                 <div
                   key={ll.lane.id}
@@ -1769,18 +1781,27 @@ export function RoadmapView({
                       onDragStart={drag.beginRowDrag}
                     />
                   )}
-                  {laneHeaderCard ? (
-                    <span
-                      className="mono-meta text-fg line-clamp-2 break-words"
-                      data-testid="lane-header-label"
-                      data-card-id={laneHeaderCard.id}
+                  {boardHref ? (
+                    <Link
+                      href={boardHref}
+                      className="mono-meta text-fg line-clamp-2 break-words underline decoration-transparent hover:decoration-fg-muted focus-visible:decoration-fg-muted underline-offset-2 outline-none transition-[text-decoration-color] duration-150"
+                      data-testid={laneHeaderCard ? "lane-header-label" : undefined}
+                      data-card-id={laneHeaderCard?.id}
                       title={ll.lane.title}
+                      aria-label={`Open board ${ll.lane.title}`}
+                      // Don't let the link's pointerdown start a drag on the
+                      // row handle (handle stops its own propagation; this
+                      // is the symmetric guard for plain clicks landing on
+                      // the title itself).
+                      onPointerDown={(e) => e.stopPropagation()}
                     >
                       {ll.lane.title}
-                    </span>
+                    </Link>
                   ) : (
                     <span
                       className="mono-meta text-fg line-clamp-2 break-words"
+                      data-testid={laneHeaderCard ? "lane-header-label" : undefined}
+                      data-card-id={laneHeaderCard?.id}
                       title={ll.lane.title}
                     >
                       {ll.lane.title}
