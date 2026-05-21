@@ -50,17 +50,8 @@ for (const vp of VIEWPORTS) {
   await page.screenshot({ path: out, fullPage: false });
   console.log(`${vp.name} (${vp.width}x${vp.height}) → ${out}`);
 
-  // Also expand all workspaces and screenshot. Reset gantt scroll first so
-  // workspace toggle + board sub-header are guaranteed in frame.
-  const toggles = await page
-    .locator('[data-testid^="common-roadmap-ws-toggle-"]')
-    .all();
-  for (const t of toggles) {
-    try {
-      await t.click({ timeout: 500 });
-    } catch {}
-  }
-  await page.waitForTimeout(300);
+  // Reset gantt scroll to the start of range, then screenshot again so the
+  // earliest-scheduled rows lead the frame.
   await page.evaluate(() => {
     const scroller = document.querySelector(
       '[data-testid="common-roadmap-view"] > div:nth-child(2)',
@@ -71,9 +62,9 @@ for (const vp of VIEWPORTS) {
     }
   });
   await page.waitForTimeout(200);
-  const out2 = `/tmp/timeline-${vp.name}-expanded.png`;
+  const out2 = `/tmp/timeline-${vp.name}-start.png`;
   await page.screenshot({ path: out2, fullPage: false });
-  console.log(`${vp.name} expanded → ${out2}`);
+  console.log(`${vp.name} start → ${out2}`);
 }
 
 await browser.close();
