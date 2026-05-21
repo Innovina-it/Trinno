@@ -13,6 +13,7 @@ import {
   ListTodo,
   Plus,
   Square,
+  X,
 } from "lucide-react";
 import { AssigneePicker } from "./assignee-picker";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -90,6 +91,8 @@ export type QuickViewSubtask = {
    *  parent card's boardId prop. */
   boardId?: string;
 };
+
+type DraftSubtask = { tempId: string; title: string };
 
 export type PatchInput = {
   title?: string;
@@ -408,6 +411,11 @@ function CardQuickViewBody({
     useState<Date | string | null>(card.startDate);
   const [targetDraft, setTargetDraft] =
     useState<Date | string | null>(card.targetDate);
+  // Subtasks added during this open session are queued as drafts and
+  // committed on Save, matching the deferred-commit contract for the rest
+  // of the fields. Discard drops them. Without this, an auto-saved subtask
+  // would leave the footer button at "Close" while a real change exists.
+  const [draftSubtasks, setDraftSubtasks] = useState<DraftSubtask[]>([]);
 
   const [titleEditing, setTitleEditing] = useState(false);
   const titleCommitRef = useRef(false);
@@ -441,6 +449,7 @@ function CardQuickViewBody({
   const typeChanged = typeDraft !== cardType;
   const startChanged = dateMs(startDraft) !== dateMs(card.startDate);
   const targetChanged = dateMs(targetDraft) !== dateMs(card.targetDate);
+  const draftsChanged = draftSubtasks.length > 0;
   const dirty =
     titleChanged ||
     descChanged ||
@@ -448,7 +457,8 @@ function CardQuickViewBody({
     completedChanged ||
     typeChanged ||
     startChanged ||
-    targetChanged;
+    targetChanged ||
+    draftsChanged;
 
   // Surface dirty + confirm hook to the wrapper so dismiss attempts
   // (X icon, Esc, outside-click) divert into the confirm phase.
@@ -472,6 +482,7 @@ function CardQuickViewBody({
     setTypeDraft(cardType as QuickViewCardType);
     setStartDraft(card.startDate);
     setTargetDraft(card.targetDate);
+    setDraftSubtasks([]);
     setTitleEditing(false);
     setDescEditing(false);
     setConfirming(false);
@@ -497,14 +508,27 @@ function CardQuickViewBody({
     if (typeChanged) patch.type = typeDraft;
     if (startChanged) patch.startDate = startDraft;
     if (targetChanged) patch.targetDate = targetDraft;
-    if (Object.keys(patch).length === 0) {
+    const queuedDrafts = draftSubtasks;
+    if (Object.keys(patch).length === 0 && queuedDrafts.length === 0) {
       setConfirming(false);
       onClose();
       return;
     }
     setSaving(true);
     try {
-      await onPatch?.(patch);
+      if (Object.keys(patch).length > 0) {
+        await onPatch?.(patch);
+      }
+      // Sequentially commit queued subtasks. The injected onCreateSubtask
+      // handlers (card-tile, roadmap-view) already swallow errors with a
+      // toast, so awaits won't throw — a partial failure just drops that
+      // row without blocking the rest.
+      if (onCreateSubtask && queuedDrafts.length > 0) {
+        for (const draft of queuedDrafts) {
+          await onCreateSubtask(draft.title);
+        }
+      }
+      setDraftSubtasks([]);
       dirtyRef.current = false;
       setConfirming(false);
       onClose();
@@ -527,7 +551,9 @@ function CardQuickViewBody({
     typeDraft,
     startDraft,
     targetDraft,
+    draftSubtasks,
     onPatch,
+    onCreateSubtask,
     onClose,
     dirtyRef,
   ]);
@@ -536,6 +562,20 @@ function CardQuickViewBody({
     resetDrafts();
     onClose();
   }, [resetDrafts, onClose]);
+
+  const queueSubtask = useCallback((title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    const tempId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? `draft-${crypto.randomUUID()}`
+        : `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setDraftSubtasks((prev) => [...prev, { tempId, title: trimmed }]);
+  }, []);
+
+  const removeDraftSubtask = useCallback((tempId: string) => {
+    setDraftSubtasks((prev) => prev.filter((d) => d.tempId !== tempId));
+  }, []);
 
   // === Field setters write to drafts (no server call) ===
   // Type is intentionally NOT editable here — same rationale as TypePicker
@@ -878,13 +918,15 @@ function CardQuickViewBody({
         <QuickViewSubboardSection cardId={card.id} />
 
         {/* SUBTASKS — child rows + inline add affordance. */}
-        {(subtaskTotal > 0 || subtaskCreatable) && (
+        {(subtaskTotal > 0 || subtaskCreatable || draftSubtasks.length > 0) && (
           <SubtaskSection
             subtaskDone={subtaskDone}
             subtaskTotal={subtaskTotal}
             subtasks={subtaskRows}
+            draftSubtasks={draftSubtasks}
+            onRemoveDraft={removeDraftSubtask}
             creatable={subtaskCreatable}
-            onCreateSubtask={onCreateSubtask}
+            onQueueSubtask={queueSubtask}
             onOpenSubtask={
               onOpenSubtask
                 ? (subtaskId) => {
@@ -1284,15 +1326,20 @@ function useQuickViewSubtasks(cardId: string): QuickViewSubtask[] {
   return useMemo(() => rows, [rows]);
 }
 
-// Inline subtask block: shows child rows and (when creatable) a
-// single-line input to add another subtask. The parent (card-tile or
-// roadmap-view) is responsible for the actual createCard server call.
+// Inline subtask block: shows persisted child rows, any drafts queued
+// during this open session, and (when creatable) a single-line input to
+// queue another. Drafts are committed by the parent CardQuickViewBody on
+// Save and dropped on Discard, matching the deferred-commit contract for
+// the rest of the dialog. The actual createCard server call lives in
+// card-tile or roadmap-view; this component never touches the server.
 function SubtaskSection({
   subtaskDone,
   subtaskTotal,
   subtasks,
+  draftSubtasks,
+  onRemoveDraft,
   creatable,
-  onCreateSubtask,
+  onQueueSubtask,
   onOpenSubtask,
   boardId,
   router,
@@ -1300,37 +1347,36 @@ function SubtaskSection({
   subtaskDone: number;
   subtaskTotal: number;
   subtasks: QuickViewSubtask[];
+  draftSubtasks: DraftSubtask[];
+  onRemoveDraft: (tempId: string) => void;
   creatable: boolean;
-  onCreateSubtask?: (title: string) => Promise<void> | void;
+  onQueueSubtask?: (title: string) => void;
   onOpenSubtask?: (subtaskId: string) => void;
   boardId: string;
   router: ReturnType<typeof useRouter>;
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (adding) inputRef.current?.focus();
   }, [adding]);
 
-  async function commit() {
+  const commit = useCallback(() => {
     const title = draft.trim();
-    if (!title || !onCreateSubtask) {
+    if (!title || !onQueueSubtask) {
       setAdding(false);
       setDraft("");
       return;
     }
-    setBusy(true);
-    try {
-      await onCreateSubtask(title);
-      setDraft("");
-      inputRef.current?.focus();
-    } finally {
-      setBusy(false);
-    }
-  }
+    onQueueSubtask(title);
+    setDraft("");
+    inputRef.current?.focus();
+  }, [draft, onQueueSubtask]);
+
+  const showList =
+    subtaskTotal > 0 || draftSubtasks.length > 0;
 
   return (
     <div className="space-y-1 text-xs">
@@ -1339,9 +1385,9 @@ function SubtaskSection({
         data-testid="card-quick-view-subtasks"
         className="rounded-md border border-hairline bg-transparent"
       >
-        {subtaskTotal > 0 && (
+        {showList && (
           <ul className="divide-y divide-hairline" data-testid="card-quick-view-subtask-list">
-            {subtasks.length > 0
+            {subtaskTotal > 0 && (subtasks.length > 0
               ? subtasks.map((subtask) => {
                   const done =
                     subtask.completedAt != null || Boolean(subtask.dueComplete);
@@ -1406,7 +1452,30 @@ function SubtaskSection({
                       </span>
                     </li>
                   );
-                })}
+                }))}
+            {draftSubtasks.map((draftRow) => (
+              <li
+                key={draftRow.tempId}
+                className="flex min-h-[34px] items-center gap-1.5 px-2"
+                data-testid="card-quick-view-subtask-draft-row"
+                data-draft-id={draftRow.tempId}
+              >
+                <ListTodo className="size-3 text-fg-faint" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-xs text-fg italic">
+                  {draftRow.title}
+                </span>
+                <span className="mono-meta-sm text-fg-faint">PENDING</span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveDraft(draftRow.tempId)}
+                  className="rounded p-0.5 text-fg-faint hover:bg-[rgb(255_255_255/0.06)] hover:text-fg"
+                  aria-label="Remove pending subtask"
+                  data-testid="card-quick-view-subtask-draft-remove"
+                >
+                  <X className="size-3" aria-hidden />
+                </button>
+              </li>
+            ))}
           </ul>
         )}
         {creatable && (
@@ -1414,7 +1483,7 @@ function SubtaskSection({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                void commit();
+                commit();
               }}
               className="flex h-[34px] items-center gap-1.5 px-2"
             >
@@ -1423,14 +1492,13 @@ function SubtaskSection({
                 ref={inputRef}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                onBlur={() => void commit()}
+                onBlur={() => commit()}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") {
                     setAdding(false);
                     setDraft("");
                   }
                 }}
-                disabled={busy}
                 placeholder="Subtask title…"
                 className="flex-1 bg-transparent outline-none text-xs text-fg placeholder:text-fg-faint"
                 data-testid="card-quick-view-subtask-input"
