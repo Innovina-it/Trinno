@@ -1,8 +1,10 @@
 import { type Filters } from "@/lib/board-filters";
 import { type Zoom } from "@/lib/roadmap/dates";
 import {
+  type BacklogPagePreferences,
   type BoardPreferences,
   type Preferences,
+  type RoadmapPagePreferences,
   type RoadmapViewModePreference,
   type WorkspacePreferences,
   type WorkspacePreferenceTab,
@@ -47,28 +49,52 @@ export function getWorkspacePreferences(
   preferences: Preferences,
   workspaceId: string,
 ): WorkspacePreferences {
-  const legacy: WorkspacePreferences = {};
-  if (isWorkspaceTab(preferences.activeTab)) {
-    legacy.activeTab = preferences.activeTab;
-  }
-  if (isRoadmapZoom(preferences.roadmapZoom)) {
-    legacy.roadmapZoom = preferences.roadmapZoom;
-  }
-
   const scoped = preferences.workspaces?.[workspaceId] ?? {};
-  return {
-    ...legacy,
-    ...scoped,
-    activeTab: isWorkspaceTab(scoped.activeTab)
-      ? scoped.activeTab
-      : legacy.activeTab,
-    roadmapZoom: isRoadmapZoom(scoped.roadmapZoom)
+  const nestedRoadmap = isRecord(scoped.roadmap) ? scoped.roadmap : undefined;
+
+  // activeTab precedence: scoped workspace value, then legacy top-level.
+  const activeTab = isWorkspaceTab(scoped.activeTab)
+    ? scoped.activeTab
+    : isWorkspaceTab(preferences.activeTab)
+      ? preferences.activeTab
+      : undefined;
+
+  // zoom precedence: nested → deprecated flat (scoped) → legacy top-level.
+  const zoom = isRoadmapZoom(nestedRoadmap?.zoom)
+    ? nestedRoadmap?.zoom
+    : isRoadmapZoom(scoped.roadmapZoom)
       ? scoped.roadmapZoom
-      : legacy.roadmapZoom,
-    roadmapViewMode: isRoadmapViewMode(scoped.roadmapViewMode)
+      : isRoadmapZoom(preferences.roadmapZoom)
+        ? preferences.roadmapZoom
+        : undefined;
+
+  // viewMode precedence: nested → deprecated flat (scoped). No top-level legacy.
+  const viewMode = isRoadmapViewMode(nestedRoadmap?.viewMode)
+    ? nestedRoadmap?.viewMode
+    : isRoadmapViewMode(scoped.roadmapViewMode)
       ? scoped.roadmapViewMode
-      : undefined,
+      : undefined;
+
+  const result: WorkspacePreferences = {
+    // backlog is a reserved placeholder for future scope.
+    backlog: {} as BacklogPagePreferences,
   };
+  if (activeTab !== undefined) {
+    result.activeTab = activeTab;
+  }
+  const roadmap: RoadmapPagePreferences = {};
+  if (zoom !== undefined) roadmap.zoom = zoom;
+  if (viewMode !== undefined) roadmap.viewMode = viewMode;
+  if (zoom !== undefined || viewMode !== undefined) {
+    result.roadmap = roadmap;
+  }
+  // Backwards-compat mirror: legacy consumers (pre-U3) still read the flat
+  // `roadmapZoom`/`roadmapViewMode` keys off this return value. The canonical
+  // shape lives in `roadmap.*`; the flat keys here are deprecated and will be
+  // dropped once U3 migrates the consumers.
+  if (zoom !== undefined) result.roadmapZoom = zoom;
+  if (viewMode !== undefined) result.roadmapViewMode = viewMode;
+  return result;
 }
 
 export function getBoardPreferences(
@@ -92,13 +118,57 @@ export function patchWorkspacePreferences(
   workspaceId: string,
   patch: WorkspacePreferences,
 ): Partial<Preferences> {
+  // Write-promotion shim: while consumers (U3 migration) still emit the
+  // deprecated flat keys, route them into the nested roadmap.* shape so
+  // we never persist the flat shape from this helper.
+  const promotedRoadmap: RoadmapPagePreferences = {
+    ...(patch.roadmap ?? {}),
+  };
+  if (patch.roadmap?.zoom === undefined && patch.roadmapZoom !== undefined) {
+    promotedRoadmap.zoom = patch.roadmapZoom;
+  }
+  if (
+    patch.roadmap?.viewMode === undefined &&
+    patch.roadmapViewMode !== undefined
+  ) {
+    promotedRoadmap.viewMode = patch.roadmapViewMode;
+  }
+
+  const existing = preferences.workspaces?.[workspaceId] ?? {};
+  const existingRoadmap = isRecord(existing.roadmap) ? existing.roadmap : {};
+  const existingBacklog = isRecord(existing.backlog) ? existing.backlog : {};
+
+  // Preserve the full existing entry (including any pre-existing legacy
+  // flat `roadmapZoom`/`roadmapViewMode`). The patch itself never emits
+  // those flat keys — we only write into the nested roadmap.* shape.
+  // Deleting the pre-existing flat keys from the persisted row is a
+  // future cleanup unit (server-side `||` merge cannot drop keys).
+  const nextEntry: WorkspacePreferences = { ...existing };
+
+  if (patch.activeTab !== undefined) {
+    nextEntry.activeTab = patch.activeTab;
+  }
+
+  const hasRoadmapWrite =
+    Object.keys(promotedRoadmap).length > 0 || patch.roadmap !== undefined;
+  if (hasRoadmapWrite) {
+    nextEntry.roadmap = {
+      ...existingRoadmap,
+      ...promotedRoadmap,
+    };
+  }
+
+  if (patch.backlog !== undefined) {
+    nextEntry.backlog = {
+      ...existingBacklog,
+      ...patch.backlog,
+    } as BacklogPagePreferences;
+  }
+
   return {
     workspaces: {
       ...(preferences.workspaces ?? {}),
-      [workspaceId]: {
-        ...(preferences.workspaces?.[workspaceId] ?? {}),
-        ...patch,
-      },
+      [workspaceId]: nextEntry,
     },
   };
 }
