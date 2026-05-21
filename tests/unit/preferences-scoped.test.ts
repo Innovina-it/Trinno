@@ -178,4 +178,17 @@ describe("scoped preferences", () => {
     const preferences: Preferences = {};
     expect(getWorkspacePreferences(preferences, "ws-a").backlog).toEqual({});
   });
+
+  it("T8 normalizes a stale workspace row on first nested write", () => {
+    const stale: Preferences = {
+      workspaces: { wsA: { roadmapZoom: "week" } },
+    };
+    const patch = patchWorkspacePreferences(stale, "wsA",
+      { roadmap: { zoom: "month" } });
+    expect(patch.workspaces?.wsA?.roadmap?.zoom).toBe("month");
+    // The pre-existing flat key is preserved by the U2 contract
+    // (cannot be deleted via jsonb `||` merge); future cleanup unit
+    // drops it once consumers are stable.
+    expect(patch.workspaces?.wsA?.roadmapZoom).toBe("week");
+  });
 });
