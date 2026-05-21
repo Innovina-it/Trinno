@@ -7,6 +7,7 @@ import { getWorkspace, listMembers } from "@/lib/queries/workspaces";
 import { hasFlag } from "@/lib/feature-flags/has-flag";
 import { BoardStoreProvider } from "@/stores/board-store";
 import { SubtaskParentSyncPrompt } from "@/components/board/card/subtask-parent-sync-prompt";
+import { BoardSyncMount } from "@/components/board/board-sync-mount";
 import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
 import {
   HydrationBoundary,
@@ -102,6 +103,7 @@ export default async function BoardLayout({
         {children}
         {modal}
         <SubtaskParentSyncPrompt />
+        <BoardSyncMount boardId={boardId} />
       </BoardStoreProvider>
     </WorkspaceStoreProvider>
   );
