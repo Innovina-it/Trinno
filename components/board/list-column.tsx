@@ -96,7 +96,7 @@ export function ListColumn({
     ? filtered.slice(0, VIRTUALIZE_THRESHOLD)
     : filtered;
   const hiddenCount = filtered.length - visibleCards.length;
-  const virtualizedBoardEnabled = useWorkspaceFlag("virtualized_board");
+  const virtualizedBoardEnabled = useWorkspaceFlag("virtualized_board", true);
 
   const sortableId = `list:${list.id}`;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
