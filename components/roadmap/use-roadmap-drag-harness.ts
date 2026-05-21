@@ -113,6 +113,10 @@ type RowDragState = {
 };
 
 export interface RoadmapDragHarnessInput {
+  // Roadmap view is workspace-scoped — needed by `reorderRoadmapRow` so
+  // the server-side renumber covers all sibling boards (rank space is
+  // shared across the workspace, not per-board).
+  workspaceId: string;
   ppd: number;
   gridStart: Date;
   // Layout constants.
@@ -192,6 +196,7 @@ export function useRoadmapDragHarness(
   input: RoadmapDragHarnessInput,
 ): RoadmapDragHarnessOutput {
   const {
+    workspaceId,
     ppd,
     gridStart,
     LANE_HEADER_HEIGHT,
@@ -1084,6 +1089,7 @@ export function useRoadmapDragHarness(
             beforeId,
             afterId,
             boardId,
+            workspaceId,
           });
           patchCardInStore(cardId, { roadmapOrder: r.roadmapOrder });
         } catch (err) {
@@ -1092,7 +1098,7 @@ export function useRoadmapDragHarness(
         }
       })();
     });
-  }, [onRowPointerMove, patchCardInStore, storeCardsRef]);
+  }, [onRowPointerMove, patchCardInStore, storeCardsRef, workspaceId]);
 
   const beginRowDrag = useCallback(
     (cardId: string, e: React.PointerEvent) => {

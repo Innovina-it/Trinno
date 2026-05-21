@@ -1047,15 +1047,19 @@ export async function reorderRoadmapRowImpl(
     beforeId: string | null;
     afterId: string | null;
     boardId: string;
+    workspaceId: string;
   },
 ): Promise<{ id: string; roadmapOrder: number }> {
   const p = ReorderRoadmapRowInput.parse(input);
   return dbAsUser(token, async (tx) => {
-    // Serialize concurrent reorders on the same board so the renumber
-    // path can't race against a second writer's neighbour-rank reads.
+    // Serialize concurrent reorders within the same workspace so the
+    // renumber path can't race against a second writer's neighbour-rank
+    // reads. The roadmap view is workspace-scoped (lanes mix anchors +
+    // orphans from many boards), so locking per-board would let two
+    // simultaneous drags on sibling boards collide on shared ranks.
     // Auto-released at txn end.
     await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext(${"reorder:" + p.boardId}))`,
+      sql`select pg_advisory_xact_lock(hashtext(${"reorder:" + p.workspaceId}))`,
     );
 
     async function readRank(id: string | null): Promise<number | null> {
@@ -1075,10 +1079,13 @@ export async function reorderRoadmapRowImpl(
       newRank = computeNewRank(beforeRank, afterRank);
     } catch (err) {
       if (!(err instanceof RankCollisionError)) throw err;
-      // Renumber every card on the board with fresh sparse ranks. We
-      // sort by current `roadmap_order ASC NULLS LAST`, then by
-      // `start_date ASC NULLS LAST`, then by `created_at ASC` so the
-      // existing visual order is preserved.
+      // Renumber every non-archived, non-subtask card in the WORKSPACE
+      // with fresh sparse ranks. roadmap_order is compared across boards
+      // (lanes mix anchors + orphans from many boards), so renumbering
+      // only the drop board would leave neighbour ranks on sibling
+      // boards untouched and re-collide on retry. We sort by current
+      // `roadmap_order ASC NULLS LAST`, then `start_date ASC NULLS LAST`,
+      // then `created_at ASC` so the existing visual order is preserved.
       const all = await tx
         .select({
           id: cards.id,
@@ -1087,7 +1094,14 @@ export async function reorderRoadmapRowImpl(
           createdAt: cards.createdAt,
         })
         .from(cards)
-        .where(and(eq(cards.boardId, p.boardId), eq(cards.archived, false)))
+        .innerJoin(boards, eq(boards.id, cards.boardId))
+        .where(
+          and(
+            eq(boards.workspaceId, p.workspaceId),
+            eq(cards.archived, false),
+            sql`${cards.type} <> 'subtask'`,
+          ),
+        )
         .orderBy(
           sql`${cards.roadmapOrder} asc nulls last`,
           sql`${cards.startDate} asc nulls last`,
@@ -1127,6 +1141,7 @@ export async function reorderRoadmapRow(input: {
   beforeId: string | null;
   afterId: string | null;
   boardId: string;
+  workspaceId: string;
 }) {
   await requireUser();
   const t = (await getSessionToken())!;

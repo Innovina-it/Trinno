@@ -1366,6 +1366,7 @@ export function RoadmapView({
   );
 
   const drag = useRoadmapDragHarness({
+    workspaceId,
     ppd: effectivePpd,
     gridStart,
     LANE_HEADER_HEIGHT,

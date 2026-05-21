@@ -217,6 +217,7 @@ export const ReorderRoadmapRowInput = z.object({
   beforeId: Uuid.nullable(),
   afterId: Uuid.nullable(),
   boardId: Uuid,
+  workspaceId: Uuid,
 });
 
 export const CreateLabelInput = z.object({
