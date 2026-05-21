@@ -2,11 +2,12 @@
 /**
  * Cross-workspace roadmap (gantt) view for /timeline.
  *
- * Each visible workspace renders as a collapsible swimlane band. Inside an
- * expanded band, cards group by board and lay out as horizontal bars on a
- * shared time axis. Bar grammar mirrors the per-workspace roadmap (pill +
- * priority stripe + completion hatch); we intentionally skip drag, deps,
- * and milestones — this surface is read-mostly.
+ * Flat chronological list across every workspace the viewer can see, sorted
+ * by start date ascending. Each row carries its own WORKSPACE · BOARD
+ * breadcrumb in the rail, followed by the card title, so the workspace
+ * column travels per row instead of as a collapsible band. Bar grammar is
+ * a quiet pill with a priority stripe + completed hatch; drag, deps, and
+ * milestones are intentionally absent — this surface is read-mostly.
  */
 import {
   useCallback,
@@ -17,8 +18,6 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ChevronRight, ExternalLink } from "lucide-react";
 import type { CrossWorkspaceCard } from "@/lib/queries/cards";
 import {
   PRIORITY_TINT,
@@ -27,20 +26,14 @@ import {
 
 type Props = {
   cards: CrossWorkspaceCard[];
-  /** Every workspace the viewer can see, including ones with zero scheduled
-   *  cards — they still render as empty bands so the surface advertises
-   *  their existence. */
-  allWorkspaces?: Array<{ id: string; name: string }>;
 };
 
 type Zoom = "W" | "M" | "Q";
 
 const DAY_PX: Record<Zoom, number> = { W: 22, M: 10, Q: 4 };
-const RAIL_W = 260;
-const ROW_H = 32;
+const RAIL_W = 280;
+const ROW_H = 44;
 const BAR_H = 22;
-const SUMMARY_H = 18;
-const STORAGE_KEY_OPEN = "common-roadmap:open-ws";
 const STORAGE_KEY_ZOOM = "common-roadmap:zoom";
 const DAY_MS = 86_400_000;
 const MONTHS = [
@@ -84,10 +77,6 @@ function startOfWeekMon(d: Date): Date {
 
 type Range = { start: Date; end: Date; days: number };
 
-// Default window scales with zoom: Q shows ~13 months, M shows ~5 months,
-// W shows ~3 months. Past/future split is roughly 1:4 so the bias sits on
-// upcoming work. Range always expands to cover any cards outside the
-// default window so nothing renders off-canvas.
 const ZOOM_WINDOW: Record<Zoom, { before: number; after: number }> = {
   W: { before: 14, after: 70 },
   M: { before: 30, after: 120 },
@@ -108,111 +97,19 @@ function computeRange(cards: CrossWorkspaceCard[], zoom: Zoom): Range {
   return { start, end, days: daysBetween(start, end) };
 }
 
-type BoardLane = {
-  boardId: string;
-  boardTitle: string;
-  rows: Row[];
-};
-
-type WorkspaceGroup = {
-  workspaceId: string;
-  workspaceName: string;
-  totalCards: number;
-  boards: BoardLane[];
-};
-
-type Row = { card: CrossWorkspaceCard; depth: 0 | 1 | 2 };
-
-function buildRows(cards: CrossWorkspaceCard[]): Row[] {
-  const byParent = new Map<string | null, CrossWorkspaceCard[]>();
-  const byId = new Map<string, CrossWorkspaceCard>();
-  for (const c of cards) {
-    byId.set(c.id, c);
-    const arr = byParent.get(c.parentCardId ?? null) ?? [];
-    arr.push(c);
-    byParent.set(c.parentCardId ?? null, arr);
-  }
-  for (const arr of byParent.values()) {
-    arr.sort((a, b) => {
-      const ta = midnight(a.startDate).getTime();
-      const tb = midnight(b.startDate).getTime();
-      if (ta !== tb) return ta - tb;
-      return a.title.localeCompare(b.title);
-    });
-  }
-  const top = byParent.get(null) ?? [];
-  const seen = new Set<string>();
-  for (const c of cards) {
-    if (c.parentCardId && !byId.has(c.parentCardId)) top.push(c);
-  }
-  const sorted = top
-    .filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)))
-    .sort((a, b) => {
-      const ae = (byParent.get(a.id)?.length ?? 0) > 0 ? 0 : 1;
-      const be = (byParent.get(b.id)?.length ?? 0) > 0 ? 0 : 1;
-      if (ae !== be) return ae - be;
-      return (
-        midnight(a.startDate).getTime() - midnight(b.startDate).getTime()
-      );
-    });
-  const out: Row[] = [];
-  function emit(card: CrossWorkspaceCard, depth: 0 | 1 | 2) {
-    out.push({ card, depth });
-    for (const ch of byParent.get(card.id) ?? []) {
-      emit(ch, depth === 0 ? 1 : 2);
-    }
-  }
-  for (const c of sorted) emit(c, 0);
-  return out;
-}
-
-function groupCards(
-  cards: CrossWorkspaceCard[],
-  allWorkspaces?: Array<{ id: string; name: string }>,
-): WorkspaceGroup[] {
-  const byWs = new Map<string, WorkspaceGroup>();
-  if (allWorkspaces) {
-    for (const w of allWorkspaces) {
-      byWs.set(w.id, {
-        workspaceId: w.id,
-        workspaceName: w.name,
-        totalCards: 0,
-        boards: [],
-      });
-    }
-  }
-  const byBoard = new Map<string, CrossWorkspaceCard[]>();
-  for (const c of cards) {
-    let ws = byWs.get(c.workspaceId);
-    if (!ws) {
-      ws = {
-        workspaceId: c.workspaceId,
-        workspaceName: c.workspaceName,
-        totalCards: 0,
-        boards: [],
-      };
-      byWs.set(c.workspaceId, ws);
-    }
-    ws.totalCards += 1;
-    const arr = byBoard.get(c.boardId) ?? [];
-    arr.push(c);
-    byBoard.set(c.boardId, arr);
-  }
-  for (const [boardId, list] of byBoard) {
-    const ws = byWs.get(list[0].workspaceId);
-    if (!ws) continue;
-    ws.boards.push({
-      boardId,
-      boardTitle: list[0].boardTitle,
-      rows: buildRows(list),
-    });
-  }
-  const out = [...byWs.values()];
-  for (const ws of out) {
-    ws.boards.sort((a, b) => a.boardTitle.localeCompare(b.boardTitle));
-  }
-  out.sort((a, b) => a.workspaceName.localeCompare(b.workspaceName));
-  return out;
+/** Stable flat ordering: startDate ASC, then workspace name, then title. The
+ *  query already orders by startDate ASC, but cards arriving with identical
+ *  start dates from different workspaces are otherwise indeterminate, and
+ *  the rail breadcrumb has no visual grouping to fall back on. */
+function sortCardsByTime(cards: CrossWorkspaceCard[]): CrossWorkspaceCard[] {
+  return [...cards].sort((a, b) => {
+    const da = midnight(a.startDate).getTime();
+    const db = midnight(b.startDate).getTime();
+    if (da !== db) return da - db;
+    const ws = a.workspaceName.localeCompare(b.workspaceName);
+    if (ws !== 0) return ws;
+    return a.title.localeCompare(b.title);
+  });
 }
 
 function useLocalStorage<T>(
@@ -222,10 +119,6 @@ function useLocalStorage<T>(
   deserialize: (raw: string) => T,
 ): [T, (next: T | ((prev: T) => T)) => void] {
   const [value, setValue] = useState<T>(initial);
-  // Refs let us read the latest serialize/deserialize without putting them in
-  // effect deps. Inline arrows from callers would otherwise change identity
-  // every render and re-fire the localStorage read each time — which, for
-  // values like a fresh Set, never bails out and produces an infinite loop.
   const serializeRef = useRef(serialize);
   const deserializeRef = useRef(deserialize);
   serializeRef.current = serialize;
@@ -256,7 +149,6 @@ function useLocalStorage<T>(
   return [value, set];
 }
 
-// Time axis: month labels + week ticks + today line.
 function TimeAxis({
   range,
   dayPx,
@@ -267,7 +159,6 @@ function TimeAxis({
   todayOffset: number | null;
 }) {
   const canvasW = range.days * dayPx;
-  // Build month spans across the range.
   const months: Array<{ label: string; left: number; width: number }> = [];
   let cursor = midnight(range.start);
   while (cursor < range.end) {
@@ -297,7 +188,6 @@ function TimeAxis({
     cursor = monthEnd;
   }
 
-  // Week ticks every 7 days.
   const weekTicks: number[] = [];
   for (let d = 0; d <= range.days; d += 7) weekTicks.push(d * dayPx);
 
@@ -425,53 +315,11 @@ function GanttBar({
   );
 }
 
-function SummaryStrip({
-  rows,
-  range,
-  dayPx,
-}: {
-  rows: Row[];
-  range: Range;
-  dayPx: number;
-}) {
-  const canvasW = range.days * dayPx;
-  return (
-    <div
-      className="relative border-t border-hairline"
-      style={{ width: canvasW, height: SUMMARY_H }}
-    >
-      {rows.map((r) => {
-        const startOffset = Math.max(
-          0,
-          daysBetween(range.start, r.card.startDate),
-        );
-        const span = Math.max(
-          1,
-          daysBetween(r.card.startDate, r.card.targetDate) + 1,
-        );
-        return (
-          <span
-            key={r.card.id}
-            aria-hidden
-            className="absolute top-1.5 h-1.5 rounded-sm bg-[rgb(255_255_255/0.22)]"
-            style={{
-              left: startOffset * dayPx,
-              width: Math.max(2, span * dayPx),
-            }}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-export function CommonRoadmapView({ cards, allWorkspaces }: Props) {
+export function CommonRoadmapView({ cards }: Props) {
   const router = useRouter();
-  const groups = useMemo(
-    () => groupCards(cards, allWorkspaces),
-    [cards, allWorkspaces],
-  );
   const today = useMemo(() => midnight(new Date()), []);
+
+  const sorted = useMemo(() => sortCardsByTime(cards), [cards]);
 
   const [zoom, setZoom] = useLocalStorage<Zoom>(
     STORAGE_KEY_ZOOM,
@@ -486,31 +334,11 @@ export function CommonRoadmapView({ cards, allWorkspaces }: Props) {
     return daysBetween(range.start, today) * dayPx;
   }, [today, range, dayPx]);
 
-  const [openWs, setOpenWs] = useLocalStorage<Set<string>>(
-    STORAGE_KEY_OPEN,
-    new Set<string>(),
-    (v) => JSON.stringify([...v]),
-    (raw) => {
-      try {
-        const arr = JSON.parse(raw);
-        return new Set<string>(Array.isArray(arr) ? arr : []);
-      } catch {
-        return new Set<string>();
-      }
-    },
-  );
-
-  const toggleWs = useCallback(
-    (id: string) => {
-      setOpenWs((prev) => {
-        const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        return next;
-      });
-    },
-    [setOpenWs],
-  );
+  const workspaceCount = useMemo(() => {
+    const s = new Set<string>();
+    for (const c of sorted) s.add(c.workspaceId);
+    return s.size;
+  }, [sorted]);
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const jumpToToday = useCallback(() => {
@@ -520,7 +348,6 @@ export function CommonRoadmapView({ cards, allWorkspaces }: Props) {
     el.scrollTo({ left: Math.max(0, target), behavior: "smooth" });
   }, [liveTodayOffset]);
 
-  // Auto-center on today on first paint.
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el || liveTodayOffset == null) return;
@@ -536,7 +363,7 @@ export function CommonRoadmapView({ cards, allWorkspaces }: Props) {
     [router],
   );
 
-  if (groups.length === 0) {
+  if (sorted.length === 0) {
     return (
       <div
         className="rounded-xl border border-hairline p-10 text-center text-fg-muted"
@@ -558,7 +385,7 @@ export function CommonRoadmapView({ cards, allWorkspaces }: Props) {
       className="rounded-xl border border-hairline overflow-hidden bg-[color:var(--bg-deep)]"
       data-testid="common-roadmap-view"
     >
-      {/* Masthead — zoom + today */}
+      {/* Masthead — zoom + today + counts */}
       <div className="flex items-center gap-2 border-b border-hairline px-3 py-2">
         <span className="mono-meta-sm text-fg-faint tracking-widest">
           ZOOM
@@ -606,8 +433,9 @@ export function CommonRoadmapView({ cards, allWorkspaces }: Props) {
           TODAY
         </button>
         <span className="ml-auto mono-meta-sm tabular-nums text-fg-faint">
-          {cards.length} {cards.length === 1 ? "CARD" : "CARDS"} ·{" "}
-          {groups.length} {groups.length === 1 ? "WORKSPACE" : "WORKSPACES"}
+          {sorted.length} {sorted.length === 1 ? "CARD" : "CARDS"} ·{" "}
+          {workspaceCount}{" "}
+          {workspaceCount === 1 ? "WORKSPACE" : "WORKSPACES"}
         </span>
       </div>
 
@@ -623,176 +451,75 @@ export function CommonRoadmapView({ cards, allWorkspaces }: Props) {
             todayOffset={liveTodayOffset}
           />
 
-          {groups.map((ws) => {
-            const open = openWs.has(ws.workspaceId);
-            const allRows = ws.boards.flatMap((b) => b.rows);
+          {sorted.map((card) => {
+            const completed = card.completedAt != null;
             return (
-              <section
-                key={ws.workspaceId}
-                data-testid={`common-roadmap-ws-${ws.workspaceId}`}
-                data-open={open ? "true" : undefined}
-                className="border-b border-hairline last:border-b-0"
+              <div
+                key={card.id}
+                className="flex group/row hover:bg-[rgb(255_255_255/0.025)] border-t border-hairline first:border-t-0"
+                data-card-id={card.id}
+                data-workspace-id={card.workspaceId}
+                data-testid="common-roadmap-row"
               >
-                {/* Band header */}
-                <div className="flex bg-[color:var(--bg-1)]">
+                <div
+                  className="sticky left-0 z-10 shrink-0 border-r border-hairline bg-[color:var(--bg-deep)] group-hover/row:bg-[rgb(20_20_20)] flex flex-col justify-center gap-0.5 px-3 transition-colors"
+                  style={{ width: RAIL_W, height: ROW_H }}
+                >
                   <div
-                    className="sticky left-0 z-10 shrink-0 border-r border-hairline bg-[color:var(--bg-1)]"
-                    style={{ width: RAIL_W }}
+                    className="flex items-center gap-1.5 mono-meta-sm text-fg-faint tracking-[0.14em] truncate"
+                    title={`${card.workspaceName} · ${card.boardTitle}`}
                   >
+                    <span className="truncate">
+                      {card.workspaceName.toUpperCase()}
+                    </span>
+                    <span aria-hidden className="text-fg-faint/60">
+                      /
+                    </span>
+                    <span className="truncate text-fg-muted">
+                      {card.boardTitle.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => toggleWs(ws.workspaceId)}
-                      aria-expanded={open}
-                      data-testid={`common-roadmap-ws-toggle-${ws.workspaceId}`}
-                      className="w-full h-9 flex items-center gap-2 px-3 text-left hover:bg-[rgb(255_255_255/0.04)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-fg/40"
+                      onClick={() => openCard(card)}
+                      className={[
+                        "truncate text-left text-xs transition-colors hover:underline focus-visible:outline-none focus-visible:underline",
+                        completed
+                          ? "line-through text-fg-faint"
+                          : "text-fg font-medium",
+                      ].join(" ")}
+                      title={card.title}
                     >
-                      <ChevronRight
-                        aria-hidden
-                        className={`size-3.5 text-fg-faint transition-transform ${open ? "rotate-90" : ""}`}
-                      />
-                      <span className="mono-meta-sm tracking-widest text-fg truncate">
-                        {ws.workspaceName.toUpperCase()}
-                      </span>
-                      <span className="ml-auto mono-meta-sm tabular-nums text-fg-faint shrink-0">
-                        {ws.totalCards}
-                      </span>
-                      <Link
-                        href={`/w/${ws.workspaceId}/roadmap`}
-                        onClick={(e) => e.stopPropagation()}
-                        title="Open workspace roadmap"
-                        aria-label={`Open ${ws.workspaceName} roadmap`}
-                        className="shrink-0 text-fg-faint hover:text-fg transition-colors"
-                      >
-                        <ExternalLink className="size-3" aria-hidden />
-                      </Link>
+                      {card.title}
                     </button>
-                  </div>
-                  <div
-                    className="relative"
-                    style={{ width: canvasW, height: 36 }}
-                  >
-                    {liveTodayOffset != null && (
-                      <div
-                        aria-hidden
-                        className="absolute top-0 bottom-0 w-px bg-fg/30"
-                        style={{ left: liveTodayOffset }}
-                      />
-                    )}
-                    {!open && allRows.length > 0 && (
-                      <SummaryStrip
-                        rows={allRows}
-                        range={range}
-                        dayPx={dayPx}
-                      />
-                    )}
+                    <span
+                      className="ml-auto mono-meta-sm shrink-0 text-fg-faint chip"
+                      data-card-type={card.type}
+                    >
+                      {card.type.toUpperCase()}
+                    </span>
                   </div>
                 </div>
-
-                {/* Expanded body */}
-                {open && ws.boards.length > 0 && (
-                  <div>
-                    {ws.boards.map((board) => (
-                      <div key={board.boardId}>
-                        {/* Board sub-header */}
-                        <div className="flex bg-[color:var(--bg-2)] border-t border-hairline">
-                          <div
-                            className="sticky left-0 z-10 shrink-0 border-r border-hairline bg-[color:var(--bg-2)] px-3 h-7 flex items-center gap-2"
-                            style={{ width: RAIL_W }}
-                          >
-                            <span
-                              aria-hidden
-                              className="size-1 rounded-full bg-fg/40 shrink-0"
-                            />
-                            <Link
-                              href={`/b/${board.boardId}`}
-                              className="mono-meta-sm tracking-widest text-fg hover:text-fg-muted truncate"
-                            >
-                              {board.boardTitle}
-                            </Link>
-                          </div>
-                          <div
-                            className="relative"
-                            style={{ width: canvasW, height: 28 }}
-                          >
-                            {liveTodayOffset != null && (
-                              <div
-                                aria-hidden
-                                className="absolute top-0 bottom-0 w-px bg-fg/30"
-                                style={{ left: liveTodayOffset }}
-                              />
-                            )}
-                          </div>
-                        </div>
-                        {/* Card rows */}
-                        {board.rows.map(({ card, depth }) => (
-                          <div
-                            key={card.id}
-                            className="flex group/row hover:bg-[rgb(255_255_255/0.025)]"
-                            data-card-id={card.id}
-                            data-depth={depth}
-                          >
-                            <div
-                              className="sticky left-0 z-10 shrink-0 border-r border-hairline bg-[color:var(--bg-deep)] group-hover/row:bg-[rgb(20_20_20)] flex items-center gap-2 pr-2 transition-colors"
-                              style={{
-                                width: RAIL_W,
-                                height: ROW_H,
-                                paddingLeft: 12 + depth * 14,
-                              }}
-                            >
-                              {depth > 0 && (
-                                <span
-                                  aria-hidden
-                                  className="size-1 rounded-full bg-fg-faint shrink-0"
-                                />
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => openCard(card)}
-                                className={[
-                                  "truncate text-left text-xs transition-colors hover:underline focus-visible:outline-none focus-visible:underline",
-                                  depth === 0
-                                    ? "text-fg font-medium"
-                                    : "text-fg-muted hover:text-fg",
-                                  card.completedAt
-                                    ? "line-through text-fg-faint"
-                                    : "",
-                                ].join(" ")}
-                                title={card.title}
-                              >
-                                {card.title}
-                              </button>
-                              <span
-                                className="ml-auto mono-meta-sm shrink-0 text-fg-faint chip"
-                                data-card-type={card.type}
-                              >
-                                {card.type.toUpperCase()}
-                              </span>
-                            </div>
-                            <div
-                              className="relative border-t border-hairline"
-                              style={{ width: canvasW, height: ROW_H }}
-                            >
-                              {liveTodayOffset != null && (
-                                <div
-                                  aria-hidden
-                                  className="absolute top-0 bottom-0 w-px bg-fg/30"
-                                  style={{ left: liveTodayOffset }}
-                                />
-                              )}
-                              <GanttBar
-                                card={card}
-                                range={range}
-                                dayPx={dayPx}
-                                onOpen={openCard}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
+                <div
+                  className="relative"
+                  style={{ width: canvasW, height: ROW_H }}
+                >
+                  {liveTodayOffset != null && (
+                    <div
+                      aria-hidden
+                      className="absolute top-0 bottom-0 w-px bg-fg/30"
+                      style={{ left: liveTodayOffset }}
+                    />
+                  )}
+                  <GanttBar
+                    card={card}
+                    range={range}
+                    dayPx={dayPx}
+                    onOpen={openCard}
+                  />
+                </div>
+              </div>
             );
           })}
         </div>
