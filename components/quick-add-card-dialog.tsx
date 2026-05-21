@@ -2,7 +2,7 @@
 import { useContext, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "zustand";
-import { Layers3, Plus } from "lucide-react";
+import { Layers3 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -393,27 +393,4 @@ export function QuickAddCardMount({
 
   if (!hasWorkspaces) return null;
   return <QuickAddCardDialog open={open} onOpenChange={setOpen} />;
-}
-
-/**
- * Floating + button for board pages. Mounted by BoardView so it only
- * appears in the board context (which conveniently means the dialog
- * uses the BoardStoreContext list source).
- */
-export function QuickAddFab() {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Quick add card"
-        data-testid="quick-add-fab"
-        className="shimmer-cta fixed bottom-6 right-6 z-40 inline-flex size-12 items-center justify-center rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
-      >
-        <Plus className="size-5" />
-      </button>
-      <QuickAddCardDialog open={open} onOpenChange={setOpen} />
-    </>
-  );
 }

@@ -36,7 +36,6 @@ import {
 } from "@/actions/cards";
 import { moveList as moveListAction } from "@/actions/lists";
 import { undoBus } from "@/lib/undo-bus";
-import { QuickAddFab } from "@/components/quick-add-card-dialog";
 import { BulkActionBar } from "./bulk-action-bar";
 import type { SprintLite } from "@/components/sprint/sprint-picker";
 import { Button } from "@/components/ui/button";
@@ -622,7 +621,6 @@ export function BoardView({
           </DndContext>
         </div>
       </div>
-      <QuickAddFab />
       <BulkActionBar sprints={sprints} />
     </div>
   );
