@@ -1,18 +1,17 @@
 "use server";
 import { sql, and, eq, or, ilike, ne, inArray } from "drizzle-orm";
-import { createClient } from "@supabase/supabase-js";
 import { dbAsUser } from "@/lib/db/client";
 import { profiles, boards } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
+import { tryGetServiceSupabase } from "@/lib/supabase/service-role";
 
 // Service-role client for auth.users.email lookups (RLS forbids that
 // table to authenticated callers). Used only by searchProfiles so users
 // can be found by their full email, not just their slug/handle.
+// Returns null when env isn't configured so callers can fall back to the
+// RLS-scoped path in dev.
 function adminAuthClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
+  return tryGetServiceSupabase();
 }
 
 // Map an email-shaped query → set of auth.user.ids whose emails start with

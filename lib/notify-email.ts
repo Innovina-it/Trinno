@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import { EMAIL_KIND_LABELS, type NotificationKind } from "@/lib/notifications/email-labels";
+import { getServiceSupabase } from "@/lib/supabase/service-role";
 
 // Email pipeline.  Fetches notifications with email_sent_at IS NULL,
 // gates each by user_notification_prefs(channel='email', enabled=true),
@@ -48,13 +48,6 @@ function escapeHtml(value: string): string {
   });
 }
 
-function admin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Supabase env not configured");
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
 export async function processPendingEmails(opts: {
   limit?: number;
   olderThanMinutes?: number;
@@ -70,7 +63,7 @@ export async function processPendingEmails(opts: {
   }
   const fromAddr = process.env.RESEND_FROM ?? "Trinno <notifications@trinno.local>";
 
-  const sb = admin();
+  const sb = getServiceSupabase();
 
   // Pull pending notifications (oldest first).
   const cutoffIso = new Date(Date.now() - minAgeMin * 60_000).toISOString();

@@ -1,10 +1,10 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
-import { createClient } from "@supabase/supabase-js";
 import { dbAsUser } from "@/lib/db/client";
 import { attachments } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
+import { getServiceSupabase } from "@/lib/supabase/service-role";
 import {
   RegisterAttachmentInput, DeleteAttachmentInput,
 } from "@/lib/validation";
@@ -14,12 +14,6 @@ function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
   return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
 }
-
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } },
-);
 
 export async function registerAttachmentImpl(token: string, input: {
   cardId: string;
@@ -55,7 +49,7 @@ export async function deleteAttachmentImpl(token: string, input: { id: string })
       .returning({ id: attachments.id });
     if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     // Best-effort storage cleanup. Errors ignored -- orphaned blob is recoverable later.
-    await admin.storage.from("card-attachments").remove([row.storagePath]).catch(() => {});
+    await getServiceSupabase().storage.from("card-attachments").remove([row.storagePath]).catch(() => {});
   });
 }
 
@@ -77,7 +71,7 @@ export async function createAttachmentSignedUrlImpl(
   });
   if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
 
-  const { data, error } = await admin.storage
+  const { data, error } = await getServiceSupabase().storage
     .from("card-attachments")
     .createSignedUrl(row.storagePath, 60 * 5, {
       download: input.download ? row.filename : false,

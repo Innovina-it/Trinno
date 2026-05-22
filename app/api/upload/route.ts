@@ -1,30 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@supabase/supabase-js";
 import { eq, and } from "drizzle-orm";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { dbAsUser } from "@/lib/db/client";
 import { boardMembers, cards } from "@/lib/db/schema";
+import { getServiceSupabase } from "@/lib/supabase/service-role";
 
 const Body = z.object({
   cardId: z.string().uuid(),
   filename: z.string().min(1).max(255),
 });
-
-// Lazy — module-level construction tripped Next's page-data collect on
-// `vercel build` when env vars weren't visible yet ("supabaseUrl is
-// required"). Per-request init also lets the route fail with a clear 500
-// instead of breaking the whole build.
-function getStorageAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error(
-      "Storage admin unavailable: NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing.",
-    );
-  }
-  return createClient(url, key, { auth: { persistSession: false } });
-}
 
 export async function POST(req: Request) {
   await requireUser();
@@ -46,7 +31,7 @@ export async function POST(req: Request) {
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const path = `cards/${body.cardId}/${crypto.randomUUID()}-${body.filename}`;
-  const { data, error } = await getStorageAdmin()
+  const { data, error } = await getServiceSupabase()
     .storage.from("card-attachments")
     .createSignedUploadUrl(path);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

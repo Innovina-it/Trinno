@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { admin, buildDigestForUser } from "@/lib/notifications/email-digest";
+import { buildDigestForUser } from "@/lib/notifications/email-digest";
+import { getServiceSupabase } from "@/lib/supabase/service-role";
 
 // Daily digest cron handler.  Loops every user with email_digest_optin =
 // true, builds a digest from the last 24h of unsent notifications, sends
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
   const fromAddr =
     process.env.RESEND_FROM ?? "Trinno <notifications@trinno.local>";
 
-  const sb = admin();
+  const sb = getServiceSupabase();
 
   // Pull every opted-in user.  We need their auth.users.email which
   // isn't exposed via the profiles table — fetch it via the auth

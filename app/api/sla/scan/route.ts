@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@supabase/supabase-js";
+import { getServiceSupabase } from "@/lib/supabase/service-role";
 
 const Body = z.object({ boardId: z.string().uuid() });
 
@@ -26,16 +26,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid boardId" }, { status: 400 });
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
+  let admin;
+  try {
+    admin = getServiceSupabase();
+  } catch {
     return NextResponse.json(
       { error: "Supabase env not configured" },
       { status: 500 },
     );
   }
-
-  const admin = createClient(url, key, { auth: { persistSession: false } });
   const { data, error } = await admin.rpc("scan_board_sla", {
     p_board_id: parsed.data.boardId,
   });

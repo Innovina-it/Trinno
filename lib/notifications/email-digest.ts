@@ -1,8 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   EMAIL_KIND_LABELS,
   type NotificationKind,
 } from "@/lib/notifications/email-labels";
+import { getServiceSupabase } from "@/lib/supabase/service-role";
 
 // Daily digest builder.  Companion to lib/notify-email.ts (per-event sender)
 // — this assembles ONE email per user per day grouped by kind/card from the
@@ -38,13 +39,6 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-export function admin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Supabase env not configured");
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
 export type DigestResult = {
   subject: string;
   html: string;
@@ -54,9 +48,9 @@ export type DigestResult = {
 
 export async function buildDigestForUser(
   userId: string,
-  opts: { now?: Date; sb?: ReturnType<typeof admin> } = {},
+  opts: { now?: Date; sb?: SupabaseClient } = {},
 ): Promise<DigestResult | null> {
-  const sb = opts.sb ?? admin();
+  const sb = opts.sb ?? getServiceSupabase();
   const now = opts.now ?? new Date();
   const since = new Date(now.getTime() - 24 * 60 * 60_000).toISOString();
 
