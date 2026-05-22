@@ -128,11 +128,18 @@ export function TimelineChrome({
   const gridStart = sharedAxis?.range.start ?? new Date();
   const gridEnd = sharedAxis?.range.end ?? new Date();
 
-  // Mirror sharedAxis.primaryScroller into a stable RefObject so
-  // RoadmapMiniMap's scrollerRef signature is satisfied. Updates whenever
-  // the first-registered band's scroller changes (mount / unmount).
-  const primaryScrollerRef = useRef<HTMLDivElement | null>(null);
-  primaryScrollerRef.current = sharedAxis?.primaryScroller ?? null;
+  // Build a NEW ref-object each time the primary scroller identity changes.
+  // RoadmapMiniMap reads scrollerRef.current inside effects whose deps are
+  // [scrollerRef], so a stable ref with a mutated `.current` would NOT
+  // re-bind the internal scroll listener when the underlying element swaps
+  // (e.g. first band collapses → primary becomes the next remaining band).
+  // Returning a fresh object on each swap forces those effects to re-run.
+  const primaryScrollerRef = useMemo<
+    React.RefObject<HTMLDivElement | null>
+  >(
+    () => ({ current: sharedAxis?.primaryScroller ?? null }),
+    [sharedAxis?.primaryScroller],
+  );
 
   // Container width tracking for fit zoom (ppd = width / 180-day window).
   // Re-measures on viewport resize via the same ResizeObserver pattern
@@ -236,8 +243,13 @@ export function TimelineChrome({
           write to every peer scroller, so clicking or dragging the viewport
           rect scrolls all bands together. Drag-resize ppd override is
           disabled cross-WS (noop) — N bands each own their own dragPpdOverride
-          local state, no single global write makes sense for it. */}
-      {sharedAxis && aggregatedCards.length > 0 && (
+          local state, no single global write makes sense for it.
+
+          Gating on `primaryScroller` (not just `sharedAxis`) ensures the
+          mini-map mounts AFTER at least one band has registered its scroller,
+          so its scroll listener binds to a real element. When every band is
+          collapsed, no scrollers exist → mini-map hides. */}
+      {sharedAxis?.primaryScroller && aggregatedCards.length > 0 && (
         <div className="hidden md:block">
           <RoadmapMiniMap
             cards={aggregatedCards}

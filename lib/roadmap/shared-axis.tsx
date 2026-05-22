@@ -67,7 +67,10 @@ export function SharedAxisProvider({
 
   const registerScroller = useCallback((el: HTMLDivElement) => {
     scrollersRef.current.add(el);
-    if (scrollersRef.current.size === 1) setPrimaryScroller(el);
+    // Functional update: avoids capturing a stale primaryScroller in this
+    // callback's closure. If the band that registered now happens to be
+    // the only one in the set, it becomes primary.
+    setPrimaryScroller((prev) => prev ?? el);
     const onScroll = () => {
       // Guard against the cascade we trigger ourselves: writing peer.scrollLeft
       // fires their scroll handler in the next microtask. Without the flag,
@@ -90,12 +93,16 @@ export function SharedAxisProvider({
     return () => {
       el.removeEventListener("scroll", onScroll);
       scrollersRef.current.delete(el);
-      if (primaryScroller === el) {
-        const next = scrollersRef.current.values().next().value ?? null;
-        setPrimaryScroller(next);
-      }
+      // Functional update reads the latest primary at the moment cleanup
+      // fires — otherwise this closure captures the value at register time
+      // and may miss subsequent swaps.
+      setPrimaryScroller((prev) =>
+        prev === el
+          ? (scrollersRef.current.values().next().value ?? null)
+          : prev,
+      );
     };
-  }, [primaryScroller]);
+  }, []);
 
   const registerJumpToDate = useCallback((fn: JumpToDateFn) => {
     jumpFnsRef.current.push(fn);
