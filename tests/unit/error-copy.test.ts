@@ -44,9 +44,13 @@ describe("errorCopy lookup table", () => {
     expect(c.description).toBe("Cannot start: not planned");
   });
 
-  it("SEED_PARTIAL → workspace-ready headline (U4 banner copy)", () => {
-    const c = errorCopy("SEED_PARTIAL");
-    expect(c.title).toMatch(/Workspace ready/);
+  it("SEED_PARTIAL → 'Workspace ready' + server message as description", () => {
+    const c = errorCopy(
+      "SEED_PARTIAL",
+      "Steps that failed: comments, watchers",
+    );
+    expect(c.title).toBe("Workspace ready");
+    expect(c.description).toBe("Steps that failed: comments, watchers");
   });
 
   it("ACTION_FAILED falls back to 'Something went wrong' + server message", () => {

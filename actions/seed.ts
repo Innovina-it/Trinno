@@ -679,40 +679,45 @@ async function seedRichDemoImpl(
 
   // ---- Comments on key cards (markdown + activity surface) ----
   // Each comment also auto-watches the author.
-  await safe(() =>
+  await seedStep(failures, "comment.initiative1.kickoff", () =>
     createCommentImpl(token, {
       cardId: initiative1.id,
       body:
         "Kickoff sync is on the calendar.\n\n- Wireframes by Tue\n- Copy review by Thu\n- First pass live by next Sprint demo",
     }),
+    failStep,
   );
-  await safe(() =>
+  await seedStep(failures, "comment.initiative1.update", () =>
     createCommentImpl(token, {
       cardId: initiative1.id,
       body:
         "Update: design has the welcome wizard wireframes ready.  See [Figma board](https://figma.com).",
     }),
+    failStep,
   );
-  await safe(() =>
+  await seedStep(failures, "comment.story1.split", () =>
     createCommentImpl(token, {
       cardId: stories1[0].id,
       body: "Splitting the wizard into 3 steps so we can a/b test the order.",
     }),
+    failStep,
   );
-  await safe(() =>
+  await seedStep(failures, "comment.initiative2.perf", () =>
     createCommentImpl(token, {
       cardId: initiative2.id,
       body:
         "Code-split landed on staging.  p95 dropped from 380ms to 210ms — close to the goal.",
     }),
+    failStep,
   );
 
   // ---- Checklists on a couple of stories ----
-  const chk1 = await safe(() =>
+  const chk1 = await seedStep(failures, "checklist.dod", () =>
     createChecklistImpl(token, {
       cardId: stories1[0].id,
       title: "Definition of done",
     }),
+    failStep,
   );
   if (chk1) {
     const items = [
@@ -722,35 +727,54 @@ async function seedRichDemoImpl(
       ["Analytics events firing", false],
       ["QA pass", false],
     ] as const;
+    let idx = 0;
     for (const [text, done] of items) {
-      const it = await safe(() =>
-        addChecklistItemImpl(token, { checklistId: chk1.id, text }),
+      const stepIdx = idx++;
+      const it = await seedStep(
+        failures,
+        `checklist.dod.item-${stepIdx}`,
+        () => addChecklistItemImpl(token, { checklistId: chk1.id, text }),
+        failStep,
       );
       if (it && done) {
-        await safe(() =>
-          toggleChecklistItemImpl(token, { id: it.id, completed: true }),
+        await seedStep(
+          failures,
+          `checklist.dod.toggle-${stepIdx}`,
+          () =>
+            toggleChecklistItemImpl(token, { id: it.id, completed: true }),
+          failStep,
         );
       }
     }
   }
-  const chk2 = await safe(() =>
+  const chk2 = await seedStep(failures, "checklist.acceptance", () =>
     createChecklistImpl(token, {
       cardId: stories1[1].id,
       title: "Acceptance",
     }),
+    failStep,
   );
   if (chk2) {
+    let idx = 0;
     for (const [text, done] of [
       ["Empty roadmap state", true],
       ["Empty boards state", false],
       ["Empty inbox state", false],
     ] as const) {
-      const it = await safe(() =>
-        addChecklistItemImpl(token, { checklistId: chk2.id, text }),
+      const stepIdx = idx++;
+      const it = await seedStep(
+        failures,
+        `checklist.acceptance.item-${stepIdx}`,
+        () => addChecklistItemImpl(token, { checklistId: chk2.id, text }),
+        failStep,
       );
       if (it && done) {
-        await safe(() =>
-          toggleChecklistItemImpl(token, { id: it.id, completed: true }),
+        await seedStep(
+          failures,
+          `checklist.acceptance.toggle-${stepIdx}`,
+          () =>
+            toggleChecklistItemImpl(token, { id: it.id, completed: true }),
+          failStep,
         );
       }
     }
@@ -759,40 +783,51 @@ async function seedRichDemoImpl(
   // ---- Card-link relations (dependency arrows on the roadmap) ----
   // Stories under initiative1 block the initiative itself; performance
   // work relates to the onboarding initiative (shared infra work).
-  await safe(() =>
+  await seedStep(failures, "card-link.story0-blocks-init1", () =>
     createCardLinkImpl(token, {
       fromCardId: stories1[0].id,
       toCardId: initiative1.id,
       kind: "blocks",
     }),
+    failStep,
   );
-  await safe(() =>
+  await seedStep(failures, "card-link.story1-blocks-init1", () =>
     createCardLinkImpl(token, {
       fromCardId: stories1[1].id,
       toCardId: initiative1.id,
       kind: "blocks",
     }),
+    failStep,
   );
-  await safe(() =>
+  await seedStep(failures, "card-link.init2-relates-init1", () =>
     createCardLinkImpl(token, {
       fromCardId: initiative2.id,
       toCardId: initiative1.id,
       kind: "relates_to",
     }),
+    failStep,
   );
-  await safe(() =>
+  await seedStep(failures, "card-link.init3-blocked-by-init2", () =>
     createCardLinkImpl(token, {
       fromCardId: initiative3.id,
       toCardId: initiative2.id,
       kind: "is_blocked_by",
     }),
+    failStep,
   );
 
   // ---- Watchers: pin the user as watcher on the headline cards so the
   //      inbox demo has signal.  toggleCardMember already auto-watches;
   //      this catches the rest. ----
+  let watcherIdx = 0;
   for (const c of [initiative1.id, initiative2.id, initiative3.id]) {
-    await safe(() => watchCardImpl(token, { cardId: c }));
+    const stepIdx = watcherIdx++;
+    await seedStep(
+      failures,
+      `watcher.initiative-${stepIdx}`,
+      () => watchCardImpl(token, { cardId: c }),
+      failStep,
+    );
   }
 
   // ---- Personal dashboard ----
@@ -866,18 +901,6 @@ async function seedRichDemoImpl(
   }
 
   return seedResult(ws.id, failures);
-}
-
-// Best-effort wrapper used by the rich seed.  Any single create that
-// fails (RLS, race, missing extension) is logged and ignored so the
-// rest of the seed keeps going — partial seed beats no seed.
-async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
-  try {
-    return await fn();
-  } catch (err) {
-    console.error("[seed.safe] non-fatal:", toStructuredError(err));
-    return null;
-  }
 }
 
 export async function seedRichDemoWorkspace() {

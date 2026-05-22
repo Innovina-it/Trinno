@@ -37,7 +37,7 @@ const COPY: Record<string, ErrorCopy> = {
     title: "Action blocked by current state",
   },
   SEED_PARTIAL: {
-    title: "Workspace ready, but some steps couldn't complete",
+    title: "Workspace ready",
   },
   SEED_STEP_FAILED: {
     title: "Setup step failed",

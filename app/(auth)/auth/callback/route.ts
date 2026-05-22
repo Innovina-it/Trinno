@@ -58,17 +58,36 @@ export async function GET(req: Request) {
   const seedMode: "demo" | "minimal" | null =
     seedCookie === "1" ? "demo" : seedCookie === "minimal" ? "minimal" : null;
   let seededWsId: string | null = null;
+  let failedSteps: string[] = [];
   if (seedMode) {
     cookieStore.delete("tr_seed_demo");
     if (token) {
       try {
         const r = await seedDemoWorkspaceImpl(token, { mode: seedMode });
         seededWsId = r.workspaceId;
+        if (r.failures.length > 0) {
+          failedSteps = r.failures.map((f) => f.step).slice(0, 10);
+        }
       } catch (e) {
         // Surface to server logs; user still gets into the app.
         console.error("[auth/callback] seedDemoWorkspace failed", e);
       }
     }
+  }
+
+  // Plan errors-onboarding (U4) — when the seed completed with one or
+  // more failed steps, hand the step names off to the client banner
+  // via a short-lived cookie. SeedFailureBanner reads it on mount,
+  // pushes through the existing errorBus, then deletes the cookie so
+  // it fires exactly once.
+  if (failedSteps.length > 0) {
+    cookieStore.set("tr_seed_report", JSON.stringify({ failedSteps }), {
+      path: "/",
+      maxAge: 600,
+      httpOnly: false,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
   }
 
   const dest = seededWsId ? `/w/${seededWsId}` : "/";

@@ -4,6 +4,7 @@ import { requireUser, getSessionToken } from "@/lib/auth";
 import { TopNav } from "@/components/nav/top-nav";
 import { TourOverlay } from "@/components/onboarding/tour-overlay";
 import { ErrorPane } from "@/components/error-pane";
+import { SeedFailureBanner } from "@/components/seed-failure-banner";
 import { UndoBanner } from "@/components/undo-banner";
 import { ShortcutsOverlay } from "@/components/shortcuts-overlay";
 import { AccessNotice } from "@/components/access-notice";
@@ -176,6 +177,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main id="main" className="min-h-[calc(100dvh-3.5rem)]">{children}</main>
       {showTour && <TourOverlay />}
       <ErrorPane />
+      <SeedFailureBanner />
       <UndoBanner />
       <ShortcutsOverlay />
       <AccessNotice />
