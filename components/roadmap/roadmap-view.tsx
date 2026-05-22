@@ -194,6 +194,7 @@ export function RoadmapView({
   hideChrome = false,
   onCollapse,
   compactLanes = false,
+  fillHeight = false,
 }: {
   workspaceId: string;
   /** Used for assignee/unassigned filter. Pass null/undefined for anonymous. */
@@ -220,6 +221,13 @@ export function RoadmapView({
    *  produces lanes that are mostly empty vertical space. Default false
    *  preserves /w/:ws/roadmap's top-to-bottom hierarchy reading. */
   compactLanes?: boolean;
+  /** Stretch the grid container to fill its parent's height. Used on the
+   *  cross-workspace /timeline surface so the last visible band absorbs
+   *  leftover viewport space when filters reduce content to a few lanes,
+   *  instead of leaving a dark void below a small band. The canvas grows
+   *  past `totalHeight`; lane content stays anchored at top, grid lines
+   *  and today/milestone markers extend through the empty area. */
+  fillHeight?: boolean;
 }) {
   // SharedAxisProvider is mounted on /timeline (multiple stacked RoadmapView
   // instances). Absent on /w/:ws/roadmap — falls back to per-band cards-derived
@@ -966,11 +974,18 @@ export function RoadmapView({
   // Default-expand every parent with subtasks once lanes first populate.
   // Guarded by a ref so subsequent re-renders or user collapses don't
   // re-expand. Toggles after init take precedence.
+  //
+  // compactLanes (cross-workspace /timeline) skips auto-expand: each
+  // expanded parent adds subtaskRowsByParent[id].length rows to lane
+  // height. On a surface with shared range + many bands that multiplies
+  // into hundreds of pixels of empty vertical space. User can still
+  // expand any single parent manually.
   const didInitExpandedRef = useRef(false);
   useEffect(() => {
     if (didInitExpandedRef.current) return;
     if (lanes.length === 0) return;
     didInitExpandedRef.current = true;
+    if (compactLanes) return;
     const next = new Set<string>();
     for (const lane of lanes) {
       for (const parentId of Object.keys(lane.subtaskRowsByParent)) {
@@ -978,7 +993,7 @@ export function RoadmapView({
       }
     }
     if (next.size > 0) setExpandedParents(next);
-  }, [lanes]);
+  }, [lanes, compactLanes]);
 
   // Per-lane stacking + total height. Each entry tracks where in the
   // canvas its body bars start, and pre-computes per-row offsets for any
@@ -1655,7 +1670,7 @@ export function RoadmapView({
     <div
       data-testid="roadmap-view"
       data-workspace-id={workspaceId}
-      className="space-y-4"
+      className={fillHeight ? "flex flex-col flex-1 min-h-0" : "space-y-4"}
     >
       {!hideChrome && (
         <RoadmapHeader
