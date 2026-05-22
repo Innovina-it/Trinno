@@ -7,7 +7,8 @@ const VIEWPORTS = [
   { name: "mobile", width: 390, height: 844 },
 ];
 
-const TIMELINE_URL = "http://localhost:3000/timeline";
+const PORT = process.env.PORT || "3000";
+const TIMELINE_URL = `http://localhost:${PORT}/timeline`;
 
 const browser = await chromium.launch({ headless: true });
 const ctx = await browser.newContext();
@@ -33,7 +34,7 @@ page.on("response", (r) => {
 
 const email = `e2e-${Date.now()}-${Math.floor(Math.random() * 1e6)}@innovina.it`;
 console.log(`signup as ${email}`);
-await page.goto("http://localhost:3000/signup");
+await page.goto(`http://localhost:${PORT}/signup`);
 await page.getByLabel("Email").fill(email);
 await page.getByLabel("Password").fill("passw0rd!");
 try {
@@ -51,15 +52,20 @@ for (const vp of VIEWPORTS) {
   console.log(`${vp.name} (${vp.width}x${vp.height}) → ${out}`);
 
   // Reset gantt scroll to the start of range, then screenshot again so the
-  // earliest-scheduled rows lead the frame.
+  // earliest-scheduled rows lead the frame. SharedAxisProvider syncs scroll
+  // across bands, so we only need to write the first band's scrollLeft.
   await page.evaluate(() => {
-    const scroller = document.querySelector(
-      '[data-testid="common-roadmap-view"] > div:nth-child(2)',
+    const grid = document.querySelector(
+      '[data-testid="timeline-bands"] [data-testid="roadmap-grid"]',
     );
-    if (scroller) {
+    if (!grid) return;
+    // The scroller is the last flex child after gutter (opt) / workspace col / lane panel.
+    const scroller = grid.lastElementChild;
+    if (scroller instanceof HTMLElement) {
       scroller.scrollLeft = 0;
       scroller.scrollTop = 0;
     }
+    window.scrollTo(0, 0);
   });
   await page.waitForTimeout(200);
   const out2 = `/tmp/timeline-${vp.name}-start.png`;

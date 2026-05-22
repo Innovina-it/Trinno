@@ -77,6 +77,11 @@ export function RoadmapHeader({
   onOpenShortcuts,
   gridStart,
   gridEnd,
+  hideNewCard = false,
+  hideShortcuts = false,
+  hideCriticalPath = false,
+  hideAutoCascade = false,
+  hideLiveStatus = false,
 }: {
   zoom: Zoom;
   onSetZoom: (z: Zoom) => void;
@@ -102,9 +107,21 @@ export function RoadmapHeader({
   onOpenShortcuts: () => void;
   gridStart: Date;
   gridEnd: Date;
+  /** Cross-workspace surface (/timeline) hides workspace-scoped controls.
+   *  Each flag defaults false so /w/:ws/roadmap behavior is unchanged. */
+  hideNewCard?: boolean;
+  hideShortcuts?: boolean;
+  hideCriticalPath?: boolean;
+  hideAutoCascade?: boolean;
+  /** Hide the bottom row (LIVE indicator + date-range chip). The range is
+   *  still meaningful cross-WS, but it competes with the page header on
+   *  /timeline so we suppress it there. */
+  hideLiveStatus?: boolean;
 }) {
   const viewOptionsCount =
-    (showCriticalPath ? 1 : 0) + (autoCascade ? 1 : 0) + (gutter ? 1 : 0);
+    (hideCriticalPath ? 0 : showCriticalPath ? 1 : 0) +
+    (hideAutoCascade ? 0 : autoCascade ? 1 : 0) +
+    (gutter ? 1 : 0);
 
   // <md: every left-zone control (zoom, lane mode, view options, jump-to-
   // date) collapses behind a single Display pill. The BottomSheet houses
@@ -279,18 +296,22 @@ export function RoadmapHeader({
               VIEW OPTIONS
             </p>
             <div className="space-y-1">
-              <SheetCheckRow
-                label="Critical path"
-                checked={showCriticalPath}
-                onChange={onToggleCriticalPath}
-                testId="roadmap-critical-toggle-sheet"
-              />
-              <SheetCheckRow
-                label="Auto-reschedule"
-                checked={autoCascade}
-                onChange={onToggleAutoCascade}
-                testId="roadmap-auto-cascade-toggle-sheet"
-              />
+              {!hideCriticalPath && (
+                <SheetCheckRow
+                  label="Critical path"
+                  checked={showCriticalPath}
+                  onChange={onToggleCriticalPath}
+                  testId="roadmap-critical-toggle-sheet"
+                />
+              )}
+              {!hideAutoCascade && (
+                <SheetCheckRow
+                  label="Auto-reschedule"
+                  checked={autoCascade}
+                  onChange={onToggleAutoCascade}
+                  testId="roadmap-auto-cascade-toggle-sheet"
+                />
+              )}
               <SheetCheckRow
                 label="Priority gutter"
                 checked={gutter}
@@ -447,20 +468,24 @@ export function RoadmapHeader({
           <DropdownMenuContent align="start" className="w-56">
             <DropdownMenuGroup>
               <DropdownMenuLabel>View options</DropdownMenuLabel>
-              <DropdownMenuCheckboxItem
-                checked={showCriticalPath}
-                onCheckedChange={onToggleCriticalPath}
-                data-testid="roadmap-critical-toggle"
-              >
-                Critical path
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={autoCascade}
-                onCheckedChange={onToggleAutoCascade}
-                data-testid="roadmap-auto-cascade-toggle"
-              >
-                Auto-reschedule
-              </DropdownMenuCheckboxItem>
+              {!hideCriticalPath && (
+                <DropdownMenuCheckboxItem
+                  checked={showCriticalPath}
+                  onCheckedChange={onToggleCriticalPath}
+                  data-testid="roadmap-critical-toggle"
+                >
+                  Critical path
+                </DropdownMenuCheckboxItem>
+              )}
+              {!hideAutoCascade && (
+                <DropdownMenuCheckboxItem
+                  checked={autoCascade}
+                  onCheckedChange={onToggleAutoCascade}
+                  data-testid="roadmap-auto-cascade-toggle"
+                >
+                  Auto-reschedule
+                </DropdownMenuCheckboxItem>
+              )}
               <DropdownMenuCheckboxItem
                 checked={gutter}
                 onCheckedChange={onToggleGutter}
@@ -524,62 +549,68 @@ export function RoadmapHeader({
         </div>
 
         {/* Primary action. */}
-        <button
-          type="button"
-          onPointerDown={
-            onChipDragStart
-              ? (e) => {
-                  if (e.button !== 0) return;
-                  onChipDragStart(e.clientX, e.clientY);
-                }
-              : undefined
-          }
-          onClick={onChipDragStart ? undefined : onOpenNewCard}
-          data-testid="roadmap-new-card-trigger"
-          title="Click or drag onto roadmap to create"
-          className="shimmer-cta inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs cursor-grab active:cursor-grabbing select-none"
-        >
-          <GripVertical
-            className="size-3 text-bg-deep/50"
-            aria-hidden
-          />
-          <Plus className="size-3.5" />
-          <span>New card</span>
-        </button>
+        {!hideNewCard && (
+          <button
+            type="button"
+            onPointerDown={
+              onChipDragStart
+                ? (e) => {
+                    if (e.button !== 0) return;
+                    onChipDragStart(e.clientX, e.clientY);
+                  }
+                : undefined
+            }
+            onClick={onChipDragStart ? undefined : onOpenNewCard}
+            data-testid="roadmap-new-card-trigger"
+            title="Click or drag onto roadmap to create"
+            className="shimmer-cta inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs cursor-grab active:cursor-grabbing select-none"
+          >
+            <GripVertical
+              className="size-3 text-bg-deep/50"
+              aria-hidden
+            />
+            <Plus className="size-3.5" />
+            <span>New card</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={onOpenShortcuts}
-          data-testid="roadmap-shortcuts-trigger"
-          aria-label="Keyboard shortcuts"
-          title="Keyboard shortcuts"
-          className="inline-flex items-center justify-center rounded-full size-8 border border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
-        >
-          <HelpCircle className="size-3.5" />
-        </button>
+        {!hideShortcuts && (
+          <button
+            type="button"
+            onClick={onOpenShortcuts}
+            data-testid="roadmap-shortcuts-trigger"
+            aria-label="Keyboard shortcuts"
+            title="Keyboard shortcuts"
+            className="inline-flex items-center justify-center rounded-full size-8 border border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
+          >
+            <HelpCircle className="size-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Ambient status — separate row, lighter weight than the action toolbar. */}
-      <div className="basis-full flex items-center justify-between gap-3 px-1 text-fg-faint">
-        <span
-          className="inline-flex items-center gap-1.5 mono-meta-sm"
-          data-testid="roadmap-live"
-          data-live={subscribed ? "true" : "false"}
-          title={subscribed ? "Realtime sync active" : "Realtime sync offline"}
-        >
+      {!hideLiveStatus && (
+        <div className="basis-full flex items-center justify-between gap-3 px-1 text-fg-faint">
           <span
-            aria-hidden
-            className={`inline-block size-1.5 rounded-full ${
-              subscribed ? "bg-emerald-400 animate-pulse" : "bg-fg/30"
-            }`}
-          />
-          {subscribed ? "Live" : "Offline"}
-        </span>
-        <span className="inline-flex items-center gap-1.5 mono-meta-sm tabular-nums">
-          <CalendarClock className="size-3" aria-hidden />
-          {formatDate(gridStart)} → {formatDate(gridEnd)}
-        </span>
-      </div>
+            className="inline-flex items-center gap-1.5 mono-meta-sm"
+            data-testid="roadmap-live"
+            data-live={subscribed ? "true" : "false"}
+            title={subscribed ? "Realtime sync active" : "Realtime sync offline"}
+          >
+            <span
+              aria-hidden
+              className={`inline-block size-1.5 rounded-full ${
+                subscribed ? "bg-emerald-400 animate-pulse" : "bg-fg/30"
+              }`}
+            />
+            {subscribed ? "Live" : "Offline"}
+          </span>
+          <span className="inline-flex items-center gap-1.5 mono-meta-sm tabular-nums">
+            <CalendarClock className="size-3" aria-hidden />
+            {formatDate(gridStart)} → {formatDate(gridEnd)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

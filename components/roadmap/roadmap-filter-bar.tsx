@@ -28,12 +28,22 @@ import {
   parseFilters,
   serializeFilters,
 } from "@/lib/board-filters";
-import { useWorkspaceStore } from "@/stores/workspace-store";
+type SprintRef = { id: string; name: string };
 
 const TYPE_OPTIONS = ["task", "subtask", "bug"] as const;
 type Type = (typeof TYPE_OPTIONS)[number];
 
-export function RoadmapFilterBar() {
+export function RoadmapFilterBar({
+  sprints,
+  hideSprint = false,
+}: {
+  /** Sprint roster for the Sprint sub-menu. RoadmapView passes the active
+   *  workspace's sprints (from the store). Cross-workspace surfaces pass
+   *  an empty array because sprint IDs don't commute across workspaces. */
+  sprints: SprintRef[];
+  /** Suppresses the Sprint sub-menu entirely (cross-workspace surfaces). */
+  hideSprint?: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -43,8 +53,6 @@ export function RoadmapFilterBar() {
   );
   const sprintParam = sp.get("sprint") ?? "";
   const [, startTransition] = useTransition();
-
-  const sprints = useWorkspaceStore((s) => s.sprints);
 
   function pushParams(params: URLSearchParams) {
     const qs = params.toString();
@@ -96,11 +104,12 @@ export function RoadmapFilterBar() {
       ? "Any sprint"
       : sprints.find((s) => s.id === sprintParam)?.name ?? "Sprint";
 
-  const active = isFilterActive(filters) || sprintParam !== "";
+  const active =
+    isFilterActive(filters) || (!hideSprint && sprintParam !== "");
   const activeCount =
     filters.types.length +
     (filters.due === "overdue" ? 1 : 0) +
-    (sprintParam ? 1 : 0);
+    (hideSprint ? 0 : sprintParam ? 1 : 0);
 
   return (
     <div className="flex items-center gap-1.5" data-testid="roadmap-filter-bar">
@@ -141,31 +150,35 @@ export function RoadmapFilterBar() {
             ))}
           </DropdownMenuGroup>
 
-          <DropdownMenuSeparator />
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <Tag className="size-3.5" aria-hidden />
-              <span className="flex-1">Sprint</span>
-              <span className="text-fg-faint truncate max-w-[8rem]">
-                {sprintLabel}
-              </span>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-48">
-              <DropdownMenuRadioGroup
-                value={sprintParam}
-                onValueChange={setSprint}
-              >
-                <DropdownMenuRadioItem value="">
-                  Any sprint
-                </DropdownMenuRadioItem>
-                {sprints.map((s) => (
-                  <DropdownMenuRadioItem key={s.id} value={s.id}>
-                    {s.name}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+          {!hideSprint && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Tag className="size-3.5" aria-hidden />
+                  <span className="flex-1">Sprint</span>
+                  <span className="text-fg-faint truncate max-w-[8rem]">
+                    {sprintLabel}
+                  </span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-48">
+                  <DropdownMenuRadioGroup
+                    value={sprintParam}
+                    onValueChange={setSprint}
+                  >
+                    <DropdownMenuRadioItem value="">
+                      Any sprint
+                    </DropdownMenuRadioItem>
+                    {sprints.map((s) => (
+                      <DropdownMenuRadioItem key={s.id} value={s.id}>
+                        {s.name}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </>
+          )}
 
           <DropdownMenuSeparator />
           <DropdownMenuCheckboxItem

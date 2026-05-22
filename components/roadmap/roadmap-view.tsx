@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import type { RoadmapCard, RoadmapLink } from "@/lib/queries/roadmap";
 import {
   addDays,
@@ -32,7 +32,6 @@ import {
   groupByAssignee,
   groupByComponent,
   groupBySubBoard,
-  UNCATEGORIZED_LANE_ID,
   type SubBoardRef,
 } from "@/lib/roadmap/layout";
 import { holidaysInRange } from "@/lib/holidays/merge";
@@ -103,6 +102,10 @@ import {
   restoreRoadmapCardOrigin,
   roadmapHref,
 } from "@/lib/roadmap/back-nav";
+import {
+  useRegisterSharedScroller,
+  useSharedAxis,
+} from "@/lib/roadmap/shared-axis";
 
 const ROW_HEIGHT = 36; // 28px bar + 8px gap
 const LANE_HEADER_HEIGHT = 28;
@@ -186,6 +189,9 @@ export function RoadmapView({
   workspaceId,
   viewerId,
   holidays: holidayDefs = [],
+  workspaceColumn,
+  hideChrome = false,
+  onCollapse,
 }: {
   workspaceId: string;
   /** Used for assignee/unassigned filter. Pass null/undefined for anonymous. */
@@ -193,7 +199,24 @@ export function RoadmapView({
   /** Effective holiday list (presets merged with workspace overrides).
    *  Server-fetched in the page; defaults to empty for safety. */
   holidays?: ReadonlyArray<{ iso: string; name: string }>;
+  /** Set on the cross-workspace /timeline surface to render a narrow column
+   *  with the workspace name to the LEFT of the lane label panel. Unset on
+   *  the single-workspace /w/:ws/roadmap route. */
+  workspaceColumn?: { name: string; href?: string };
+  /** Hide the band's own RoadmapHeader, toolbar row (filters, milestones),
+   *  and mini-map. Used on /timeline where ONE shared chrome at page level
+   *  drives every band; only the grid + canvas remain per band so the page
+   *  doesn't stack N copies of the same controls. */
+  hideChrome?: boolean;
+  /** When set, renders a collapse-to-strip control inside the WS column
+   *  header. Click → caller decides what to render in this band's slot
+   *  (typically a compact CollapsedBand strip). */
+  onCollapse?: () => void;
 }) {
+  // SharedAxisProvider is mounted on /timeline (multiple stacked RoadmapView
+  // instances). Absent on /w/:ws/roadmap — falls back to per-band cards-derived
+  // range and per-band scroll.
+  const sharedAxis = useSharedAxis();
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -799,6 +822,10 @@ export function RoadmapView({
   const gutterOnRef = useRef(gutterOn);
   gutterOnRef.current = gutterOn;
 
+  // Cross-workspace scroll sync: wire this band's scroller into the page-level
+  // SharedAxisProvider when mounted on /timeline. No-op on /w/:ws/roadmap.
+  useRegisterSharedScroller(scrollerRef);
+
   // --- Fit zoom: measure canvas container width for responsive effectivePpd ---
   const [containerWidth, setContainerWidth] = useState(0);
   useEffect(() => {
@@ -822,21 +849,31 @@ export function RoadmapView({
   // snap.
   const [dragPpdOverride, setDragPpdOverride] = useState<number | null>(null);
 
+  const sharedRangeStart = sharedAxis?.range.start ?? null;
+  const sharedRangeEnd = sharedAxis?.range.end ?? null;
+
   // Resolve effective pixels-per-day.
   // For fixed zoom levels this is the static value from pixelsPerDay().
-  // For "fit" we compute it so 180 days fill the available canvas width.
+  // For "fit" we compute it so the visible range fills the canvas width.
   // dragPpdOverride wins over both — used by the mini-map for continuous
   // resize-to-zoom.
   const effectivePpd = useMemo(() => {
     if (dragPpdOverride !== null) return dragPpdOverride;
     if (zoom !== "fit") return pixelsPerDay(zoom);
     if (containerWidth === 0) return 8; // pre-mount fallback
-    // scrollerRef is `flex-1` after the lane-label panel, so its clientWidth
-    // already excludes the label panel. Divide directly by 180 days; no
-    // further subtraction needed (previous code double-subtracted, leaving
-    // ~200px empty on the right).
+    // When a shared axis (timeline page) provides an explicit range, divide
+    // by that range so the data span auto-scales to viewport width. Falls
+    // back to the legacy 180-day window for the single-workspace roadmap
+    // where no shared axis is mounted.
+    if (sharedRangeStart && sharedRangeEnd) {
+      const days = Math.max(
+        1,
+        dayDiff(sharedRangeStart, sharedRangeEnd),
+      );
+      return Math.max(2, containerWidth / days);
+    }
     return Math.max(2, containerWidth / 180);
-  }, [dragPpdOverride, zoom, containerWidth]);
+  }, [dragPpdOverride, zoom, containerWidth, sharedRangeStart, sharedRangeEnd]);
 
   const now = useMemo(() => new Date(), []);
   // Base origin = current period (week/month/quarter). If any card starts
@@ -844,6 +881,7 @@ export function RoadmapView({
   // zoom period so grid ticks stay aligned). Mirrors the forward extension
   // we already do for late targets.
   const gridStart = useMemo(() => {
+    if (sharedRangeStart) return sharedRangeStart;
     const base = gridStartFor(now, zoom);
     const minStart = cards.reduce(
       (acc, c) => (c.startDate.getTime() < acc ? c.startDate.getTime() : acc),
@@ -851,8 +889,9 @@ export function RoadmapView({
     );
     if (minStart >= base.getTime()) return base;
     return gridStartFor(new Date(minStart), zoom);
-  }, [cards, now, zoom]);
+  }, [cards, now, zoom, sharedRangeStart]);
   const gridEnd = useMemo(() => {
+    if (sharedRangeEnd) return sharedRangeEnd;
     const baseEnd = gridEndFor(gridStart, zoom);
     // Extend to cover any card past 6 months.
     const maxTarget = cards.reduce(
@@ -860,7 +899,7 @@ export function RoadmapView({
       baseEnd.getTime(),
     );
     return new Date(maxTarget);
-  }, [cards, gridStart, zoom]);
+  }, [cards, gridStart, zoom, sharedRangeEnd]);
   const totalDays = Math.max(1, dayDiff(gridStart, gridEnd));
   const width = totalDays * effectivePpd;
   // Workspace-effective holidays (presets + overrides) falling within
@@ -1427,6 +1466,14 @@ export function RoadmapView({
     [gridStart, effectivePpd],
   );
 
+  // Cross-workspace surface: page-level Today / date-picker calls into the
+  // band's jumpToDate (first one registered wins), then scroll-sync mirrors
+  // the result to every other band. No-op on /w/:ws/roadmap (no provider).
+  useEffect(() => {
+    if (!sharedAxis) return;
+    return sharedAxis.registerJumpToDate(jumpToDate);
+  }, [sharedAxis, jumpToDate]);
+
 
   // Initial viewport anchor. Zoom/view preferences are server-backed; the
   // horizontal scroll position is intentionally not persisted.
@@ -1598,62 +1645,66 @@ export function RoadmapView({
       data-workspace-id={workspaceId}
       className="space-y-4"
     >
-      <RoadmapHeader
-        zoom={zoom}
-        onSetZoom={setZoom}
-        laneMode={laneMode}
-        onSetLaneMode={setLaneMode}
-        viewMode={viewMode}
-        onSetViewMode={setViewMode}
-        subscribed={subscribed}
-        showCriticalPath={showCriticalPath}
-        onToggleCriticalPath={() => setShowCriticalPath((p) => !p)}
-        autoCascade={autoCascade}
-        onToggleAutoCascade={toggleAutoCascade}
-        gutter={gutterOn}
-        onToggleGutter={toggleGutter}
-        onJumpToDate={jumpToDate}
-        onOpenNewCard={() => setNewCardOpen(true)}
-        onChipDragStart={drag.onChipDragStart}
-        queryDraft={queryDraft}
-        onQueryDraftChange={setQueryDraft}
-        searchInputRef={searchInputRef}
-        onOpenShortcuts={() => setShortcutsOpen(true)}
-        gridStart={gridStart}
-        gridEnd={gridEnd}
-      />
+      {!hideChrome && (
+        <RoadmapHeader
+          zoom={zoom}
+          onSetZoom={setZoom}
+          laneMode={laneMode}
+          onSetLaneMode={setLaneMode}
+          viewMode={viewMode}
+          onSetViewMode={setViewMode}
+          subscribed={subscribed}
+          showCriticalPath={showCriticalPath}
+          onToggleCriticalPath={() => setShowCriticalPath((p) => !p)}
+          autoCascade={autoCascade}
+          onToggleAutoCascade={toggleAutoCascade}
+          gutter={gutterOn}
+          onToggleGutter={toggleGutter}
+          onJumpToDate={jumpToDate}
+          onOpenNewCard={() => setNewCardOpen(true)}
+          onChipDragStart={drag.onChipDragStart}
+          queryDraft={queryDraft}
+          onQueryDraftChange={setQueryDraft}
+          searchInputRef={searchInputRef}
+          onOpenShortcuts={() => setShortcutsOpen(true)}
+          gridStart={gridStart}
+          gridEnd={gridEnd}
+        />
+      )}
       {/* === MILESTONE MARKERS START (toolbar) === */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <AssigneeFilterRow hiddenCount={mineHiddenCount} />
-        <RoadmapFilterBar />
-        <button
-          type="button"
-          onClick={() => setShowMilestones((v) => !v)}
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] ${
-            !showMilestones
-              ? "border-fg/40 bg-fg/10 text-fg"
-              : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
-          }`}
-          data-testid="roadmap-toggle-milestones"
-        >
-          {showMilestones ? "Hide milestones" : "Show milestones"}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setEditingMilestone(null);
-            setMilestoneDialogOpen(true);
-          }}
-          className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
-          data-testid="roadmap-add-milestone"
-        >
-          + Add milestone
-        </button>
-      </div>
+      {!hideChrome && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <AssigneeFilterRow hiddenCount={mineHiddenCount} />
+          <RoadmapFilterBar sprints={storeSprints} />
+          <button
+            type="button"
+            onClick={() => setShowMilestones((v) => !v)}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] ${
+              !showMilestones
+                ? "border-fg/40 bg-fg/10 text-fg"
+                : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
+            }`}
+            data-testid="roadmap-toggle-milestones"
+          >
+            {showMilestones ? "Hide milestones" : "Show milestones"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEditingMilestone(null);
+              setMilestoneDialogOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
+            data-testid="roadmap-add-milestone"
+          >
+            + Add milestone
+          </button>
+        </div>
+      )}
       {/* === MILESTONE MARKERS END (toolbar) === */}
 
 
-      {viewMode === "gantt" && cards.length > 0 && (
+      {!hideChrome && viewMode === "gantt" && cards.length > 0 && (
         <div className="hidden md:block">
           <RoadmapMiniMap
             cards={cards}
@@ -1702,8 +1753,8 @@ export function RoadmapView({
       ) : (
         <>
           {lanes.length === 1 &&
-            lanes[0].id === UNCATEGORIZED_LANE_ID &&
-            lanes[0].cards.length === 0 && (
+            lanes[0].kind === "uncategorized" &&
+            lanes[0].cards.length <= 1 && (
               <div
                 className="mx-auto max-w-2xl py-8 text-center text-fg-faint"
                 data-testid="roadmap-empty-unassigned-banner"
@@ -1725,6 +1776,67 @@ export function RoadmapView({
               height={HEADER_STRIP_HEIGHT + totalHeight}
               hoveredBand={drag.hoveredGutterBand}
             />
+          )}
+          {/* Cross-workspace surface only: workspace column sits to the LEFT
+              of the lane panel so each row reads WORKSPACE · LANE · BARS.
+              Vertical mono-meta keeps the column narrow (40px) so it earns
+              real estate against the lane label panel without crowding the
+              canvas. Background is --bg-2 (one step deeper than --surface)
+              so the column reads as a separator, not a second lane panel. */}
+          {workspaceColumn && (
+            <div
+              className="shrink-0 border-r border-hairline bg-[color:var(--bg-2)] relative flex"
+              style={{ width: 40 }}
+              data-testid="roadmap-workspace-column"
+            >
+              {onCollapse ? (
+                <button
+                  type="button"
+                  onClick={onCollapse}
+                  className="border-b border-hairline absolute inset-x-0 top-0 text-fg-faint hover:text-fg hover:bg-[color:var(--surface-strong)] flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+                  style={{ height: HEADER_STRIP_HEIGHT }}
+                  aria-label={`Collapse ${workspaceColumn.name}`}
+                  title={`Collapse ${workspaceColumn.name}`}
+                  data-testid="roadmap-workspace-collapse"
+                >
+                  <ChevronUp className="size-4" aria-hidden />
+                </button>
+              ) : (
+                <div
+                  className="border-b border-hairline absolute inset-x-0 top-0 mono-meta-sm text-fg-faint flex items-end justify-center"
+                  style={{ height: HEADER_STRIP_HEIGHT }}
+                  aria-hidden
+                >
+                  WS
+                </div>
+              )}
+              {workspaceColumn.href ? (
+                <Link
+                  href={workspaceColumn.href}
+                  className="block w-full h-full mono-meta-sm tracking-[0.14em] text-fg-muted hover:text-fg transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+                  style={{
+                    writingMode: "vertical-rl",
+                    paddingTop: HEADER_STRIP_HEIGHT + 12,
+                    paddingLeft: 12,
+                  }}
+                  title={workspaceColumn.name}
+                >
+                  {workspaceColumn.name.toUpperCase()}
+                </Link>
+              ) : (
+                <div
+                  className="block w-full h-full mono-meta-sm tracking-[0.14em] text-fg-muted"
+                  style={{
+                    writingMode: "vertical-rl",
+                    paddingTop: HEADER_STRIP_HEIGHT + 12,
+                    paddingLeft: 12,
+                  }}
+                  title={workspaceColumn.name}
+                >
+                  {workspaceColumn.name.toUpperCase()}
+                </div>
+              )}
+            </div>
           )}
           {/* Lane labels (sticky) — width driven by `--lane-label-w` so the
               panel can collapse on narrow viewports (Task 9). */}
@@ -1757,15 +1869,13 @@ export function RoadmapView({
                   : `${count} ${count === 1 ? "CARD" : "CARDS"}`;
               // Lane titles link to the board the lane represents:
               // sub_board → the sub-board itself (lane.id is its board id);
-              // uncategorized (orphan) → the orphan's home board (title
-              // already resolves to that board's name). Assignee/component
+              // uncategorized → the parent board (lane.id is the board id
+              // since orphans are merged per-board). Assignee/component
               // lanes have no board target and remain plain text.
               const boardHref =
-                ll.lane.kind === "sub_board"
+                ll.lane.kind === "sub_board" || ll.lane.kind === "uncategorized"
                   ? `/b/${ll.lane.id}`
-                  : ll.lane.kind === "uncategorized" && laneHeaderCard
-                    ? `/b/${laneHeaderCard.boardId}`
-                    : null;
+                  : null;
               return (
                 <div
                   key={ll.lane.id}
