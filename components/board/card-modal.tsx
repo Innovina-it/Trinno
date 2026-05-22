@@ -196,6 +196,31 @@ function fmtHistoryValue(field: string, v: string | null): string {
   return v.length > 40 ? `${v.slice(0, 40)}...` : v;
 }
 
+function HistorySkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <ol
+      className="space-y-1.5"
+      data-testid="history-skeleton"
+      aria-busy="true"
+      aria-label="Loading history"
+    >
+      {Array.from({ length: rows }).map((_, i) => (
+        <li
+          key={i}
+          className="flex items-baseline gap-2 text-xs leading-snug"
+        >
+          <span className="w-20 h-3 bg-fg/10 rounded animate-pulse shrink-0" />
+          <span className="h-3 w-12 bg-fg/10 rounded animate-pulse shrink-0" />
+          <span className="h-3 w-16 bg-fg/10 rounded animate-pulse" />
+          <span className="size-3 shrink-0" aria-hidden />
+          <span className="h-3 w-20 bg-fg/10 rounded animate-pulse" />
+          <span className="ml-auto h-3 w-16 bg-fg/10 rounded animate-pulse" />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function CardHistoryPanel({
   cardId,
   enabled,
@@ -226,6 +251,10 @@ function CardHistoryPanel({
         <p className="text-xs text-[color:var(--accent-magenta)]">
           Failed to load: {error}
         </p>
+      )}
+
+      {loading && rows.length === 0 && !error && (
+        <HistorySkeleton rows={3} />
       )}
 
       {!loading && rows.length === 0 && !error && (
@@ -478,7 +507,7 @@ export function CardModal({
   const descTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedDesc = useRef(card.description ?? "");
   const lastSavedTitle = useRef(card.title);
-  const lazyHistory = useWorkspaceFlag("lazy_card_history", false);
+  const lazyHistory = useWorkspaceFlag("lazy_card_history", true);
   const subboardsEnabled = useWorkspaceFlag("subboards_enabled", true);
 
   useEffect(() => {

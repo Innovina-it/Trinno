@@ -35,7 +35,7 @@ describe("dispatch 7 card modal and quick view fixes", () => {
     expect(flags).toContain('"lazy_card_history"');
     expect(historyQuery).toContain("export function useCardHistoryPaginated");
     expect(historyQuery).toContain("limit: String(safePageSize + 1)");
-    expect(modal).toContain('useWorkspaceFlag("lazy_card_history", false)');
+    expect(modal).toContain('useWorkspaceFlag("lazy_card_history", true)');
     expect(modal).toContain("enabled={!lazyHistory || historyRequested}");
     expect(modal).toContain("if (open) setHistoryRequested(true);");
   });
