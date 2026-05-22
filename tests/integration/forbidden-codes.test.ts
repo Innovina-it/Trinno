@@ -8,6 +8,7 @@ import {
   startSprintImpl,
 } from "@/actions/sprints";
 import { removeMemberImpl } from "@/actions/workspace-members";
+import { removeBoardMemberImpl } from "@/actions/board-members";
 import { StructuredError } from "@/lib/errors";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -110,6 +111,51 @@ describe("U2 — server actions throw StructuredError with codes", () => {
     expect((caught as StructuredError).code).toBe("ROLE_INSUFFICIENT");
     expect((caught as StructuredError).message).toMatch(
       /owners and admins can manage members/i,
+    );
+  });
+
+  it("non-admin member cannot remove a board member — ROLE_INSUFFICIENT", async () => {
+    const owner = await makeUser("bowner");
+    const ws = await createWorkspaceImpl(owner.jwt, { name: "WS-board-rm" });
+    const board = await createBoardImpl(owner.jwt, {
+      workspaceId: ws.id,
+      title: "B",
+      backgroundKind: "color",
+      backgroundValue: "#fafafa",
+    });
+
+    // Add a plain workspace member (no board-admin role).
+    const member = await makeUser("bmember");
+    await service
+      .from("workspace_members")
+      .insert({ workspaceId: ws.id, user_id: member.id, role: "member" });
+    // Make them a "member" on the board too (not admin).
+    await service
+      .from("board_members")
+      .insert({ board_id: board.id, user_id: member.id, role: "member" });
+
+    // A target board admin for them to fail to remove.
+    const target = await makeUser("btarget");
+    await service
+      .from("workspace_members")
+      .insert({ workspaceId: ws.id, user_id: target.id, role: "member" });
+    await service
+      .from("board_members")
+      .insert({ board_id: board.id, user_id: target.id, role: "admin" });
+
+    let caught: unknown;
+    try {
+      await removeBoardMemberImpl(member.jwt, {
+        boardId: board.id,
+        userId: target.id,
+      });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(StructuredError);
+    expect((caught as StructuredError).code).toBe("ROLE_INSUFFICIENT");
+    expect((caught as StructuredError).message).toMatch(
+      /board admins or workspace owners\/admins/i,
     );
   });
 

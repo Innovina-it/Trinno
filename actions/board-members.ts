@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { sql, and, eq } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { boardMembers } from "@/lib/db/schema";
+import { boardMembers, boards, workspaceMembers } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
   InviteBoardMemberInput,
@@ -12,12 +12,77 @@ import {
 } from "@/lib/validation";
 import { StructuredError } from "@/lib/errors";
 
+type BoardMembersTx = Parameters<Parameters<typeof dbAsUser>[1]>[0];
+
+function decodeSub(jwt: string): string {
+  const [, payload] = jwt.split(".");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
+}
+
+/**
+ * Plan errors-onboarding follow-up — emit a specific
+ * ROLE_INSUFFICIENT message instead of leaving the user with the
+ * RLS-empty-row "Forbidden" default when a non-admin tries to
+ * manage board members. Valid managers: board admins OR workspace
+ * owners/admins.
+ */
+async function assertCanManageBoardMembers(
+  tx: BoardMembersTx,
+  boardId: string,
+  userId: string,
+) {
+  const [board] = await tx
+    .select({ workspaceId: boards.workspaceId })
+    .from(boards)
+    .where(eq(boards.id, boardId))
+    .limit(1);
+  if (!board) {
+    throw new StructuredError("ACCESS_DENIED", "Forbidden");
+  }
+
+  const [boardMembership] = await tx
+    .select({ role: boardMembers.role })
+    .from(boardMembers)
+    .where(
+      and(
+        eq(boardMembers.boardId, boardId),
+        eq(boardMembers.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (boardMembership?.role === "admin") return;
+
+  const [wsMembership] = await tx
+    .select({ role: workspaceMembers.role })
+    .from(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, board.workspaceId),
+        eq(workspaceMembers.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (
+    wsMembership?.role === "owner" ||
+    wsMembership?.role === "admin"
+  ) {
+    return;
+  }
+
+  throw new StructuredError(
+    "ROLE_INSUFFICIENT",
+    "Only board admins or workspace owners/admins can manage board members.",
+  );
+}
+
 export async function inviteBoardMemberImpl(
   token: string,
   input: { boardId: string; email: string; role: "admin" | "member" | "observer" },
 ) {
   const parsed = InviteBoardMemberInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    await assertCanManageBoardMembers(tx, parsed.boardId, actorId);
     const lookup = await tx.execute(
       sql`select public.find_user_id_by_email(${parsed.email}) as id`,
     );
@@ -60,7 +125,9 @@ export async function changeBoardMemberRoleImpl(
   },
 ) {
   const parsed = ChangeBoardMemberRoleInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    await assertCanManageBoardMembers(tx, parsed.boardId, actorId);
     const [row] = await tx
       .update(boardMembers)
       .set({ role: parsed.role })
@@ -81,7 +148,9 @@ export async function removeBoardMemberImpl(
   input: { boardId: string; userId: string },
 ) {
   const parsed = RemoveBoardMemberInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    await assertCanManageBoardMembers(tx, parsed.boardId, actorId);
     const r = await tx
       .delete(boardMembers)
       .where(
@@ -139,7 +208,9 @@ export async function addBoardMembersByIdsImpl(
   },
 ) {
   const parsed = AddBoardMembersByIdsInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    await assertCanManageBoardMembers(tx, parsed.boardId, actorId);
     const rows = parsed.members.map((m) => ({
       boardId: parsed.boardId,
       userId: m.userId,
