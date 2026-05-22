@@ -114,7 +114,13 @@ export function useCardHistoryPaginated(
     return () => {
       cancelled = true;
     };
-  }, [cardId, hasMore, loading, pageToFetch, safePageSize]);
+    // `loading` intentionally omitted: it is *written* inside this effect.
+    // Listing it would re-trigger the effect on every setLoading(true),
+    // and the cleanup of the just-started instance would set
+    // `cancelled = true` before `.then()` runs, leaving the panel stuck
+    // in a loading state forever.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardId, hasMore, pageToFetch, safePageSize]);
 
   const loadNextPage = useCallback(() => {
     if (loading || !hasMore) return;
