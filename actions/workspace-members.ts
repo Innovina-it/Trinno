@@ -9,12 +9,44 @@ import {
 } from "@/lib/validation";
 import { StructuredError } from "@/lib/errors";
 
+type MemberTx = Parameters<Parameters<typeof dbAsUser>[1]>[0];
+
+function decodeSub(jwt: string): string {
+  const [, payload] = jwt.split(".");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
+}
+
+async function assertCanManageWorkspaceMembers(
+  tx: MemberTx,
+  workspaceId: string,
+  userId: string,
+) {
+  const [membership] = await tx
+    .select({ role: workspaceMembers.role })
+    .from(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (membership?.role !== "owner" && membership?.role !== "admin") {
+    throw new StructuredError(
+      "ROLE_INSUFFICIENT",
+      "Only workspace owners and admins can manage members.",
+    );
+  }
+}
+
 export async function inviteMemberImpl(
   token: string,
   input: { workspaceId: string; email: string; role: "admin" | "member" },
 ) {
   const parsed = InviteMemberInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    await assertCanManageWorkspaceMembers(tx, parsed.workspaceId, actorId);
     const lookup = await tx.execute(
       sql`select public.find_user_id_by_email(${parsed.email}) as id`,
     );
@@ -47,7 +79,9 @@ export async function changeMemberRoleImpl(
   input: { workspaceId: string; userId: string; role: "owner" | "admin" | "member" },
 ) {
   const parsed = ChangeMemberRoleInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    await assertCanManageWorkspaceMembers(tx, parsed.workspaceId, actorId);
     const [row] = await tx.update(workspaceMembers)
       .set({ role: parsed.role })
       .where(and(
@@ -65,7 +99,9 @@ export async function removeMemberImpl(
   input: { workspaceId: string; userId: string },
 ) {
   const parsed = RemoveMemberInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    await assertCanManageWorkspaceMembers(tx, parsed.workspaceId, actorId);
     const r = await tx.delete(workspaceMembers).where(and(
       eq(workspaceMembers.workspaceId, parsed.workspaceId),
       eq(workspaceMembers.userId, parsed.userId),

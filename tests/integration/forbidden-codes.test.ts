@@ -7,6 +7,7 @@ import {
   createSprintImpl,
   startSprintImpl,
 } from "@/actions/sprints";
+import { removeMemberImpl } from "@/actions/workspace-members";
 import { StructuredError } from "@/lib/errors";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -77,6 +78,39 @@ describe("U2 — server actions throw StructuredError with codes", () => {
     }
     expect(caught).toBeInstanceOf(StructuredError);
     expect((caught as StructuredError).code).toBe("ROLE_INSUFFICIENT");
+  });
+
+  it("non-admin member cannot remove a workspace member — ROLE_INSUFFICIENT", async () => {
+    const owner = await makeUser("owner-rm");
+    const ws = await createWorkspaceImpl(owner.jwt, { name: "WS-rm" });
+
+    // Add a plain "member" who's NOT owner/admin.
+    const member = await makeUser("member-rm");
+    await service
+      .from("workspace_members")
+      .insert({ workspaceId: ws.id, user_id: member.id, role: "member" });
+
+    // And a 3rd user the member will try to remove (placeholder target;
+    // assertion fires before any DELETE runs).
+    const target = await makeUser("target-rm");
+    await service
+      .from("workspace_members")
+      .insert({ workspaceId: ws.id, user_id: target.id, role: "admin" });
+
+    let caught: unknown;
+    try {
+      await removeMemberImpl(member.jwt, {
+        workspaceId: ws.id,
+        userId: target.id,
+      });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(StructuredError);
+    expect((caught as StructuredError).code).toBe("ROLE_INSUFFICIENT");
+    expect((caught as StructuredError).message).toMatch(
+      /owners and admins can manage members/i,
+    );
   });
 
   it("re-starting an already-active sprint rejects with code CONFLICT", async () => {
