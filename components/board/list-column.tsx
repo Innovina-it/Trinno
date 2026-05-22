@@ -184,26 +184,30 @@ export function ListColumn({
     )
       return;
     startArchive(async () => {
-      try {
-        await archiveList({ id: list.id, archived: true });
-        undoBus.push({
-          message: `Archived list "${list.title}"`,
-          undo: async () => {
-            try {
-              await archiveList({ id: list.id, archived: false });
-              updateListLocal(list.id, { archived: false });
-            } catch (err) {
-              const m = "Failed to undo: " + (err as Error).message;
-              toast.error(m);
-              errorBus.push({ message: m });
-            }
-          },
+      const r = await archiveList({ id: list.id, archived: true });
+      if (!r.ok) {
+        errorBus.push({
+          code: r.error.code,
+          message: r.error.message,
+          context: r.error.context,
         });
-      } catch (err) {
-        const m = (err as Error).message;
-        toast.error(m);
-        errorBus.push({ message: `Archive list failed: ${m}` });
+        return;
       }
+      undoBus.push({
+        message: `Archived list "${list.title}"`,
+        undo: async () => {
+          const u = await archiveList({ id: list.id, archived: false });
+          if (!u.ok) {
+            errorBus.push({
+              code: u.error.code,
+              message: "Failed to undo: " + u.error.message,
+              context: u.error.context,
+            });
+            return;
+          }
+          updateListLocal(list.id, { archived: false });
+        },
+      });
     });
   }
 

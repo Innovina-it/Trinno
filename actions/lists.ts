@@ -12,7 +12,7 @@ import {
   SetWipLimitInput, SetListStatusKindInput, SetListColorInput, DeleteListInput,
   EnsureStatusListInput, Uuid,
 } from "@/lib/validation";
-import { StructuredError } from "@/lib/errors";
+import { StructuredError, actionResult } from "@/lib/errors";
 
 const MoveCardToListInput = z.object({
   cardId: Uuid,
@@ -200,11 +200,13 @@ export async function ensureStatusListImpl(
 }
 
 export async function createList(input: { boardId: string; title: string }) {
-  await requireUser();
-  const t = (await getSessionToken())!;
-  const r = await createListImpl(t, input);
-  revalidatePath(`/b/${input.boardId}`);
-  return r;
+  return actionResult(async () => {
+    await requireUser();
+    const t = (await getSessionToken())!;
+    const r = await createListImpl(t, input);
+    revalidatePath(`/b/${input.boardId}`);
+    return r;
+  });
 }
 export async function renameList(input: { id: string; title: string }) {
   await requireUser();
@@ -244,11 +246,13 @@ export async function deleteList(input: { id: string }) {
 }
 
 export async function archiveList(input: { id: string; archived: boolean }) {
-  await requireUser();
-  const t = (await getSessionToken())!;
-  const r = await archiveListImpl(t, input);
-  revalidatePath(`/b/${r.boardId}`);
-  return r;
+  return actionResult(async () => {
+    await requireUser();
+    const t = (await getSessionToken())!;
+    const r = await archiveListImpl(t, input);
+    revalidatePath(`/b/${r.boardId}`);
+    return r;
+  });
 }
 
 export async function setWipLimit(input: Parameters<typeof setWipLimitImpl>[1]) {

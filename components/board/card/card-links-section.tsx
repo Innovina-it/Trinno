@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useBoardStore } from "@/stores/board-store";
 import { createCardLink, deleteCardLink } from "@/actions/card-links";
+import { errorBus } from "@/lib/errors/error-bus";
 import { searchCardsForLinkAction } from "@/actions/search";
 import { TypeIcon } from "./type-picker";
 import {
@@ -170,31 +171,36 @@ export function CardLinksSection({
 
   function add(targetId: string) {
     start(async () => {
-      try {
-        const link = await createCardLink({
-          fromCardId: cardId,
-          toCardId: targetId,
-          kind,
+      const r = await createCardLink({
+        fromCardId: cardId,
+        toCardId: targetId,
+        kind,
+      });
+      if (!r.ok) {
+        errorBus.push({
+          code: r.error.code,
+          message: r.error.message,
+          context: r.error.context,
         });
-        addCardLinkLocal(link);
-        // The mirror row will arrive via realtime
-        setOpen(false);
-        setQ("");
-        undoBus.push({
-          message: "Card link added",
-          undo: async () => {
-            removeCardLinkLocal(link.id);
-            try {
-              await deleteCardLink({ id: link.id });
-            } catch (err) {
-              addCardLinkLocal(link);
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
-        });
-      } catch (err) {
-        toast.error((err as Error).message);
+        return;
       }
+      const link = r.data;
+      addCardLinkLocal(link);
+      // The mirror row will arrive via realtime
+      setOpen(false);
+      setQ("");
+      undoBus.push({
+        message: "Card link added",
+        undo: async () => {
+          removeCardLinkLocal(link.id);
+          try {
+            await deleteCardLink({ id: link.id });
+          } catch (err) {
+            addCardLinkLocal(link);
+            toast.error("Undo failed: " + (err as Error).message);
+          }
+        },
+      });
     });
   }
 
@@ -208,16 +214,16 @@ export function CardLinksSection({
         undoBus.push({
           message: "Card link removed",
           undo: async () => {
-            try {
-              const restored = await createCardLink({
-                fromCardId: link.fromCardId,
-                toCardId: link.toCardId,
-                kind: link.kind,
-              });
-              addCardLinkLocal(restored);
-            } catch (err) {
-              toast.error("Undo failed: " + (err as Error).message);
+            const restored = await createCardLink({
+              fromCardId: link.fromCardId,
+              toCardId: link.toCardId,
+              kind: link.kind,
+            });
+            if (!restored.ok) {
+              toast.error("Undo failed: " + restored.error.message);
+              return;
             }
+            addCardLinkLocal(restored.data);
           },
         });
       } catch (err) {

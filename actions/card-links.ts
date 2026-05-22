@@ -5,7 +5,7 @@ import { dbAsUser } from "@/lib/db/client";
 import { cardLinks } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { CreateCardLinkInput, DeleteCardLinkInput } from "@/lib/validation";
-import { StructuredError } from "@/lib/errors";
+import { StructuredError, actionResult } from "@/lib/errors";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -65,11 +65,13 @@ export async function deleteCardLinkImpl(token: string, input: { id: string }) {
 export async function createCardLink(
   input: Parameters<typeof createCardLinkImpl>[1],
 ) {
-  await requireUser();
-  const t = (await getSessionToken())!;
-  const r = await createCardLinkImpl(t, input);
-  revalidatePath(`/b/${r.boardId}`);
-  return r;
+  return actionResult(async () => {
+    await requireUser();
+    const t = (await getSessionToken())!;
+    const r = await createCardLinkImpl(t, input);
+    revalidatePath(`/b/${r.boardId}`);
+    return r;
+  });
 }
 
 export async function deleteCardLink(input: { id: string }) {

@@ -2,6 +2,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { AlertTriangle, X, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { errorBus, type ErrorEntry } from "@/lib/errors/error-bus";
+import { errorCopy } from "@/lib/errors/copy";
 
 /**
  * Plan #16b-γ-C (#6) — persistent error pane.
@@ -26,7 +27,7 @@ export function ErrorPane() {
 
   const headline =
     entries.length === 1
-      ? entries[0].message
+      ? errorCopy(entries[0].code, entries[0].message).title
       : `${entries.length} unresolved errors`;
 
   function onRetry(entry: ErrorEntry) {
@@ -80,16 +81,29 @@ export function ErrorPane() {
         </div>
         {!collapsed && (
           <ul className="border-t border-red-500/30 max-h-60 overflow-y-auto">
-            {entries.map((e) => (
+            {entries.map((e) => {
+              const copy = errorCopy(e.code, e.message);
+              return (
               <li
                 key={e.id}
                 className="flex items-center gap-2 px-3 py-2 border-b border-red-500/15 last:border-0"
                 data-testid="error-pane-entry"
                 data-error-id={e.id}
+                data-error-code={e.code}
               >
-                <span className="flex-1 text-sm break-words">
-                  {e.message}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium break-words">
+                    {copy.title}
+                  </div>
+                  {copy.description && (
+                    <div
+                      className="mono-meta-sm text-red-200/85 break-words"
+                      data-testid="error-pane-description"
+                    >
+                      {copy.description}
+                    </div>
+                  )}
+                </div>
                 {e.retry && (
                   <button
                     type="button"
@@ -116,7 +130,8 @@ export function ErrorPane() {
                   <X className="size-3" />
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

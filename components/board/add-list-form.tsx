@@ -1,11 +1,11 @@
 "use client";
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
 import { X, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createList } from "@/actions/lists";
 import { useBoardStore } from "@/stores/board-store";
+import { errorBus } from "@/lib/errors/error-bus";
 
 export function AddListForm({ boardId }: { boardId: string }) {
   const [open, setOpen] = useState(false);
@@ -18,13 +18,17 @@ export function AddListForm({ boardId }: { boardId: string }) {
     const trimmed = title.trim();
     if (!trimmed) return;
     start(async () => {
-      try {
-        const list = await createList({ boardId, title: trimmed });
-        addList(list);
-        setTitle("");
-      } catch (err) {
-        toast.error((err as Error).message);
+      const r = await createList({ boardId, title: trimmed });
+      if (!r.ok) {
+        errorBus.push({
+          code: r.error.code,
+          message: r.error.message,
+          context: r.error.context,
+        });
+        return;
       }
+      addList(r.data);
+      setTitle("");
     });
   }
 
