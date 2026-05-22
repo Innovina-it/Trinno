@@ -11,6 +11,7 @@ import {
   MoveGadgetInput,
   ReorderGadgetsInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 export async function createGadgetImpl(
   token: string,
@@ -47,7 +48,7 @@ export async function createGadgetImpl(
         position: nextPos,
       })
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -70,7 +71,7 @@ export async function updateGadgetImpl(
       .set(patch)
       .where(eq(gadgets.id, p.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -85,7 +86,7 @@ export async function removeGadgetImpl(
       .delete(gadgets)
       .where(eq(gadgets.id, p.id))
       .returning({ id: gadgets.id, dashboardId: gadgets.dashboardId });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return r[0];
   });
 }
@@ -100,7 +101,7 @@ export async function moveGadgetImpl(
       .select()
       .from(gadgets)
       .where(eq(gadgets.id, p.id));
-    if (!target) throw new Error("Forbidden");
+    if (!target) throw new StructuredError("ACCESS_DENIED", "Forbidden");
 
     const all = await tx
       .select()
@@ -109,7 +110,7 @@ export async function moveGadgetImpl(
       .orderBy(asc(gadgets.position));
 
     const idx = all.findIndex((g) => g.id === p.id);
-    if (idx < 0) throw new Error("Forbidden");
+    if (idx < 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     const neighbourIdx = p.direction === "up" ? idx - 1 : idx + 1;
     if (neighbourIdx < 0 || neighbourIdx >= all.length) {
       // No-op at boundary.
@@ -190,10 +191,10 @@ export async function reorderGadgetsImpl(
       .where(eq(gadgets.dashboardId, p.dashboardId));
     const existing = new Set(all.map((g) => g.id));
     if (existing.size !== p.orderedIds.length) {
-      throw new Error("Reorder set mismatch");
+      throw new StructuredError("VALIDATION_ERROR", "Reorder set mismatch", { kind: "gadget-reorder-mismatch" });
     }
     for (const id of p.orderedIds) {
-      if (!existing.has(id)) throw new Error("Reorder set mismatch");
+      if (!existing.has(id)) throw new StructuredError("VALIDATION_ERROR", "Reorder set mismatch", { kind: "gadget-reorder-mismatch" });
     }
     // Two-phase update to avoid intermediate position collisions if a unique
     // index is later added on (dashboard_id, position).

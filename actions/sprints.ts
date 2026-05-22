@@ -13,6 +13,7 @@ import {
   AssignCardToSprintInput,
   BulkShiftCardDatesInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 // Plan #16b-β — type for the conflict-card payload returned by
 // `startSprintImpl`. A "conflict" is a card whose dates fall outside the
@@ -55,7 +56,10 @@ async function assertCanManageSprints(
     .limit(1);
 
   if (membership?.role !== "owner" && membership?.role !== "admin") {
-    throw new Error("Only workspace owners and admins can manage sprints.");
+    throw new StructuredError(
+      "ROLE_INSUFFICIENT",
+      "Only workspace owners and admins can manage sprints.",
+    );
   }
 }
 
@@ -66,7 +70,7 @@ async function getSprintWorkspaceId(tx: SprintTx, sprintId: string) {
     .where(eq(sprints.id, sprintId))
     .limit(1);
 
-  if (!row) throw new Error("Forbidden");
+  if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   return row.workspaceId;
 }
 
@@ -94,7 +98,7 @@ export async function createSprintImpl(
         endDate: asDate(p.endDate) ?? null,
       })
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -124,7 +128,7 @@ export async function updateSprintImpl(
       .set(patch)
       .where(eq(sprints.id, p.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -139,7 +143,7 @@ export async function deleteSprintImpl(token: string, input: { id: string }) {
       .delete(sprints)
       .where(eq(sprints.id, p.id))
       .returning({ id: sprints.id });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 
@@ -162,8 +166,10 @@ export async function startSprintImpl(
       .where(and(eq(sprints.id, p.id), eq(sprints.state, "planned")))
       .returning();
     if (!row)
-      throw new Error(
+      throw new StructuredError(
+        "CONFLICT",
         "Cannot start: not planned, or another sprint is already active",
+        { kind: "sprint-start" },
       );
     // Plan #16b-β — surface cards whose start/target dates fall outside
     // the (now-known) sprint window so the UI can offer a bulk shift.
@@ -252,7 +258,12 @@ export async function completeSprintImpl(
       .set({ state: "completed", completedAt: new Date() })
       .where(and(eq(sprints.id, p.id), eq(sprints.state, "active")))
       .returning();
-    if (!row) throw new Error("Cannot complete: sprint is not active");
+    if (!row)
+      throw new StructuredError(
+        "CONFLICT",
+        "Cannot complete: sprint is not active",
+        { kind: "sprint-complete" },
+      );
     return row;
   });
 }
@@ -270,14 +281,18 @@ export async function assignCardToSprintImpl(
       .innerJoin(boards, eq(boards.id, cards.boardId))
       .where(eq(cards.id, p.cardId))
       .limit(1);
-    if (!cardAccess) throw new Error("Forbidden");
+    if (!cardAccess) throw new StructuredError("ACCESS_DENIED", "Forbidden");
 
     await assertCanManageSprints(tx, cardAccess.workspaceId, actorId);
 
     if (p.sprintId !== null) {
       const sprintWorkspaceId = await getSprintWorkspaceId(tx, p.sprintId);
       if (sprintWorkspaceId !== cardAccess.workspaceId) {
-        throw new Error("Sprint must belong to the card workspace.");
+        throw new StructuredError(
+          "VALIDATION_ERROR",
+          "Sprint must belong to the card workspace.",
+          { kind: "sprint-workspace-mismatch" },
+        );
       }
     }
 
@@ -286,7 +301,7 @@ export async function assignCardToSprintImpl(
       .set({ sprintId: p.sprintId })
       .where(eq(cards.id, p.cardId))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }

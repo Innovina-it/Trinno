@@ -9,6 +9,7 @@ import {
   CreateChecklistInput, RenameChecklistInput, DeleteChecklistInput,
   AddChecklistItemInput, ToggleChecklistItemInput, RemoveChecklistItemInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 export async function createChecklistImpl(token: string, input: { cardId: string; title: string }) {
   const parsed = CreateChecklistInput.parse(input);
@@ -21,7 +22,7 @@ export async function createChecklistImpl(token: string, input: { cardId: string
       cardId: parsed.cardId, title: parsed.title, position: pos,
       boardId: "00000000-0000-0000-0000-000000000000",
     }).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -31,7 +32,7 @@ export async function renameChecklistImpl(token: string, input: { id: string; ti
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(checklists).set({ title: parsed.title })
       .where(eq(checklists.id, parsed.id)).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -41,7 +42,7 @@ export async function deleteChecklistImpl(token: string, input: { id: string }) 
   return dbAsUser(token, async (tx) => {
     const r = await tx.delete(checklists).where(eq(checklists.id, parsed.id))
       .returning({ id: checklists.id });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 
@@ -56,7 +57,7 @@ export async function addChecklistItemImpl(token: string, input: { checklistId: 
       checklistId: parsed.checklistId, text: parsed.text, position: pos,
       boardId: "00000000-0000-0000-0000-000000000000",
     }).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -66,7 +67,7 @@ export async function toggleChecklistItemImpl(token: string, input: { id: string
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(checklistItems).set({ completed: parsed.completed })
       .where(eq(checklistItems.id, parsed.id)).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -76,7 +77,7 @@ export async function removeChecklistItemImpl(token: string, input: { id: string
   return dbAsUser(token, async (tx) => {
     const r = await tx.delete(checklistItems).where(eq(checklistItems.id, parsed.id))
       .returning({ id: checklistItems.id });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 

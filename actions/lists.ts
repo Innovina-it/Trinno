@@ -12,6 +12,7 @@ import {
   SetWipLimitInput, SetListStatusKindInput, SetListColorInput, DeleteListInput,
   EnsureStatusListInput, Uuid,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 const MoveCardToListInput = z.object({
   cardId: Uuid,
@@ -30,7 +31,7 @@ export async function createListImpl(token: string, input: { boardId: string; ti
     const [row] = await tx.insert(lists)
       .values({ boardId: parsed.boardId, title: parsed.title, position: pos })
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -40,7 +41,7 @@ export async function renameListImpl(token: string, input: { id: string; title: 
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(lists).set({ title: parsed.title })
       .where(eq(lists.id, parsed.id)).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -50,7 +51,7 @@ export async function moveListImpl(token: string, input: { id: string; position:
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(lists).set({ position: parsed.position })
       .where(eq(lists.id, parsed.id)).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -60,7 +61,7 @@ export async function archiveListImpl(token: string, input: { id: string; archiv
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(lists).set({ archived: parsed.archived })
       .where(eq(lists.id, parsed.id)).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -70,7 +71,7 @@ export async function setWipLimitImpl(token: string, input: { id: string; wipLim
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(lists).set({ wipLimit: p.wipLimit })
       .where(eq(lists.id, p.id)).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -95,7 +96,7 @@ export async function setListStatusKindImpl(
       .set({ statusKind: p.statusKind })
       .where(eq(lists.id, p.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -193,7 +194,7 @@ export async function ensureStatusListImpl(
         ),
       )
       .limit(1);
-    if (!winner) throw new Error("Forbidden");
+    if (!winner) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return winner;
   });
 }
@@ -229,7 +230,7 @@ export async function deleteListImpl(
       .delete(lists)
       .where(eq(lists.id, parsed.id))
       .returning({ id: lists.id, boardId: lists.boardId });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return r[0];
   });
 }
@@ -284,7 +285,7 @@ export async function setListColorImpl(
       .set({ color: p.color })
       .where(eq(lists.id, p.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -317,7 +318,7 @@ export async function moveCardToListImpl(
       .from(cards)
       .where(eq(cards.id, parsed.cardId))
       .limit(1);
-    if (!card) throw new Error("Forbidden");
+    if (!card) throw new StructuredError("ACCESS_DENIED", "Forbidden");
 
     const [toList] = await tx
       .select({
@@ -327,9 +328,13 @@ export async function moveCardToListImpl(
       .from(lists)
       .where(and(eq(lists.id, parsed.toListId), eq(lists.archived, false)))
       .limit(1);
-    if (!toList) throw new Error("Forbidden");
+    if (!toList) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     if (toList.boardId !== card.boardId) {
-      throw new Error("Destination list must be on the card's board");
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        "Destination list must be on the card's board",
+        { kind: "cross-board-move" },
+      );
     }
 
     const [moved] = await tx
@@ -337,7 +342,7 @@ export async function moveCardToListImpl(
       .set({ listId: parsed.toListId, position: parsed.position })
       .where(eq(cards.id, parsed.cardId))
       .returning();
-    if (!moved) throw new Error("Forbidden");
+    if (!moved) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return { success: true as const, card: moved };
   });
 }

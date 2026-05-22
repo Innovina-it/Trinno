@@ -7,6 +7,7 @@ import { getSessionToken, requireUser } from "@/lib/auth";
 import {
   InviteMemberInput, ChangeMemberRoleInput, RemoveMemberInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 export async function inviteMemberImpl(
   token: string,
@@ -18,7 +19,12 @@ export async function inviteMemberImpl(
       sql`select public.find_user_id_by_email(${parsed.email}) as id`,
     );
     const userId = (lookup as unknown as { id: string | null }[])[0]?.id;
-    if (!userId) throw new Error("No user with that email");
+    if (!userId)
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        "No user with that email",
+        { kind: "user-not-found" },
+      );
 
     const [row] = await tx.insert(workspaceMembers)
       .values({ workspaceId: parsed.workspaceId, userId, role: parsed.role })
@@ -29,7 +35,7 @@ export async function inviteMemberImpl(
         eq(workspaceMembers.workspaceId, parsed.workspaceId),
         eq(workspaceMembers.userId, userId),
       ));
-      if (existing.length === 0) throw new Error("Forbidden");
+      if (existing.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
       return existing[0];
     }
     return row;
@@ -49,7 +55,7 @@ export async function changeMemberRoleImpl(
         eq(workspaceMembers.userId, parsed.userId),
       ))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -64,7 +70,7 @@ export async function removeMemberImpl(
       eq(workspaceMembers.workspaceId, parsed.workspaceId),
       eq(workspaceMembers.userId, parsed.userId),
     )).returning({ userId: workspaceMembers.userId });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 

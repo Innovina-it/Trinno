@@ -8,6 +8,7 @@ import {
   SetCardVersionInput,
   ClearCardVersionInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 const PLACEHOLDER_WORKSPACE_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -40,7 +41,7 @@ export async function setCardVersionImpl(
             sql`${cardVersions.kind} = ${p.kind}::public.card_version_kind`,
           ),
         );
-      if (existing.length === 0) throw new Error("Forbidden");
+      if (existing.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
       return { attached: true, alreadyExisted: true, row: existing[0] };
     }
     return { attached: true, alreadyExisted: false, row: inserted[0] };

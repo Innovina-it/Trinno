@@ -10,6 +10,7 @@ import {
   RemoveBoardMemberInput,
   AddBoardMembersByIdsInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 export async function inviteBoardMemberImpl(
   token: string,
@@ -21,7 +22,12 @@ export async function inviteBoardMemberImpl(
       sql`select public.find_user_id_by_email(${parsed.email}) as id`,
     );
     const userId = (lookup as unknown as { id: string | null }[])[0]?.id;
-    if (!userId) throw new Error("No user with that email");
+    if (!userId)
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        "No user with that email",
+        { kind: "user-not-found" },
+      );
 
     const [row] = await tx
       .insert(boardMembers)
@@ -38,7 +44,7 @@ export async function inviteBoardMemberImpl(
             eq(boardMembers.userId, userId),
           ),
         );
-      if (existing.length === 0) throw new Error("Forbidden");
+      if (existing.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
       return existing[0];
     }
     return row;
@@ -65,7 +71,7 @@ export async function changeBoardMemberRoleImpl(
         ),
       )
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -85,7 +91,7 @@ export async function removeBoardMemberImpl(
         ),
       )
       .returning({ userId: boardMembers.userId });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 

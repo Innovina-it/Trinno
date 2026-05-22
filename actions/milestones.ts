@@ -9,6 +9,7 @@ import {
   UpdateMilestoneInput,
   DeleteMilestoneInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 function toDate(v: string | Date): Date {
   return v instanceof Date ? v : new Date(v);
@@ -44,7 +45,7 @@ export async function createMilestoneImpl(
         createdBy: input.createdBy,
       })
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -68,7 +69,7 @@ export async function updateMilestoneImpl(
       .set(patch)
       .where(eq(milestones.id, p.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -83,7 +84,7 @@ export async function deleteMilestoneImpl(
       .delete(milestones)
       .where(eq(milestones.id, p.id))
       .returning({ id: milestones.id, workspaceId: milestones.workspaceId });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return r[0]!;
   });
 }

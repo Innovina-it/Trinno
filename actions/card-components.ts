@@ -5,6 +5,7 @@ import { dbAsUser } from "@/lib/db/client";
 import { cardComponents } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { ToggleCardComponentInput } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 const PLACEHOLDER_BOARD_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -43,7 +44,7 @@ export async function toggleCardComponentImpl(
         boardId: PLACEHOLDER_BOARD_ID,
       })
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return { attached: true, boardId: row.boardId };
   });
 }

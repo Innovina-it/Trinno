@@ -4,6 +4,7 @@ import { dbAsUser } from "@/lib/db/client";
 import { cardMembers } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { ToggleCardMemberInput } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 export async function toggleCardMemberImpl(token: string, input: { cardId: string; userId: string }) {
   const parsed = ToggleCardMemberInput.parse(input);
@@ -24,7 +25,7 @@ export async function toggleCardMemberImpl(token: string, input: { cardId: strin
       cardId: parsed.cardId, userId: parsed.userId,
       boardId: "00000000-0000-0000-0000-000000000000",
     }).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return { assigned: true };
   });
 }

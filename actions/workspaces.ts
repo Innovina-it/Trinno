@@ -10,6 +10,7 @@ import {
   RenameWorkspaceInput,
   SetWorkspaceAutoAssignCreatorInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -66,7 +67,7 @@ export async function renameWorkspaceImpl(
       .set({ name: parsed.name })
       .where(eq(workspaces.id, parsed.id))
       .returning();
-    if (!ws) throw new Error("Forbidden");
+    if (!ws) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return ws;
   });
 }
@@ -81,7 +82,7 @@ export async function deleteWorkspaceImpl(
       .delete(workspaces)
       .where(eq(workspaces.id, parsed.id))
       .returning({ id: workspaces.id });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 
@@ -124,7 +125,7 @@ export async function setWorkspaceAutoAssignCreatorImpl(
       .set({ autoAssignCreator: parsed.autoAssignCreator })
       .where(eq(workspaces.id, parsed.id))
       .returning();
-    if (!ws) throw new Error("Forbidden");
+    if (!ws) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return ws;
   });
 }

@@ -28,6 +28,7 @@ import {
 } from "@/lib/roadmap/sparse-rank";
 import { ensureStatusListImpl } from "@/actions/lists";
 import type { StatusKind } from "@/lib/status";
+import { StructuredError } from "@/lib/errors";
 
 // Plan #16b-γ-D (#8) — bulk-action validators.
 //
@@ -117,7 +118,11 @@ export async function createCardImpl(token: string, input: {
         const target =
           candidates.find((l) => l.statusKind === "todo") ?? candidates[0];
         if (!target) {
-          throw new Error("Parent card's board has no list to receive the subtask");
+          throw new StructuredError(
+            "VALIDATION_ERROR",
+            "Parent card's board has no list to receive the subtask",
+            { kind: "cross-board-no-list" },
+          );
         }
         effectiveListId = target.id;
       }
@@ -184,7 +189,7 @@ export async function createCardImpl(token: string, input: {
       targetDate,
       ownerId,
     }).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
 
     // Subtasks inherit the parent's assignees so a child surfaces to the
     // same people without re-picking. Parent-inheritance takes precedence
@@ -307,7 +312,7 @@ export async function updateCardImpl(token: string, input: {
         .innerJoin(boards, eq(boards.id, cards.boardId))
         .where(eq(cards.id, parsed.id))
         .limit(1);
-      if (!cardAccess) throw new Error("Forbidden");
+      if (!cardAccess) throw new StructuredError("ACCESS_DENIED", "Forbidden");
 
       const [boardMembership] = await tx
         .select({ role: boardMembers.role })
@@ -343,7 +348,8 @@ export async function updateCardImpl(token: string, input: {
         cardAccess.ownerId === null && parsed.ownerId === actorId;
 
       if (!isAdmin && !isCurrentOwner && !(isWritableMember && isClaimingUnowned)) {
-        throw new Error(
+        throw new StructuredError(
+          "ROLE_INSUFFICIENT",
           "Only admins, the current owner, or a member claiming an unowned card can change owner.",
         );
       }
@@ -373,7 +379,11 @@ export async function updateCardImpl(token: string, input: {
           !!targetBoardMember ||
           (cardAccess.visibility === "workspace" && !!targetWorkspaceMember);
         if (!targetCanOwn) {
-          throw new Error("Owner must be a board or workspace member.");
+          throw new StructuredError(
+            "VALIDATION_ERROR",
+            "Owner must be a board or workspace member.",
+            { kind: "owner-not-member" },
+          );
         }
       }
     }
@@ -412,8 +422,10 @@ export async function updateCardImpl(token: string, input: {
         const target =
           candidates.find((l) => l.statusKind === "todo") ?? candidates[0];
         if (!target) {
-          throw new Error(
+          throw new StructuredError(
+            "VALIDATION_ERROR",
             "CROSS_BOARD_NO_LIST: parent card's board has no list to receive the card",
+            { kind: "cross-board-no-list" },
           );
         }
         patch.listId = target.id;
@@ -458,7 +470,7 @@ export async function updateCardImpl(token: string, input: {
     try {
       const [row] = await tx.update(cards).set(patch)
         .where(eq(cards.id, parsed.id)).returning();
-      if (!row) throw new Error("Forbidden");
+      if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
       return row;
     } catch (err) {
       // Plan #8 cycle-guard trigger raises 'cards: parent cycle detected'.
@@ -469,10 +481,18 @@ export async function updateCardImpl(token: string, input: {
       const msg = (err instanceof Error ? err.message : String(err)) + " " + (cause ?? "");
       const lower = msg.toLowerCase();
       if (lower.includes("parent cycle")) {
-        throw new Error("PARENT_CYCLE: parent cycle detected");
+        throw new StructuredError(
+          "VALIDATION_ERROR",
+          "PARENT_CYCLE: parent cycle detected",
+          { kind: "parent-cycle" },
+        );
       }
       if (lower.includes("parent must be in same board")) {
-        throw new Error("CROSS_BOARD_PARENT: parent must be in same board");
+        throw new StructuredError(
+          "VALIDATION_ERROR",
+          "CROSS_BOARD_PARENT: parent must be in same board",
+          { kind: "cross-board-parent" },
+        );
       }
       throw err;
     }
@@ -487,7 +507,7 @@ export async function moveCardImpl(token: string, input: {
     const [row] = await tx.update(cards)
       .set({ listId: parsed.listId, position: parsed.position })
       .where(eq(cards.id, parsed.id)).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -534,7 +554,7 @@ export async function moveCardToStatusImpl(
       currentStatusKind: currentList?.statusKind ?? null,
     };
   });
-  if (!probe) throw new Error("Forbidden");
+  if (!probe) throw new StructuredError("ACCESS_DENIED", "Forbidden");
 
   // Phase 2: no-op short-circuit.
   if (probe.currentStatusKind === input.statusKind) {
@@ -561,7 +581,7 @@ export async function moveCardToStatusImpl(
       .set({ listId: target.id, position: pos })
       .where(eq(cards.id, cardId))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return { cardId, listId: target.id };
   });
 }
@@ -571,7 +591,7 @@ export async function archiveCardImpl(token: string, input: { id: string; archiv
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.update(cards).set({ archived: parsed.archived })
       .where(eq(cards.id, parsed.id)).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -778,7 +798,7 @@ export async function moveCardCrossBoardImpl(
       .select({ id: lists.id, boardId: lists.boardId })
       .from(lists)
       .where(eq(lists.id, p.toListId));
-    if (!tlist) throw new Error("Forbidden");
+    if (!tlist) throw new StructuredError("ACCESS_DENIED", "Forbidden");
 
     // Snapshot the source boardId before the move so the wrapper can
     // revalidate the source page as well — otherwise the source
@@ -788,7 +808,7 @@ export async function moveCardCrossBoardImpl(
       .select({ boardId: cards.boardId })
       .from(cards)
       .where(eq(cards.id, p.cardId));
-    if (!src) throw new Error("Forbidden");
+    if (!src) throw new StructuredError("ACCESS_DENIED", "Forbidden");
 
     // Pick a position at the tail of the destination list.
     const [last] = await tx
@@ -811,7 +831,7 @@ export async function moveCardCrossBoardImpl(
       })
       .where(eq(cards.id, p.cardId))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return {
       id: row.id,
       boardId: row.boardId,
@@ -846,15 +866,17 @@ export async function moveCardToBoardImpl(
     const target =
       candidates.find((l) => l.statusKind === "todo") ?? candidates[0];
     if (!target) {
-      throw new Error(
+      throw new StructuredError(
+        "VALIDATION_ERROR",
         "CROSS_BOARD_NO_LIST: destination board has no list to receive the card",
+        { kind: "cross-board-no-list" },
       );
     }
     const [src] = await tx
       .select({ boardId: cards.boardId, parentCardId: cards.parentCardId, type: cards.type })
       .from(cards)
       .where(eq(cards.id, p.cardId));
-    if (!src) throw new Error("Forbidden");
+    if (!src) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     const [last] = await tx
       .select({ position: cards.position })
       .from(cards)
@@ -882,8 +904,10 @@ export async function moveCardToBoardImpl(
         .limit(1);
       if (parent?.boardId !== p.toBoardId) {
         if (src.type === "subtask") {
-          throw new Error(
+          throw new StructuredError(
+            "VALIDATION_ERROR",
             "CROSS_BOARD_SUBTASK_BLOCKED: cannot move a subtask away from its parent's board",
+            { kind: "cross-board-subtask-blocked" },
           );
         }
         updates.parentCardId = null;
@@ -894,7 +918,7 @@ export async function moveCardToBoardImpl(
       .set(updates)
       .where(eq(cards.id, p.cardId))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return {
       id: row.id,
       boardId: row.boardId,
@@ -1131,7 +1155,7 @@ export async function reorderRoadmapRowImpl(
       .set({ roadmapOrder: newRank })
       .where(eq(cards.id, p.cardId))
       .returning({ id: cards.id, roadmapOrder: cards.roadmapOrder });
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return { id: row.id, roadmapOrder: row.roadmapOrder as number };
   });
 }
@@ -1148,8 +1172,9 @@ export async function reorderRoadmapRow(input: {
   try {
     return await reorderRoadmapRowImpl(t, input);
   } catch (err) {
-    const msg = (err as Error).message;
-    throw new Error(msg === "Forbidden" ? "Forbidden" : `Reorder failed: ${msg}`);
+    if (err instanceof StructuredError) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new StructuredError("ACTION_FAILED", `Reorder failed: ${msg}`);
   }
 }
 
@@ -1191,7 +1216,7 @@ export async function syncParentFromSubtaskImpl(
       .from(cards)
       .where(eq(cards.id, parsed.parentCardId))
       .limit(1);
-    if (!current) throw new Error("Forbidden");
+    if (!current) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     const isComplete = current.completedAt != null;
     if (isComplete === wantComplete) {
       return { completedAt: current.completedAt, boardId: current.boardId };
@@ -1202,7 +1227,7 @@ export async function syncParentFromSubtaskImpl(
       .set({ completedAt: next })
       .where(eq(cards.id, parsed.parentCardId))
       .returning({ completedAt: cards.completedAt, boardId: cards.boardId });
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return { completedAt: row.completedAt, boardId: row.boardId };
   });
 

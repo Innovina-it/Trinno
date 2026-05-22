@@ -10,6 +10,7 @@ import {
   DeleteSlaPolicyInput,
   ScanBoardSlaInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 export async function createSlaPolicyImpl(
   token: string,
@@ -34,7 +35,7 @@ export async function createSlaPolicyImpl(
         appliesWhen: p.appliesWhen,
       })
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -55,7 +56,7 @@ export async function updateSlaPolicyImpl(
       .set(patch)
       .where(eq(slaPolicies.id, p.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -70,7 +71,7 @@ export async function deleteSlaPolicyImpl(
       .delete(slaPolicies)
       .where(eq(slaPolicies.id, p.id))
       .returning({ id: slaPolicies.id });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 

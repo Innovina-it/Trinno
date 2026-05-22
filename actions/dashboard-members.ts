@@ -9,6 +9,7 @@ import {
   ChangeDashboardRoleInput,
   RemoveDashboardMemberInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -26,8 +27,18 @@ export async function shareDashboardImpl(
       sql`select public.find_user_id_by_email(${p.email}) as id`,
     );
     const userId = (lookup as unknown as { id: string | null }[])[0]?.id;
-    if (!userId) throw new Error("No user with that email");
-    if (userId === addedBy) throw new Error("That's you");
+    if (!userId)
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        "No user with that email",
+        { kind: "user-not-found" },
+      );
+    if (userId === addedBy)
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        "That's you",
+        { kind: "self-invite" },
+      );
 
     const [row] = await tx
       .insert(dashboardMembers)
@@ -37,7 +48,7 @@ export async function shareDashboardImpl(
         set: { role: p.role },
       })
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -58,7 +69,7 @@ export async function changeDashboardRoleImpl(
         ),
       )
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -78,7 +89,7 @@ export async function removeDashboardMemberImpl(
         ),
       )
       .returning({ userId: dashboardMembers.userId });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 

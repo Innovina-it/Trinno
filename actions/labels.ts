@@ -7,6 +7,7 @@ import { getSessionToken, requireUser } from "@/lib/auth";
 import {
   CreateLabelInput, RenameLabelInput, DeleteLabelInput, ToggleCardLabelInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 export async function createLabelImpl(token: string, input: { boardId: string; name: string; color: string }) {
   const parsed = CreateLabelInput.parse(input);
@@ -14,7 +15,7 @@ export async function createLabelImpl(token: string, input: { boardId: string; n
     const [row] = await tx.insert(labels).values({
       boardId: parsed.boardId, name: parsed.name, color: parsed.color,
     }).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -26,7 +27,7 @@ export async function renameLabelImpl(token: string, input: { id: string; name: 
       .set({ name: parsed.name, color: parsed.color })
       .where(eq(labels.id, parsed.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -36,7 +37,7 @@ export async function deleteLabelImpl(token: string, input: { id: string }) {
   return dbAsUser(token, async (tx) => {
     const r = await tx.delete(labels).where(eq(labels.id, parsed.id))
       .returning({ id: labels.id });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 
@@ -59,7 +60,7 @@ export async function toggleCardLabelImpl(token: string, input: { cardId: string
       cardId: parsed.cardId, labelId: parsed.labelId,
       boardId: "00000000-0000-0000-0000-000000000000",
     }).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return { attached: true };
   });
 }

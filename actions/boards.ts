@@ -29,6 +29,7 @@ import { createListImpl, setListStatusKindImpl } from "@/actions/lists";
 import { createLabelImpl } from "@/actions/labels";
 import { workspaceMembers } from "@/lib/db/schema";
 import { and } from "drizzle-orm";
+import { StructuredError } from "@/lib/errors";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -67,7 +68,8 @@ export async function createBoardImpl(
       !membership ||
       (membership.role !== "owner" && membership.role !== "admin")
     ) {
-      throw new Error(
+      throw new StructuredError(
+        "ROLE_INSUFFICIENT",
         "Only workspace owners and admins can create boards in this workspace.",
       );
     }
@@ -89,7 +91,7 @@ export async function createBoardImpl(
         position: nextPosition,
       })
       .returning();
-    if (!b) throw new Error("Forbidden");
+    if (!b) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     await tx.insert(boardMembers).values({
       boardId: b.id,
       userId: createdBy,
@@ -121,7 +123,7 @@ export async function renameBoardImpl(
       .set({ title: parsed.title })
       .where(eq(boards.id, parsed.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -137,7 +139,7 @@ export async function setBoardArchivedImpl(
       .set({ archived: parsed.archived })
       .where(eq(boards.id, parsed.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -152,7 +154,7 @@ export async function deleteBoardImpl(
       .delete(boards)
       .where(eq(boards.id, parsed.id))
       .returning({ id: boards.id });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 
@@ -184,7 +186,12 @@ export async function createBoardFromTemplateImpl(
 ) {
   const parsed = CreateBoardFromTemplateInput.parse(input);
   const tpl = BOARD_TEMPLATES.find((t) => t.id === parsed.templateId);
-  if (!tpl) throw new Error(`Unknown template: ${parsed.templateId}`);
+  if (!tpl)
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `Unknown template: ${parsed.templateId}`,
+      { kind: "unknown-template", templateId: parsed.templateId },
+    );
 
   const board = await createBoardImpl(token, {
     workspaceId: parsed.workspaceId,
@@ -281,15 +288,29 @@ export async function createSubboardImpl(
       })
       .from(boards)
       .where(eq(boards.id, parsed.parentBoardId));
-    if (!parent) throw new Error("Parent board not found.");
+    if (!parent)
+      throw new StructuredError(
+        "ACCESS_DENIED",
+        "Parent board not found.",
+        { kind: "parent-board-missing" },
+      );
 
     const [anchor] = await tx
       .select({ id: cards.id, boardId: cards.boardId })
       .from(cards)
       .where(eq(cards.id, parsed.parentCardId));
-    if (!anchor) throw new Error("Anchor card not found.");
+    if (!anchor)
+      throw new StructuredError(
+        "ACCESS_DENIED",
+        "Anchor card not found.",
+        { kind: "anchor-card-missing" },
+      );
     if (anchor.boardId !== parent.id) {
-      throw new Error("Anchor card does not belong to the parent board.");
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        "Anchor card does not belong to the parent board.",
+        { kind: "anchor-card-wrong-board" },
+      );
     }
 
     const [membership] = await tx
@@ -305,7 +326,8 @@ export async function createSubboardImpl(
       !membership ||
       (membership.role !== "owner" && membership.role !== "admin")
     ) {
-      throw new Error(
+      throw new StructuredError(
+        "ROLE_INSUFFICIENT",
         "Only workspace owners and admins can create sub-boards.",
       );
     }
@@ -331,7 +353,7 @@ export async function createSubboardImpl(
         position: subPosition,
       })
       .returning();
-    if (!b) throw new Error("Forbidden");
+    if (!b) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     await tx.insert(boardMembers).values({
       boardId: b.id,
       userId: createdBy,
@@ -369,7 +391,12 @@ export async function promoteCardToSubboardImpl(
       .where(eq(cards.id, parsed.cardId));
     return row ?? null;
   });
-  if (!anchor) throw new Error("Card not found.");
+  if (!anchor)
+    throw new StructuredError(
+      "ACCESS_DENIED",
+      "Card not found.",
+      { kind: "card-missing" },
+    );
   return createSubboardImpl(token, {
     parentBoardId: anchor.boardId,
     parentCardId: anchor.id,
@@ -507,7 +534,10 @@ export async function reorderBoardsImpl(
         ),
       );
     if (!membership) {
-      throw new Error("Not a member of this workspace.");
+      throw new StructuredError(
+        "NOT_MEMBER",
+        "Not a member of this workspace.",
+      );
     }
 
     const existing = await tx

@@ -5,6 +5,7 @@ import { dbAsUser } from "@/lib/db/client";
 import { worklogs } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { LogWorkInput, DeleteWorklogInput } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 function decodeSub(jwt: string) {
   const [, p] = jwt.split(".");
@@ -39,7 +40,7 @@ export async function logWorkImpl(
         comment: p.comment ?? null,
       })
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -51,7 +52,7 @@ export async function deleteWorklogImpl(token: string, input: { id: string }) {
       .delete(worklogs)
       .where(eq(worklogs.id, p.id))
       .returning({ id: worklogs.id });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 

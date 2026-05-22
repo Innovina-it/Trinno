@@ -1,0 +1,102 @@
+import { describe, it, expect } from "vitest";
+import { createClient } from "@supabase/supabase-js";
+import { createWorkspaceImpl } from "@/actions/workspaces";
+import { createBoardImpl } from "@/actions/boards";
+import { createListImpl, renameListImpl } from "@/actions/lists";
+import {
+  createSprintImpl,
+  startSprintImpl,
+} from "@/actions/sprints";
+import { StructuredError } from "@/lib/errors";
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const service = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  auth: { persistSession: false },
+});
+
+async function makeUser(p: string) {
+  const email = `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}@x.io`;
+  const { data } = await service.auth.admin.createUser({
+    email,
+    password: "passw0rd!",
+    email_confirm: true,
+  });
+  const { data: s } = await createClient(url, anon).auth.signInWithPassword({
+    email,
+    password: "passw0rd!",
+  });
+  return { id: data.user!.id, jwt: s.session!.access_token };
+}
+
+describe("U2 — server actions throw StructuredError with codes", () => {
+  it("renameList by a non-member rejects with code ACCESS_DENIED", async () => {
+    const owner = await makeUser("owner");
+    const ws = await createWorkspaceImpl(owner.jwt, { name: "WS" });
+    const b = await createBoardImpl(owner.jwt, {
+      workspaceId: ws.id,
+      title: "B",
+      backgroundKind: "color",
+      backgroundValue: "#fafafa",
+    });
+    const list = await createListImpl(owner.jwt, {
+      boardId: b.id,
+      title: "L",
+    });
+
+    const intruder = await makeUser("intruder");
+    let caught: unknown;
+    try {
+      await renameListImpl(intruder.jwt, { id: list.id, title: "hacked" });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(StructuredError);
+    expect((caught as StructuredError).code).toBe("ACCESS_DENIED");
+  });
+
+  it("non-admin cannot manage sprints — code ROLE_INSUFFICIENT", async () => {
+    const owner = await makeUser("owner2");
+    const ws = await createWorkspaceImpl(owner.jwt, { name: "WS2" });
+
+    // Add a second user as a plain "member" so they pass workspace
+    // membership checks but fail the owner/admin gate.
+    const member = await makeUser("member");
+    await service
+      .from("workspace_members")
+      .insert({ workspace_id: ws.id, user_id: member.id, role: "member" });
+
+    let caught: unknown;
+    try {
+      await createSprintImpl(member.jwt, {
+        workspaceId: ws.id,
+        name: "S1",
+      });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(StructuredError);
+    expect((caught as StructuredError).code).toBe("ROLE_INSUFFICIENT");
+  });
+
+  it("re-starting an already-active sprint rejects with code CONFLICT", async () => {
+    const u = await makeUser("conflict");
+    const ws = await createWorkspaceImpl(u.jwt, { name: "WS3" });
+    const s = await createSprintImpl(u.jwt, {
+      workspaceId: ws.id,
+      name: "Sprint",
+    });
+    await startSprintImpl(u.jwt, { id: s.id });
+
+    let caught: unknown;
+    try {
+      // Sprint is no longer in "planned" state, so the where-clause
+      // filter returns 0 rows and the CONFLICT throw fires.
+      await startSprintImpl(u.jwt, { id: s.id });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(StructuredError);
+    expect((caught as StructuredError).code).toBe("CONFLICT");
+  });
+});

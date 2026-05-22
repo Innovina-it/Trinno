@@ -4,6 +4,7 @@ import { dbAsUser } from "@/lib/db/client";
 import { profiles } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { MarkOnboardingCompletedInput } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -30,7 +31,7 @@ export async function markOnboardingCompletedImpl(
         id: profiles.id,
         onboardingCompletedAt: profiles.onboardingCompletedAt,
       });
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }

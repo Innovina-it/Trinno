@@ -5,6 +5,7 @@ import { dbAsUser } from "@/lib/db/client";
 import { cardLinks } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { CreateCardLinkInput, DeleteCardLinkInput } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -26,7 +27,11 @@ export async function createCardLinkImpl(
 ) {
   const parsed = CreateCardLinkInput.parse(input);
   if (parsed.fromCardId === parsed.toCardId)
-    throw new Error("Cannot link card to itself");
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      "Cannot link card to itself",
+      { kind: "self-link" },
+    );
   const createdBy = decodeSub(token);
   return dbAsUser(token, async (tx) => {
     const [row] = await tx
@@ -40,7 +45,7 @@ export async function createCardLinkImpl(
       })
       .onConflictDoNothing()
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -52,7 +57,7 @@ export async function deleteCardLinkImpl(token: string, input: { id: string }) {
       .delete(cardLinks)
       .where(eq(cardLinks.id, parsed.id))
       .returning({ id: cardLinks.id });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 

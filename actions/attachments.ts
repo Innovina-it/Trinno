@@ -8,6 +8,7 @@ import { getSessionToken, requireUser } from "@/lib/auth";
 import {
   RegisterAttachmentInput, DeleteAttachmentInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -39,7 +40,7 @@ export async function registerAttachmentImpl(token: string, input: {
       uploadedBy,
       boardId: "00000000-0000-0000-0000-000000000000",
     }).returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -49,10 +50,10 @@ export async function deleteAttachmentImpl(token: string, input: { id: string })
   return dbAsUser(token, async (tx) => {
     const [row] = await tx.select({ storagePath: attachments.storagePath })
       .from(attachments).where(eq(attachments.id, parsed.id));
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     const r = await tx.delete(attachments).where(eq(attachments.id, parsed.id))
       .returning({ id: attachments.id });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     // Best-effort storage cleanup. Errors ignored -- orphaned blob is recoverable later.
     await admin.storage.from("card-attachments").remove([row.storagePath]).catch(() => {});
   });
@@ -74,14 +75,21 @@ export async function createAttachmentSignedUrlImpl(
       .limit(1);
     return attachment;
   });
-  if (!row) throw new Error("Forbidden");
+  if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
 
   const { data, error } = await admin.storage
     .from("card-attachments")
     .createSignedUrl(row.storagePath, 60 * 5, {
       download: input.download ? row.filename : false,
     });
-  if (error || !data) throw error ?? new Error("Could not create download link");
+  if (error || !data)
+    throw (
+      error ??
+      new StructuredError(
+        "ACTION_FAILED",
+        "Could not create download link",
+      )
+    );
   return { url: data.signedUrl };
 }
 

@@ -9,6 +9,7 @@ import {
   UpdateVersionInput,
   DeleteVersionInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 function toDateOrNull(v: string | Date | null | undefined): Date | null {
   if (v === null || v === undefined) return null;
@@ -37,7 +38,7 @@ export async function createVersionImpl(
         releaseDate: toDateOrNull(p.releaseDate ?? null),
       })
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -75,7 +76,7 @@ export async function updateVersionImpl(
       .set(patch)
       .where(eq(versions.id, p.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -90,7 +91,7 @@ export async function deleteVersionImpl(
       .delete(versions)
       .where(eq(versions.id, p.id))
       .returning({ id: versions.id, workspaceId: versions.workspaceId });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return r[0];
   });
 }

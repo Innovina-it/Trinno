@@ -8,6 +8,7 @@ import {
   CreateCommentInput, EditCommentInput, DeleteCommentInput,
   ResolveCommentInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -71,7 +72,7 @@ export async function createCommentImpl(token: string, input: { cardId: string; 
           nullif(to_jsonb(comments)->>'resolved_by', '')::uuid as resolved_by
       `);
       const [row] = rows as unknown as Parameters<typeof mapCommentRow>[0][];
-      if (!row) throw new Error("Forbidden");
+      if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
       return mapCommentRow(row);
     }
     const rows = await tx.execute(sql`
@@ -90,7 +91,7 @@ export async function createCommentImpl(token: string, input: { cardId: string; 
         nullif(to_jsonb(comments)->>'resolved_by', '')::uuid as resolved_by
     `);
     const [row] = rows as unknown as Parameters<typeof mapCommentRow>[0][];
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return mapCommentRow(row);
   });
 }
@@ -115,7 +116,7 @@ export async function editCommentImpl(token: string, input: { id: string; body: 
         nullif(to_jsonb(comments)->>'resolved_by', '')::uuid as resolved_by
     `);
     const [row] = rows as unknown as Parameters<typeof mapCommentRow>[0][];
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return mapCommentRow(row);
   });
 }
@@ -125,7 +126,7 @@ export async function deleteCommentImpl(token: string, input: { id: string }) {
   return dbAsUser(token, async (tx) => {
     const r = await tx.delete(comments).where(eq(comments.id, parsed.id))
       .returning({ id: comments.id });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 
@@ -145,7 +146,7 @@ export async function resolveCommentImpl(
       })
       .where(eq(comments.id, parsed.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }

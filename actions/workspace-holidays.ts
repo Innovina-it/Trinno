@@ -10,6 +10,7 @@ import {
   UnmuteWorkspaceHolidayInput,
   DeleteWorkspaceHolidayInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 type HolidayTx = Parameters<Parameters<typeof dbAsUser>[1]>[0];
 
@@ -34,7 +35,10 @@ async function assertCanManageCalendar(
     )
     .limit(1);
   if (membership?.role !== "owner" && membership?.role !== "admin") {
-    throw new Error("Only workspace owners and admins can manage the calendar.");
+    throw new StructuredError(
+      "ROLE_INSUFFICIENT",
+      "Only workspace owners and admins can manage the calendar.",
+    );
   }
 }
 

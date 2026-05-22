@@ -9,6 +9,7 @@ import {
   UpdateComponentInput,
   DeleteComponentInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 export async function createComponentImpl(
   token: string,
@@ -24,7 +25,7 @@ export async function createComponentImpl(
         leadUserId: p.leadUserId ?? null,
       })
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -43,7 +44,7 @@ export async function updateComponentImpl(
       .set(patch)
       .where(eq(components.id, p.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -58,7 +59,7 @@ export async function deleteComponentImpl(
       .delete(components)
       .where(eq(components.id, p.id))
       .returning({ id: components.id, boardId: components.boardId });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return r[0];
   });
 }

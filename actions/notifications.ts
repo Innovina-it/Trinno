@@ -5,6 +5,7 @@ import { dbAsUser } from "@/lib/db/client";
 import { notifications } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { MarkNotificationReadInput } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 export async function markNotificationReadImpl(
   token: string,
@@ -17,7 +18,7 @@ export async function markNotificationReadImpl(
       .set({ readAt: p.read ? new Date() : null })
       .where(eq(notifications.id, p.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }

@@ -9,6 +9,7 @@ import {
   UpdateDashboardInput,
   DeleteDashboardInput,
 } from "@/lib/validation";
+import { StructuredError } from "@/lib/errors";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -35,7 +36,7 @@ export async function createDashboardImpl(
         name: p.name,
       })
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -53,7 +54,7 @@ export async function updateDashboardImpl(
       .set(patch)
       .where(eq(dashboards.id, p.id))
       .returning();
-    if (!row) throw new Error("Forbidden");
+    if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
     return row;
   });
 }
@@ -68,7 +69,7 @@ export async function deleteDashboardImpl(
       .delete(dashboards)
       .where(eq(dashboards.id, p.id))
       .returning({ id: dashboards.id });
-    if (r.length === 0) throw new Error("Forbidden");
+    if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
   });
 }
 

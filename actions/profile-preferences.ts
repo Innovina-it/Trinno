@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { dbAsUser } from "@/lib/db/client";
 import { type Preferences } from "@/lib/preferences/types";
+import { StructuredError } from "@/lib/errors";
 
 type PreferencesRow = {
   preferences: Preferences | null;
@@ -14,7 +15,11 @@ function assertPreferencePatch(
   value: Partial<Preferences>,
 ): Partial<Preferences> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Invalid preferences payload");
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      "Invalid preferences payload",
+      { kind: "preferences-invalid" },
+    );
   }
   return value;
 }
@@ -22,7 +27,11 @@ function assertPreferencePatch(
 function toJsonb(patch: Partial<Preferences>): string {
   const json = JSON.stringify(patch);
   if (!json || json === "undefined") {
-    throw new Error("Invalid preferences payload");
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      "Invalid preferences payload",
+      { kind: "preferences-invalid" },
+    );
   }
   return json;
 }
