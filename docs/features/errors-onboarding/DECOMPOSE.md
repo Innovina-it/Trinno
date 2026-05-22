@@ -51,12 +51,12 @@ WIP limit: 1 unit at a time. OK.
 - T5. RLS info-leak: `NOT_FOUND` only when row provably exists for someone; else `ACCESS_DENIED`
 
 ## Status
-- [x] U1 dispatched
-- [x] U1 verified (commit pending squash)
-- [ ] U2 dispatched
-- [ ] U2 verified
-- [ ] U3 dispatched
-- [ ] U3 verified
-- [ ] U4 dispatched
-- [ ] U4 verified
-- [ ] Gate 5 harvest
+- [x] U1 dispatched → commit 77acf76
+- [x] U1 verified
+- [x] U2 dispatched → commit faaaf9d
+- [x] U2 verified
+- [x] U3 dispatched → commit 0b905b2 (narrowed scope: 3 of 24 wrappers, see CONTRACT.md)
+- [x] U3 verified
+- [x] U4 dispatched → commit 233b070
+- [x] U4 verified
+- [x] Gate 5 harvest
