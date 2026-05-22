@@ -238,6 +238,7 @@ export function TimelineBands({
                 }}
                 hideChrome
                 onCollapse={() => toggle(band.id)}
+                compactLanes
               />
             </WorkspaceStoreProvider>
           );

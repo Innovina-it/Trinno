@@ -32,6 +32,7 @@ import {
   groupByAssignee,
   groupByComponent,
   groupBySubBoard,
+  stackInLane,
   type SubBoardRef,
 } from "@/lib/roadmap/layout";
 import { holidaysInRange } from "@/lib/holidays/merge";
@@ -192,6 +193,7 @@ export function RoadmapView({
   workspaceColumn,
   hideChrome = false,
   onCollapse,
+  compactLanes = false,
 }: {
   workspaceId: string;
   /** Used for assignee/unassigned filter. Pass null/undefined for anonymous. */
@@ -212,6 +214,12 @@ export function RoadmapView({
    *  header. Click → caller decides what to render in this band's slot
    *  (typically a compact CollapsedBand strip). */
   onCollapse?: () => void;
+  /** Greedy-pack non-overlapping cards onto the same lane row instead of
+   *  giving every card its own dedicated row. Used on /timeline where the
+   *  shared range stretches the canvas so wide that one-row-per-card
+   *  produces lanes that are mostly empty vertical space. Default false
+   *  preserves /w/:ws/roadmap's top-to-bottom hierarchy reading. */
+  compactLanes?: boolean;
 }) {
   // SharedAxisProvider is mounted on /timeline (multiple stacked RoadmapView
   // instances). Absent on /w/:ws/roadmap — falls back to per-band cards-derived
@@ -979,14 +987,18 @@ export function RoadmapView({
   const laneLayout = useMemo(() => {
     let yCursor = HEADER_STRIP_HEIGHT;
     return lanes.map((lane) => {
-      // One row per task in the lane (sorted by startDate). Previous
-      // behaviour used `stackInLane` greedy-packing so non-overlapping
-      // tasks shared a row; the new lane model wants every task on its
-      // own row so the hierarchy reads top-to-bottom under each anchor.
-      const placed = lane.cards
-        .slice()
-        .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
-        .map((card, idx) => ({ card, row: idx }));
+      // Default behaviour: one row per task in the lane (sorted by
+      // startDate) so the hierarchy reads top-to-bottom under each anchor.
+      // `compactLanes` (cross-workspace /timeline) falls back to greedy
+      // packing — non-overlapping tasks share a row — so the lane height
+      // doesn't reserve a row per off-screen card when the shared range
+      // stretches the canvas across many months.
+      const placed = compactLanes
+        ? stackInLane(lane.cards)
+        : lane.cards
+            .slice()
+            .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
+            .map((card, idx) => ({ card, row: idx }));
       const rowsCount =
         placed.length === 0 ? 0 : Math.max(...placed.map((p) => p.row + 1));
       const headerRows = lane.headerCard ? 1 : 0;
@@ -1038,7 +1050,7 @@ export function RoadmapView({
         expandedExtraByParent,
       };
     });
-  }, [lanes, expandedParents]);
+  }, [lanes, expandedParents, compactLanes]);
 
   // Plan #16b-γ-G G2 — bar-drag vertical hit-testing reads the latest
   // laneLayout without re-binding the pointermove callback (which would
