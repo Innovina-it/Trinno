@@ -129,6 +129,34 @@ export function UserPreferencesProvider({
     };
   }, [flushPending]);
 
+  // The 500ms debounce can lose writes if the user closes the tab (or the
+  // whole browser) before it fires. Flush immediately when the page is
+  // hidden — covers tab close, app switch, Chrome close, and phone lock.
+  // pagehide is the most reliable unload signal across browsers (bfcache
+  // safe); visibilitychange catches the common "user backgrounds the tab,
+  // then quits Chrome from the menu" sequence.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    function flushNow() {
+      if (writeTimerRef.current) {
+        clearTimeout(writeTimerRef.current);
+        writeTimerRef.current = null;
+      }
+      flushPending();
+    }
+    function onVisibility() {
+      if (document.visibilityState === "hidden") flushNow();
+    }
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flushNow);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flushNow);
+    };
+  }, [flushPending]);
+
   const value = useMemo(
     () => ({ preferences, setPreferences }),
     [preferences, setPreferences],
