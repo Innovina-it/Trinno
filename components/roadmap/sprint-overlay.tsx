@@ -41,7 +41,9 @@ export function SprintOverlay({
         const sStart = startOfDay(sp.startDate);
         const sEnd = startOfDay(sp.endDate);
         const startDays = Math.max(0, dayDiff(gridStart, sStart));
-        const endDays = Math.min(totalDays, dayDiff(gridStart, sEnd));
+        // Inclusive end: sprint ending Aug 29 covers through end-of-day 29,
+        // matching how card bars extend +1 ppd past startOfDay(targetDate).
+        const endDays = Math.min(totalDays, dayDiff(gridStart, sEnd) + 1);
         const x = startDays * ppd;
         const w = Math.max(0, (endDays - startDays) * ppd);
         if (w <= 0) return null;
