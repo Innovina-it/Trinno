@@ -20,8 +20,6 @@ export interface MilestoneMarkersProps {
   ppd?: number;
   gridStart: Date;
   gridEnd: Date;
-  /** Full canvas height in px (from top of header to bottom of last row). */
-  canvasHeight: number;
   headerHeight: number;
   /** Whether the current user may edit/delete milestones. */
   canAdmin: boolean;
@@ -51,7 +49,6 @@ export function MilestoneMarkers({
   ppd: ppdProp,
   gridStart,
   gridEnd,
-  canvasHeight,
   headerHeight,
   canAdmin,
   minDate,
@@ -154,15 +151,17 @@ export function MilestoneMarkers({
           <div
             key={m.id}
             data-testid={`milestone-marker-${m.id}`}
-            className="absolute top-0 pointer-events-auto"
-            style={{ left: x, height: canvasHeight }}
+            className="absolute inset-y-0 pointer-events-auto"
+            style={{ left: x }}
           >
-            {/* Vertical line — draggable */}
+            {/* Vertical line — draggable. Uses inset-y-0 so it follows the
+                canvas's actual rendered height, including the cross-workspace
+                /timeline surface where the last visible band's canvas grows
+                past `totalHeight` to fill the viewport. */}
             <div
-              className="absolute top-0 w-px cursor-ew-resize"
+              className="absolute inset-y-0 w-px cursor-ew-resize"
               style={{
                 backgroundColor: m.color,
-                height: canvasHeight,
                 opacity: 0.75,
               }}
               onPointerDown={(e) => startDrag(e, m)}

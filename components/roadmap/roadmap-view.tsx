@@ -496,7 +496,9 @@ export function RoadmapView({
   const storeComponents = useWorkspaceStore((s) => s.components);
   const storeSubBoards = useWorkspaceStore((s) => s.subBoards);
   const patchCardInStore = useWorkspaceStore((s) => s.patchCard);
-  const setWorkspaceSnapshot = useWorkspaceStore((s) => s.setSnapshot);
+  const setWorkspaceSnapshot = useWorkspaceStore(
+    (s) => s.mergeSnapshotPreservingRealtime,
+  );
   const workspaceQueryClient = useWorkspaceCacheQueryClient();
   const sharedSnapshot = useWorkspaceSnapshot(workspaceId);
   const sharedBoards = useBoards(workspaceId);
@@ -1790,7 +1792,9 @@ export function RoadmapView({
               </div>
             )}
         <div
-          className="flex border border-hairline rounded-xl overflow-hidden"
+          className={`flex border border-hairline rounded-xl overflow-hidden${
+            fillHeight ? " flex-1 min-h-0" : ""
+          }`}
           data-testid="roadmap-grid"
         >
           {/* Plan #16b-γ-G G4 — priority gutter as its own column to the
@@ -1992,7 +1996,11 @@ export function RoadmapView({
             <div
               ref={canvasRef}
               className="relative"
-              style={{ width, height: totalHeight }}
+              style={
+                fillHeight
+                  ? { width, minHeight: totalHeight, height: "100%" }
+                  : { width, height: totalHeight }
+              }
               data-testid="roadmap-canvas"
               onPointerDown={drag.onCanvasEmptyPointerDown}
             >
@@ -2221,7 +2229,6 @@ export function RoadmapView({
                   ppd={effectivePpd}
                   gridStart={gridStart}
                   gridEnd={gridEnd}
-                  canvasHeight={totalHeight + HEADER_STRIP_HEIGHT}
                   headerHeight={HEADER_STRIP_HEIGHT}
                   canAdmin={true}
                   minDate={earliestCardStart}

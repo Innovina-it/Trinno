@@ -49,6 +49,13 @@ export type WorkspaceState = {
   subBoards: SubBoard[];
 
   setSnapshot: (s: Omit<WorkspaceSnapshot, "workspaceId">) => void;
+  // Like setSnapshot but skips collections that are already kept live by
+  // per-row CDC subscriptions (cards, lists, sprints, links, members,
+  // versions). Replacing those wholesale would clobber pending optimistic
+  // patches (e.g. a roadmap bar drag mid-persist) with stale snapshot data.
+  mergeSnapshotPreservingRealtime: (
+    s: Omit<WorkspaceSnapshot, "workspaceId">,
+  ) => void;
 
   upsertList: (l: List) => void;
   patchList: (id: string, patch: Partial<List>) => void;
@@ -100,6 +107,14 @@ export function createWorkspaceStore(initial: WorkspaceSnapshot) {
     subBoards: initial.subBoards,
 
     setSnapshot: (s) => set({ ...s }),
+    mergeSnapshotPreservingRealtime: (s) =>
+      set({
+        boards: s.boards,
+        components: s.components,
+        cardComponents: s.cardComponents,
+        workspaceProfiles: s.workspaceProfiles,
+        subBoards: s.subBoards,
+      }),
 
     upsertList: (l) =>
       set((st) => ({

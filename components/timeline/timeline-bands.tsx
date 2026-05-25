@@ -207,42 +207,75 @@ export function TimelineBands({
     );
   }
 
+  // Last expanded band absorbs leftover viewport vertical space via
+  // `fillHeight` + a `flex-1` wrapper, so filters that narrow the canvas to
+  // a few lanes don't leave a stark dark void below the band. Earlier bands
+  // and collapsed strips keep their natural intrinsic height.
+  let lastExpandedIdx = -1;
+  for (let i = visibleBands.length - 1; i >= 0; i--) {
+    if (!collapsedIds.has(visibleBands[i].band.id)) {
+      lastExpandedIdx = i;
+      break;
+    }
+  }
+
   return (
     <SharedAxisProvider range={range}>
-      <TimelineChrome
-        bandIds={visibleBands.map((v) => v.band.id)}
-        aggregatedCards={aggregatedCards}
-      />
-      <div className="space-y-3" data-testid="timeline-bands">
-        {visibleBands.map(({ band, visibleCards, earliestStartMs, latestEndMs }) => {
-          const isCollapsed = collapsedIds.has(band.id);
-          return isCollapsed ? (
-            <CollapsedBand
-              key={band.id}
-              name={band.name}
-              href={`/w/${band.id}/roadmap`}
-              cardCount={visibleCards.length}
-              earliestStart={new Date(earliestStartMs)}
-              latestEnd={new Date(latestEndMs)}
-              onExpand={() => toggle(band.id)}
-            />
-          ) : (
-            <WorkspaceStoreProvider key={band.id} initial={band.snapshot}>
-              <RoadmapView
-                workspaceId={band.id}
-                viewerId={viewerId}
-                holidays={band.holidays}
-                workspaceColumn={{
-                  name: band.name,
-                  href: `/w/${band.id}/roadmap`,
-                }}
-                hideChrome
-                onCollapse={() => toggle(band.id)}
-                compactLanes
-              />
-            </WorkspaceStoreProvider>
-          );
-        })}
+      <div className="flex flex-col flex-1 min-h-0 gap-3">
+        <TimelineChrome
+          bandIds={visibleBands.map((v) => v.band.id)}
+          aggregatedCards={aggregatedCards}
+        />
+        <div
+          className="flex flex-col flex-1 min-h-0 gap-3"
+          data-testid="timeline-bands"
+        >
+          {visibleBands.map(
+            ({ band, visibleCards, earliestStartMs, latestEndMs }, idx) => {
+              const isCollapsed = collapsedIds.has(band.id);
+              if (isCollapsed) {
+                return (
+                  <CollapsedBand
+                    key={band.id}
+                    name={band.name}
+                    href={`/w/${band.id}/roadmap`}
+                    cardCount={visibleCards.length}
+                    earliestStart={new Date(earliestStartMs)}
+                    latestEnd={new Date(latestEndMs)}
+                    onExpand={() => toggle(band.id)}
+                  />
+                );
+              }
+              const isLastExpanded = idx === lastExpandedIdx;
+              return (
+                <div
+                  key={band.id}
+                  className={
+                    isLastExpanded
+                      ? "flex flex-col flex-1 min-h-0"
+                      : "flex flex-col"
+                  }
+                >
+                  <WorkspaceStoreProvider initial={band.snapshot}>
+                    <RoadmapView
+                      workspaceId={band.id}
+                      viewerId={viewerId}
+                      holidays={band.holidays}
+                      workspaceColumn={{
+                        name: band.name,
+                        href: `/w/${band.id}/roadmap`,
+                      }}
+                      hideChrome
+                      onCollapse={() => toggle(band.id)}
+                      compactLanes
+                      fillHeight={isLastExpanded}
+                    />
+                  </WorkspaceStoreProvider>
+                </div>
+              );
+            },
+          )}
+        </div>
       </div>
     </SharedAxisProvider>
   );
