@@ -18,11 +18,15 @@ import { BlockedBadge } from "./card/blocked-badge";
 import { StoryPointsChip } from "./card/story-points-chip";
 import { TimeChip } from "./card/time-chip";
 import { PriorityChip, type CardPriority } from "./card/priority-picker";
+import {
+  CardContextMenu,
+  type CardContextMenuPosition,
+} from "./card/card-context-menu";
 import { CardCover } from "./card/cover-picker";
 import { mergeMemberPool } from "./card/member-pool";
 import { CompleteToggle } from "./card/complete-toggle";
 import { cardCode } from "@/lib/format";
-import { createCard, updateCard } from "@/actions/cards";
+import { archiveCard, createCard, updateCard } from "@/actions/cards";
 import { toggleCardMember } from "@/actions/card-members";
 import { SubtaskBadge } from "./card-tile-subtask-badge";
 import { formatDate } from "@/lib/format-date";
@@ -81,6 +85,8 @@ export function CardTile({
   // ~200 cards the per-tile s.cards scans dominated re-render cost on
   // every CDC echo).
   const [quickViewOpen, setQuickViewOpen] = useState(false);
+  const [contextMenu, setContextMenu] =
+    useState<CardContextMenuPosition | null>(null);
 
   // Quick-view data — previously selected inside CardQuickView itself.
   // Lifted here so the component is store-agnostic and can be reused
@@ -391,6 +397,63 @@ export function CardTile({
 
   const completed = card.completedAt != null || card.dueComplete;
 
+  // Right-click → context menu with parity to roadmap-bar's menu.
+  // Suppressed during multi-select drag operations.
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (isDragging) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  function menuOpenCard() {
+    setQuickViewOpen(true);
+  }
+  function menuToggleComplete() {
+    const next = !completed;
+    updateCardLocal(card.id, {
+      completedAt: next ? new Date() : null,
+      dueComplete: next,
+    });
+    startTransition(async () => {
+      try {
+        await updateCard({ id: card.id, completed: next });
+      } catch (err) {
+        updateCardLocal(card.id, {
+          completedAt: next ? null : new Date(),
+          dueComplete: !next,
+        });
+        toast.error((err as Error).message);
+      }
+    });
+  }
+  function menuSetPriority(next: CardPriority | null) {
+    const prev = (card.priority ?? null) as CardPriority | null;
+    if (next === prev) return;
+    updateCardLocal(card.id, { priority: next });
+    startTransition(async () => {
+      try {
+        await updateCard({ id: card.id, priority: next });
+      } catch (err) {
+        updateCardLocal(card.id, { priority: prev });
+        toast.error((err as Error).message);
+      }
+    });
+  }
+  function menuArchive() {
+    startTransition(async () => {
+      try {
+        await archiveCard({ id: card.id, archived: true });
+        toast.success(`Archived "${card.title}"`);
+      } catch (err) {
+        toast.error((err as Error).message);
+      }
+    });
+  }
+  function menuOpenInNewView() {
+    router.push(`/b/${boardId}/c/${card.id}`);
+  }
+
   return (
     <>
     <div
@@ -401,6 +464,7 @@ export function CardTile({
       role="button"
       tabIndex={0}
       onClick={handleClick}
+      onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}
       data-card-id={card.id}
       data-dragging={isDragging ? "true" : undefined}
@@ -574,6 +638,21 @@ export function CardTile({
         onCreateSubtask={onQuickCreateSubtask}
       />
     )}
+    <CardContextMenu
+      menu={contextMenu}
+      setMenu={setContextMenu}
+      isCompleted={completed}
+      priority={(card.priority ?? null) as CardPriority | null}
+      testIdPrefix="card-tile-menu"
+      actions={{
+        onOpen: menuOpenCard,
+        onEditDates: menuOpenCard,
+        onToggleComplete: menuToggleComplete,
+        onSetPriority: menuSetPriority,
+        onArchive: menuArchive,
+        onOpenInNewView: menuOpenInNewView,
+      }}
+    />
     </>
   );
 }
