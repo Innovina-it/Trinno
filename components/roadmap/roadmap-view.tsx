@@ -911,6 +911,25 @@ export function RoadmapView({
   }, [cards, gridStart, zoom, sharedRangeEnd]);
   const totalDays = Math.max(1, dayDiff(gridStart, gridEnd));
   const width = totalDays * effectivePpd;
+  // Intra-day offset for the today markers. Week zoom only — month/quarter/fit
+  // day columns are too narrow for the shift to read as information.
+  // <11h → start of column, 11-14h → middle, ≥14h → end of column.
+  // currentHour ticks every minute so the line shifts across the 11/14
+  // thresholds without a page reload (also recovers after a system clock change).
+  const [currentHour, setCurrentHour] = useState<number>(() =>
+    new Date().getHours(),
+  );
+  useEffect(() => {
+    const tick = () => setCurrentHour(new Date().getHours());
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const todayDayOffset = useMemo(() => {
+    if (zoom !== "week") return 0;
+    if (currentHour < 11) return 0;
+    if (currentHour < 14) return effectivePpd / 2;
+    return effectivePpd;
+  }, [zoom, currentHour, effectivePpd]);
   // Workspace-effective holidays (presets + overrides) falling within
   // the current grid. Memoised so the linear scan only re-runs when the
   // viewport range or the input list changes.
@@ -2035,7 +2054,9 @@ export function RoadmapView({
                   clamped to lane content for the same reason as the grid
                   lines above. */}
               {(() => {
-                const todayX = xForDate(startOfDay(now), gridStart, effectivePpd);
+                const todayX =
+                  xForDate(startOfDay(now), gridStart, effectivePpd) +
+                  todayDayOffset;
                 if (todayX < 0 || todayX > width) return null;
                 return (
                   <div
@@ -2157,7 +2178,8 @@ export function RoadmapView({
               {(() => {
                 const today = startOfDay(new Date());
                 if (today < gridStart || today > gridEnd) return null;
-                const todayX = xForDate(today, gridStart, effectivePpd);
+                const todayX =
+                  xForDate(today, gridStart, effectivePpd) + todayDayOffset;
                 return (
                   <div
                     data-testid="roadmap-today-line"
