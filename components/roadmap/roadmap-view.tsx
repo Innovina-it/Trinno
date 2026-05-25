@@ -106,6 +106,7 @@ import {
 import {
   useRegisterSharedScroller,
   useSharedAxis,
+  useSharedDragPpd,
 } from "@/lib/roadmap/shared-axis";
 
 const ROW_HEIGHT = 36; // 28px bar + 8px gap
@@ -238,10 +239,14 @@ export function RoadmapView({
   const sp = useSearchParams();
   const { preferences, setPreferences } = useUserPreferences();
   const workspacePreferences = getWorkspacePreferences(preferences, workspaceId);
+  // On the cross-workspace /timeline surface (sharedAxis mounted), URL is
+  // the only source of truth for zoom/lanes/view — per-workspace prefs would
+  // make each band render at a different scale, breaking the shared axis.
+  const useWsPrefs = sharedAxis === null;
   const zoomParam = sp.get("zoom");
   const zoom: Zoom = (ZOOMS as string[]).includes(zoomParam ?? "")
     ? (zoomParam as Zoom)
-    : (workspacePreferences.roadmap?.zoom ?? "fit");
+    : (useWsPrefs ? (workspacePreferences.roadmap?.zoom ?? "fit") : "fit");
   const lanesParam = sp.get("lanes");
   const laneMode: LaneMode = (LANE_MODES as string[]).includes(lanesParam ?? "")
     ? (lanesParam as LaneMode)
@@ -249,7 +254,7 @@ export function RoadmapView({
   const viewParam = sp.get("view");
   const viewMode: ViewMode = (VIEW_MODES as string[]).includes(viewParam ?? "")
     ? (viewParam as ViewMode)
-    : (workspacePreferences.roadmap?.viewMode ?? "gantt");
+    : (useWsPrefs ? (workspacePreferences.roadmap?.viewMode ?? "gantt") : "gantt");
   const focusParam = sp.get("focus");
   const queryParam = sp.get("q") ?? "";
   // Plan #16b-γ-G G4 — priority-gutter URL toggle. Default off (param
@@ -865,7 +870,17 @@ export function RoadmapView({
   // real time. Cleared when the user changes the discrete zoom from the
   // header, or programmatically by mini-map on pointerup if it commits a
   // snap.
-  const [dragPpdOverride, setDragPpdOverride] = useState<number | null>(null);
+  const sharedDragPpd = useSharedDragPpd();
+  const [localDragPpdOverride, setLocalDragPpdOverride] = useState<number | null>(null);
+  // On the cross-workspace /timeline surface, the mini-map resize handle
+  // writes through SharedAxis so every band scales together. On the
+  // single-workspace roadmap, fall back to per-band local state.
+  const dragPpdOverride = sharedDragPpd
+    ? sharedDragPpd.value
+    : localDragPpdOverride;
+  const setDragPpdOverride = sharedDragPpd
+    ? sharedDragPpd.set
+    : setLocalDragPpdOverride;
 
   const sharedRangeStart = sharedAxis?.range.start ?? null;
   const sharedRangeEnd = sharedAxis?.range.end ?? null;

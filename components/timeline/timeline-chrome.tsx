@@ -25,7 +25,7 @@ import { RoadmapHeader, ZOOMS, LANE_MODES, VIEW_MODES, type LaneMode, type ViewM
 import { RoadmapFilterBar } from "@/components/roadmap/roadmap-filter-bar";
 import { RoadmapMiniMap } from "@/components/roadmap/mini-map";
 import { AssigneeFilterRow } from "@/components/filters/assignee-filter-row";
-import { useSharedAxis } from "@/lib/roadmap/shared-axis";
+import { useSharedAxis, useSharedDragPpd } from "@/lib/roadmap/shared-axis";
 import type { Zoom } from "@/lib/roadmap/dates";
 import { dayDiff, pixelsPerDay } from "@/lib/roadmap/dates";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
@@ -47,6 +47,7 @@ export function TimelineChrome({
   const sp = useSearchParams();
   const [, startTransition] = useTransition();
   const sharedAxis = useSharedAxis();
+  const sharedDragPpd = useSharedDragPpd();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // --- URL-driven state, mirrors RoadmapView's reads ---
@@ -98,9 +99,12 @@ export function TimelineChrome({
     pushParams(params);
   }
   const setZoom = useCallback((next: Zoom) => {
+    // Discrete zoom exits any continuous mini-map resize so the new zoom's
+    // native ppd takes effect immediately across every band.
+    sharedDragPpd?.set(null);
     setUrlParam("zoom", next === "fit" ? null : next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp]);
+  }, [sp, sharedDragPpd]);
   const setLaneMode = useCallback((next: LaneMode) => {
     setUrlParam("lanes", next === "sub_board" ? null : next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -169,10 +173,11 @@ export function TimelineChrome({
     ? Math.max(1, dayDiff(sharedAxis.range.start, sharedAxis.range.end))
     : 1;
   const effectivePpd = useMemo(() => {
+    if (sharedDragPpd?.value != null) return sharedDragPpd.value;
     if (zoom !== "fit") return pixelsPerDay(zoom);
     if (containerWidth === 0) return 8; // pre-mount fallback
     return Math.max(2, containerWidth / FOCUS_DAYS);
-  }, [zoom, containerWidth]);
+  }, [zoom, containerWidth, sharedDragPpd?.value]);
 
   const canvasWidth = totalDays * effectivePpd;
 
@@ -249,9 +254,8 @@ export function TimelineChrome({
           fed with aggregated cards across every visible band and pointed at
           the first band's scroller via SharedAxis. Scroll-sync mirrors the
           write to every peer scroller, so clicking or dragging the viewport
-          rect scrolls all bands together. Drag-resize ppd override is
-          disabled cross-WS (noop) — N bands each own their own dragPpdOverride
-          local state, no single global write makes sense for it.
+          rect scrolls all bands together. Drag-resize writes through
+          SharedAxis.setDragPpdOverride so every band scales together.
 
           Gating on `primaryScroller` (not just `sharedAxis`) ensures the
           mini-map mounts AFTER at least one band has registered its scroller,
@@ -268,7 +272,7 @@ export function TimelineChrome({
             zoom={zoom}
             onSetZoom={setZoom}
             effectivePpd={effectivePpd}
-            onPpdOverride={noop as (ppd: number | null) => void}
+            onPpdOverride={sharedDragPpd?.set ?? (noop as (ppd: number | null) => void)}
           />
         </div>
       )}

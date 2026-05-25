@@ -46,7 +46,18 @@ type SharedAxisHandle = {
   primaryScroller: HTMLDivElement | null;
 };
 
+/** Cross-band live pixels-per-day override driven by the page-level
+ *  mini-map resize handle. Split into its own context so high-frequency
+ *  updates during a drag don't churn the main SharedAxisHandle identity,
+ *  which would re-fire every consumer effect that lists `sharedAxis` as a
+ *  dep (scroller re-registration, etc.) and trigger an update-depth loop. */
+type SharedDragPpdHandle = {
+  value: number | null;
+  set: (v: number | null) => void;
+};
+
 const SharedAxisContext = createContext<SharedAxisHandle | null>(null);
+const SharedDragPpdContext = createContext<SharedDragPpdHandle | null>(null);
 
 export function SharedAxisProvider({
   range,
@@ -64,6 +75,7 @@ export function SharedAxisProvider({
   // just snapshots which one is "first".
   const [primaryScroller, setPrimaryScroller] =
     useState<HTMLDivElement | null>(null);
+  const [dragPpdOverride, setDragPpdOverride] = useState<number | null>(null);
 
   const registerScroller = useCallback((el: HTMLDivElement) => {
     scrollersRef.current.add(el);
@@ -133,15 +145,30 @@ export function SharedAxisProvider({
     ],
   );
 
+  // Stable setter (useState setters are stable). Wrapping the live value in
+  // a separate memo keeps identity churn isolated from `value` above.
+  const dragValue = useMemo<SharedDragPpdHandle>(
+    () => ({ value: dragPpdOverride, set: setDragPpdOverride }),
+    [dragPpdOverride],
+  );
+
   return (
     <SharedAxisContext.Provider value={value}>
-      {children}
+      <SharedDragPpdContext.Provider value={dragValue}>
+        {children}
+      </SharedDragPpdContext.Provider>
     </SharedAxisContext.Provider>
   );
 }
 
 export function useSharedAxis(): SharedAxisHandle | null {
   return useContext(SharedAxisContext);
+}
+
+/** Subscribe to the cross-band drag-ppd override. Returns null outside a
+ *  SharedAxisProvider. */
+export function useSharedDragPpd(): SharedDragPpdHandle | null {
+  return useContext(SharedDragPpdContext);
 }
 
 /**
