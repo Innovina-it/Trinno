@@ -237,11 +237,22 @@ export function BoardView({
     if (!activeKey) return;
 
     if (activeKey.type === "list") {
-      const overKey = decodeId(String(over.id));
-      if (!overKey || overKey.type !== "list") return;
+      // dnd-kit picks the topmost intersecting droppable. Three live under
+      // each list column: the outer `list:<id>` sortable, the inner
+      // `list-drop:<id>` droppable (covers the cards-area), and the per-card
+      // `card:<id>` sortables. When the drag ends over an empty cards-area
+      // (common for a fresh list with zero cards) or over a card, the prior
+      // `overKey.type === "list"` guard bailed silently. Resolve the target
+      // list via `over.data.current.listId` instead — every droppable
+      // attached inside a list-column carries it.
+      const overData = over.data.current as
+        | { type?: string; listId?: string }
+        | undefined;
+      const overListId = overData?.listId ?? null;
+      if (!overListId || overListId === activeKey.id) return;
 
       const fromIdx = lists.findIndex((l) => l.id === activeKey.id);
-      const toIdx = lists.findIndex((l) => l.id === overKey.id);
+      const toIdx = lists.findIndex((l) => l.id === overListId);
       if (fromIdx < 0 || toIdx < 0) return;
 
       const reordered = arrayMove(lists, fromIdx, toIdx);
