@@ -14,6 +14,7 @@ const baseFilters: Filters = {
   unassigned: false,
   scheduled: false,
   hideCompleted: false,
+  showDates: false,
 };
 
 function card(id: string, ownerId: string | null): RoadmapFilterCard {

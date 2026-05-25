@@ -94,6 +94,7 @@ export function RoadmapFilterBar({
         unassigned: false,
         scheduled: false,
         hideCompleted: false,
+        showDates: false,
       },
       "",
     );

@@ -83,6 +83,7 @@ describe("scoped preferences", () => {
       unassigned: false,
       scheduled: true,
       hideCompleted: false,
+      showDates: false,
     };
     const preferences: Preferences = {
       boards: {

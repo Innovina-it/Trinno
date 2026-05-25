@@ -61,6 +61,9 @@ export function CardTile({
   const showStatus = laneMode !== "none";
 
   const sortableId = `card:${card.id}`;
+  // Display-only filter — when `dates=show` is absent from the URL the
+  // schedule chip in CardMetaRow is hidden. Default OFF on the board.
+  const showDates = sp.get("dates") === "show";
   const parentCard = useBoardStore((s) =>
     card.parentCardId ? s.cards.find((c) => c.id === card.parentCardId) : null,
   );
@@ -600,6 +603,7 @@ export function CardTile({
         sprintName={sprintName}
         showStatus={showStatus}
         workspaceId={workspaceId}
+        showDates={showDates}
         onSchedClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -679,6 +683,7 @@ function CardMetaRow({
   sprintName,
   showStatus,
   workspaceId,
+  showDates,
   onSchedClick,
   fmtShortDate,
 }: {
@@ -687,10 +692,11 @@ function CardMetaRow({
   sprintName: string | null;
   showStatus: boolean;
   workspaceId?: string;
+  showDates: boolean;
   onSchedClick: (e: React.MouseEvent) => void;
   fmtShortDate: (d: Date | string) => string;
 }) {
-  const hasSched = (card.startDate || card.targetDate) && workspaceId;
+  const hasSched = (card.startDate || card.targetDate) && workspaceId && showDates;
   const hasSprint = !!card.sprintId;
   const hasStatus = showStatus && !!statusKind;
   const hasDue = !!card.dueDate;

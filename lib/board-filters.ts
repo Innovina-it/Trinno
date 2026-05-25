@@ -19,6 +19,10 @@ export type Filters = {
   unassigned: boolean;
   scheduled: boolean;
   hideCompleted: boolean;
+  /** Display-only flag (does NOT filter cards). When true, the board's
+   *  card-tile renders the start/target date chip; when false (default)
+   *  the chip is hidden. URL key `dates=show` — absent means hidden. */
+  showDates: boolean;
 };
 
 export const FILTER_QUERY_KEYS = [
@@ -28,6 +32,7 @@ export const FILTER_QUERY_KEYS = [
   "assignee",
   "scheduled",
   "done",
+  "dates",
 ] as const;
 
 export function hasExplicitFilterParams(sp: URLSearchParams): boolean {
@@ -75,6 +80,8 @@ export function parseFilters(sp: URLSearchParams): Filters {
   // components/workload/workload-view.tsx). On the board the default is
   // OFF (completed cards visible) so we only persist when toggled on.
   const hideCompleted = sp.get("done") === "hide";
+  // `dates=show` opt-in. Default off → card-tile schedule chip hidden.
+  const showDates = sp.get("dates") === "show";
   return {
     types,
     labelIds,
@@ -83,6 +90,7 @@ export function parseFilters(sp: URLSearchParams): Filters {
     unassigned,
     scheduled,
     hideCompleted,
+    showDates,
   };
 }
 
@@ -96,6 +104,7 @@ export function serializeFilters(f: Filters): URLSearchParams {
   else sp.set("assignee", "all"); // explicit "All" — round-trips through URL
   if (f.scheduled) sp.set("scheduled", "1");
   if (f.hideCompleted) sp.set("done", "hide");
+  if (f.showDates) sp.set("dates", "show");
   return sp;
 }
 
@@ -122,7 +131,8 @@ export function isFilterActive(f: Filters): boolean {
     || f.assignedToMe
     || f.unassigned
     || f.scheduled
-    || f.hideCompleted;
+    || f.hideCompleted
+    || f.showDates;
 }
 
 export function applyFilters<T extends FilterCard>(

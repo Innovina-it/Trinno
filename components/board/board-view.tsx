@@ -522,6 +522,7 @@ export function BoardView({
                             unassigned: false,
                             scheduled: false,
                             hideCompleted: false,
+                            showDates: false,
                           },
                           dataVisibilityFilters: { assignee: "all" },
                         }),

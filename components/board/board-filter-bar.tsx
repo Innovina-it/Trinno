@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   CalendarClock,
+  CalendarOff,
   CalendarRange,
   ChevronDown,
   Eye,
@@ -94,6 +95,9 @@ export function BoardFilterBar({
   function toggleHideCompleted() {
     update({ ...filters, hideCompleted: !filters.hideCompleted });
   }
+  function toggleShowDates() {
+    update({ ...filters, showDates: !filters.showDates });
+  }
   function clear() {
     update({
       types: [],
@@ -103,6 +107,7 @@ export function BoardFilterBar({
       unassigned: false,
       scheduled: false,
       hideCompleted: false,
+      showDates: false,
     });
   }
 
@@ -232,6 +237,31 @@ export function BoardFilterBar({
         )}
         <span className="text-fg">
           {filters.hideCompleted ? "Hide completed" : "Show completed"}
+        </span>
+      </button>
+
+      {/* Show-dates toggle. URL key `dates=show` opts INTO showing the
+          start/target chip on each card-tile. Default OFF — board cards
+          stay clean. Toggling ON reveals the schedule chip. */}
+      <button
+        type="button"
+        data-testid="board-show-dates-toggle"
+        data-active={filters.showDates ? "true" : "false"}
+        aria-pressed={filters.showDates}
+        onClick={toggleShowDates}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
+          filters.showDates
+            ? "border-fg/40 bg-fg/10 text-fg"
+            : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
+        }`}
+      >
+        {filters.showDates ? (
+          <CalendarRange className="size-3.5" aria-hidden />
+        ) : (
+          <CalendarOff className="size-3.5" aria-hidden />
+        )}
+        <span className="text-fg">
+          {filters.showDates ? "Show dates" : "Hide dates"}
         </span>
       </button>
 

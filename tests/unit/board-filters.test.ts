@@ -114,6 +114,7 @@ describe("hideCompleted filter", () => {
     assignedToMe: false,
     unassigned: false,
     scheduled: false,
+    showDates: false,
   };
 
   it("parses done=hide as hideCompleted: true", () => {
