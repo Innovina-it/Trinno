@@ -1,7 +1,6 @@
 "use client";
 import {
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   useTransition,
@@ -10,17 +9,10 @@ import {
 import { createPortal } from "react-dom";
 import type React from "react";
 import {
-  Archive,
-  CalendarRange,
   Check,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
-  Flag,
-  LayoutGrid,
   MoreHorizontal,
-  MousePointerClick,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -33,6 +25,10 @@ import {
   PRIORITY_TINT,
   type CardPriority,
 } from "@/components/board/card/priority-picker";
+import {
+  CardContextMenu,
+  type CardContextMenuPosition,
+} from "@/components/board/card/card-context-menu";
 import {
   Dialog,
   DialogContent,
@@ -170,8 +166,6 @@ function statusFill(status: StatusKind | null, isHeader: boolean): {
   }
 }
 
-type ContextMenu = { x: number; y: number };
-
 function isoForInput(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -230,8 +224,7 @@ export function RoadmapBar({
   const router = useRouter();
   const patchCardLocal = useWorkspaceStore((s) => s.patchCard);
   const dot = TYPE_DOT[card.type] ?? "bg-fg/40";
-  const [menu, setMenu] = useState<ContextMenu | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menu, setMenu] = useState<CardContextMenuPosition | null>(null);
   const [datesOpen, setDatesOpen] = useState(false);
   const [datesStart, setDatesStart] = useState(() => isoForInput(card.startDate));
   const [datesTarget, setDatesTarget] = useState(() => isoForInput(card.targetDate));
@@ -268,24 +261,6 @@ export function RoadmapBar({
     };
   }, []);
 
-  useEffect(() => {
-    if (!menu) return;
-    function onDown(e: MouseEvent) {
-      if (!menuRef.current) return;
-      if (menuRef.current.contains(e.target as Node)) return;
-      setMenu(null);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setMenu(null);
-    }
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [menu]);
-
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault();
     setMenu({ x: e.clientX, y: e.clientY });
@@ -298,52 +273,7 @@ export function RoadmapBar({
     setMenu({ x: rect.left, y: rect.bottom + 4 });
   }
 
-  // Adjusted menu position after measuring the rendered menu's size.
-  // The raw click coordinates can push the menu past the viewport edges
-  // (especially the bottom row of cards in the roadmap), so we flip
-  // up/left when the natural placement would overflow.
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(
-    null,
-  );
-  useLayoutEffect(() => {
-    if (!menu) {
-      setMenuPos(null);
-      return;
-    }
-    const node = menuRef.current;
-    if (!node) {
-      setMenuPos({ top: menu.y, left: menu.x });
-      return;
-    }
-    const rect = node.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const margin = 8;
-    let top = menu.y;
-    let left = menu.x;
-    if (top + rect.height + margin > vh) {
-      top = Math.max(margin, menu.y - rect.height);
-    }
-    if (left + rect.width + margin > vw) {
-      left = Math.max(margin, menu.x - rect.width);
-    }
-    setMenuPos({ top, left });
-  }, [menu]);
-  const menuStyle: CSSProperties | undefined = menu
-    ? {
-        position: "fixed",
-        // Render off-screen on the first paint (before measurement) so the
-        // menu never flashes at the overflowing coords. Once useLayoutEffect
-        // runs, we apply the corrected position synchronously.
-        top: menuPos?.top ?? -9999,
-        left: menuPos?.left ?? -9999,
-        zIndex: 100,
-        visibility: menuPos ? "visible" : "hidden",
-      }
-    : undefined;
-
   function handleOpenCard() {
-    setMenu(null);
     // Prefer the in-place quick-view (zero navigation, no loading flash).
     // The parent (roadmap-view) registers `onOpen` which remembers the
     // roadmap origin and opens CardQuickView as an overlay. Only fall
@@ -356,19 +286,16 @@ export function RoadmapBar({
   }
 
   function handleInBoard() {
-    setMenu(null);
     router.push(`/b/${card.boardId}`);
   }
 
   function handleEditDates() {
-    setMenu(null);
     setDatesStart(isoForInput(card.startDate));
     setDatesTarget(isoForInput(card.targetDate));
     setDatesOpen(true);
   }
 
   function handleArchive() {
-    setMenu(null);
     startTransition(async () => {
       try {
         await archiveCard({ id: card.id, archived: true });
@@ -381,7 +308,6 @@ export function RoadmapBar({
 
   function handleToggleComplete() {
     const next = !isCompleted;
-    setMenu(null);
     // Optimistic patch to the workspace store so the bar flips
     // immediately. Realtime CDC will reconcile when the trigger emits
     // the canonical row. Without this, the bar stays in its pre-click
@@ -408,7 +334,6 @@ export function RoadmapBar({
   // are flat (no submenu) since the existing menu is a stack of plain
   // buttons. Includes a "Clear priority" entry when one is set.
   function handleSetPriority(next: CardPriority | null) {
-    setMenu(null);
     startTransition(async () => {
       try {
         await updateCard({ id: card.id, priority: next });
@@ -694,119 +619,23 @@ export function RoadmapBar({
           </div>,
           document.body,
         )}
-      {menu && typeof document !== "undefined" && createPortal(
-        <div
-          ref={menuRef}
-          role="menu"
-          data-testid="roadmap-bar-menu"
-          style={menuStyle}
-          // Stop pointerdown from bubbling to the canvas's
-          // onCanvasEmptyPointerDown which would start a phantom paint
-          // operation. The paint then completes on the next pointerup
-          // (often the user clicking "Save" in a follow-on dialog) and
-          // pops open the new-card dialog over the user's actual save.
-          onPointerDown={(e) => e.stopPropagation()}
-          className="min-w-48 max-h-[calc(100vh-16px)] overflow-y-auto rounded-md border border-hairline-hi bg-[color:var(--popover)] shadow-xl py-1 text-sm"
-        >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={handleOpenCard}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
-            data-testid="roadmap-bar-menu-open-card"
-          >
-            <MousePointerClick className="size-3" />
-            Open card
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={handleInBoard}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
-            data-testid="roadmap-bar-menu-in-board"
-          >
-            <LayoutGrid className="size-3" />
-            In board
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={handleEditDates}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
-            data-testid="roadmap-bar-menu-edit-dates"
-          >
-            <CalendarRange className="size-3" />
-            Edit dates
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={handleToggleComplete}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
-            data-testid="roadmap-bar-menu-complete"
-          >
-            <CheckCircle2 className="size-3" />
-            {isCompleted ? "Mark not complete" : "Mark complete"}
-          </button>
-          <div className="my-1 border-t border-hairline" />
-          {(["p0", "p1", "p2", "p3", "p4"] as CardPriority[]).map((p) => (
-            <button
-              key={p}
-              type="button"
-              role="menuitem"
-              onClick={() => handleSetPriority(p)}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
-              data-testid="roadmap-bar-menu-set-priority"
-              data-priority={p}
-            >
-              <span
-                aria-hidden
-                className={`size-2 rounded-full ${PRIORITY_TINT[p].dot}`}
-              />
-              <Flag className="size-3" />
-              Set {p.toUpperCase()}
-            </button>
-          ))}
-          {priority !== null && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => handleSetPriority(null)}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-fg-muted hover:bg-[rgb(255_255_255/0.06)]"
-              data-testid="roadmap-bar-menu-clear-priority"
-            >
-              <Flag className="size-3" />
-              Clear priority
-            </button>
-          )}
-          <div className="my-1 border-t border-hairline" />
-          <button
-            type="button"
-            role="menuitem"
-            onClick={handleArchive}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg hover:bg-[rgb(255_255_255/0.06)]"
-            data-testid="roadmap-bar-menu-archive"
-          >
-            <Archive className="size-3" />
-            Archive
-          </button>
-          <div className="my-1 border-t border-hairline" />
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setMenu(null);
-              router.push(`/b/${card.boardId}/c/${card.id}`);
-            }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-fg-muted hover:bg-[rgb(255_255_255/0.06)]"
-            data-testid="roadmap-bar-menu-open-board"
-          >
-            <ExternalLink className="size-3" />
-            Open in new view
-          </button>
-        </div>,
-        document.body,
-      )}
+      <CardContextMenu
+        menu={menu}
+        setMenu={setMenu}
+        isCompleted={isCompleted}
+        priority={priority}
+        testIdPrefix="roadmap-bar-menu"
+        actions={{
+          onOpen: handleOpenCard,
+          onInBoard: handleInBoard,
+          onEditDates: handleEditDates,
+          onToggleComplete: handleToggleComplete,
+          onSetPriority: handleSetPriority,
+          onArchive: handleArchive,
+          onOpenInNewView: () =>
+            router.push(`/b/${card.boardId}/c/${card.id}`),
+        }}
+      />
       <Dialog open={datesOpen} onOpenChange={setDatesOpen}>
         <DialogContent data-testid="roadmap-bar-dates-dialog">
           <DialogHeader>
