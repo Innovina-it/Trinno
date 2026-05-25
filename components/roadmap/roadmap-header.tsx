@@ -522,12 +522,12 @@ export function RoadmapHeader({
       <div className="flex items-center gap-1.5">
         {/* Date jump compound control. Hidden <md: (lives inside the
             Display sheet on mobile). */}
-        <div className="hidden md:inline-flex items-stretch rounded-full border border-hairline bg-[color:var(--surface)] divide-x divide-hairline overflow-hidden text-xs">
+        <div className="hidden md:inline-flex items-stretch rounded-full border border-hairline bg-[color:var(--surface)] divide-x divide-hairline text-xs">
           <button
             type="button"
             onClick={() => onJumpToDate(new Date())}
             data-testid="roadmap-jump-today"
-            className="px-3 py-1.5 hover:bg-[rgb(255_255_255/0.08)] text-fg"
+            className="px-3 py-1.5 hover:bg-[rgb(255_255_255/0.08)] text-fg rounded-l-full"
             title="Scroll to today"
           >
             Today
@@ -544,6 +544,7 @@ export function RoadmapHeader({
               }}
               triggerLabel="Jump to date"
               inputLabel="Jump to date"
+              align="right"
             />
           </div>
         </div>

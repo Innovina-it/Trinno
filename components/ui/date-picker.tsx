@@ -84,12 +84,14 @@ export function DatePicker({
   disabled,
   triggerLabel = "Set date",
   inputLabel = "Date",
+  align = "left",
 }: {
   value: Date | null;
   onChange: (next: Date | null) => void;
   disabled?: boolean;
   triggerLabel?: string;
   inputLabel?: string;
+  align?: "left" | "right";
 }) {
   const today = startOfDayUTC(new Date());
   const formattedValue = formatDate(value);
@@ -261,7 +263,9 @@ export function DatePicker({
             "aria-label": "Pick date",
             onKeyDown: onGridKey,
             className:
-              "absolute left-0 top-full mt-2 z-50 w-[640px] max-w-[calc(100vw-2rem)] rounded-2xl border border-hairline-hi bg-[color:var(--popover)] p-3 shadow-[0_40px_100px_-32px_rgba(0,0,0,0.6)] outline-none",
+              "absolute " +
+              (align === "right" ? "right-0" : "left-0") +
+              " top-full mt-2 z-50 w-[640px] max-w-[calc(100vw-2rem)] rounded-2xl border border-hairline-hi bg-[color:var(--popover)] p-3 shadow-[0_40px_100px_-32px_rgba(0,0,0,0.6)] outline-none",
           },
           createElement(
             "div",

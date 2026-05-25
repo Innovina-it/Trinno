@@ -52,4 +52,29 @@ describe("DatePicker", () => {
 
     expect(screen.getByRole("dialog", { name: "Pick date" })).toBeTruthy();
   });
+
+  it("picking a day from the grid fires onChange and closes the popup", () => {
+    let captured: Date | null = null;
+    function Harness() {
+      return createElement(DatePicker, {
+        value: null,
+        onChange: (d: Date | null) => {
+          captured = d;
+        },
+        triggerLabel: "Jump to date",
+        inputLabel: "Jump to date",
+      });
+    }
+    render(createElement(Harness));
+
+    fireEvent.click(screen.getByLabelText("Jump to date"));
+    expect(screen.getByRole("dialog", { name: "Pick date" })).toBeTruthy();
+
+    const dayButton = screen.getAllByRole("button").find((b) => b.textContent === "15");
+    if (!dayButton) throw new Error("day-15 button not found");
+    fireEvent.click(dayButton);
+
+    expect(captured).not.toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Pick date" })).toBeNull();
+  });
 });
