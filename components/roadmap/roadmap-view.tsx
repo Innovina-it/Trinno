@@ -916,16 +916,17 @@ export function RoadmapView({
   // <11h → start of column, 11-14h → middle, ≥14h → end of column.
   // currentHour ticks every minute so the line shifts across the 11/14
   // thresholds without a page reload (also recovers after a system clock change).
-  const [currentHour, setCurrentHour] = useState<number>(() =>
-    new Date().getHours(),
-  );
+  // null on server + first client render — keeps today marker x identical
+  // across hydration (offset = 0). Resolves to local hour after mount.
+  const [currentHour, setCurrentHour] = useState<number | null>(null);
   useEffect(() => {
     const tick = () => setCurrentHour(new Date().getHours());
+    tick();
     const id = setInterval(tick, 60_000);
     return () => clearInterval(id);
   }, []);
   const todayDayOffset = useMemo(() => {
-    if (zoom !== "week") return 0;
+    if (zoom !== "week" || currentHour === null) return 0;
     if (currentHour < 11) return 0;
     if (currentHour < 14) return effectivePpd / 2;
     return effectivePpd;
