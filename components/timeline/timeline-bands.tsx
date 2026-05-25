@@ -28,7 +28,6 @@ import { TimelineChrome } from "@/components/timeline/timeline-chrome";
 import { SharedAxisProvider } from "@/lib/roadmap/shared-axis";
 import { parseFilters } from "@/lib/board-filters";
 import { roadmapUserFilterPasses } from "@/lib/roadmap/filtering";
-import { gridStartFor } from "@/lib/roadmap/dates";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
 
 export type TimelineBand = {
@@ -133,10 +132,23 @@ export function TimelineBands({
   }, [bands, filters, queryNorm, viewerId]);
 
   // --- Filter-aware aggregate range + cards ---
+  // Today-anchored window: ~1 month back, ~6 months forward, snapped to
+  // month boundaries. Stable across filter changes so toggling Mine/All
+  // doesn't reshape the axis. Extended only when cards fall outside the
+  // window so out-of-window bars remain reachable by horizontal scroll.
+  // Fit zoom is computed against a fixed FOCUS_DAYS in TimelineChrome /
+  // RoadmapView so the visible density stays readable regardless of how
+  // far the extension reaches.
   const range = useMemo(() => {
-    const now = Date.now();
+    const now = new Date();
+    const defaultStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
+    );
+    const defaultEnd = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 6, 1),
+    );
     if (visibleBands.length === 0) {
-      return { start: new Date(now), end: new Date(now + 30 * 86_400_000) };
+      return { start: defaultStart, end: defaultEnd };
     }
     const earliest = visibleBands.reduce(
       (acc, b) => (b.earliestStartMs < acc ? b.earliestStartMs : acc),
@@ -146,15 +158,28 @@ export function TimelineBands({
       (acc, b) => (b.latestEndMs > acc ? b.latestEndMs : acc),
       Number.NEGATIVE_INFINITY,
     );
-    const start = gridStartFor(new Date(earliest), "fit");
-    const latestDate = new Date(latest);
-    const end = new Date(
-      Date.UTC(
-        latestDate.getUTCFullYear(),
-        latestDate.getUTCMonth() + 1,
-        1,
-      ),
-    );
+    let start = defaultStart;
+    if (earliest < defaultStart.getTime()) {
+      const earliestDate = new Date(earliest);
+      start = new Date(
+        Date.UTC(
+          earliestDate.getUTCFullYear(),
+          earliestDate.getUTCMonth(),
+          1,
+        ),
+      );
+    }
+    let end = defaultEnd;
+    if (latest > defaultEnd.getTime()) {
+      const latestDate = new Date(latest);
+      end = new Date(
+        Date.UTC(
+          latestDate.getUTCFullYear(),
+          latestDate.getUTCMonth() + 1,
+          1,
+        ),
+      );
+    }
     return { start, end };
   }, [visibleBands]);
 
@@ -207,31 +232,22 @@ export function TimelineBands({
     );
   }
 
-  // Last expanded band absorbs leftover viewport vertical space via
-  // `fillHeight` + a `flex-1` wrapper, so filters that narrow the canvas to
-  // a few lanes don't leave a stark dark void below the band. Earlier bands
-  // and collapsed strips keep their natural intrinsic height.
-  let lastExpandedIdx = -1;
-  for (let i = visibleBands.length - 1; i >= 0; i--) {
-    if (!collapsedIds.has(visibleBands[i].band.id)) {
-      lastExpandedIdx = i;
-      break;
-    }
-  }
-
+  // Bands size to their natural lane content. Any leftover vertical space
+  // on the page sits below the band stack as plain page background — no
+  // band frame stretches past its content into a dark void.
   return (
     <SharedAxisProvider range={range}>
-      <div className="flex flex-col flex-1 min-h-0 gap-3">
+      <div className="flex flex-col gap-3">
         <TimelineChrome
           bandIds={visibleBands.map((v) => v.band.id)}
           aggregatedCards={aggregatedCards}
         />
         <div
-          className="flex flex-col flex-1 min-h-0 gap-3"
+          className="flex flex-col gap-3"
           data-testid="timeline-bands"
         >
           {visibleBands.map(
-            ({ band, visibleCards, earliestStartMs, latestEndMs }, idx) => {
+            ({ band, visibleCards, earliestStartMs, latestEndMs }) => {
               const isCollapsed = collapsedIds.has(band.id);
               if (isCollapsed) {
                 return (
@@ -246,16 +262,8 @@ export function TimelineBands({
                   />
                 );
               }
-              const isLastExpanded = idx === lastExpandedIdx;
               return (
-                <div
-                  key={band.id}
-                  className={
-                    isLastExpanded
-                      ? "flex flex-col flex-1 min-h-0"
-                      : "flex flex-col"
-                  }
-                >
+                <div key={band.id} className="flex flex-col">
                   <WorkspaceStoreProvider initial={band.snapshot}>
                     <RoadmapView
                       workspaceId={band.id}
@@ -268,7 +276,6 @@ export function TimelineBands({
                       hideChrome
                       onCollapse={() => toggle(band.id)}
                       compactLanes
-                      fillHeight={isLastExpanded}
                     />
                   </WorkspaceStoreProvider>
                 </div>

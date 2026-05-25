@@ -86,7 +86,7 @@ export default async function CommonTimelinePage({
     }));
 
   return (
-    <div className="mx-auto max-w-screen-2xl px-3 sm:px-4 md:px-6 py-5 md:py-7 flex flex-col gap-5 min-h-[calc(100dvh-3.5rem)]">
+    <div className="mx-auto max-w-screen-2xl px-3 sm:px-4 md:px-6 py-5 md:py-7 flex flex-col gap-5">
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div className="space-y-1.5">
           <span className="mono-meta-sm tracking-widest text-fg-faint">

@@ -157,24 +157,22 @@ export function TimelineChrome({
     return () => ro.disconnect();
   }, [sharedAxis?.primaryScroller]);
 
-  // Match RoadmapView's effectivePpd EXACTLY (roadmap-view.tsx:860). When a
-  // shared axis is mounted (i.e. on /timeline), fit-zoom divides by the
-  // total days of the shared range so the canvas fits the viewport — same
-  // ppd a band uses, so mini-map's canvasWidth equals the band scroller's
-  // scrollWidth. Without this, the mini-map's ratio is wrong: the viewport
-  // rect under-sizes and the strip looks like it has further to scroll
-  // when it doesn't.
+  // Fit zoom divides by a fixed ~6-month focus window so the visible
+  // density stays readable even when the shared range extends to cover
+  // distant cards. The canvas can still grow past the viewport — users
+  // scroll horizontally to reach extensions; Fit no longer compresses
+  // every card into a sliver when the data span is large. Must match
+  // RoadmapView's Fit computation so mini-map canvasWidth = band scroller
+  // scrollWidth.
+  const FOCUS_DAYS = 180;
   const totalDays = sharedAxis
     ? Math.max(1, dayDiff(sharedAxis.range.start, sharedAxis.range.end))
     : 1;
   const effectivePpd = useMemo(() => {
     if (zoom !== "fit") return pixelsPerDay(zoom);
     if (containerWidth === 0) return 8; // pre-mount fallback
-    if (sharedAxis) {
-      return Math.max(2, containerWidth / totalDays);
-    }
-    return Math.max(2, containerWidth / 180);
-  }, [zoom, containerWidth, sharedAxis, totalDays]);
+    return Math.max(2, containerWidth / FOCUS_DAYS);
+  }, [zoom, containerWidth]);
 
   const canvasWidth = totalDays * effectivePpd;
 

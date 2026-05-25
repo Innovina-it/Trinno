@@ -21,6 +21,11 @@ export interface MilestoneMarkersProps {
   gridStart: Date;
   gridEnd: Date;
   headerHeight: number;
+  /** Lane-content height. When set, the milestone vertical line is clamped
+   *  to this height instead of the full canvas — used on /timeline where
+   *  the canvas grows past lane content to fill the viewport, so the line
+   *  doesn't bleed into the empty area below the lanes. */
+  bodyHeight?: number;
   /** Whether the current user may edit/delete milestones. */
   canAdmin: boolean;
   /** Earliest task start date across the relevant scope. A milestone may
@@ -50,6 +55,7 @@ export function MilestoneMarkers({
   gridStart,
   gridEnd,
   headerHeight,
+  bodyHeight,
   canAdmin,
   minDate,
   onEdit,
@@ -147,20 +153,28 @@ export function MilestoneMarkers({
         const x = Math.round((days + 1) * ppd);
         const isOpen = popoverId === m.id;
 
+        // When bodyHeight is provided, clamp the vertical line to lane
+        // content height so the empty area below lanes (on /timeline with
+        // fillHeight) stays free of marker lines bleeding through.
+        const lineStyle: React.CSSProperties = bodyHeight
+          ? { top: 0, height: bodyHeight }
+          : { top: 0, bottom: 0 };
+        const wrapperStyle: React.CSSProperties = bodyHeight
+          ? { left: x, top: 0, height: bodyHeight }
+          : { left: x, top: 0, bottom: 0 };
+
         return (
           <div
             key={m.id}
             data-testid={`milestone-marker-${m.id}`}
-            className="absolute inset-y-0 pointer-events-auto"
-            style={{ left: x }}
+            className="absolute pointer-events-auto"
+            style={wrapperStyle}
           >
-            {/* Vertical line — draggable. Uses inset-y-0 so it follows the
-                canvas's actual rendered height, including the cross-workspace
-                /timeline surface where the last visible band's canvas grows
-                past `totalHeight` to fill the viewport. */}
+            {/* Vertical line — draggable. */}
             <div
-              className="absolute inset-y-0 w-px cursor-ew-resize"
+              className="absolute w-px cursor-ew-resize"
               style={{
+                ...lineStyle,
                 backgroundColor: m.color,
                 opacity: 0.75,
               }}

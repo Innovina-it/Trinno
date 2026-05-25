@@ -872,26 +872,17 @@ export function RoadmapView({
 
   // Resolve effective pixels-per-day.
   // For fixed zoom levels this is the static value from pixelsPerDay().
-  // For "fit" we compute it so the visible range fills the canvas width.
-  // dragPpdOverride wins over both — used by the mini-map for continuous
-  // resize-to-zoom.
+  // For "fit" we divide by a 180-day focus window so density stays
+  // readable; the canvas (totalDays * effectivePpd) can grow past the
+  // viewport when the shared range extends to cover distant cards, and
+  // the user scrolls to them. dragPpdOverride wins over both — used by
+  // the mini-map for continuous resize-to-zoom.
   const effectivePpd = useMemo(() => {
     if (dragPpdOverride !== null) return dragPpdOverride;
     if (zoom !== "fit") return pixelsPerDay(zoom);
     if (containerWidth === 0) return 8; // pre-mount fallback
-    // When a shared axis (timeline page) provides an explicit range, divide
-    // by that range so the data span auto-scales to viewport width. Falls
-    // back to the legacy 180-day window for the single-workspace roadmap
-    // where no shared axis is mounted.
-    if (sharedRangeStart && sharedRangeEnd) {
-      const days = Math.max(
-        1,
-        dayDiff(sharedRangeStart, sharedRangeEnd),
-      );
-      return Math.max(2, containerWidth / days);
-    }
     return Math.max(2, containerWidth / 180);
-  }, [dragPpdOverride, zoom, containerWidth, sharedRangeStart, sharedRangeEnd]);
+  }, [dragPpdOverride, zoom, containerWidth]);
 
   const now = useMemo(() => new Date(), []);
   // Base origin = current period (week/month/quarter). If any card starts
@@ -1781,7 +1772,8 @@ export function RoadmapView({
         </div>
       ) : (
         <>
-          {lanes.length === 1 &&
+          {!compactLanes &&
+            lanes.length === 1 &&
             lanes[0].kind === "uncategorized" &&
             lanes[0].cards.length <= 1 && (
               <div
@@ -1792,7 +1784,7 @@ export function RoadmapView({
               </div>
             )}
         <div
-          className={`flex border border-hairline rounded-xl overflow-hidden${
+          className={`flex border border-hairline rounded-xl overflow-hidden bg-[color:var(--bg-1)]${
             fillHeight ? " flex-1 min-h-0" : ""
           }`}
           data-testid="roadmap-grid"
@@ -2025,18 +2017,23 @@ export function RoadmapView({
                   </div>
                 ))}
               </div>
-              {/* Vertical grid lines that span full height */}
+              {/* Vertical grid lines — clamped to lane content height so
+                  when the canvas stretches past `totalHeight` (fillHeight
+                  on /timeline) the empty area below lanes stays free of
+                  hairlines bleeding through. */}
               {ticks.map((t, i) => (
                 <div
                   key={`vl-${i}`}
                   aria-hidden
-                  className="absolute top-0 bottom-0 border-l border-hairline/40"
-                  style={{ left: t.x }}
+                  className="absolute top-0 border-l border-hairline/40"
+                  style={{ left: t.x, height: totalHeight }}
                 />
               ))}
               {/* Today marker — vertical 1px line at today's x. Rendered
                   beneath bars (z-default) so a bar covering today still
-                  shows the line through hairline transparency. */}
+                  shows the line through hairline transparency. Height
+                  clamped to lane content for the same reason as the grid
+                  lines above. */}
               {(() => {
                 const todayX = xForDate(startOfDay(now), gridStart, effectivePpd);
                 if (todayX < 0 || todayX > width) return null;
@@ -2044,8 +2041,8 @@ export function RoadmapView({
                   <div
                     aria-hidden
                     data-testid="roadmap-today-marker"
-                    className="absolute top-0 bottom-0 w-px bg-fg/30 pointer-events-none"
-                    style={{ left: todayX }}
+                    className="absolute top-0 w-px bg-fg/30 pointer-events-none"
+                    style={{ left: todayX, height: totalHeight }}
                   >
                     <span
                       className="absolute -translate-x-1/2 mono-meta-sm text-fg-faint bg-[color:var(--popover)] px-1.5 py-0.5 rounded-md border border-hairline-hi"
@@ -2120,7 +2117,7 @@ export function RoadmapView({
                         style={{
                           left: x,
                           top: HEADER_STRIP_HEIGHT,
-                          bottom: 0,
+                          height: Math.max(0, totalHeight - HEADER_STRIP_HEIGHT),
                           width: 2 * effectivePpd,
                         }}
                       />,
@@ -2150,7 +2147,7 @@ export function RoadmapView({
                       style={{
                         left: x,
                         top: HEADER_STRIP_HEIGHT,
-                        bottom: 0,
+                        height: Math.max(0, totalHeight - HEADER_STRIP_HEIGHT),
                         width: effectivePpd,
                       }}
                     />
@@ -2230,6 +2227,7 @@ export function RoadmapView({
                   gridStart={gridStart}
                   gridEnd={gridEnd}
                   headerHeight={HEADER_STRIP_HEIGHT}
+                  bodyHeight={fillHeight ? totalHeight : undefined}
                   canAdmin={true}
                   minDate={earliestCardStart}
                   onEdit={(m) => {
