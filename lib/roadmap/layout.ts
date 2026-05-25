@@ -151,31 +151,58 @@ export function groupBySubBoard<C extends RoadmapCard>(
       };
     });
 
-  // Top-level cards that don't belong to any visible sub-board lane get
-  // their OWN single-row self-lane, mirroring how anchor cards become lanes.
-  // Subtasks remain nested under their parent via `subtaskRowsByParent`.
-  // Lane title resolves to the orphan's PARENT BOARD name (when supplied),
-  // so a card sitting on a regular top-level board reads as "{Board}"
-  // instead of echoing the card's own title. Falls back to the card title
-  // when no board map is supplied or the board id isn't in the map.
+  // Top-level cards that don't belong to any visible sub-board lane are
+  // grouped into ONE lane per parent board, with the cards stacked into
+  // rows inside that lane. Previously every orphan card became its own
+  // self-lane, which produced N duplicate "{Board}" rows when a board had
+  // N untouched top-level cards. Lane title still resolves to the parent
+  // board's name when supplied; falls back to the first card's title.
   const boardTitleById = new Map(boards.map((b) => [b.id, b.title]));
-  const orphanLanes: Lane<C>[] = orphans
-    .slice()
+  const orphansByBoard = new Map<string, C[]>();
+  for (const c of orphans) {
+    const arr = orphansByBoard.get(c.boardId) ?? [];
+    arr.push(c);
+    orphansByBoard.set(c.boardId, arr);
+  }
+  const minOrderFor = (laneCards: C[]): number | null => {
+    let min: number | null = null;
+    for (const c of laneCards) {
+      const r = c.roadmapOrder ?? null;
+      if (r === null) continue;
+      if (min === null || r < min) min = r;
+    }
+    return min;
+  };
+  const orphanLanes: Lane<C>[] = [...orphansByBoard.entries()]
+    .map(([boardId, laneCards]) => {
+      const sorted = laneCards.slice().sort((a, b) => {
+        const ar = a.roadmapOrder ?? null;
+        const br = b.roadmapOrder ?? null;
+        if (ar !== null && br !== null) return ar - br;
+        if (ar !== null) return -1;
+        if (br !== null) return 1;
+        return a.title.localeCompare(b.title);
+      });
+      return {
+        boardId,
+        cards: sorted,
+        title: boardTitleById.get(boardId) ?? sorted[0].title,
+        minOrder: minOrderFor(sorted),
+      };
+    })
     .sort((a, b) => {
-      const ar = a.roadmapOrder ?? null;
-      const br = b.roadmapOrder ?? null;
-      if (ar !== null && br !== null) return ar - br;
-      if (ar !== null) return -1;
-      if (br !== null) return 1;
+      if (a.minOrder !== null && b.minOrder !== null) return a.minOrder - b.minOrder;
+      if (a.minOrder !== null) return -1;
+      if (b.minOrder !== null) return 1;
       return a.title.localeCompare(b.title);
     })
-    .map<Lane<C>>((c) => ({
-      id: c.id,
-      title: boardTitleById.get(c.boardId) ?? c.title,
+    .map<Lane<C>>(({ boardId, cards: laneCards, title }) => ({
+      id: boardId,
+      title,
       kind: "uncategorized",
-      headerCard: c,
-      cards: [],
-      subtaskRowsByParent: subtaskRowsFor([c.id]),
+      headerCard: null,
+      cards: laneCards,
+      subtaskRowsByParent: subtaskRowsFor(laneCards.map((c) => c.id)),
     }));
 
   return [...subBoardLanes, ...orphanLanes];

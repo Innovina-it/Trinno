@@ -25,7 +25,7 @@ describe("groupBySubBoard", () => {
     parentCardId: over.parentCardId ?? null,
   });
 
-  it("creates one lane per sub-board + a self-lane per orphan card", () => {
+  it("creates one lane per sub-board + one merged lane per orphan board", () => {
     // Anchor card lives on the parent board "B"; its sub-board is "sb1".
     const anchor = card({ id: "e1", title: "Anchor A", boardId: "B" });
     // Child lives inside the sub-board (boardId = sub-board id).
@@ -39,9 +39,50 @@ describe("groupBySubBoard", () => {
     expect(lanes.find((l) => l.id === "sb1")?.cards.map((c) => c.id)).toEqual([
       "s1",
     ]);
-    const orphanLane = lanes.find((l) => l.id === "s2");
-    expect(orphanLane?.headerCard?.id).toBe("s2");
-    expect(orphanLane?.cards).toEqual([]);
+    // Orphan lane is keyed by its parent board id; the orphan card sits in
+    // lane.cards (no header card — board name is the lane label).
+    const orphanLane = lanes.find((l) => l.id === "B");
+    expect(orphanLane?.headerCard).toBeNull();
+    expect(orphanLane?.cards.map((c) => c.id)).toEqual(["s2"]);
+  });
+
+  it("merges multiple orphan cards on the same board into one lane", () => {
+    const a = card({ id: "a", title: "A", boardId: "B" });
+    const b = card({
+      id: "b",
+      title: "B",
+      boardId: "B",
+      startDate: new Date("2026-05-10T00:00:00Z"),
+      targetDate: new Date("2026-05-15T00:00:00Z"),
+    });
+    const c = card({
+      id: "c",
+      title: "C",
+      boardId: "B",
+      startDate: new Date("2026-05-20T00:00:00Z"),
+      targetDate: new Date("2026-05-25T00:00:00Z"),
+    });
+    const lanes = groupBySubBoard([a, b, c], [], [{ id: "B", title: "General" }]);
+    expect(lanes).toHaveLength(1);
+    expect(lanes[0].id).toBe("B");
+    expect(lanes[0].title).toBe("General");
+    expect(lanes[0].kind).toBe("uncategorized");
+    expect(lanes[0].cards.map((c) => c.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("keeps separate lanes for orphans that live on different boards", () => {
+    const a = card({ id: "a", boardId: "B1" });
+    const b = card({ id: "b", boardId: "B2" });
+    const lanes = groupBySubBoard(
+      [a, b],
+      [],
+      [
+        { id: "B1", title: "Board One" },
+        { id: "B2", title: "Board Two" },
+      ],
+    );
+    expect(lanes).toHaveLength(2);
+    expect(lanes.map((l) => l.id).sort()).toEqual(["B1", "B2"]);
   });
 
   it("uses the anchor card as the lane header", () => {
@@ -65,7 +106,7 @@ describe("groupBySubBoard", () => {
     expect(lane.headerCard?.id).toBe("e1");
   });
 
-  it("orders sub-board lanes alphabetically by anchor title with orphan self-lanes last", () => {
+  it("orders sub-board lanes alphabetically by anchor title with orphan lanes last", () => {
     const anchorB = card({ id: "eb", title: "Beta", boardId: "B" });
     const anchorA = card({ id: "ea", title: "Alpha", boardId: "B" });
     const orphan = card({ id: "s1", title: "Orphan", boardId: "B" });
@@ -76,7 +117,8 @@ describe("groupBySubBoard", () => {
         sub({ id: "sba", parentCardId: "ea" }),
       ],
     );
-    expect(lanes.map((l) => l.id)).toEqual(["sba", "sbb", "s1"]);
+    // Orphan lane is keyed by the orphan's board id ("B"), not the card id.
+    expect(lanes.map((l) => l.id)).toEqual(["sba", "sbb", "B"]);
   });
 
   it("does not emit any orphan lane when every visible card belongs to a sub-board lane", () => {
@@ -89,7 +131,7 @@ describe("groupBySubBoard", () => {
     expect(lanes.map((l) => l.id)).toEqual(["sba"]);
   });
 
-  it("sub-board lanes use kind=sub_board; orphan self-lanes use kind=uncategorized", () => {
+  it("sub-board lanes use kind=sub_board; orphan lanes use kind=uncategorized", () => {
     const anchorA = card({ id: "ea", title: "Alpha", boardId: "B" });
     const orphan = card({ id: "s1", boardId: "B" });
     const lanes = groupBySubBoard(
@@ -97,18 +139,18 @@ describe("groupBySubBoard", () => {
       [sub({ id: "sba", parentCardId: "ea" })],
     );
     expect(lanes.find((l) => l.id === "sba")?.kind).toBe("sub_board");
-    expect(lanes.find((l) => l.id === "s1")?.kind).toBe("uncategorized");
+    expect(lanes.find((l) => l.id === "B")?.kind).toBe("uncategorized");
   });
 
   it("skips sub-boards whose anchor card is not in the cards input", () => {
     // Sub-board points at an anchor card we don't have — it's hidden, not
-    // an error. Falls back to orphan lane for visible cards.
+    // an error. Falls back to orphan lane keyed by the orphan's board id.
     const orphan = card({ id: "s1", boardId: "B" });
     const lanes = groupBySubBoard(
       [orphan],
       [sub({ id: "sba", parentCardId: "missing-anchor" })],
     );
-    expect(lanes.map((l) => l.id)).toEqual(["s1"]);
+    expect(lanes.map((l) => l.id)).toEqual(["B"]);
   });
 
   it("orphan lane title uses parent board name when boards map is supplied", () => {
@@ -119,18 +161,19 @@ describe("groupBySubBoard", () => {
       [{ id: "B", title: "General" }],
     );
     expect(lanes).toHaveLength(1);
-    expect(lanes[0].id).toBe("s1");
+    expect(lanes[0].id).toBe("B");
     expect(lanes[0].title).toBe("General");
-    expect(lanes[0].headerCard?.id).toBe("s1");
+    expect(lanes[0].headerCard).toBeNull();
+    expect(lanes[0].cards.map((c) => c.id)).toEqual(["s1"]);
   });
 
-  it("orphan lane falls back to card title when board id is not in boards map", () => {
+  it("orphan lane falls back to first card title when board id is not in boards map", () => {
     const orphan = card({ id: "s1", title: "Some Card", boardId: "B" });
     const lanes = groupBySubBoard([orphan], [], [{ id: "OTHER", title: "X" }]);
     expect(lanes[0].title).toBe("Some Card");
   });
 
-  it("orphan lane falls back to card title when no boards map is supplied", () => {
+  it("orphan lane falls back to first card title when no boards map is supplied", () => {
     const orphan = card({ id: "s1", title: "Some Card", boardId: "B" });
     const lanes = groupBySubBoard([orphan], []);
     expect(lanes[0].title).toBe("Some Card");
