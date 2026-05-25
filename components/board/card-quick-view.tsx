@@ -416,6 +416,15 @@ function CardQuickViewBody({
   // of the fields. Discard drops them. Without this, an auto-saved subtask
   // would leave the footer button at "Close" while a real change exists.
   const [draftSubtasks, setDraftSubtasks] = useState<DraftSubtask[]>([]);
+  // Assignee toggles also defer to Save — same reason as subtasks. Baseline
+  // is frozen at mount (body is keyed by card.id so a card swap remounts
+  // the body and re-snapshots).
+  const [baselineMemberIds] = useState<Set<string>>(
+    () => new Set(memberProfiles.map((p) => p.id)),
+  );
+  const [memberDraft, setMemberDraft] = useState<Set<string>>(
+    () => new Set(memberProfiles.map((p) => p.id)),
+  );
 
   const [titleEditing, setTitleEditing] = useState(false);
   const titleCommitRef = useRef(false);
@@ -450,6 +459,15 @@ function CardQuickViewBody({
   const startChanged = dateMs(startDraft) !== dateMs(card.startDate);
   const targetChanged = dateMs(targetDraft) !== dateMs(card.targetDate);
   const draftsChanged = draftSubtasks.length > 0;
+  let membersChanged = memberDraft.size !== baselineMemberIds.size;
+  if (!membersChanged) {
+    for (const id of memberDraft) {
+      if (!baselineMemberIds.has(id)) {
+        membersChanged = true;
+        break;
+      }
+    }
+  }
   const dirty =
     titleChanged ||
     descChanged ||
@@ -458,7 +476,8 @@ function CardQuickViewBody({
     typeChanged ||
     startChanged ||
     targetChanged ||
-    draftsChanged;
+    draftsChanged ||
+    membersChanged;
 
   // Surface dirty + confirm hook to the wrapper so dismiss attempts
   // (X icon, Esc, outside-click) divert into the confirm phase.
@@ -483,6 +502,7 @@ function CardQuickViewBody({
     setStartDraft(card.startDate);
     setTargetDraft(card.targetDate);
     setDraftSubtasks([]);
+    setMemberDraft(new Set(baselineMemberIds));
     setTitleEditing(false);
     setDescEditing(false);
     setConfirming(false);
@@ -495,6 +515,7 @@ function CardQuickViewBody({
     basePriority,
     baseCompleted,
     cardType,
+    baselineMemberIds,
     dirtyRef,
   ]);
 
@@ -509,7 +530,22 @@ function CardQuickViewBody({
     if (startChanged) patch.startDate = startDraft;
     if (targetChanged) patch.targetDate = targetDraft;
     const queuedDrafts = draftSubtasks;
-    if (Object.keys(patch).length === 0 && queuedDrafts.length === 0) {
+    const memberAdds: string[] = [];
+    const memberRemoves: string[] = [];
+    if (membersChanged && onToggleMember) {
+      for (const id of memberDraft) {
+        if (!baselineMemberIds.has(id)) memberAdds.push(id);
+      }
+      for (const id of baselineMemberIds) {
+        if (!memberDraft.has(id)) memberRemoves.push(id);
+      }
+    }
+    const hasMemberDiff = memberAdds.length + memberRemoves.length > 0;
+    if (
+      Object.keys(patch).length === 0 &&
+      queuedDrafts.length === 0 &&
+      !hasMemberDiff
+    ) {
       setConfirming(false);
       onClose();
       return;
@@ -527,6 +563,13 @@ function CardQuickViewBody({
         for (const draft of queuedDrafts) {
           await onCreateSubtask(draft.title);
         }
+      }
+      // Replay assignee diff. onToggleMember owns optimistic store updates
+      // + board-member upsert mirror (trigger 0098) at the caller site, so
+      // sequential awaits preserve that contract.
+      if (hasMemberDiff && onToggleMember) {
+        for (const id of memberAdds) await onToggleMember(id);
+        for (const id of memberRemoves) await onToggleMember(id);
       }
       setDraftSubtasks([]);
       dirtyRef.current = false;
@@ -552,8 +595,12 @@ function CardQuickViewBody({
     startDraft,
     targetDraft,
     draftSubtasks,
+    membersChanged,
+    memberDraft,
+    baselineMemberIds,
     onPatch,
     onCreateSubtask,
+    onToggleMember,
     onClose,
     dirtyRef,
   ]);
@@ -616,7 +663,15 @@ function CardQuickViewBody({
   // to the assigned list (read-only display).
   const memberPool: QuickViewMember[] =
     availableMembers && membersEditable ? availableMembers : memberProfiles;
-  const assignedIds = new Set(memberProfiles.map((p) => p.id));
+
+  const toggleMemberDraft = useCallback((id: string) => {
+    setMemberDraft((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   return (
     <>
@@ -875,8 +930,8 @@ function CardQuickViewBody({
                 displayName: p.displayName,
                 avatarUrl: p.avatarUrl,
               }))}
-              selected={assignedIds}
-              onToggle={(id) => void onToggleMember?.(id)}
+              selected={memberDraft}
+              onToggle={toggleMemberDraft}
               testId="card-quick-view-assignees"
             />
           ) : memberProfiles.length > 0 ? (
