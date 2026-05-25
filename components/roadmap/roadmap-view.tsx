@@ -1856,7 +1856,7 @@ export function RoadmapView({
               {workspaceColumn.href ? (
                 <Link
                   href={workspaceColumn.href}
-                  className="block w-full h-full mono-meta-sm tracking-[0.14em] text-fg-muted hover:text-fg transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+                  className="block w-full mono-meta-sm tracking-[0.14em] text-fg-muted hover:text-fg transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
                   style={{
                     writingMode: "vertical-rl",
                     paddingTop: HEADER_STRIP_HEIGHT + 12,
@@ -1868,7 +1868,7 @@ export function RoadmapView({
                 </Link>
               ) : (
                 <div
-                  className="block w-full h-full mono-meta-sm tracking-[0.14em] text-fg-muted"
+                  className="block w-full mono-meta-sm tracking-[0.14em] text-fg-muted"
                   style={{
                     writingMode: "vertical-rl",
                     paddingTop: HEADER_STRIP_HEIGHT + 12,
