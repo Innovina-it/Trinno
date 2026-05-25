@@ -404,8 +404,17 @@ export function useRoadmapDragHarness(
     (
       d: Date,
       includeBlockers: boolean,
+      origDate?: Date,
     ): SnapPreview | null => {
       type Cand = SnapPreview & { thresholdDays: number };
+      // Directional snap (see snapDate): only consider candidates on the
+      // path between origin and current position. Keeps preview consistent
+      // with the commit-time snap so the user doesn't see a snap hint they
+      // won't actually get on pointerup.
+      const origMs = origDate ? startOfDay(origDate).getTime() : null;
+      const dMs = startOfDay(d).getTime();
+      const direction =
+        origMs === null ? 0 : dMs < origMs ? -1 : dMs > origMs ? 1 : 0;
       const candidates: Cand[] = [];
       const day = d.getUTCDay();
       const sinceMonday = (day + 6) % 7;
@@ -443,10 +452,19 @@ export function useRoadmapDragHarness(
           });
         }
       }
+      const dragMagnitudeDays =
+        origMs === null ? Number.POSITIVE_INFINITY : Math.abs(dayDiff(d, new Date(origMs)));
       let best: Cand | null = null;
       let bestDiff = Number.POSITIVE_INFINITY;
       for (const c of candidates) {
+        const candMs = c.date.getTime();
+        // Snap must never reverse the user's drag direction (no rewinds)
+        // and must not pull the bar farther than the user actually dragged
+        // (no over-extend past intent).
+        if (direction === -1 && candMs > dMs) continue;
+        if (direction === 1 && candMs < dMs) continue;
         const diff = Math.abs(dayDiff(d, c.date));
+        if (diff > dragMagnitudeDays) continue;
         if (diff <= c.thresholdDays && diff < bestDiff) {
           best = c;
           bestDiff = diff;
@@ -458,7 +476,23 @@ export function useRoadmapDragHarness(
   );
 
   const snapDate = useCallback(
-    (d: Date, extraCandidates: Date[] = []): Date => {
+    (d: Date, extraCandidates: Date[] = [], origDate?: Date): Date => {
+      // Directional snap: snap candidate must lie in the drag direction
+      // relative to the user's current pointer position. A candidate
+      // BEHIND the pointer would visibly reverse the drag — feels like a
+      // reset. Particularly important when the card edge started exactly
+      // on a sprint end / monday: without this, every tiny drag gets
+      // yanked straight back.
+      const origMs = origDate ? startOfDay(origDate).getTime() : null;
+      const dMs = startOfDay(d).getTime();
+      const direction =
+        origMs === null
+          ? 0
+          : dMs < origMs
+            ? -1 // dragged left (earlier)
+            : dMs > origMs
+              ? 1 // dragged right (later)
+              : 0;
       const candidates: Array<{ date: Date; thresholdDays: number }> =
         extraCandidates.map((date) => ({
           date,
@@ -490,10 +524,20 @@ export function useRoadmapDragHarness(
           );
         }
       }
+      const dragMagnitudeDays =
+        origMs === null ? Number.POSITIVE_INFINITY : Math.abs(dayDiff(d, new Date(origMs)));
       let best: Date | null = null;
       let bestDiff = Number.POSITIVE_INFINITY;
       for (const c of candidates) {
+        const candMs = c.date.getTime();
+        // Snap must never reverse drag direction (no rewinds) and must not
+        // pull the bar farther than the user actually dragged (no over-
+        // extend past intent). Both rules together mean: snap can fine-tune
+        // a drag onto a grid line, but never override the user's distance.
+        if (direction === -1 && candMs > dMs) continue;
+        if (direction === 1 && candMs < dMs) continue;
         const diff = Math.abs(dayDiff(d, c.date));
+        if (diff > dragMagnitudeDays) continue;
         if (diff <= c.thresholdDays && diff < bestDiff) {
           best = c.date;
           bestDiff = diff;
@@ -613,12 +657,12 @@ export function useRoadmapDragHarness(
       } else {
         let preview: SnapPreview | null = null;
         if (d.mode === "resize-left") {
-          preview = snapDateWithSource(startOfDay(nextStart), true);
+          preview = snapDateWithSource(startOfDay(nextStart), true, d.origStart);
         } else if (d.mode === "resize-right") {
-          preview = snapDateWithSource(startOfDay(nextTarget), false);
+          preview = snapDateWithSource(startOfDay(nextTarget), false, d.origTarget);
         } else {
-          const startCand = snapDateWithSource(startOfDay(nextStart), true);
-          const targetCand = snapDateWithSource(startOfDay(nextTarget), false);
+          const startCand = snapDateWithSource(startOfDay(nextStart), true, d.origStart);
+          const targetCand = snapDateWithSource(startOfDay(nextTarget), false, d.origTarget);
           const startDelta = startCand
             ? Math.abs(dayDiff(startOfDay(nextStart), startCand.date))
             : Number.POSITIVE_INFINITY;
@@ -828,12 +872,12 @@ export function useRoadmapDragHarness(
     let snappedTarget = startOfDay(current.targetDate);
     if (!altBypass) {
       if (d.mode === "resize-left") {
-        snappedStart = snapDate(snappedStart, blockerTargets);
+        snappedStart = snapDate(snappedStart, blockerTargets, d.origStart);
       } else if (d.mode === "resize-right") {
-        snappedTarget = snapDate(snappedTarget);
+        snappedTarget = snapDate(snappedTarget, [], d.origTarget);
       } else {
-        const startSnap = snapDate(snappedStart, blockerTargets);
-        const targetSnap = snapDate(snappedTarget);
+        const startSnap = snapDate(snappedStart, blockerTargets, d.origStart);
+        const targetSnap = snapDate(snappedTarget, [], d.origTarget);
         const startDelta = Math.abs(dayDiff(snappedStart, startSnap));
         const targetDelta = Math.abs(dayDiff(snappedTarget, targetSnap));
         if (startDelta <= targetDelta && startDelta <= 4) {
