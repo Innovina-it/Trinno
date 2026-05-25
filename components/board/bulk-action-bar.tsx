@@ -39,6 +39,7 @@ import {
 } from "@/actions/cards";
 import { moveCardToList } from "@/actions/lists";
 import {
+  PRIORITY_LABELS,
   PRIORITY_TINT,
   type CardPriority,
 } from "@/components/board/card/priority-picker";
@@ -476,12 +477,12 @@ export function BulkActionBar({
         await bulkSetPriority({ cardIds: ids, priority });
         clearSelection();
         toast.success(
-          `Priority ${priority ? priority.toUpperCase() : "cleared"} on ${
+          `Priority ${priority ? PRIORITY_LABELS[priority] : "cleared"} on ${
             ids.length
           } card${ids.length === 1 ? "" : "s"}`,
         );
         undoBus.push({
-          message: `Priority ${priority ? priority.toUpperCase() : "cleared"}`,
+          message: `Priority ${priority ? PRIORITY_LABELS[priority] : "cleared"}`,
           undo: async () => {
             for (const p of prior) {
               updateCardLocal(p.id, { priority: p.priority });
@@ -723,12 +724,13 @@ export function BulkActionBar({
                 data-testid="bulk-action-priority-item"
                 data-priority={p}
                 onClick={() => onSetPriority(p)}
+                className={PRIORITY_TINT[p].text}
               >
                 <span
                   aria-hidden
                   className={`size-2 rounded-full mr-2 ${PRIORITY_TINT[p].dot}`}
                 />
-                {p.toUpperCase()}
+                {PRIORITY_LABELS[p]}
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />

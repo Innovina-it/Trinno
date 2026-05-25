@@ -17,7 +17,11 @@ import { TypeIcon } from "./card/type-picker";
 import { BlockedBadge } from "./card/blocked-badge";
 import { StoryPointsChip } from "./card/story-points-chip";
 import { TimeChip } from "./card/time-chip";
-import { PriorityChip, type CardPriority } from "./card/priority-picker";
+import {
+  PRIORITY_TINT,
+  PriorityChip,
+  type CardPriority,
+} from "./card/priority-picker";
 import {
   CardContextMenu,
   type CardContextMenuPosition,
@@ -454,11 +458,22 @@ export function CardTile({
     router.push(`/b/${boardId}/c/${card.id}`);
   }
 
+  // Priority background tint — marked. Mixes 25% of the priority surface
+  // colour with the tile's default `--surface-strong`. Tile background
+  // hover (`hover:bg-[--surface-hi]`) still wins via cascade.
+  const cardPriority = (card.priority ?? null) as CardPriority | null;
+  const priorityBg = cardPriority
+    ? `color-mix(in oklab, ${PRIORITY_TINT[cardPriority].surface} 25%, var(--surface-strong))`
+    : undefined;
+  const tileStyle: React.CSSProperties = priorityBg
+    ? { ...style, background: priorityBg }
+    : style;
+
   return (
     <>
     <div
       ref={setNodeRef}
-      style={style}
+      style={tileStyle}
       {...attributes}
       {...(isEditing ? {} : listeners)}
       role="button"
@@ -469,6 +484,7 @@ export function CardTile({
       data-card-id={card.id}
       data-dragging={isDragging ? "true" : undefined}
       data-selected={isSelected ? "true" : undefined}
+      data-priority={cardPriority ?? "none"}
       className="group/card relative block rounded-xl bg-[color:var(--surface-strong)] backdrop-blur-md border border-[color:var(--hairline)] text-fg cursor-grab transition-all duration-200 ease-out shadow-[0_1px_0_0_rgb(255_255_255/0.06)_inset,0_8px_20px_-12px_rgb(0_0_0_/_0.5)] hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[color:var(--surface-hi)] hover:shadow-[0_1px_0_0_rgb(255_255_255/0.10)_inset,0_12px_28px_-12px_rgb(0_0_0/0.6)] active:cursor-grabbing data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02] data-[dragging=true]:cursor-grabbing data-[selected=true]:ring-2 data-[selected=true]:ring-[color:var(--accent-cyan)] data-[selected=true]:bg-[color:var(--surface-hi)]"
     >
       <CardCover
@@ -642,7 +658,7 @@ export function CardTile({
       menu={contextMenu}
       setMenu={setContextMenu}
       isCompleted={completed}
-      priority={(card.priority ?? null) as CardPriority | null}
+      priority={cardPriority}
       testIdPrefix="card-tile-menu"
       actions={{
         onOpen: menuOpenCard,

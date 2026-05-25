@@ -13,6 +13,7 @@ import { Check, ChevronRight, CornerLeftUp } from "lucide-react";
 import type { CrossWorkspaceCard } from "@/lib/queries/cards";
 import { formatDate } from "@/lib/format-date";
 import {
+  PRIORITY_LABELS,
   PRIORITY_TINT,
   type CardPriority,
 } from "@/components/board/card/priority-picker";
@@ -56,7 +57,7 @@ function PriorityDot({ priority }: { priority: CardPriority | null }) {
       aria-hidden
       data-priority={priority ?? "none"}
       className={`inline-block size-2 rounded-full shrink-0 ${dotClass}`}
-      title={priority ? `Priority ${priority.toUpperCase()}` : "No priority"}
+      title={priority ? `Priority ${PRIORITY_LABELS[priority]}` : "No priority"}
     />
   );
 }

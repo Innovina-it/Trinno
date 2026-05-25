@@ -26,7 +26,12 @@ import {
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { PriorityChip, type CardPriority } from "./card/priority-picker";
+import {
+  PRIORITY_LABELS,
+  PRIORITY_TINT,
+  PriorityChip,
+  type CardPriority,
+} from "./card/priority-picker";
 import { formatDate } from "@/lib/format-date";
 import { BoardStoreContext } from "@/stores/board-store";
 import { WorkspaceStoreContext } from "@/stores/workspace-store";
@@ -825,8 +830,16 @@ function CardQuickViewBody({
                   aria-label="Priority"
                 >
                   {PRIORITY_OPTIONS.map((p) => (
-                    <option key={p || "none"} value={p}>
-                      {p === "" ? "— None" : p.toUpperCase()}
+                    <option
+                      key={p || "none"}
+                      value={p}
+                      style={
+                        p === ""
+                          ? undefined
+                          : { color: PRIORITY_TINT[p].textColor }
+                      }
+                    >
+                      {p === "" ? "— None" : PRIORITY_LABELS[p]}
                     </option>
                   ))}
                 </select>
