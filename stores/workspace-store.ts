@@ -35,6 +35,7 @@ type SubBoard = WorkspaceSnapshot["subBoards"][number];
 
 export type WorkspaceState = {
   workspaceId: string;
+  autoAssignCreator: boolean;
   boards: Board[];
   lists: List[];
   cards: Card[];
@@ -93,6 +94,7 @@ export type WorkspaceState = {
 export function createWorkspaceStore(initial: WorkspaceSnapshot) {
   return createStore<WorkspaceState>((set) => ({
     workspaceId: initial.workspaceId,
+    autoAssignCreator: initial.autoAssignCreator,
     boards: initial.boards,
     lists: initial.lists,
     cards: initial.cards,
@@ -109,6 +111,7 @@ export function createWorkspaceStore(initial: WorkspaceSnapshot) {
     setSnapshot: (s) => set({ ...s }),
     mergeSnapshotPreservingRealtime: (s) =>
       set({
+        autoAssignCreator: s.autoAssignCreator,
         boards: s.boards,
         components: s.components,
         cardComponents: s.cardComponents,

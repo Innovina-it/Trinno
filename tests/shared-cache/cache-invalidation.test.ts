@@ -20,6 +20,7 @@ function makeSnapshot(title: string): SharedWorkspaceSnapshot {
   const now = new Date("2026-05-14T00:00:00.000Z");
   return {
     workspaceId,
+    autoAssignCreator: false,
     workspace: { id: workspaceId, name: "WS", ownerId: "u1", createdAt: now },
     members: [{ userId: "u1", role: "owner", displayName: "Ada", avatarUrl: null }],
     boards: [

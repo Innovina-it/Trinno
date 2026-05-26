@@ -19,6 +19,7 @@ import { getCardStatusKind } from "@/lib/status";
 function makeSnapshot(lists: WorkspaceSnapshot["lists"]): WorkspaceSnapshot {
   return {
     workspaceId: "w1",
+    autoAssignCreator: false,
     boards: [],
     lists,
     cards: [],

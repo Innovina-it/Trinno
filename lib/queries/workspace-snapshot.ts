@@ -14,6 +14,7 @@ import {
   cardMembers,
   profiles,
   workspaceMembers,
+  workspaces,
 } from "@/lib/db/schema";
 
 // Plan #16b-β — single-transaction snapshot loader for the per-workspace
@@ -25,6 +26,11 @@ import {
 
 export type WorkspaceSnapshot = {
   workspaceId: string;
+  // Per-workspace toggle: when true, the server-side createCard path
+  // auto-inserts the creator into card_members. The client mirrors this
+  // by seeding the assignee picker in the new-card dialog so the UI
+  // matches what the server will persist.
+  autoAssignCreator: boolean;
   boards: Array<{
     id: string;
     title: string;
@@ -117,6 +123,12 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
   workspaceId: string,
 ): Promise<WorkspaceSnapshot> {
   return dbAsUser(token, async (tx) => {
+    const [wsRow] = await tx
+      .select({ autoAssignCreator: workspaces.autoAssignCreator })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .limit(1);
+    const autoAssignCreator = wsRow?.autoAssignCreator ?? false;
     const boardRows = await tx
       .select({
         id: boards.id,
@@ -176,6 +188,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         .orderBy(asc(versions.name));
       return {
         workspaceId,
+        autoAssignCreator,
         boards: [],
         lists: [],
         cards: [],
@@ -344,6 +357,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
 
     return {
       workspaceId,
+      autoAssignCreator,
       boards: boardRows.map((b) => ({
         id: b.id,
         title: b.title,

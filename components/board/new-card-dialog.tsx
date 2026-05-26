@@ -153,6 +153,11 @@ export function NewCardDialog({
   // assignee.
   const workspaceProfiles = useWorkspaceStore((s) => s.workspaceProfiles);
   const upsertCardMember = useWorkspaceStore((s) => s.upsertCardMember);
+  const removeCardMember = useWorkspaceStore((s) => s.removeCardMember);
+  // When this is on AND the card has no parent, the server's createCardImpl
+  // inserts the creator into card_members at INSERT time. The picker
+  // pre-selects the creator so the UI reflects what's about to be persisted.
+  const autoAssignCreator = useWorkspaceStore((s) => s.autoAssignCreator);
 
   function toggleAssignee(userId: string) {
     setAssignees((prev) => {
@@ -280,6 +285,20 @@ export function NewCardDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, parentId]);
 
+  // Pre-select the creator in the assignee picker when the workspace has
+  // auto-assign on and the card is a standalone (no parent). This mirrors
+  // what createCardImpl will persist server-side — keeping the picker label
+  // honest instead of showing "Pick assignees" for a card that's about to
+  // land with the creator already assigned. Subtasks fall through to the
+  // server's parent-member inheritance, so we don't pre-select for them.
+  useEffect(() => {
+    if (!open) return;
+    if (!autoAssignCreator) return;
+    if (parentId) return;
+    if (!currentUserId) return;
+    setAssignees((prev) => (prev.has(currentUserId) ? prev : new Set([...prev, currentUserId])));
+  }, [open, autoAssignCreator, parentId, currentUserId]);
+
   function reset() {
     setTitle("");
     setType("task");
@@ -364,13 +383,42 @@ export function NewCardDialog({
         }
         // Pre-assign members. Fire each one sequentially so per-call
         // errors surface as toasts, but the card itself is already saved.
+        // When the workspace auto-assigns the creator and this is a
+        // standalone card, the server has already inserted that row at
+        // create-time — calling toggleCardMember again would *remove* it
+        // (toggle is symmetric). We skip the creator in that case, and if
+        // the user explicitly deselected themselves we toggle once after
+        // the loop to undo the server's insert.
+        const creatorAutoInserted =
+          autoAssignCreator && !parentCardId && !!currentUserId;
         for (const userId of assignees) {
+          if (creatorAutoInserted && userId === currentUserId) {
+            // server already added — just mirror locally
+            upsertCardMember({ cardId: created.id, userId });
+            continue;
+          }
           try {
             await toggleCardMember({ cardId: created.id, userId });
             upsertCardMember({ cardId: created.id, userId });
           } catch (err) {
             toast.error(
               "Saved card, but assignee failed: " + (err as Error).message,
+            );
+          }
+        }
+        if (
+          creatorAutoInserted &&
+          currentUserId &&
+          !assignees.has(currentUserId)
+        ) {
+          // Pre-seeded creator was unticked by the user. Undo the server-side
+          // insert so the final state matches the picker.
+          try {
+            await toggleCardMember({ cardId: created.id, userId: currentUserId });
+            removeCardMember(created.id, currentUserId);
+          } catch (err) {
+            toast.error(
+              "Saved card, but unassign failed: " + (err as Error).message,
             );
           }
         }
