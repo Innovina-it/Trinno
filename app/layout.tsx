@@ -4,6 +4,7 @@ import { Geist, Geist_Mono, Instrument_Serif, JetBrains_Mono } from "next/font/g
 import { cookies } from "next/headers";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthBroadcastListener } from "./(auth)/auth-broadcast-listener";
+import { EnvBadge } from "@/components/ui/env-badge";
 
 const geistSans = Geist({
   subsets: ["latin"],
@@ -34,6 +35,10 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   title: "Trinno",
   description: "Internal workspace for boards, roadmap, and dashboards.",
+  // Non-production (preview / pre-prod) deploys must not be indexed.
+  ...(process.env.VERCEL_ENV !== "production"
+    ? { robots: { index: false, follow: false } }
+    : {}),
 };
 
 export const viewport: Viewport = {
@@ -72,6 +77,7 @@ export default async function RootLayout({
       >
         <AuthBroadcastListener />
         {children}
+        <EnvBadge />
         <Toaster richColors />
       </body>
     </html>
