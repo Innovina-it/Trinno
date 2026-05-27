@@ -35,9 +35,8 @@ export function fetchWithTabId(
   }
 
   if (!isSameOriginUrl(input)) {
-    const u = typeof input === "string" ? input : input instanceof URL ? input.toString() : input instanceof Request ? input.url : "<unknown>";
-    console.warn("[fetch-with-tab-id] cross-origin fetch:", u);
-    return originalFetch(input, init).catch((e) => { console.error("[fetch-with-tab-id] FAIL:", u, e); throw e; });
+    // Cross-origin (es. Supabase): passthrough senza header tab-id, silenzioso.
+    return originalFetch(input, init);
   }
 
   const tabId = getTabId();
