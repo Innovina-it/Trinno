@@ -50,10 +50,9 @@ export function RoadmapMiniMap({
   /** Push a live pixels-per-day to the canvas. Pass null to release. */
   onPpdOverride: (ppd: number | null) => void;
 }) {
-  // zoom + onSetZoom are unused here for now (header owns the discrete
-  // selector), but kept on the prop API so the mini-map can later commit
-  // a snap-to-discrete on release without another prop dance.
-  void zoom;
+  // onSetZoom is unused here for now (header owns the discrete selector),
+  // but kept on the prop API so the mini-map can later commit a
+  // snap-to-discrete on release without another prop dance.
   void onSetZoom;
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapObserverRef = useRef<ResizeObserver | null>(null);
@@ -322,10 +321,13 @@ export function RoadmapMiniMap({
 
   // Auto-hide when canvas fits the viewport. Mini-map adds nothing when
   // there is nothing to scroll. 4px tolerance for sub-pixel rounding.
+  // Exception: in "fit" zoom the strip stays — it doubles as the
+  // zoom control (edge-resize), and a fit-density canvas usually lands
+  // exactly at viewport width, which would otherwise hide it entirely.
   const fits =
     scrollState.scrollWidth > 0 &&
     scrollState.scrollWidth <= scrollState.width + 4;
-  if (fits) return null;
+  if (fits && zoom !== "fit") return null;
 
   return (
     <div
