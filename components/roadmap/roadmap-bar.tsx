@@ -377,6 +377,11 @@ export function RoadmapBar({
   const priority = card.priority ?? null;
   const priorityDot = priority ? PRIORITY_TINT[priority as CardPriority].dot : null;
   const isCompleted = card.completedAt != null;
+  // A late, still-open task gets a red outline. Mirrors the overdue rule
+  // used by the due pill (due-pill.tsx): not complete AND target in the
+  // past. "Closed" on the roadmap means completedAt is set
+  // (roadmap-view.tsx), so completed bars are never flagged overdue.
+  const isOverdue = !isCompleted && card.targetDate.getTime() < Date.now();
 
   // Trailing assignee stack lives OUTSIDE the bar to the right. Suppressed
   // when there isn't enough free space before the next bar (or canvas edge)
@@ -405,6 +410,11 @@ export function RoadmapBar({
           width: Math.max(width, 12),
           top: row * 36 + 4,
           ...fill.style,
+          // Red outline for overdue+open bars. Applied after fill.style so
+          // it wins; uses the same --status-blocked token the due pill uses
+          // for late items. blocked-status glow (boxShadow) is a separate
+          // layer and is unaffected.
+          ...(isOverdue ? { borderColor: "var(--status-blocked)" } : {}),
         }}
         className={`absolute h-7 rounded-md border border-fg/30 backdrop-blur-sm
                    hover:border-fg/60 transition-colors cursor-grab active:cursor-grabbing
@@ -427,6 +437,7 @@ export function RoadmapBar({
         data-testid="roadmap-bar"
         data-status={status ?? "unmapped"}
         data-priority={priority ?? "none"}
+        data-overdue={isOverdue ? "true" : "false"}
         aria-label={`Roadmap bar for ${card.title}`}
       >
         {/* Plan #16b-γ-G G4 — left-edge priority stripe (3px). Always
