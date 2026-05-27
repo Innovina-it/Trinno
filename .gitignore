@@ -55,3 +55,4 @@ backup-*.sql
 error.log
 *.pdf
 docs/ai-agent-user-preferences-workflow.html
+.gstack/
