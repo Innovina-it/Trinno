@@ -1167,8 +1167,19 @@ export function CardModal({
 
   if (!asDialog) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <div className="rounded-2xl border border-hairline-hi bg-[color:var(--popover)] p-6 shadow-xl">
+      // Full-page card route (deep-links + the roadmap "Open advanced
+      // settings" path, which can't reach the board's @modal intercept).
+      // The card floats on the dark page background; make that surrounding
+      // area dismiss the card so it matches the board overlay's
+      // click-outside-to-close behavior. close() returns to the roadmap
+      // when a breadcrumb is present, else router.back().
+      <main
+        className="min-h-dvh w-full px-4 py-6"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) close();
+        }}
+      >
+        <div className="mx-auto max-w-3xl rounded-2xl border border-hairline-hi bg-[color:var(--popover)] p-6 shadow-xl">
           <div className="mb-4 flex items-baseline justify-between">
             <span className="mono-meta-sm text-fg-faint">
               CARD · #{cardCode(card.id)}
