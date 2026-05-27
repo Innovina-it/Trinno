@@ -64,13 +64,20 @@ export function WorkspaceSwitcher({
   const [openCreate, setOpenCreate] = useState(false);
   const [q, setQ] = useState("");
 
+  // Personal routes (/inbox, /timeline, ...) are workspace-agnostic. This is
+  // reactive via usePathname, unlike `activeId` which the (app) layout computes
+  // once on the server and does NOT recompute on client-side navigation between
+  // sibling pages. So after a board → /timeline client nav, `activeId` is still
+  // pinned to the board's workspace; gating on the live pathname is what keeps
+  // the label honest.
+  const onPersonalRoute =
+    !!pathname &&
+    PERSONAL_ROUTES.some(
+      (route) => pathname === route || pathname.startsWith(route + "/"),
+    );
+
   function targetFor(newId: string): string {
-    if (
-      pathname &&
-      PERSONAL_ROUTES.some(
-        (route) => pathname === route || pathname.startsWith(route + "/"),
-      )
-    ) {
+    if (onPersonalRoute) {
       return pathname;
     }
     const m = pathname?.match(/^\/w\/[^/]+\/([^/?#]+)/);
@@ -83,7 +90,10 @@ export function WorkspaceSwitcher({
   // When the URL doesn't pin a workspace (e.g. /inbox, /dashboards),
   // don't fake "active = workspaces[0]". The trigger label and the
   // in-list checkmark would lie about which workspace the user is in.
-  const active = activeId ? workspaces.find((w) => w.id === activeId) : undefined;
+  const active =
+    activeId && !onPersonalRoute
+      ? workspaces.find((w) => w.id === activeId)
+      : undefined;
 
   const showSearch = workspaces.length > SEARCH_THRESHOLD;
   const filtered = useMemo(() => {
