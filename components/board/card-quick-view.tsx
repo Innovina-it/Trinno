@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/back-button";
 import {
   PRIORITY_LABELS,
   PRIORITY_TINT,
@@ -287,6 +288,15 @@ export function CardQuickView({
         className="sm:max-w-md"
         showCloseButton={false}
       >
+        {/* Top-right back control. Routes through handleOpenChange so the
+            unsaved-edit "Save changes?" guard fires exactly as it does for
+            Esc / outside-click — closing returns to the board / roadmap the
+            qv floats over (the "previous page"). */}
+        <BackButton
+          onClick={() => handleOpenChange(false)}
+          className="absolute top-3 right-3"
+          data-testid="card-quick-view-back"
+        />
         <CardQuickViewBody
           // Force a fresh body instance when the underlying card swaps
           // (Google-Calendar-style subtask navigation). The body keeps
@@ -680,7 +690,7 @@ function CardQuickViewBody({
 
   return (
     <>
-      <DialogHeader className="min-w-0 pr-10 overflow-hidden">
+      <DialogHeader className="min-w-0 pr-20 overflow-hidden">
         <DialogTitle
           data-testid="card-quick-view-title"
           className={`min-w-0 max-w-full ${completed ? "line-through text-fg-muted" : ""}`}
