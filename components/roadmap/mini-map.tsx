@@ -338,9 +338,13 @@ export function RoadmapMiniMap({
       role="presentation"
     >
       {/* Compressed card marks. Decorative — actual interactivity lives
-          on the viewport rect + the strip background. */}
+          on the viewport rect + the strip background. In "fit" zoom we
+          drop closed cards: the range already ignores them, so a mark
+          would only clamp to the edge with nothing to scroll to. */}
       {ratio > 0 &&
-        cards.map((c) => {
+        cards
+          .filter((c) => zoom !== "fit" || c.completedAt == null)
+          .map((c) => {
           const sx =
             Math.max(0, dayDiff(gridStart, startOfDay(c.startDate))) *
             dayWidthOnMap;

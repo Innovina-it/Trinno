@@ -900,6 +900,15 @@ export function RoadmapView({
   }, [dragPpdOverride, zoom, containerWidth]);
 
   const now = useMemo(() => new Date(), []);
+  // Fit zoom focuses on open work: closed cards must not stretch the range
+  // (and therefore the scroll extent), so a completed task far in the future
+  // gets ignored and can't be scrolled to. Other zooms use the full set.
+  // Fall back to all cards when everything is closed so the view never blanks.
+  const rangeCards = useMemo(() => {
+    if (zoom !== "fit") return cards;
+    const open = cards.filter((c) => c.completedAt == null);
+    return open.length > 0 ? open : cards;
+  }, [cards, zoom]);
   // Base origin = current period (week/month/quarter). If any card starts
   // before that, walk the origin back to cover it (snapped to the same
   // zoom period so grid ticks stay aligned). Mirrors the forward extension
@@ -907,23 +916,23 @@ export function RoadmapView({
   const gridStart = useMemo(() => {
     if (sharedRangeStart) return sharedRangeStart;
     const base = gridStartFor(now, zoom);
-    const minStart = cards.reduce(
+    const minStart = rangeCards.reduce(
       (acc, c) => (c.startDate.getTime() < acc ? c.startDate.getTime() : acc),
       base.getTime(),
     );
     if (minStart >= base.getTime()) return base;
     return gridStartFor(new Date(minStart), zoom);
-  }, [cards, now, zoom, sharedRangeStart]);
+  }, [rangeCards, now, zoom, sharedRangeStart]);
   const gridEnd = useMemo(() => {
     if (sharedRangeEnd) return sharedRangeEnd;
     const baseEnd = gridEndFor(gridStart, zoom);
     // Extend to cover any card past 6 months.
-    const maxTarget = cards.reduce(
+    const maxTarget = rangeCards.reduce(
       (acc, c) => (c.targetDate.getTime() > acc ? c.targetDate.getTime() : acc),
       baseEnd.getTime(),
     );
     return new Date(maxTarget);
-  }, [cards, gridStart, zoom, sharedRangeEnd]);
+  }, [rangeCards, gridStart, zoom, sharedRangeEnd]);
   const totalDays = Math.max(1, dayDiff(gridStart, gridEnd));
   const width = totalDays * effectivePpd;
   // Intra-day offset for the today markers. Week zoom only — month/quarter/fit
