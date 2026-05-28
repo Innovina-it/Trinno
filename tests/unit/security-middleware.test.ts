@@ -49,6 +49,30 @@ describe("security baseline middleware", () => {
     expect(location.searchParams.get("next")).toBe("/dashboard");
   });
 
+  it.each([
+    "/api/cron/send-emails",
+    "/api/notifications/digest",
+    "/api/sla/scan",
+  ])("passes %s unauthenticated (handler does its own Bearer/cron-key check)", async (path) => {
+    const { middleware } = await import("@/middleware");
+
+    const res = await middleware(makeRequest(path));
+
+    expect(res.status).not.toBe(401);
+    expect(res.status).not.toBe(302);
+  });
+
+  it("still 401s a non-cron /api/* path unauthenticated (allowlist not over-widened)", async () => {
+    const { middleware } = await import("@/middleware");
+
+    const res = await middleware(makeRequest("/api/boards"));
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toEqual({
+      error: "Authentication required",
+    });
+  });
+
   it("keeps the matcher broad enough for dashboard and internal API routes", async () => {
     const { config } = await import("@/middleware");
     const matcher = new RegExp(`^${config.matcher[0]}$`);

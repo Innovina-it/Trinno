@@ -14,15 +14,23 @@ const PUBLIC_PATH_EXACT = new Set<string>([
 
 const PUBLIC_PATH_PREFIX = ["/auth/", "/_next/"];
 
+// Cron-style routes that authenticate via Bearer/x-cron-key inside the
+// handler. Anything matched here bypasses the user-session gate.
+// Add a path here only after confirming the handler implements its own
+// secret check, else this becomes a privilege-escalation hole.
+export const CRON_API_PATHS_EXACT = new Set<string>([
+  "/api/notifications/digest",
+  "/api/sla/scan",
+]);
+
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATH_EXACT.has(pathname)) return true;
   return PUBLIC_PATH_PREFIX.some((p) => pathname.startsWith(p));
 }
 
-// Cron endpoints authenticate via `Authorization: Bearer CRON_SECRET` inside
-// the route handler. Skip the user-session gate so Vercel cron keeps working.
 function isCronApi(pathname: string): boolean {
-  return pathname.startsWith("/api/cron/");
+  if (pathname.startsWith("/api/cron/")) return true;
+  return CRON_API_PATHS_EXACT.has(pathname);
 }
 
 function isApi(pathname: string): boolean {
