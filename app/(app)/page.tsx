@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { listWorkspaces } from "@/lib/queries/workspaces";
+import { getUserPreferences } from "@/actions/profile-preferences";
+import { type Preferences } from "@/lib/preferences/types";
 
 export default async function Home() {
   await requireUser();
@@ -52,5 +54,14 @@ export default async function Home() {
       </div>
     );
   }
-  redirect(`/w/${ws[0].id}`);
+  // Prefer the last-visited workspace if the user still has access to it.
+  // Falls back to the first workspace on stale ids (deleted workspace,
+  // revoked membership) or when preferences fail to load.
+  const preferences: Preferences = await getUserPreferences().catch(() => ({}));
+  const lastWorkspaceId = preferences.lastWorkspaceId;
+  const target =
+    lastWorkspaceId && ws.some((w) => w.id === lastWorkspaceId)
+      ? lastWorkspaceId
+      : ws[0].id;
+  redirect(`/w/${target}`);
 }

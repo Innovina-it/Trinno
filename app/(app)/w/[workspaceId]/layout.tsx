@@ -5,6 +5,7 @@ import { getWorkspace, listMembers } from "@/lib/queries/workspaces";
 import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import { hasFlag } from "@/lib/feature-flags/has-flag";
 import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
+import { WorkspaceVisitMarker } from "@/components/workspace/workspace-visit-marker";
 import {
   HydrationBoundary,
   type DehydratedWorkspaceCache,
@@ -32,7 +33,14 @@ export default async function WorkspaceLayout({
     workspaceId,
     "shared_workspace_cache_v2",
   );
-  if (!sharedWorkspaceCacheEnabled) return <>{children}</>;
+  if (!sharedWorkspaceCacheEnabled) {
+    return (
+      <>
+        <WorkspaceVisitMarker workspaceId={workspaceId} />
+        {children}
+      </>
+    );
+  }
 
   const [snapshot, members] = await Promise.all([
     getWorkspaceSnapshot(token, workspaceId),
@@ -61,6 +69,7 @@ export default async function WorkspaceLayout({
 
   return (
     <HydrationBoundary state={state}>
+      <WorkspaceVisitMarker workspaceId={workspaceId} />
       <WorkspaceStoreProvider initial={snapshot}>{children}</WorkspaceStoreProvider>
     </HydrationBoundary>
   );

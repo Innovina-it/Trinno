@@ -8,6 +8,7 @@ import { hasFlag } from "@/lib/feature-flags/has-flag";
 import { BoardStoreProvider } from "@/stores/board-store";
 import { SubtaskParentSyncPrompt } from "@/components/board/card/subtask-parent-sync-prompt";
 import { BoardSyncMount } from "@/components/board/board-sync-mount";
+import { BoardVisitMarker } from "@/components/board/board-visit-marker";
 import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
 import {
   HydrationBoundary,
@@ -78,6 +79,10 @@ export default async function BoardLayout({
 
   const body = (
     <WorkspaceStoreProvider initial={workspaceSnapshot}>
+      <BoardVisitMarker
+        workspaceId={snap.board.workspaceId}
+        boardId={boardId}
+      />
       <BoardStoreProvider
         initial={{
           boardId,

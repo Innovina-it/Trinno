@@ -88,6 +88,9 @@ export function getWorkspacePreferences(
   if (zoom !== undefined || viewMode !== undefined) {
     result.roadmap = roadmap;
   }
+  if (typeof scoped.lastBoardId === "string") {
+    result.lastBoardId = scoped.lastBoardId;
+  }
   // Backwards-compat mirror: legacy consumers (pre-U3) still read the flat
   // `roadmapZoom`/`roadmapViewMode` keys off this return value. The canonical
   // shape lives in `roadmap.*`; the flat keys here are deprecated and will be
@@ -147,6 +150,10 @@ export function patchWorkspacePreferences(
 
   if (patch.activeTab !== undefined) {
     nextEntry.activeTab = patch.activeTab;
+  }
+
+  if (patch.lastBoardId !== undefined) {
+    nextEntry.lastBoardId = patch.lastBoardId;
   }
 
   const hasRoadmapWrite =
