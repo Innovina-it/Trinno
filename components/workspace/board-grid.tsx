@@ -199,6 +199,7 @@ export function BoardGrid({
 
   return (
     <DndContext
+      id="board-grid"
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragEnd={onDragEnd}
