@@ -1,8 +1,9 @@
 // Panel D query helpers for the /me home dashboard.
 // Inbox, Watchlist, and Blockers queries scoped via RLS through dbAsUser.
 
-import { and, desc, eq, isNull, max, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, max, notInArray, or, sql } from "drizzle-orm";
 import { meId, dbAsUser } from "@/lib/queries/me";
+import { listMyGuestWorkspaceIds } from "@/lib/queries/me-guard";
 import {
   notifications,
   cards,
@@ -50,7 +51,13 @@ export type BlockingMyCard = {
 /** Last 20 notifications for the current user, newest first. Joined to
  *  card title + actor display name. Both read and unread. */
 export async function listMyInbox(token: string): Promise<InboxItem[]> {
+  const userId = await meId(token);
+  const guestWsIds = await listMyGuestWorkspaceIds(token, userId);
+
   return dbAsUser(token, async (tx) => {
+    // Left-join boards so we can drop notifications whose related board
+    // belongs to a workspace where the user is a guest. Notifications
+    // without a related board (workspace-level pings, etc.) stay visible.
     const rows = await tx
       .select({
         id: notifications.id,
@@ -65,6 +72,15 @@ export async function listMyInbox(token: string): Promise<InboxItem[]> {
       .from(notifications)
       .leftJoin(cards, eq(cards.id, notifications.relatedCardId))
       .leftJoin(profiles, eq(profiles.id, notifications.actorUserId))
+      .leftJoin(boards, eq(boards.id, notifications.relatedBoardId))
+      .where(
+        guestWsIds.length > 0
+          ? or(
+              isNull(boards.workspaceId),
+              notInArray(boards.workspaceId, guestWsIds),
+            )
+          : undefined,
+      )
       .orderBy(desc(notifications.createdAt))
       .limit(20);
     return rows as InboxItem[];
@@ -77,6 +93,7 @@ export async function listMyInbox(token: string): Promise<InboxItem[]> {
  *  card or null. */
 export async function listMyWatchlist(token: string): Promise<WatchedCard[]> {
   const userId = await meId(token);
+  const guestWsIds = await listMyGuestWorkspaceIds(token, userId);
 
   return dbAsUser(token, async (tx) => {
     // Build a subquery: max activity per card.
@@ -108,6 +125,9 @@ export async function listMyWatchlist(token: string): Promise<WatchedCard[]> {
         and(
           eq(cardWatchers.userId, userId),
           sql`${cards.archived} = false`,
+          guestWsIds.length > 0
+            ? notInArray(boards.workspaceId, guestWsIds)
+            : undefined,
         ),
       )
       .orderBy(desc(activitySub.lastActivityAt))
@@ -124,9 +144,15 @@ export async function listBlockersOnMyCards(
   token: string,
 ): Promise<BlockingMyCard[]> {
   const userId = await meId(token);
+  const guestWsIds = await listMyGuestWorkspaceIds(token, userId);
+  const excludeGuestOnMine =
+    guestWsIds.length > 0
+      ? notInArray(boards.workspaceId, guestWsIds)
+      : undefined;
 
   return dbAsUser(token, async (tx) => {
-    // Get my open cards (owner OR member).
+    // Get my open cards (owner OR member). Join boards on every branch so
+    // we can exclude my cards that live in a workspace where I'm a guest.
     const myOwnerCards = tx
       .select({
         myCardId: cards.id,
@@ -134,6 +160,7 @@ export async function listBlockersOnMyCards(
         blockerId: cardLinks.toCardId,
       })
       .from(cards)
+      .innerJoin(boards, eq(boards.id, cards.boardId))
       .innerJoin(
         cardLinks,
         and(
@@ -141,7 +168,13 @@ export async function listBlockersOnMyCards(
           eq(cardLinks.kind, "is_blocked_by"),
         ),
       )
-      .where(and(eq(cards.ownerId, userId), isNull(cards.completedAt)));
+      .where(
+        and(
+          eq(cards.ownerId, userId),
+          isNull(cards.completedAt),
+          excludeGuestOnMine,
+        ),
+      );
 
     const myMemberCards = tx
       .select({
@@ -151,6 +184,7 @@ export async function listBlockersOnMyCards(
       })
       .from(cardMembers)
       .innerJoin(cards, eq(cards.id, cardMembers.cardId))
+      .innerJoin(boards, eq(boards.id, cards.boardId))
       .innerJoin(
         cardLinks,
         and(
@@ -158,11 +192,20 @@ export async function listBlockersOnMyCards(
           eq(cardLinks.kind, "is_blocked_by"),
         ),
       )
-      .where(and(eq(cardMembers.userId, userId), isNull(cards.completedAt)));
+      .where(
+        and(
+          eq(cardMembers.userId, userId),
+          isNull(cards.completedAt),
+          excludeGuestOnMine,
+        ),
+      );
 
     // Union owner + member rows.
     const combined = myOwnerCards.union(myMemberCards).as("my_blocked_cards");
 
+    // Pull blocker details, also dropping blockers that live in a guest
+    // workspace (an unlikely cross-workspace dependency but still inside
+    // the "no guest content" rule).
     const rows = await tx
       .select({
         myCardId: combined.myCardId,
@@ -174,6 +217,8 @@ export async function listBlockersOnMyCards(
       })
       .from(combined)
       .innerJoin(cards, eq(cards.id, combined.blockerId))
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .where(excludeGuestOnMine)
       .orderBy(combined.myCardId, combined.blockerId);
 
     // Dedupe by (myCardId, blockerId).

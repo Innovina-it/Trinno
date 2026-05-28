@@ -1,6 +1,7 @@
-import { eq, sql, inArray } from "drizzle-orm";
+import { and, eq, sql, inArray, notInArray } from "drizzle-orm";
 import { sprints, workspaces } from "@/lib/db/schema";
 import { dbAsUser, meId } from "@/lib/queries/me";
+import { listMyGuestWorkspaceIds } from "@/lib/queries/me-guard";
 
 export type MyActiveSprint = {
   id: string;
@@ -26,9 +27,12 @@ export async function listMyActiveSprints(
   token: string,
 ): Promise<MyActiveSprint[]> {
   const userId = await meId(token);
+  const guestWsIds = await listMyGuestWorkspaceIds(token, userId);
 
   return dbAsUser(token, async (tx) => {
     // 1. Fetch all active sprints (RLS scopes to workspaces user can see).
+    //    Then drop sprints whose workspace has the user as a guest — the /me
+    //    dashboard must hide content from guest workspaces entirely.
     const activeSprints = await tx
       .select({
         id: sprints.id,
@@ -39,7 +43,14 @@ export async function listMyActiveSprints(
         workspaceId: sprints.workspaceId,
       })
       .from(sprints)
-      .where(eq(sprints.state, "active"))
+      .where(
+        and(
+          eq(sprints.state, "active"),
+          guestWsIds.length > 0
+            ? notInArray(sprints.workspaceId, guestWsIds)
+            : undefined,
+        ),
+      )
       .limit(20);
 
     if (activeSprints.length === 0) return [];

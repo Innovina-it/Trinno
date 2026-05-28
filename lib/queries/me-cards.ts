@@ -3,9 +3,10 @@
 // own boards. This file deliberately avoids a mega-query so each
 // panel can evolve independently.
 
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, notInArray } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { meId } from "@/lib/queries/me";
+import { listMyGuestWorkspaceIds } from "@/lib/queries/me-guard";
 import {
   boards,
   cardMembers,
@@ -39,6 +40,11 @@ const MAX_TODAY_RAW = 1000;
  *  preferring role="owner". */
 export async function listMyOpenCards(token: string): Promise<MyCard[]> {
   const userId = await meId(token);
+  const guestWsIds = await listMyGuestWorkspaceIds(token, userId);
+  const excludeGuest =
+    guestWsIds.length > 0
+      ? notInArray(boards.workspaceId, guestWsIds)
+      : undefined;
 
   return dbAsUser(token, async (tx) => {
     const baseSelect = {
@@ -68,6 +74,7 @@ export async function listMyOpenCards(token: string): Promise<MyCard[]> {
           eq(cards.archived, false),
           isNull(cards.completedAt),
           eq(cards.ownerId, userId),
+          excludeGuest,
         ),
       )
       .orderBy(asc(cards.createdAt))
@@ -85,6 +92,7 @@ export async function listMyOpenCards(token: string): Promise<MyCard[]> {
           eq(cards.archived, false),
           isNull(cards.completedAt),
           eq(cardMembers.userId, userId),
+          excludeGuest,
         ),
       )
       .orderBy(asc(cards.createdAt))
@@ -128,6 +136,7 @@ export async function getMyTodayCounts(
   token: string,
 ): Promise<{ overdue: number; dueToday: number; completedToday: number }> {
   const userId = await meId(token);
+  const guestWsIds = await listMyGuestWorkspaceIds(token, userId);
 
   return dbAsUser(token, async (tx) => {
     const startOfToday = new Date();
@@ -137,6 +146,12 @@ export async function getMyTodayCounts(
     endOfToday.setHours(23, 59, 59, 999);
 
     // Fetch raw rows for this user (owner or member), not archived.
+    // Join boards so we can exclude guest workspaces from the count.
+    const excludeGuest =
+      guestWsIds.length > 0
+        ? notInArray(boards.workspaceId, guestWsIds)
+        : undefined;
+
     const ownerRows = await tx
       .select({
         id: cards.id,
@@ -144,10 +159,12 @@ export async function getMyTodayCounts(
         completedAt: cards.completedAt,
       })
       .from(cards)
+      .innerJoin(boards, eq(boards.id, cards.boardId))
       .where(
         and(
           eq(cards.archived, false),
           eq(cards.ownerId, userId),
+          excludeGuest,
         ),
       )
       .limit(MAX_TODAY_RAW);
@@ -160,10 +177,12 @@ export async function getMyTodayCounts(
       })
       .from(cardMembers)
       .innerJoin(cards, eq(cards.id, cardMembers.cardId))
+      .innerJoin(boards, eq(boards.id, cards.boardId))
       .where(
         and(
           eq(cards.archived, false),
           eq(cardMembers.userId, userId),
+          excludeGuest,
         ),
       )
       .limit(MAX_TODAY_RAW);

@@ -5,9 +5,10 @@
 // RLS is enforced by dbAsUser.
 // ---------------------------------------------------------------------------
 
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, notInArray } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { meId } from "@/lib/queries/me";
+import { listMyGuestWorkspaceIds } from "@/lib/queries/me-guard";
 import {
   boards,
   cardMembers,
@@ -48,11 +49,18 @@ export async function listAssignedAcrossWorkspaces(
   workspaceIds?: string[],
 ): Promise<CrossWorkspaceCard[]> {
   const userId = await meId(token);
+  const guestWsIds = await listMyGuestWorkspaceIds(token, userId);
 
   return dbAsUser(token, async (tx) => {
     const wsFilter =
       workspaceIds && workspaceIds.length > 0
         ? inArray(boards.workspaceId, workspaceIds)
+        : undefined;
+    // /me timeline must hide workspaces where the user is a guest — even
+    // if they're owner/assignee of a card there.
+    const excludeGuest =
+      guestWsIds.length > 0
+        ? notInArray(boards.workspaceId, guestWsIds)
         : undefined;
 
     const baseSelect = {
@@ -84,6 +92,7 @@ export async function listAssignedAcrossWorkspaces(
           isNotNull(cards.targetDate),
           eq(cards.ownerId, userId),
           wsFilter,
+          excludeGuest,
         ),
       )
       .orderBy(asc(cards.startDate))
@@ -102,6 +111,7 @@ export async function listAssignedAcrossWorkspaces(
           isNotNull(cards.targetDate),
           eq(cardMembers.userId, userId),
           wsFilter,
+          excludeGuest,
         ),
       )
       .orderBy(asc(cards.startDate))

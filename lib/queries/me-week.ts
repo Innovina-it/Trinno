@@ -1,7 +1,8 @@
-import { and, asc, eq, gte, isNotNull, lte } from "drizzle-orm";
+import { and, asc, eq, gte, isNotNull, lte, notInArray } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { boards, cards, cardMembers, workspaces } from "@/lib/db/schema";
 import { meId } from "@/lib/queries/me";
+import { listMyGuestWorkspaceIds } from "@/lib/queries/me-guard";
 
 export type MyWeekCard = {
   id: string;
@@ -29,6 +30,11 @@ export async function listMyWeekCards(
   token: string,
 ): Promise<MyWeekCard[]> {
   const userId = await meId(token);
+  const guestWsIds = await listMyGuestWorkspaceIds(token, userId);
+  const excludeGuest =
+    guestWsIds.length > 0
+      ? notInArray(boards.workspaceId, guestWsIds)
+      : undefined;
 
   return dbAsUser(token, async (tx) => {
     const now = new Date();
@@ -74,6 +80,7 @@ export async function listMyWeekCards(
           dateFilter,
           isNotNull(cards.ownerId),
           eq(cards.ownerId, userId),
+          excludeGuest,
         ),
       )
       .orderBy(asc(cards.startDate))
@@ -90,6 +97,7 @@ export async function listMyWeekCards(
         and(
           dateFilter,
           eq(cardMembers.userId, userId),
+          excludeGuest,
         ),
       )
       .orderBy(asc(cards.startDate))
