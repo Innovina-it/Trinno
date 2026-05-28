@@ -9,6 +9,10 @@ import {
   RegisterAttachmentInput, DeleteAttachmentInput,
 } from "@/lib/validation";
 import { StructuredError } from "@/lib/errors";
+import {
+  assertNotGuest,
+  getWorkspaceRoleForCard,
+} from "@/lib/permissions/guest-guard";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -25,6 +29,7 @@ export async function registerAttachmentImpl(token: string, input: {
   const parsed = RegisterAttachmentInput.parse(input);
   const uploadedBy = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    assertNotGuest(await getWorkspaceRoleForCard(tx, parsed.cardId, uploadedBy));
     const [row] = await tx.insert(attachments).values({
       cardId: parsed.cardId,
       storagePath: parsed.storagePath,
@@ -41,10 +46,16 @@ export async function registerAttachmentImpl(token: string, input: {
 
 export async function deleteAttachmentImpl(token: string, input: { id: string }) {
   const parsed = DeleteAttachmentInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
-    const [row] = await tx.select({ storagePath: attachments.storagePath })
-      .from(attachments).where(eq(attachments.id, parsed.id));
+    const [row] = await tx.select({
+      storagePath: attachments.storagePath,
+      cardId: attachments.cardId,
+    }).from(attachments).where(eq(attachments.id, parsed.id));
     if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
+    if (row.cardId) {
+      assertNotGuest(await getWorkspaceRoleForCard(tx, row.cardId, actorId));
+    }
     const r = await tx.delete(attachments).where(eq(attachments.id, parsed.id))
       .returning({ id: attachments.id });
     if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");

@@ -6,6 +6,15 @@ import { cardComponents } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { ToggleCardComponentInput } from "@/lib/validation";
 import { StructuredError } from "@/lib/errors";
+import {
+  assertNotGuest,
+  getWorkspaceRoleForCard,
+} from "@/lib/permissions/guest-guard";
+
+function decodeSub(jwt: string): string {
+  const [, payload] = jwt.split(".");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
+}
 
 const PLACEHOLDER_BOARD_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -14,7 +23,9 @@ export async function toggleCardComponentImpl(
   input: { cardId: string; componentId: string },
 ) {
   const p = ToggleCardComponentInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    assertNotGuest(await getWorkspaceRoleForCard(tx, p.cardId, actorId));
     const existing = await tx
       .select()
       .from(cardComponents)

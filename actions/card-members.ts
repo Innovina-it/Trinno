@@ -5,10 +5,22 @@ import { cardMembers } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { ToggleCardMemberInput } from "@/lib/validation";
 import { StructuredError } from "@/lib/errors";
+import {
+  assertNotGuest,
+  getWorkspaceRoleForCard,
+} from "@/lib/permissions/guest-guard";
+
+function decodeSub(jwt: string): string {
+  const [, payload] = jwt.split(".");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
+}
 
 export async function toggleCardMemberImpl(token: string, input: { cardId: string; userId: string }) {
   const parsed = ToggleCardMemberInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    // #0111 — guests cannot self-assign or change assignments at all.
+    assertNotGuest(await getWorkspaceRoleForCard(tx, parsed.cardId, actorId));
     const existing = await tx.select().from(cardMembers).where(and(
       eq(cardMembers.cardId, parsed.cardId),
       eq(cardMembers.userId, parsed.userId),

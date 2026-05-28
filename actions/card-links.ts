@@ -6,6 +6,10 @@ import { cardLinks } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { CreateCardLinkInput, DeleteCardLinkInput } from "@/lib/validation";
 import { StructuredError, actionResult } from "@/lib/errors";
+import {
+  assertNotGuest,
+  getWorkspaceRoleForCard,
+} from "@/lib/permissions/guest-guard";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -34,6 +38,7 @@ export async function createCardLinkImpl(
     );
   const createdBy = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    assertNotGuest(await getWorkspaceRoleForCard(tx, parsed.fromCardId, createdBy));
     const [row] = await tx
       .insert(cardLinks)
       .values({
@@ -52,7 +57,16 @@ export async function createCardLinkImpl(
 
 export async function deleteCardLinkImpl(token: string, input: { id: string }) {
   const parsed = DeleteCardLinkInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const [link] = await tx
+      .select({ fromCardId: cardLinks.fromCardId })
+      .from(cardLinks)
+      .where(eq(cardLinks.id, parsed.id))
+      .limit(1);
+    if (link?.fromCardId) {
+      assertNotGuest(await getWorkspaceRoleForCard(tx, link.fromCardId, actorId));
+    }
     const r = await tx
       .delete(cardLinks)
       .where(eq(cardLinks.id, parsed.id))

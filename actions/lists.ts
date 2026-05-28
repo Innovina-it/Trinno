@@ -13,6 +13,28 @@ import {
   EnsureStatusListInput, Uuid,
 } from "@/lib/validation";
 import { StructuredError, actionResult } from "@/lib/errors";
+import {
+  assertGuestCardWriteAllowed,
+  assertNotGuest,
+  getWorkspaceRoleForBoard,
+} from "@/lib/permissions/guest-guard";
+
+function decodeSub(jwt: string): string {
+  const [, payload] = jwt.split(".");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
+}
+
+async function getBoardIdForList(
+  tx: Parameters<Parameters<typeof dbAsUser>[1]>[0],
+  listId: string,
+): Promise<string | null> {
+  const [row] = await tx
+    .select({ boardId: lists.boardId })
+    .from(lists)
+    .where(eq(lists.id, listId))
+    .limit(1);
+  return row?.boardId ?? null;
+}
 
 const MoveCardToListInput = z.object({
   cardId: Uuid,
@@ -22,7 +44,10 @@ const MoveCardToListInput = z.object({
 
 export async function createListImpl(token: string, input: { boardId: string; title: string }) {
   const parsed = CreateListInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    // #0111 — guests cannot create lists.
+    assertNotGuest(await getWorkspaceRoleForBoard(tx, parsed.boardId, actorId));
     const [last] = await tx.select({ position: lists.position }).from(lists)
       .where(eq(lists.boardId, parsed.boardId))
       .orderBy(desc(lists.position))
@@ -38,7 +63,10 @@ export async function createListImpl(token: string, input: { boardId: string; ti
 
 export async function renameListImpl(token: string, input: { id: string; title: string }) {
   const parsed = RenameListInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const boardId = await getBoardIdForList(tx, parsed.id);
+    if (boardId) assertNotGuest(await getWorkspaceRoleForBoard(tx, boardId, actorId));
     const [row] = await tx.update(lists).set({ title: parsed.title })
       .where(eq(lists.id, parsed.id)).returning();
     if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
@@ -48,7 +76,10 @@ export async function renameListImpl(token: string, input: { id: string; title: 
 
 export async function moveListImpl(token: string, input: { id: string; position: string }) {
   const parsed = MoveListInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const boardId = await getBoardIdForList(tx, parsed.id);
+    if (boardId) assertNotGuest(await getWorkspaceRoleForBoard(tx, boardId, actorId));
     const [row] = await tx.update(lists).set({ position: parsed.position })
       .where(eq(lists.id, parsed.id)).returning();
     if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
@@ -58,7 +89,10 @@ export async function moveListImpl(token: string, input: { id: string; position:
 
 export async function archiveListImpl(token: string, input: { id: string; archived: boolean }) {
   const parsed = ArchiveListInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const boardId = await getBoardIdForList(tx, parsed.id);
+    if (boardId) assertNotGuest(await getWorkspaceRoleForBoard(tx, boardId, actorId));
     const [row] = await tx.update(lists).set({ archived: parsed.archived })
       .where(eq(lists.id, parsed.id)).returning();
     if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
@@ -68,7 +102,10 @@ export async function archiveListImpl(token: string, input: { id: string; archiv
 
 export async function setWipLimitImpl(token: string, input: { id: string; wipLimit: number | null }) {
   const p = SetWipLimitInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const boardId = await getBoardIdForList(tx, p.id);
+    if (boardId) assertNotGuest(await getWorkspaceRoleForBoard(tx, boardId, actorId));
     const [row] = await tx.update(lists).set({ wipLimit: p.wipLimit })
       .where(eq(lists.id, p.id)).returning();
     if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
@@ -90,7 +127,10 @@ export async function setListStatusKindImpl(
   },
 ) {
   const p = SetListStatusKindInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const boardId = await getBoardIdForList(tx, p.id);
+    if (boardId) assertNotGuest(await getWorkspaceRoleForBoard(tx, boardId, actorId));
     const [row] = await tx
       .update(lists)
       .set({ statusKind: p.statusKind })
@@ -114,6 +154,11 @@ export async function ensureStatusListImpl(
 ) {
   const parsed = EnsureStatusListInput.parse(input);
   return dbAsUser(token, async (tx) => {
+    // No guest gate here — this helper is only called from
+    // moveCardToStatusImpl, which already validates that a guest is
+    // assigned to the card before reaching this point. Adding a gate
+    // here would double-block legitimate guest status moves that need
+    // a fresh status column.
     // Fast path: row already exists.
     const [existing] = await tx
       .select()
@@ -227,7 +272,10 @@ export async function deleteListImpl(
   input: { id: string },
 ) {
   const parsed = DeleteListInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const boardId = await getBoardIdForList(tx, parsed.id);
+    if (boardId) assertNotGuest(await getWorkspaceRoleForBoard(tx, boardId, actorId));
     const r = await tx
       .delete(lists)
       .where(eq(lists.id, parsed.id))
@@ -283,7 +331,10 @@ export async function setListColorImpl(
   },
 ) {
   const p = SetListColorInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const boardId = await getBoardIdForList(tx, p.id);
+    if (boardId) assertNotGuest(await getWorkspaceRoleForBoard(tx, boardId, actorId));
     const [row] = await tx
       .update(lists)
       .set({ color: p.color })
@@ -313,6 +364,7 @@ export async function moveCardToListImpl(
   },
 ) {
   const parsed = MoveCardToListInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
     const [card] = await tx
       .select({
@@ -323,6 +375,13 @@ export async function moveCardToListImpl(
       .where(eq(cards.id, parsed.cardId))
       .limit(1);
     if (!card) throw new StructuredError("ACCESS_DENIED", "Forbidden");
+
+    // #0111 — guests may move (change listId of) a card they are
+    // assigned to. assertGuestCardWriteAllowed is a no-op for non-guests.
+    const role = await getWorkspaceRoleForBoard(tx, card.boardId, actorId);
+    if (role === "guest") {
+      await assertGuestCardWriteAllowed(tx, role, parsed.cardId, actorId, ["listId"]);
+    }
 
     const [toList] = await tx
       .select({

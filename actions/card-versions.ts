@@ -9,6 +9,15 @@ import {
   ClearCardVersionInput,
 } from "@/lib/validation";
 import { StructuredError } from "@/lib/errors";
+import {
+  assertNotGuest,
+  getWorkspaceRoleForCard,
+} from "@/lib/permissions/guest-guard";
+
+function decodeSub(jwt: string): string {
+  const [, payload] = jwt.split(".");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
+}
 
 const PLACEHOLDER_WORKSPACE_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -17,7 +26,9 @@ export async function setCardVersionImpl(
   input: { cardId: string; versionId: string; kind: "affects" | "fixes" },
 ) {
   const p = SetCardVersionInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    assertNotGuest(await getWorkspaceRoleForCard(tx, p.cardId, actorId));
     // ON CONFLICT DO NOTHING — idempotent if already attached.
     const inserted = await tx
       .insert(cardVersions)
@@ -53,7 +64,9 @@ export async function clearCardVersionImpl(
   input: { cardId: string; versionId: string; kind: "affects" | "fixes" },
 ) {
   const p = ClearCardVersionInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    assertNotGuest(await getWorkspaceRoleForCard(tx, p.cardId, actorId));
     await tx
       .delete(cardVersions)
       .where(

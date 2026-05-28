@@ -8,10 +8,34 @@ import {
   CreateLabelInput, RenameLabelInput, DeleteLabelInput, ToggleCardLabelInput,
 } from "@/lib/validation";
 import { StructuredError } from "@/lib/errors";
+import {
+  assertNotGuest,
+  getWorkspaceRoleForBoard,
+  getWorkspaceRoleForCard,
+} from "@/lib/permissions/guest-guard";
+
+function decodeSub(jwt: string): string {
+  const [, payload] = jwt.split(".");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub;
+}
+
+async function getBoardIdForLabel(
+  tx: Parameters<Parameters<typeof dbAsUser>[1]>[0],
+  labelId: string,
+): Promise<string | null> {
+  const [row] = await tx
+    .select({ boardId: labels.boardId })
+    .from(labels)
+    .where(eq(labels.id, labelId))
+    .limit(1);
+  return row?.boardId ?? null;
+}
 
 export async function createLabelImpl(token: string, input: { boardId: string; name: string; color: string }) {
   const parsed = CreateLabelInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    assertNotGuest(await getWorkspaceRoleForBoard(tx, parsed.boardId, actorId));
     const [row] = await tx.insert(labels).values({
       boardId: parsed.boardId, name: parsed.name, color: parsed.color,
     }).returning();
@@ -22,7 +46,10 @@ export async function createLabelImpl(token: string, input: { boardId: string; n
 
 export async function renameLabelImpl(token: string, input: { id: string; name: string; color: string }) {
   const parsed = RenameLabelInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const boardId = await getBoardIdForLabel(tx, parsed.id);
+    if (boardId) assertNotGuest(await getWorkspaceRoleForBoard(tx, boardId, actorId));
     const [row] = await tx.update(labels)
       .set({ name: parsed.name, color: parsed.color })
       .where(eq(labels.id, parsed.id))
@@ -34,7 +61,10 @@ export async function renameLabelImpl(token: string, input: { id: string; name: 
 
 export async function deleteLabelImpl(token: string, input: { id: string }) {
   const parsed = DeleteLabelInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const boardId = await getBoardIdForLabel(tx, parsed.id);
+    if (boardId) assertNotGuest(await getWorkspaceRoleForBoard(tx, boardId, actorId));
     const r = await tx.delete(labels).where(eq(labels.id, parsed.id))
       .returning({ id: labels.id });
     if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
@@ -43,7 +73,9 @@ export async function deleteLabelImpl(token: string, input: { id: string }) {
 
 export async function toggleCardLabelImpl(token: string, input: { cardId: string; labelId: string }) {
   const parsed = ToggleCardLabelInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    assertNotGuest(await getWorkspaceRoleForCard(tx, parsed.cardId, actorId));
     const existing = await tx.select().from(cardLabels).where(and(
       eq(cardLabels.cardId, parsed.cardId),
       eq(cardLabels.labelId, parsed.labelId),

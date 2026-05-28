@@ -9,6 +9,10 @@ import {
   ResolveCommentInput,
 } from "@/lib/validation";
 import { StructuredError } from "@/lib/errors";
+import {
+  assertNotGuest,
+  getWorkspaceRoleForCard,
+} from "@/lib/permissions/guest-guard";
 
 function decodeSub(jwt: string): string {
   const [, payload] = jwt.split(".");
@@ -55,6 +59,8 @@ export async function createCommentImpl(token: string, input: { cardId: string; 
   const parsed = CreateCommentInput.parse(input);
   const authorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    // #0111 — guests are read-only; commenting is blocked.
+    assertNotGuest(await getWorkspaceRoleForCard(tx, parsed.cardId, authorId));
     if (parsed.parentCommentId) {
       const rows = await tx.execute(sql`
         insert into public.comments (card_id, author_id, parent_comment_id, body, board_id)
@@ -98,7 +104,14 @@ export async function createCommentImpl(token: string, input: { cardId: string; 
 
 export async function editCommentImpl(token: string, input: { id: string; body: string }) {
   const parsed = EditCommentInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const [c] = await tx
+      .select({ cardId: comments.cardId })
+      .from(comments)
+      .where(eq(comments.id, parsed.id))
+      .limit(1);
+    if (c?.cardId) assertNotGuest(await getWorkspaceRoleForCard(tx, c.cardId, actorId));
     const rows = await tx.execute(sql`
       update public.comments
       set body = ${parsed.body}, edited_at = now()
@@ -123,7 +136,14 @@ export async function editCommentImpl(token: string, input: { id: string; body: 
 
 export async function deleteCommentImpl(token: string, input: { id: string }) {
   const parsed = DeleteCommentInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const [c] = await tx
+      .select({ cardId: comments.cardId })
+      .from(comments)
+      .where(eq(comments.id, parsed.id))
+      .limit(1);
+    if (c?.cardId) assertNotGuest(await getWorkspaceRoleForCard(tx, c.cardId, actorId));
     const r = await tx.delete(comments).where(eq(comments.id, parsed.id))
       .returning({ id: comments.id });
     if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
@@ -137,6 +157,12 @@ export async function resolveCommentImpl(
   const parsed = ResolveCommentInput.parse(input);
   const uid = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    const [c] = await tx
+      .select({ cardId: comments.cardId })
+      .from(comments)
+      .where(eq(comments.id, parsed.id))
+      .limit(1);
+    if (c?.cardId) assertNotGuest(await getWorkspaceRoleForCard(tx, c.cardId, uid));
     const [row] = await tx
       .update(comments)
       .set({

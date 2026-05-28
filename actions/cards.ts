@@ -29,6 +29,12 @@ import {
 import { ensureStatusListImpl } from "@/actions/lists";
 import type { StatusKind } from "@/lib/status";
 import { StructuredError } from "@/lib/errors";
+import {
+  assertGuestCardWriteAllowed,
+  assertNotGuest,
+  getWorkspaceRoleForBoard,
+  getWorkspaceRoleForCard,
+} from "@/lib/permissions/guest-guard";
 
 // Plan #16b-γ-D (#8) — bulk-action validators.
 //
@@ -82,6 +88,17 @@ export async function createCardImpl(token: string, input: {
   const parsed = CreateCardInput.parse(input);
   const creatorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    // #0111 — guests cannot create cards (read-only except status moves).
+    const [listBoardForRole] = await tx
+      .select({ boardId: lists.boardId })
+      .from(lists)
+      .where(eq(lists.id, parsed.listId))
+      .limit(1);
+    if (listBoardForRole?.boardId) {
+      assertNotGuest(
+        await getWorkspaceRoleForBoard(tx, listBoardForRole.boardId, creatorId),
+      );
+    }
     // When parentCardId is set, the DB trigger `cards_validate_parent`
     // requires the new card's resolved board (from listId → lists.board_id)
     // to equal the parent's board. The roadmap NewCardDialog can race —
@@ -300,6 +317,8 @@ export async function updateCardImpl(token: string, input: {
     patch.completedAt = parsed.completed ? new Date() : null;
   }
   return dbAsUser(token, async (tx) => {
+    // #0111 — updateCard never touches listId; guests have no path here.
+    assertNotGuest(await getWorkspaceRoleForCard(tx, parsed.id, actorId));
     if (parsed.ownerId !== undefined) {
       const [cardAccess] = await tx
         .select({
@@ -503,7 +522,13 @@ export async function moveCardImpl(token: string, input: {
   id: string; listId: string; position: string;
 }) {
   const parsed = MoveCardInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    // #0111 — guests may move (change listId of) cards assigned to them.
+    const role = await getWorkspaceRoleForCard(tx, parsed.id, actorId);
+    if (role === "guest") {
+      await assertGuestCardWriteAllowed(tx, role, parsed.id, actorId, ["listId"]);
+    }
     const [row] = await tx.update(cards)
       .set({ listId: parsed.listId, position: parsed.position })
       .where(eq(cards.id, parsed.id)).returning();
@@ -536,14 +561,19 @@ export async function moveCardToStatusImpl(
   input: { cardId: string; statusKind: StatusKind },
 ): Promise<{ cardId: string; listId: string }> {
   const cardId = input.cardId;
+  const actorId = decodeSub(token);
 
-  // Phase 1: probe.
+  // Phase 1: probe (+ #0111 guest gate for assigned cards only).
   const probe = await dbAsUser(token, async (tx) => {
     const [card] = await tx
       .select({ id: cards.id, boardId: cards.boardId, listId: cards.listId })
       .from(cards)
       .where(eq(cards.id, cardId));
     if (!card) return null;
+    const role = await getWorkspaceRoleForBoard(tx, card.boardId, actorId);
+    if (role === "guest") {
+      await assertGuestCardWriteAllowed(tx, role, cardId, actorId, ["listId"]);
+    }
     const [currentList] = await tx
       .select({ id: lists.id, statusKind: lists.statusKind })
       .from(lists)
@@ -588,7 +618,10 @@ export async function moveCardToStatusImpl(
 
 export async function archiveCardImpl(token: string, input: { id: string; archived: boolean }) {
   const parsed = ArchiveCardInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    // #0111 — archive is not a status move; guests are blocked.
+    assertNotGuest(await getWorkspaceRoleForCard(tx, parsed.id, actorId));
     const [row] = await tx.update(cards).set({ archived: parsed.archived })
       .where(eq(cards.id, parsed.id)).returning();
     if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
@@ -616,7 +649,10 @@ export async function cascadeShiftBlockedAfterImpl(
 ): Promise<{ shifted: { id: string; deltaDays: number }[] }> {
   const parsed = CascadeShiftBlockedInput.parse(input);
   if (parsed.deltaDays === 0) return { shifted: [] };
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    // #0111 — cascade-shift writes dates on dependents; guests blocked.
+    assertNotGuest(await getWorkspaceRoleForCard(tx, parsed.cardId, actorId));
     const visited = new Set<string>([parsed.cardId]);
     const dependents: string[] = [];
     let frontier: string[] = [parsed.cardId];
@@ -686,7 +722,12 @@ export async function bulkArchiveCardsImpl(
   input: { cardIds: string[]; archived: boolean },
 ): Promise<{ updated: number }> {
   const p = BulkArchiveInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    // #0111 — bulk-archive is not a status move; reject guests.
+    if (p.cardIds.length > 0) {
+      assertNotGuest(await getWorkspaceRoleForCard(tx, p.cardIds[0]!, actorId));
+    }
     const r = await tx
       .update(cards)
       .set({ archived: p.archived })
@@ -702,7 +743,11 @@ export async function bulkSetSprintImpl(
   input: { cardIds: string[]; sprintId: string | null },
 ): Promise<{ updated: number }> {
   const p = BulkSetSprintInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    if (p.cardIds.length > 0) {
+      assertNotGuest(await getWorkspaceRoleForCard(tx, p.cardIds[0]!, actorId));
+    }
     const r = await tx
       .update(cards)
       .set({ sprintId: p.sprintId })
@@ -719,7 +764,11 @@ export async function bulkSetPriorityImpl(
   input: { cardIds: string[]; priority: "p0" | "p1" | "p2" | "p3" | "p4" | null },
 ): Promise<{ updated: number }> {
   const p = BulkSetPriorityInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    if (p.cardIds.length > 0) {
+      assertNotGuest(await getWorkspaceRoleForCard(tx, p.cardIds[0]!, actorId));
+    }
     const r = await tx
       .update(cards)
       .set({ priority: p.priority })
@@ -738,7 +787,11 @@ export async function bulkSetCompletedImpl(
   input: { cardIds: string[]; completed: boolean },
 ): Promise<{ updated: number }> {
   const p = BulkSetCompletedInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    if (p.cardIds.length > 0) {
+      assertNotGuest(await getWorkspaceRoleForCard(tx, p.cardIds[0]!, actorId));
+    }
     const r = await tx
       .update(cards)
       .set({ completedAt: p.completed ? new Date() : null })
@@ -758,7 +811,11 @@ export async function bulkAddLabelImpl(
   input: { cardIds: string[]; labelId: string },
 ): Promise<{ inserted: number }> {
   const p = BulkAddLabelInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    if (p.cardIds.length > 0) {
+      assertNotGuest(await getWorkspaceRoleForCard(tx, p.cardIds[0]!, actorId));
+    }
     const rows = p.cardIds.map((id) => ({
       cardId: id,
       labelId: p.labelId,
@@ -791,7 +848,11 @@ export async function moveCardCrossBoardImpl(
   position: string;
 }> {
   const p = MoveCardCrossBoardInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    // #0111 — cross-board move is a structural change (boardId update +
+    // possible parent reparent), not a status move; reject guests.
+    assertNotGuest(await getWorkspaceRoleForCard(tx, p.cardId, actorId));
     // Resolve destination board via the target list. If the user can't
     // read the list (RLS), this returns 0 rows and we 403.
     const [tlist] = await tx
@@ -853,7 +914,9 @@ export async function moveCardToBoardImpl(
   position: string;
 }> {
   const p = MoveCardToBoardInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    assertNotGuest(await getWorkspaceRoleForCard(tx, p.cardId, actorId));
     const candidates = await tx
       .select({
         id: lists.id,
@@ -1075,7 +1138,10 @@ export async function reorderRoadmapRowImpl(
   },
 ): Promise<{ id: string; roadmapOrder: number }> {
   const p = ReorderRoadmapRowInput.parse(input);
+  const actorId = decodeSub(token);
   return dbAsUser(token, async (tx) => {
+    // #0111 — roadmap reorder is a write across many cards; reject guests.
+    assertNotGuest(await getWorkspaceRoleForCard(tx, p.cardId, actorId));
     // Serialize concurrent reorders within the same workspace so the
     // renumber path can't race against a second writer's neighbour-rank
     // reads. The roadmap view is workspace-scoped (lanes mix anchors +
@@ -1205,12 +1271,16 @@ export async function syncParentFromSubtaskImpl(
   const parsed = SyncParentFromSubtaskInput.parse(input);
   const wantComplete = parsed.intent === "done";
   const statusKind: StatusKind = wantComplete ? "done" : "in_progress";
+  const actorId = decodeSub(token);
 
   // Step 1: completed_at flip (idempotent — no-op write if already in
   // target state, so the 0086 activity trigger stays silent). Also
   // returns boardId so the wrapper can revalidate without a second
   // round-trip.
   const { completedAt, boardId } = await dbAsUser(token, async (tx) => {
+    // #0111 — sync-parent flips parent.completedAt and moves it; a guest
+    // cannot drive a parent's status from a subtask. Reject.
+    assertNotGuest(await getWorkspaceRoleForCard(tx, parsed.parentCardId, actorId));
     const [current] = await tx
       .select({ completedAt: cards.completedAt, boardId: cards.boardId })
       .from(cards)
