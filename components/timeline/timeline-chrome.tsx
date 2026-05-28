@@ -29,6 +29,11 @@ import { useSharedAxis, useSharedDragPpd } from "@/lib/roadmap/shared-axis";
 import type { Zoom } from "@/lib/roadmap/dates";
 import { dayDiff, pixelsPerDay } from "@/lib/roadmap/dates";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
+import { useUserPreferences } from "@/lib/preferences/provider";
+import {
+  getTimelinePreferences,
+  patchTimelinePreferences,
+} from "@/lib/preferences/scoped";
 
 export function TimelineChrome({
   bandIds = [],
@@ -49,6 +54,8 @@ export function TimelineChrome({
   const sharedAxis = useSharedAxis();
   const sharedDragPpd = useSharedDragPpd();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const { preferences, setPreferences } = useUserPreferences();
+  const timelinePrefs = getTimelinePreferences(preferences);
 
   // --- URL-driven state, mirrors RoadmapView's reads ---
   const zoomParam = sp.get("zoom");
@@ -59,14 +66,20 @@ export function TimelineChrome({
   const lanesParam = sp.get("lanes");
   const laneMode: LaneMode = (LANE_MODES as string[]).includes(lanesParam ?? "")
     ? (lanesParam as LaneMode)
-    : "sub_board";
+    : (timelinePrefs.laneMode ?? "sub_board");
 
   const viewParam = sp.get("view");
   const viewMode: ViewMode = (VIEW_MODES as string[]).includes(viewParam ?? "")
     ? (viewParam as ViewMode)
     : "gantt";
 
-  const gutterOn = sp.get("gutter") === "1";
+  const gutterParam = sp.get("gutter");
+  const gutterOn =
+    gutterParam === "1"
+      ? true
+      : gutterParam === "0"
+        ? false
+        : (timelinePrefs.gutter ?? false);
 
   const queryParam = sp.get("q") ?? "";
   const [queryDraft, setQueryDraft] = useState(queryParam);
@@ -106,17 +119,27 @@ export function TimelineChrome({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp, sharedDragPpd]);
   const setLaneMode = useCallback((next: LaneMode) => {
+    setPreferences((current) =>
+      patchTimelinePreferences(current, { laneMode: next }),
+    );
     setUrlParam("lanes", next === "sub_board" ? null : next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp]);
+  }, [sp, setPreferences]);
   const setViewMode = useCallback((next: ViewMode) => {
     setUrlParam("view", next === "gantt" ? null : next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp]);
   const toggleGutter = useCallback(() => {
-    setUrlParam("gutter", gutterOn ? null : "1");
+    const next = !gutterOn;
+    setPreferences((current) =>
+      patchTimelinePreferences(current, { gutter: next }),
+    );
+    // Write the URL explicitly (?gutter=0 when turning off) so a stale
+    // truthy pref reading on the next render doesn't bounce the toggle
+    // back on. Matches the pattern roadmap-view uses for its gutter.
+    setUrlParam("gutter", next ? "1" : "0");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gutterOn, sp]);
+  }, [gutterOn, sp, setPreferences]);
   const noop = useCallback(() => {}, []);
 
   // --- Shared axis bindings ---
@@ -227,8 +250,8 @@ export function TimelineChrome({
       {/* Same row /w/:ws/roadmap uses: assignee filter + filter bar (no
           milestone buttons on the cross-WS surface). */}
       <div className="flex items-center gap-2 flex-wrap">
-        <AssigneeFilterRow />
-        <RoadmapFilterBar sprints={[]} hideSprint />
+        <AssigneeFilterRow timeline />
+        <RoadmapFilterBar sprints={[]} hideSprint timeline />
 
         {bandIds.length > 0 && (
           <button

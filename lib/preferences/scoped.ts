@@ -6,6 +6,7 @@ import {
   type Preferences,
   type RoadmapPagePreferences,
   type RoadmapViewModePreference,
+  type TimelinePreferences,
   type WorkspacePreferences,
   type WorkspacePreferenceTab,
 } from "@/lib/preferences/types";
@@ -13,6 +14,7 @@ import {
 const WORKSPACE_TABS = ["board", "roadmap"] as const;
 const ROADMAP_VIEW_MODES = ["gantt", "list"] as const;
 const ROADMAP_ZOOMS = ["fit", "week", "month", "quarter"] as const;
+const ROADMAP_LANE_MODES = ["sub_board", "assignee", "component"] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -85,7 +87,30 @@ export function getWorkspacePreferences(
   const roadmap: RoadmapPagePreferences = {};
   if (zoom !== undefined) roadmap.zoom = zoom;
   if (viewMode !== undefined) roadmap.viewMode = viewMode;
-  if (zoom !== undefined || viewMode !== undefined) {
+  if (isFilters(nestedRoadmap?.filters)) {
+    roadmap.filters = nestedRoadmap.filters;
+  }
+  if (typeof nestedRoadmap?.sprintFilter === "string") {
+    roadmap.sprintFilter = nestedRoadmap.sprintFilter;
+  }
+  if (
+    (ROADMAP_LANE_MODES as readonly unknown[]).includes(nestedRoadmap?.laneMode)
+  ) {
+    roadmap.laneMode = nestedRoadmap?.laneMode as RoadmapPagePreferences["laneMode"];
+  }
+  if (typeof nestedRoadmap?.showCriticalPath === "boolean") {
+    roadmap.showCriticalPath = nestedRoadmap.showCriticalPath;
+  }
+  if (typeof nestedRoadmap?.autoCascade === "boolean") {
+    roadmap.autoCascade = nestedRoadmap.autoCascade;
+  }
+  if (typeof nestedRoadmap?.gutter === "boolean") {
+    roadmap.gutter = nestedRoadmap.gutter;
+  }
+  if (typeof nestedRoadmap?.showMilestones === "boolean") {
+    roadmap.showMilestones = nestedRoadmap.showMilestones;
+  }
+  if (Object.keys(roadmap).length > 0) {
     result.roadmap = roadmap;
   }
   if (typeof scoped.lastBoardId === "string") {
@@ -176,6 +201,37 @@ export function patchWorkspacePreferences(
     workspaces: {
       ...(preferences.workspaces ?? {}),
       [workspaceId]: nextEntry,
+    },
+  };
+}
+
+export function getTimelinePreferences(
+  preferences: Preferences,
+): TimelinePreferences {
+  const scoped = preferences.timeline ?? {};
+  const out: TimelinePreferences = {};
+  if (isFilters(scoped.filters)) out.filters = scoped.filters;
+  if ((ROADMAP_LANE_MODES as readonly unknown[]).includes(scoped.laneMode)) {
+    out.laneMode = scoped.laneMode as TimelinePreferences["laneMode"];
+  }
+  if (typeof scoped.gutter === "boolean") out.gutter = scoped.gutter;
+  if (
+    Array.isArray(scoped.collapsedWorkspaceIds) &&
+    scoped.collapsedWorkspaceIds.every((id) => typeof id === "string")
+  ) {
+    out.collapsedWorkspaceIds = scoped.collapsedWorkspaceIds;
+  }
+  return out;
+}
+
+export function patchTimelinePreferences(
+  preferences: Preferences,
+  patch: TimelinePreferences,
+): Partial<Preferences> {
+  return {
+    timeline: {
+      ...(preferences.timeline ?? {}),
+      ...patch,
     },
   };
 }

@@ -28,6 +28,11 @@ import {
   parseFilters,
   serializeFilters,
 } from "@/lib/board-filters";
+import { useUserPreferences } from "@/lib/preferences/provider";
+import {
+  patchTimelinePreferences,
+  patchWorkspacePreferences,
+} from "@/lib/preferences/scoped";
 type SprintRef = { id: string; name: string };
 
 const TYPE_OPTIONS = ["task", "subtask", "bug"] as const;
@@ -36,6 +41,8 @@ type Type = (typeof TYPE_OPTIONS)[number];
 export function RoadmapFilterBar({
   sprints,
   hideSprint = false,
+  workspaceId,
+  timeline,
 }: {
   /** Sprint roster for the Sprint sub-menu. RoadmapView passes the active
    *  workspace's sprints (from the store). Cross-workspace surfaces pass
@@ -43,10 +50,19 @@ export function RoadmapFilterBar({
   sprints: SprintRef[];
   /** Suppresses the Sprint sub-menu entirely (cross-workspace surfaces). */
   hideSprint?: boolean;
+  /** When set, every filter mutation is mirrored into the workspace's
+   *  roadmap preferences so the choice survives a tab close / re-login.
+   *  Omit on cross-workspace surfaces (no single owning workspace). */
+  workspaceId?: string;
+  /** When true (and no workspaceId), persists the filter mutations into
+   *  the global `preferences.timeline.filters`. Used by the
+   *  cross-workspace `/timeline` surface. */
+  timeline?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
+  const { setPreferences } = useUserPreferences();
   const filters = useMemo(
     () => parseFilters(new URLSearchParams(sp.toString())),
     [sp],
@@ -69,6 +85,17 @@ export function RoadmapFilterBar({
     }
     if (sprintNext) params.set("sprint", sprintNext);
     pushParams(params);
+    if (workspaceId) {
+      setPreferences((current) =>
+        patchWorkspacePreferences(current, workspaceId, {
+          roadmap: { filters: next, sprintFilter: sprintNext },
+        }),
+      );
+    } else if (timeline) {
+      setPreferences((current) =>
+        patchTimelinePreferences(current, { filters: next }),
+      );
+    }
   }
 
   function toggleType(t: Type) {

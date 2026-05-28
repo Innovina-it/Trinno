@@ -11,7 +11,11 @@ import {
   type AssigneeMode,
 } from "@/lib/board-filters";
 import { useUserPreferences } from "@/lib/preferences/provider";
-import { patchBoardPreferences } from "@/lib/preferences/scoped";
+import {
+  patchBoardPreferences,
+  patchTimelinePreferences,
+  patchWorkspacePreferences,
+} from "@/lib/preferences/scoped";
 
 // Prominent top-row assignee filter. Promoted out of the filter dropdown
 // cluster so the operator's primary axis (mine vs all vs unassigned) is
@@ -40,10 +44,20 @@ const SEGMENTS: { value: AssigneeMode; label: string; title: string }[] = [
 
 export function AssigneeFilterRow({
   boardId,
+  workspaceId,
+  timeline,
   className,
   hiddenCount = 0,
 }: {
   boardId?: string;
+  /** When set (and no boardId), persists the filter to the workspace's
+   *  roadmap preferences instead of a per-board scope. Used by the
+   *  roadmap surface which has no single board to scope to. */
+  workspaceId?: string;
+  /** When true (and no boardId / workspaceId), persists the filter to the
+   *  global `preferences.timeline.filters`. Used by the cross-workspace
+   *  `/timeline` surface which has no single workspace to scope to. */
+  timeline?: boolean;
   className?: string;
   hiddenCount?: number;
 }) {
@@ -75,6 +89,16 @@ export function AssigneeFilterRow({
           filters: nextFilters,
           dataVisibilityFilters: { assignee: next },
         }),
+      );
+    } else if (workspaceId) {
+      setPreferences((current) =>
+        patchWorkspacePreferences(current, workspaceId, {
+          roadmap: { filters: nextFilters },
+        }),
+      );
+    } else if (timeline) {
+      setPreferences((current) =>
+        patchTimelinePreferences(current, { filters: nextFilters }),
       );
     }
   }

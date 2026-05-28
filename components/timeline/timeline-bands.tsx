@@ -18,7 +18,7 @@
  * the computed range + aggregatedCards reach every consumer without
  * re-prop-drilling through the server boundary.
  */
-import { useCallback, useMemo, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { WorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
@@ -26,7 +26,17 @@ import { RoadmapView } from "@/components/roadmap/roadmap-view";
 import { CollapsedBand } from "@/components/timeline/collapsed-band";
 import { TimelineChrome } from "@/components/timeline/timeline-chrome";
 import { SharedAxisProvider } from "@/lib/roadmap/shared-axis";
-import { parseFilters } from "@/lib/board-filters";
+import {
+  hasExplicitFilterParams,
+  parseFilters,
+  preserveNonFilterParams,
+  serializeFilters,
+} from "@/lib/board-filters";
+import { useUserPreferences } from "@/lib/preferences/provider";
+import {
+  getTimelinePreferences,
+  patchTimelinePreferences,
+} from "@/lib/preferences/scoped";
 import { roadmapUserFilterPasses } from "@/lib/roadmap/filtering";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
 
@@ -48,6 +58,7 @@ export function TimelineBands({
   const pathname = usePathname();
   const sp = useSearchParams();
   const [, startTransition] = useTransition();
+  const { preferences, setPreferences } = useUserPreferences();
 
   // --- URL state ---
   const filters = useMemo(
@@ -55,11 +66,60 @@ export function TimelineBands({
     [sp],
   );
   const queryNorm = (sp.get("q") ?? "").trim().toLowerCase();
+
+  // Seed URL from persisted timeline preferences on first mount: filters
+  // and the collapsed-band set. URL with explicit values wins so a shared
+  // link always shows that link's exact view.
+  const didSeedTimelineRef = useRef(false);
+  useEffect(() => {
+    if (didSeedTimelineRef.current) return;
+    didSeedTimelineRef.current = true;
+    const saved = getTimelinePreferences(preferences);
+    const sourceParams = new URLSearchParams(sp.toString());
+    let nextParams = sourceParams;
+    let touched = false;
+    if (saved.filters && !hasExplicitFilterParams(sourceParams)) {
+      nextParams = preserveNonFilterParams(
+        sourceParams,
+        serializeFilters(saved.filters),
+      );
+      touched = true;
+    }
+    if (
+      saved.collapsedWorkspaceIds &&
+      saved.collapsedWorkspaceIds.length > 0 &&
+      !nextParams.has("collapsed")
+    ) {
+      nextParams.set("collapsed", saved.collapsedWorkspaceIds.join(","));
+      touched = true;
+    }
+    if (!touched) return;
+    const qs = nextParams.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Mirror collapse-set changes into the persisted timeline pref. Skip
+  // the first render — the seed effect above is the only legitimate
+  // first-paint mutation and shouldn't re-emit itself as a save.
+  const collapsedFirstRenderRef = useRef(true);
   const collapsedIds = useMemo(() => {
     const c = sp.get("collapsed");
     if (!c) return new Set<string>();
     return new Set(c.split(",").filter(Boolean));
   }, [sp]);
+
+  useEffect(() => {
+    if (collapsedFirstRenderRef.current) {
+      collapsedFirstRenderRef.current = false;
+      return;
+    }
+    setPreferences((current) =>
+      patchTimelinePreferences(current, {
+        collapsedWorkspaceIds: [...collapsedIds],
+      }),
+    );
+  }, [collapsedIds, setPreferences]);
 
   // --- Per-band filter pass ---
   // For each band, walk its snapshot.cards, keep cards that have both

@@ -80,7 +80,12 @@ import {
   type PatchInput as QuickViewPatchInput,
   type QuickViewSubtask,
 } from "@/components/board/card-quick-view";
-import { parseFilters } from "@/lib/board-filters";
+import {
+  hasExplicitFilterParams,
+  parseFilters,
+  preserveNonFilterParams,
+  serializeFilters,
+} from "@/lib/board-filters";
 import { useRoadmapDragHarness } from "./use-roadmap-drag-harness";
 import {
   useBoards,
@@ -250,16 +255,28 @@ export function RoadmapView({
   const lanesParam = sp.get("lanes");
   const laneMode: LaneMode = (LANE_MODES as string[]).includes(lanesParam ?? "")
     ? (lanesParam as LaneMode)
-    : "sub_board";
+    : (useWsPrefs
+        ? (workspacePreferences.roadmap?.laneMode ?? "sub_board")
+        : "sub_board");
   const viewParam = sp.get("view");
   const viewMode: ViewMode = (VIEW_MODES as string[]).includes(viewParam ?? "")
     ? (viewParam as ViewMode)
     : (useWsPrefs ? (workspacePreferences.roadmap?.viewMode ?? "gantt") : "gantt");
   const focusParam = sp.get("focus");
   const queryParam = sp.get("q") ?? "";
-  // Plan #16b-γ-G G4 — priority-gutter URL toggle. Default off (param
-  // absent); `?gutter=1` turns it on.
-  const gutterOn = sp.get("gutter") === "1";
+  // Plan #16b-γ-G G4 — priority-gutter URL toggle. URL `?gutter=1`/`?gutter=0`
+  // wins when present (so shared links keep their explicit state). When
+  // absent, fall back to the workspace pref so a returning user finds the
+  // gutter in the same state they left it.
+  const gutterParam = sp.get("gutter");
+  const gutterOn =
+    gutterParam === "1"
+      ? true
+      : gutterParam === "0"
+        ? false
+        : useWsPrefs
+          ? (workspacePreferences.roadmap?.gutter ?? false)
+          : false;
 
   // A3 — debounced search. URL param `q` is the source of truth, the
   // input is a local mirror that flushes to the URL after 250ms.
@@ -289,6 +306,33 @@ export function RoadmapView({
     [sp],
   );
   const sprintFilter = sp.get("sprint") ?? "";
+
+  // Seed the URL from persisted workspace roadmap filters on first mount.
+  // Mirrors board-view's `savedFilters` rehydration: the URL remains the
+  // source of truth during a session, but if the user lands on the
+  // roadmap with no filter params (cold reload, fresh sign-in, or
+  // cross-device visit) we replay their last applied filters / sprint.
+  // Hard URL filter params win — opening a shared link must show that
+  // link's exact view, not the recipient's saved one.
+  const didSeedFiltersRef = useRef(false);
+  useEffect(() => {
+    if (didSeedFiltersRef.current) return;
+    didSeedFiltersRef.current = true;
+    const savedFilters = workspacePreferences.roadmap?.filters;
+    const savedSprint = workspacePreferences.roadmap?.sprintFilter;
+    if (!savedFilters && !savedSprint) return;
+    const params = new URLSearchParams(sp.toString());
+    if (hasExplicitFilterParams(params) || params.has("sprint")) return;
+    const nextParams = preserveNonFilterParams(
+      params,
+      savedFilters ? serializeFilters(savedFilters) : new URLSearchParams(),
+    );
+    if (savedSprint) nextParams.set("sprint", savedSprint);
+    const qs = nextParams.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    // Intentionally mount-only; subsequent URL changes shouldn't re-seed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // A7 — new-card dialog state lifted up so `n` can open it.
   const [newCardOpen, setNewCardOpen] = useState(false);
@@ -429,29 +473,68 @@ export function RoadmapView({
     setPanning(false);
   }, []);
 
-  // Plan #16b-γ-A (#3) — critical-path overlay toggle. Local state only;
-  // intentionally not URL-synced because the overlay is a per-session
-  // analysis tool, not a shareable view state.
-  const [showCriticalPath, setShowCriticalPath] = useState(false);
+  // Plan #16b-γ-A (#3) — critical-path overlay toggle. Seeded from the
+  // workspace's persisted pref so the overlay state is restored on
+  // reload / cross-device sign-in. Per-workspace only — on /timeline the
+  // shared axis makes a single overlay setting span multiple bands, so
+  // we fall back to plain local state.
+  const [showCriticalPath, setShowCriticalPath] = useState(() =>
+    useWsPrefs ? (workspacePreferences.roadmap?.showCriticalPath ?? false) : false,
+  );
+  const showCriticalPathFirstRenderRef = useRef(true);
+  useEffect(() => {
+    if (showCriticalPathFirstRenderRef.current) {
+      showCriticalPathFirstRenderRef.current = false;
+      return;
+    }
+    if (!useWsPrefs) return;
+    setPreferences((current) =>
+      patchWorkspacePreferences(current, workspaceId, {
+        roadmap: { showCriticalPath },
+      }),
+    );
+  }, [showCriticalPath, useWsPrefs, workspaceId, setPreferences]);
 
-  // Plan #16b-γ-A (#4) — auto-cascade toggle (per-workspace, persisted in
-  // localStorage). When true, a forward target_date drag opens a confirm
-  // dialog listing every transitively blocked dependent we'd shift by the
-  // same delta. The dialog calls the server action; the originating drag
-  // has already persisted on its own.
+  // Plan #16b-γ-A (#4) — auto-cascade toggle. Primary store is the
+  // workspace pref so the choice follows the user cross-device. Legacy
+  // localStorage entries (pre-pref rollout) are read once and promoted
+  // into the pref so users don't see the toggle silently reset on first
+  // visit after the migration.
   const AUTO_CASCADE_KEY = `roadmap:${workspaceId}:autoCascade`;
-  const [autoCascade, setAutoCascade] = useState(false);
+  const [autoCascade, setAutoCascade] = useState(() =>
+    useWsPrefs && workspacePreferences.roadmap?.autoCascade !== undefined
+      ? workspacePreferences.roadmap.autoCascade
+      : false,
+  );
   const autoCascadeRef = useRef(autoCascade);
   autoCascadeRef.current = autoCascade;
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // Skip the rehydrate when the pref already carries an explicit value —
+    // the pref is the source of truth.
+    if (workspacePreferences.roadmap?.autoCascade !== undefined) return;
     try {
       const raw = window.localStorage.getItem(AUTO_CASCADE_KEY);
-      if (raw === "1") setAutoCascade(true);
+      if (raw === "1") {
+        setAutoCascade(true);
+        if (useWsPrefs) {
+          setPreferences((current) =>
+            patchWorkspacePreferences(current, workspaceId, {
+              roadmap: { autoCascade: true },
+            }),
+          );
+        }
+      }
     } catch {
       /* ignore */
     }
-  }, [AUTO_CASCADE_KEY]);
+  }, [
+    AUTO_CASCADE_KEY,
+    setPreferences,
+    useWsPrefs,
+    workspaceId,
+    workspacePreferences.roadmap?.autoCascade,
+  ]);
   const toggleAutoCascade = useCallback(() => {
     setAutoCascade((p) => {
       const next = !p;
@@ -460,9 +543,16 @@ export function RoadmapView({
       } catch {
         /* ignore */
       }
+      if (useWsPrefs) {
+        setPreferences((current) =>
+          patchWorkspacePreferences(current, workspaceId, {
+            roadmap: { autoCascade: next },
+          }),
+        );
+      }
       return next;
     });
-  }, [AUTO_CASCADE_KEY]);
+  }, [AUTO_CASCADE_KEY, setPreferences, useWsPrefs, workspaceId]);
 
   // Cascade dialog state.
   const [cascadeState, setCascadeState] = useState<{
@@ -476,7 +566,25 @@ export function RoadmapView({
 
   // === MILESTONE MARKERS START ===
   const [storedMilestones, setStoredMilestones] = useState<MilestoneRow[]>([]);
-  const [showMilestones, setShowMilestones] = useState(true);
+  // Seed from workspace pref so a returning user finds the markers in the
+  // same visibility state. Default true = markers visible (matches the
+  // prior hard-coded default for fresh accounts).
+  const [showMilestones, setShowMilestones] = useState(() =>
+    useWsPrefs ? (workspacePreferences.roadmap?.showMilestones ?? true) : true,
+  );
+  const showMilestonesFirstRenderRef = useRef(true);
+  useEffect(() => {
+    if (showMilestonesFirstRenderRef.current) {
+      showMilestonesFirstRenderRef.current = false;
+      return;
+    }
+    if (!useWsPrefs) return;
+    setPreferences((current) =>
+      patchWorkspacePreferences(current, workspaceId, {
+        roadmap: { showMilestones },
+      }),
+    );
+  }, [showMilestones, useWsPrefs, workspaceId, setPreferences]);
   const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<MilestoneRow | null>(null);
 
@@ -1180,19 +1288,37 @@ export function RoadmapView({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
-  // ---- Lane mode toggle (URL-synced; default "sub_board" stays absent from URL) ----
+  // ---- Lane mode toggle (URL-synced + workspace pref for cross-session restore) ----
   function setLaneMode(next: LaneMode) {
+    if (useWsPrefs) {
+      setPreferences((current) =>
+        patchWorkspacePreferences(current, workspaceId, {
+          roadmap: { laneMode: next },
+        }),
+      );
+    }
     const params = new URLSearchParams(sp.toString());
     if (next === "sub_board") params.delete("lanes");
     else params.set("lanes", next);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
-  // Plan #16b-γ-G G4 — priority-gutter toggle (URL-synced; default off).
+  // Plan #16b-γ-G G4 — priority-gutter toggle (URL + workspace pref).
+  // When turning off, write the explicit `?gutter=0` so the URL "wins"
+  // over a stale truthy pref reading immediately after the toggle (we'd
+  // otherwise read pref=true on the next render and bounce back on).
   function toggleGutter() {
+    const next = !gutterOn;
+    if (useWsPrefs) {
+      setPreferences((current) =>
+        patchWorkspacePreferences(current, workspaceId, {
+          roadmap: { gutter: next },
+        }),
+      );
+    }
     const params = new URLSearchParams(sp.toString());
-    if (gutterOn) params.delete("gutter");
-    else params.set("gutter", "1");
+    if (next) params.set("gutter", "1");
+    else params.delete("gutter");
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
@@ -1738,8 +1864,14 @@ export function RoadmapView({
       {/* === MILESTONE MARKERS START (toolbar) === */}
       {!hideChrome && (
         <div className="flex items-center gap-2 flex-wrap">
-          <AssigneeFilterRow hiddenCount={mineHiddenCount} />
-          <RoadmapFilterBar sprints={storeSprints} />
+          <AssigneeFilterRow
+            workspaceId={workspaceId}
+            hiddenCount={mineHiddenCount}
+          />
+          <RoadmapFilterBar
+            sprints={storeSprints}
+            workspaceId={workspaceId}
+          />
           <button
             type="button"
             onClick={() => setShowMilestones((v) => !v)}

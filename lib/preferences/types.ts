@@ -4,9 +4,28 @@ import { type Zoom } from "@/lib/roadmap/dates";
 export type WorkspacePreferenceTab = "board" | "roadmap";
 export type RoadmapViewModePreference = "gantt" | "list";
 
+export type RoadmapLaneModePreference = "sub_board" | "assignee" | "component";
+
 export type RoadmapPagePreferences = {
   zoom?: Zoom;
   viewMode?: RoadmapViewModePreference;
+  /** Persisted roadmap filter bag (types, due, assignee, etc.). Mirrors the
+   *  board's `BoardPreferences.filters` so the user finds the same filter
+   *  applied after a reload / cross-device sign-in. URL stays the source of
+   *  truth during a session; this is the seed for the next session. */
+  filters?: Filters;
+  /** Currently-selected sprint chip on the roadmap. URL key `?sprint=`. */
+  sprintFilter?: string;
+  /** "Group lanes" dropdown selection (sub_board / assignee / component). */
+  laneMode?: RoadmapLaneModePreference;
+  /** View options dropdown — Critical path overlay. */
+  showCriticalPath?: boolean;
+  /** View options dropdown — Auto-reschedule cascade on drag. */
+  autoCascade?: boolean;
+  /** View options dropdown — Priority gutter column. */
+  gutter?: boolean;
+  /** Milestone markers toolbar toggle. Default true (markers visible). */
+  showMilestones?: boolean;
 };
 
 export type BacklogPagePreferences = Record<string, never>;
@@ -27,6 +46,18 @@ export type WorkspacePreferences = {
   roadmapZoom?: Zoom;
   /** @deprecated use roadmap.viewMode */
   roadmapViewMode?: RoadmapViewModePreference;
+};
+
+/** Cross-workspace `/timeline` surface. Scope is global (not per-workspace)
+ *  because the page itself aggregates every workspace into one view. */
+export type TimelinePreferences = {
+  filters?: Filters;
+  /** "Group lanes" dropdown selection. */
+  laneMode?: "sub_board" | "assignee" | "component";
+  /** Priority gutter toggle from the View options dropdown. */
+  gutter?: boolean;
+  /** Workspaces whose bands are currently collapsed in the band stack. */
+  collapsedWorkspaceIds?: string[];
 };
 
 export type BoardPreferences = {
@@ -51,6 +82,8 @@ export type Preferences = {
 
   workspaces?: Record<string, WorkspacePreferences>;
   boards?: Record<string, BoardPreferences>;
+  /** Filters applied on the cross-workspace `/timeline` page. Global scope. */
+  timeline?: TimelinePreferences;
 
   // Legacy flat keys. Keep readable for existing persisted rows while new
   // workspace/board scoped preferences roll out. Will be removed in a future
