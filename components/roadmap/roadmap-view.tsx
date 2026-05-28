@@ -1836,83 +1836,84 @@ export function RoadmapView({
       className={fillHeight ? "flex flex-col flex-1 min-h-0" : "space-y-4"}
     >
       {!hideChrome && (
-        <RoadmapHeader
-          zoom={zoom}
-          onSetZoom={setZoom}
-          laneMode={laneMode}
-          onSetLaneMode={setLaneMode}
-          viewMode={viewMode}
-          onSetViewMode={setViewMode}
-          subscribed={subscribed}
-          showCriticalPath={showCriticalPath}
-          onToggleCriticalPath={() => setShowCriticalPath((p) => !p)}
-          autoCascade={autoCascade}
-          onToggleAutoCascade={toggleAutoCascade}
-          gutter={gutterOn}
-          onToggleGutter={toggleGutter}
-          onJumpToDate={jumpToDate}
-          onOpenNewCard={() => setNewCardOpen(true)}
-          onChipDragStart={drag.onChipDragStart}
-          queryDraft={queryDraft}
-          onQueryDraftChange={setQueryDraft}
-          searchInputRef={searchInputRef}
-          onOpenShortcuts={() => setShortcutsOpen(true)}
-          gridStart={gridStart}
-          gridEnd={gridEnd}
-        />
-      )}
-      {/* === MILESTONE MARKERS START (toolbar) === */}
-      {!hideChrome && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <AssigneeFilterRow
-            workspaceId={workspaceId}
-            hiddenCount={mineHiddenCount}
-          />
-          <RoadmapFilterBar
-            sprints={storeSprints}
-            workspaceId={workspaceId}
-          />
-          <button
-            type="button"
-            onClick={() => setShowMilestones((v) => !v)}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] ${
-              !showMilestones
-                ? "border-fg/40 bg-fg/10 text-fg"
-                : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
-            }`}
-            data-testid="roadmap-toggle-milestones"
-          >
-            {showMilestones ? "Hide milestones" : "Show milestones"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setEditingMilestone(null);
-              setMilestoneDialogOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
-            data-testid="roadmap-add-milestone"
-          >
-            + Add milestone
-          </button>
-        </div>
-      )}
-      {/* === MILESTONE MARKERS END (toolbar) === */}
-
-
-      {!hideChrome && viewMode === "gantt" && cards.length > 0 && (
-        <div className="hidden md:block">
-          <RoadmapMiniMap
-            cards={cards}
-            gridStart={gridStart}
-            gridEnd={gridEnd}
-            canvasWidth={width}
-            scrollerRef={scrollerRef}
+        <div
+          className="sticky top-14 z-30 -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6 pt-3 pb-3 bg-[color:var(--bg-deep)]/95 backdrop-blur-sm border-b border-hairline space-y-3"
+          data-testid="roadmap-sticky-header"
+        >
+          <RoadmapHeader
             zoom={zoom}
             onSetZoom={setZoom}
-            effectivePpd={effectivePpd}
-            onPpdOverride={setDragPpdOverride}
+            laneMode={laneMode}
+            onSetLaneMode={setLaneMode}
+            viewMode={viewMode}
+            onSetViewMode={setViewMode}
+            subscribed={subscribed}
+            showCriticalPath={showCriticalPath}
+            onToggleCriticalPath={() => setShowCriticalPath((p) => !p)}
+            autoCascade={autoCascade}
+            onToggleAutoCascade={toggleAutoCascade}
+            gutter={gutterOn}
+            onToggleGutter={toggleGutter}
+            onJumpToDate={jumpToDate}
+            onOpenNewCard={() => setNewCardOpen(true)}
+            onChipDragStart={drag.onChipDragStart}
+            queryDraft={queryDraft}
+            onQueryDraftChange={setQueryDraft}
+            searchInputRef={searchInputRef}
+            onOpenShortcuts={() => setShortcutsOpen(true)}
+            gridStart={gridStart}
+            gridEnd={gridEnd}
           />
+          {/* === MILESTONE MARKERS START (toolbar) === */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <AssigneeFilterRow
+              workspaceId={workspaceId}
+              hiddenCount={mineHiddenCount}
+            />
+            <RoadmapFilterBar
+              sprints={storeSprints}
+              workspaceId={workspaceId}
+            />
+            <button
+              type="button"
+              onClick={() => setShowMilestones((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs hover:bg-[rgb(255_255_255/0.08)] ${
+                !showMilestones
+                  ? "border-fg/40 bg-fg/10 text-fg"
+                  : "border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg"
+              }`}
+              data-testid="roadmap-toggle-milestones"
+            >
+              {showMilestones ? "Hide milestones" : "Show milestones"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingMilestone(null);
+                setMilestoneDialogOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
+              data-testid="roadmap-add-milestone"
+            >
+              + Add milestone
+            </button>
+          </div>
+          {/* === MILESTONE MARKERS END (toolbar) === */}
+          {viewMode === "gantt" && cards.length > 0 && (
+            <div className="hidden md:block">
+              <RoadmapMiniMap
+                cards={cards}
+                gridStart={gridStart}
+                gridEnd={gridEnd}
+                canvasWidth={width}
+                scrollerRef={scrollerRef}
+                zoom={zoom}
+                onSetZoom={setZoom}
+                effectivePpd={effectivePpd}
+                onPpdOverride={setDragPpdOverride}
+              />
+            </div>
+          )}
         </div>
       )}
 
