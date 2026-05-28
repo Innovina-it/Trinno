@@ -7,6 +7,7 @@ import { LogOut, XIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { logout } from "@/actions/auth";
+import { useUserPreferences } from "@/lib/preferences/provider";
 
 type DrawerLink = {
   href: string;
@@ -43,6 +44,7 @@ export function MobileNavDrawer({
   isActive,
   trigger,
 }: MobileNavDrawerProps) {
+  const { flushPreferences } = useUserPreferences();
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       {trigger && (
@@ -174,7 +176,16 @@ export function MobileNavDrawer({
                 </p>
               </div>
             )}
-            <form action={logout}>
+            <form
+              onSubmit={async (e) => {
+                // See account-menu.tsx — drain pending pref writes before
+                // the auth cookie is cleared. Without this, prefs changed
+                // in the last 500ms window are lost on next sign-in.
+                e.preventDefault();
+                await flushPreferences();
+                await logout();
+              }}
+            >
               <button
                 type="submit"
                 data-testid="mobile-nav-logout"

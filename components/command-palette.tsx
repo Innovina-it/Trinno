@@ -30,6 +30,7 @@ import {
 import { search } from "@/actions/search";
 import { logout } from "@/actions/auth";
 import { useCommandPalette } from "@/lib/use-command-palette";
+import { useUserPreferences } from "@/lib/preferences/provider";
 
 export type PaletteFavorite = {
   boardId: string;
@@ -103,6 +104,7 @@ export function CommandPalette({
   // Open state lives in a shared store so the nav's ⌘K trigger button
   // and the `useNavChords` hook can both flip it. Esc closes locally.
   const { open, setOpen } = useCommandPalette();
+  const { flushPreferences } = useUserPreferences();
   const [q, setQ] = useState("");
   const [cardResults, setCardResults] = useState<CardResult[]>([]);
   const [active, setActive] = useState(0);
@@ -354,6 +356,9 @@ export function CommandPalette({
         icon: <LogOut className="size-3.5 text-fg-muted" />,
         onSelect: async () => {
           setOpen(false);
+          // Drain pending pref writes before the auth cookie is cleared.
+          // See account-menu.tsx for the full rationale.
+          await flushPreferences();
           await logout();
         },
       },
@@ -364,7 +369,7 @@ export function CommandPalette({
     }
 
     return out;
-  }, [q, recents, favorites, cardResults, workspaces, activeWorkspaceId, theme, setTheme, setOpen, router]);
+  }, [q, recents, favorites, cardResults, workspaces, activeWorkspaceId, theme, setTheme, setOpen, router, flushPreferences]);
 
   // Group items per section for rendering. Plain array of pairs so we
   // don't reach for the JS `Map` constructor — Turbopack misresolves it

@@ -25,6 +25,10 @@ type PreferencesUpdate =
 type UserPreferencesContextValue = {
   preferences: Preferences;
   setPreferences: (update: PreferencesUpdate) => void;
+  /** Cancel the debounce and await any pending write. Call before logout,
+   *  account switch, or other auth-clearing actions so in-flight changes
+   *  hit the DB while the user's JWT is still valid. */
+  flushPreferences: () => Promise<void>;
 };
 
 const UserPreferencesContext =
@@ -74,21 +78,31 @@ export function UserPreferencesProvider({
   const pendingRef = useRef<Partial<Preferences>>({});
   const writeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const flushPending = useCallback(() => {
+  const flushPending = useCallback(async (): Promise<void> => {
     const pending = pendingRef.current;
     if (Object.keys(pending).length === 0) return;
 
     pendingRef.current = {};
-    void setUserPreferences(pending).catch(() => {
+    try {
+      await setUserPreferences(pending);
+    } catch {
       pendingRef.current = { ...pending, ...pendingRef.current };
-    });
+    }
   }, []);
+
+  const flushPreferences = useCallback(async (): Promise<void> => {
+    if (writeTimerRef.current) {
+      clearTimeout(writeTimerRef.current);
+      writeTimerRef.current = null;
+    }
+    await flushPending();
+  }, [flushPending]);
 
   const scheduleWrite = useCallback(() => {
     if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
     writeTimerRef.current = setTimeout(() => {
       writeTimerRef.current = null;
-      flushPending();
+      void flushPending();
     }, 500);
   }, [flushPending]);
 
@@ -125,7 +139,7 @@ export function UserPreferencesProvider({
   useEffect(() => {
     return () => {
       if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
-      flushPending();
+      void flushPending();
     };
   }, [flushPending]);
 
@@ -143,7 +157,7 @@ export function UserPreferencesProvider({
         clearTimeout(writeTimerRef.current);
         writeTimerRef.current = null;
       }
-      flushPending();
+      void flushPending();
     }
     function onVisibility() {
       if (document.visibilityState === "hidden") flushNow();
@@ -158,8 +172,8 @@ export function UserPreferencesProvider({
   }, [flushPending]);
 
   const value = useMemo(
-    () => ({ preferences, setPreferences }),
-    [preferences, setPreferences],
+    () => ({ preferences, setPreferences, flushPreferences }),
+    [preferences, setPreferences, flushPreferences],
   );
 
   return createElement(

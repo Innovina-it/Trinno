@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { logout } from "@/actions/auth";
 import { publishAuthEvent } from "@/lib/auth/broadcast";
+import { useUserPreferences } from "@/lib/preferences/provider";
 
 function deriveInitials(email: string): string {
   // Pull initials from the email's local-part. Prefer characters around `.`,
@@ -40,6 +41,7 @@ export function AccountMenu({
   email: string;
 }) {
   const initials = deriveInitials(email);
+  const { flushPreferences } = useUserPreferences();
 
   return (
     <DropdownMenu>
@@ -74,14 +76,18 @@ export function AccountMenu({
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <form
-          action={logout}
-          onSubmit={() => {
-            // The server action clears the auth cookie but never fires
-            // `onAuthStateChange` on the client, so we have to publish
-            // the cross-tab broadcast explicitly before the request
-            // leaves. Without this, peer tabs miss the `signed-out`
-            // event and stay on stale signed-in pages until reload.
+          onSubmit={async (e) => {
+            // Intercept the form submit so we can (1) broadcast `signed-out`
+            // to peer tabs, (2) drain any pending preference writes while
+            // the JWT is still valid, then (3) fire the server action. If
+            // the auth cookie is cleared before the pref flush completes,
+            // the write fails RLS silently and changes from the last
+            // session are lost on re-login. Mirrored in mobile-nav-drawer
+            // and command-palette logout paths.
+            e.preventDefault();
             publishAuthEvent({ type: "signed-out", userId });
+            await flushPreferences();
+            await logout();
           }}
         >
           <DropdownMenuItem
