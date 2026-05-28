@@ -41,7 +41,7 @@ async function assertCanManageWorkspaceMembers(
 
 export async function inviteMemberImpl(
   token: string,
-  input: { workspaceId: string; email: string; role: "admin" | "member" },
+  input: { workspaceId: string; email: string; role: "admin" | "member" | "guest" },
 ) {
   const parsed = InviteMemberInput.parse(input);
   const actorId = decodeSub(token);
@@ -76,7 +76,7 @@ export async function inviteMemberImpl(
 
 export async function changeMemberRoleImpl(
   token: string,
-  input: { workspaceId: string; userId: string; role: "owner" | "admin" | "member" },
+  input: { workspaceId: string; userId: string; role: "owner" | "admin" | "member" | "guest" },
 ) {
   const parsed = ChangeMemberRoleInput.parse(input);
   const actorId = decodeSub(token);

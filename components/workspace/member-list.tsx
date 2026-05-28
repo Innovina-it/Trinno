@@ -10,7 +10,7 @@ import { toast } from "sonner";
 
 type Member = {
   userId: string;
-  role: "owner" | "admin" | "member";
+  role: "owner" | "admin" | "member" | "guest";
   displayName: string;
   avatarUrl: string | null;
 };
@@ -65,6 +65,7 @@ export function MemberList({
             options={[
               { value: "member", label: "Member" },
               { value: "admin", label: "Admin" },
+              { value: "guest", label: "Guest" },
               ...(m.role === "owner"
                 ? ([{ value: "owner", label: "Owner" }] as SelectOption[])
                 : []),

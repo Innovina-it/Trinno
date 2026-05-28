@@ -18,9 +18,10 @@ import {
   type PickerSelected,
 } from "@/components/people/people-picker";
 
-type Role = "admin" | "member";
+type Role = "admin" | "member" | "guest";
 
 const ROLE_OPTIONS = [
+  { value: "guest", label: "Guest" },
   { value: "member", label: "Member" },
   { value: "admin", label: "Admin" },
 ];
@@ -87,7 +88,7 @@ export function CreateWorkspaceDialog({
             selected={selected}
             onSelectedChange={setSelected}
             roleOptions={ROLE_OPTIONS}
-            defaultRole="member"
+            defaultRole="guest"
             label="Add members"
             labelHint="optional"
           />

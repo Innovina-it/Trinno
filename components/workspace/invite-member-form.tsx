@@ -23,7 +23,7 @@ type Preview =
 
 export function InviteMemberForm({ workspaceId }: { workspaceId: string }) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"admin" | "member">("member");
+  const [role, setRole] = useState<"admin" | "member" | "guest">("member");
   const [pending, start] = useTransition();
   const [preview, setPreview] = useState<Preview>({ state: "idle" });
 
@@ -120,10 +120,11 @@ export function InviteMemberForm({ workspaceId }: { workspaceId: string }) {
         <DropdownMenuContent>
           <DropdownMenuRadioGroup
             value={role}
-            onValueChange={(v) => setRole(v as "admin" | "member")}
+            onValueChange={(v) => setRole(v as "admin" | "member" | "guest")}
           >
             <DropdownMenuRadioItem value="member">Member</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="admin">Admin</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="guest">Guest (read-only)</DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>

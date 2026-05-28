@@ -21,7 +21,7 @@ export async function createWorkspaceImpl(
   token: string,
   input: {
     name: string;
-    members?: { id: string; role: "admin" | "member" }[];
+    members?: { id: string; role: "admin" | "member" | "guest" }[];
     memberIds?: string[];
   },
 ) {
@@ -88,7 +88,7 @@ export async function deleteWorkspaceImpl(
 
 export async function createWorkspace(input: {
   name: string;
-  members?: { id: string; role: "admin" | "member" }[];
+  members?: { id: string; role: "admin" | "member" | "guest" }[];
   memberIds?: string[];
 }) {
   await requireUser();
