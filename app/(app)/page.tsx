@@ -5,7 +5,7 @@ import { getUserPreferences } from "@/actions/profile-preferences";
 import { type Preferences } from "@/lib/preferences/types";
 
 export default async function Home() {
-  const user = await requireUser();
+  await requireUser();
   const token = (await getSessionToken())!;
   let ws: Awaited<ReturnType<typeof listWorkspaces>> = [];
   let loadError: string | null = null;
@@ -54,19 +54,14 @@ export default async function Home() {
       </div>
     );
   }
-  // Prefer the last-visited workspace when the user still has access to
-  // it. Otherwise prefer a workspace the user was INVITED to (ownerId !==
-  // current user) over their auto-created personal one — `listWorkspaces`
-  // orders by created_at desc, and a guest / member added to an older
-  // shared workspace would land on the newer personal workspace by
-  // default, never seeing the shared one. Final fallback is `ws[0]` for
-  // users who only have their personal workspace.
+  // Prefer the last-visited workspace if the user still has access to it.
+  // Falls back to the first workspace on stale ids (deleted workspace,
+  // revoked membership) or when preferences fail to load.
   const preferences: Preferences = await getUserPreferences().catch(() => ({}));
   const lastWorkspaceId = preferences.lastWorkspaceId;
-  const invitedWorkspace = ws.find((w) => w.ownerId !== user.id);
   const target =
     lastWorkspaceId && ws.some((w) => w.id === lastWorkspaceId)
       ? lastWorkspaceId
-      : (invitedWorkspace?.id ?? ws[0].id);
+      : ws[0].id;
   redirect(`/w/${target}`);
 }
