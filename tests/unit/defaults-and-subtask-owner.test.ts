@@ -216,12 +216,16 @@ describe("default board lists and subtask owner defaults", () => {
     const { createCardImpl } = await import("@/actions/cards");
     const parentOwnerId = uuid(2);
     // Order matches createCardImpl's read sequence when parentCardId is set:
-    //   1) parentBoard lookup, 2) listBoard lookup (cross-board guard),
-    //   3) last-position lookup, 4) parent defaults, 5) parentMembers.
+    //   1) listBoardForRole lookup (#0111 guest gate via lists table),
+    //   2) workspace_role join (boards + workspace_members) for guest gate,
+    //   3) parentBoard lookup, 4) listBoard lookup (cross-board guard),
+    //   5) last-position lookup, 6) parent defaults, 7) parentMembers.
     // parentBoard/listBoard return the same boardId so the cross-board snap
     // is skipped — the test focuses on owner inheritance, not board reroute.
     const sharedBoardId = uuid(10);
     state.selectResponses = [
+      [{ boardId: sharedBoardId }],
+      [], // workspace role lookup returns "no row" → role null → gate is a no-op
       [{ boardId: sharedBoardId }],
       [{ boardId: sharedBoardId }],
       [],

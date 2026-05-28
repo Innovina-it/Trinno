@@ -64,6 +64,24 @@ vi.mock("@/lib/db/client", () => {
         }),
       };
     }),
+    // #0111 — bulk impls now call getWorkspaceRoleForCard to gate guests.
+    // Stub the SELECT chain so the role lookup returns "no membership row"
+    // (= non-guest, gate is a no-op).
+    select: vi.fn(() => ({
+      from: () => ({
+        innerJoin: () => ({
+          innerJoin: () => ({
+            where: () => ({
+              limit: async () => [],
+            }),
+          }),
+        }),
+        where: () => ({
+          limit: async () => [],
+        }),
+      }),
+    })),
+    execute: vi.fn(async () => []),
   };
 
   return {
@@ -76,6 +94,17 @@ vi.mock("@/lib/db/client", () => {
 function uuid(n: number) {
   return `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 }
+
+// #0111 — bulk impls now decode the JWT to load the actor's workspace
+// role for the guest gate. Provide a well-formed fake JWT so decodeSub
+// doesn't blow on a plain string.
+function jwtFor(sub: string) {
+  const payload = Buffer.from(JSON.stringify({ sub }), "utf8").toString(
+    "base64url",
+  );
+  return `header.${payload}.signature`;
+}
+const TEST_JWT = jwtFor(uuid(99));
 
 function seedCards(count: number) {
   const base = Date.UTC(2026, 0, 1, 9, 0, 0);
@@ -100,7 +129,7 @@ describe("batch update refactors", () => {
     const { bulkArchiveCardsImpl } = await import("@/actions/cards");
     const started = performance.now();
 
-    const result = await bulkArchiveCardsImpl("token", {
+    const result = await bulkArchiveCardsImpl(TEST_JWT, {
       cardIds: state.rows.map((row) => row.id),
       archived: true,
     });
@@ -123,7 +152,7 @@ describe("batch update refactors", () => {
     state.expectedShiftMinutes = 90;
     const started = performance.now();
 
-    const result = await bulkShiftCardDatesImpl("token", {
+    const result = await bulkShiftCardDatesImpl(TEST_JWT, {
       cardIds: state.rows.map((row) => row.id),
       deltaMinutes: state.expectedShiftMinutes,
     });
