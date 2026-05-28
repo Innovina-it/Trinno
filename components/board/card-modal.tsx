@@ -385,6 +385,14 @@ function QuickEditStrip({
   }
 
   function setDue(next: Date | null) {
+    // Snapshot prior state so we can revert if the server rejects (e.g.
+    // a guest editing a card they're not allowed to mutate).
+    const liveCard = boardStore!.getState().cards.find((c) => c.id === cardId);
+    const prev = {
+      dueDate: liveCard?.dueDate ?? null,
+      dueComplete: liveCard?.dueComplete ?? false,
+      completedAt: liveCard?.completedAt ?? null,
+    };
     // Persist as noon UTC so the date doesn't shift across time zones — matches DueSection.
     const dueDate = next
       ? new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth(), next.getUTCDate(), 12))
@@ -397,6 +405,7 @@ function QuickEditStrip({
       try {
         await updateCard({ id: cardId, ...patch });
       } catch (err) {
+        updateCardLocal(cardId, prev);
         toast.error((err as Error).message);
       }
     });

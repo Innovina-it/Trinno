@@ -260,6 +260,7 @@ export function BoardView({
       const after =
         toIdx < reordered.length - 1 ? reordered[toIdx + 1].position : null;
       const newPos = positionBetween(before, after);
+      const originalListPosition = lists[fromIdx].position;
 
       moveListLocal(activeKey.id, newPos);
       const retryMoveList = async () => {
@@ -269,6 +270,9 @@ export function BoardView({
         try {
           await moveListAction({ id: activeKey.id, position: newPos });
         } catch (err) {
+          // Revert local optimistic move so the list snaps back when the
+          // server rejects (e.g. guest dragging a list).
+          moveListLocal(activeKey.id, originalListPosition);
           const msg = "Failed to move list: " + (err as Error).message;
           toast.error(msg);
           errorBus.push({ message: msg, retry: retryMoveList });
@@ -417,6 +421,11 @@ export function BoardView({
             });
           }
         } catch (err) {
+          // Revert the optimistic move locally so the card snaps back to
+          // its original list/position immediately — without this, a
+          // rejected move (e.g. guest moving an unassigned card) leaves
+          // the card visually moved until the next refresh.
+          moveCardLocal(activeKey.id, originalListId, originalPosition);
           const msg = "Failed to move card: " + (err as Error).message;
           toast.error(msg);
           errorBus.push({ message: msg, retry: retryMoveCard });

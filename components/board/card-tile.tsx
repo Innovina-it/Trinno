@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition, useRef, useCallback, useMemo } from "react";
+import { useState, useTransition, useRef, useCallback, useMemo, useContext } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useShallow } from "zustand/shallow";
 import { useSortable } from "@dnd-kit/sortable";
@@ -7,7 +7,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { FolderKanban, CalendarRange, Check, CircleDot, CornerLeftUp, Layers3 } from "lucide-react";
 import { toast } from "sonner";
 import type { CardRow, BoardProfile } from "@/lib/queries/board-snapshot";
-import { useBoardStore } from "@/stores/board-store";
+import { useBoardStore, BoardStoreContext } from "@/stores/board-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { getCardStatusKind, STATUS_LABEL } from "@/lib/status";
 import { LabelStripes } from "./card/label-stripes";
@@ -158,10 +158,11 @@ export function CardTile({
   });
 
   // === Quick-view edit wiring ===========================================
-  // onPatch: optimistic local mutation + server action. Failure path just
-  // toasts; we don't unwind state (CDC echo will eventually correct any
-  // drift). Maps `completed` → {completedAt, dueComplete} for the local
-  // store; server action accepts `completed` directly.
+  // onPatch: optimistic local mutation + server action. On failure we
+  // snapshot the touched fields BEFORE patching and revert them; without
+  // this, a server reject (e.g. a guest editing a card) leaves the tile
+  // visually mutated until the next reload.
+  const boardStoreCtx = useContext(BoardStoreContext);
   const onQuickPatch = useCallback(
     async (patch: PatchInput) => {
       const localPatch: Parameters<typeof updateCardLocal>[1] = {};
@@ -200,14 +201,26 @@ export function CardTile({
         localPatch.completedAt = patch.completed ? new Date() : null;
         localPatch.dueComplete = patch.completed;
       }
+      // Snapshot only the keys the local patch touches, read from the
+      // live store so prior optimistic updates are respected.
+      const liveCard = boardStoreCtx
+        ?.getState()
+        .cards.find((c) => c.id === card.id);
+      const revert: Parameters<typeof updateCardLocal>[1] = {};
+      if (liveCard) {
+        for (const k of Object.keys(localPatch) as Array<keyof typeof localPatch>) {
+          (revert as Record<string, unknown>)[k] = (liveCard as Record<string, unknown>)[k];
+        }
+      }
       updateCardLocal(card.id, localPatch);
       try {
         await updateCard({ id: card.id, ...patch });
       } catch (err) {
+        if (liveCard) updateCardLocal(card.id, revert);
         toast.error((err as Error).message ?? "Failed to save");
       }
     },
-    [card.id, updateCardLocal],
+    [card.id, updateCardLocal, boardStoreCtx],
   );
 
   const onQuickToggleMember = useCallback(
@@ -233,6 +246,10 @@ export function CardTile({
       try {
         await toggleCardMember({ cardId: card.id, userId });
       } catch (err) {
+        // Revert the optimistic assignment when the server rejects (e.g.
+        // a guest who cannot self-assign).
+        if (isAssigned) storeAddMember({ cardId: card.id, userId });
+        else storeRemoveMember(card.id, userId);
         toast.error((err as Error).message ?? "Failed to update assignees");
       }
     },
