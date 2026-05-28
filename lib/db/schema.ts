@@ -17,6 +17,7 @@ export const workspaceRole = pgEnum("workspace_role", [
   "owner",
   "admin",
   "member",
+  "guest",
 ]);
 export const boardRole = pgEnum("board_role", ["admin", "member", "observer"]);
 export const boardVisibility = pgEnum("board_visibility", [
