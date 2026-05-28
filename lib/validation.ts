@@ -12,7 +12,7 @@ export const CreateWorkspaceInput = z
   .object({
     name: Title,
     members: z
-      .array(z.object({ id: Uuid, role: z.enum(["admin", "member"]) }))
+      .array(z.object({ id: Uuid, role: z.enum(["admin", "member", "guest"]) }))
       .optional()
       .default([]),
     memberIds: z.array(Uuid).optional(),
@@ -36,12 +36,12 @@ export const SetWorkspaceAutoAssignCreatorInput = z.object({
 export const InviteMemberInput = z.object({
   workspaceId: Uuid,
   email: Email,
-  role: z.enum(["admin", "member"]),
+  role: z.enum(["admin", "member", "guest"]),
 });
 export const ChangeMemberRoleInput = z.object({
   workspaceId: Uuid,
   userId: Uuid,
-  role: z.enum(["owner", "admin", "member"]),
+  role: z.enum(["owner", "admin", "member", "guest"]),
 });
 export const RemoveMemberInput = z.object({ workspaceId: Uuid, userId: Uuid });
 

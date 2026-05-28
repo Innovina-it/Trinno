@@ -30,6 +30,11 @@ const COPY: Record<string, ErrorCopy> = {
     title: "Permission required",
     description: "Only workspace owners or admins can do that.",
   },
+  GUEST_FORBIDDEN: {
+    title: "Read-only access",
+    description:
+      "Guests can only change the status of cards assigned to them. Ask a member or admin to make this change.",
+  },
   VALIDATION_ERROR: {
     title: "Invalid action",
   },

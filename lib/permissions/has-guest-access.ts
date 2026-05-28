@@ -4,7 +4,8 @@ export type GuestPermissionAction =
   | "read_card_comments"
   | "comment_card"
   | "create_board"
-  | "receive_notification";
+  | "receive_notification"
+  | "update_own_card_status";
 
 export type GuestNotificationReason = "direct_mention" | "assignment" | "watch" | "workspace";
 
@@ -28,11 +29,15 @@ export function hasGuestAccess(input: GuestAccessInput): boolean {
       return input.boardAssigned === true || input.cardAssigned === true;
     case "comment_card":
       return input.cardAssigned === true;
+    case "update_own_card_status":
+      // Move (listId change) on a card where guest is in card_members.
+      // Guests cannot self-assign — assignment comes from other roles.
+      return input.cardAssigned === true;
     case "receive_notification":
-      return (
-        input.notificationReason === "direct_mention" ||
-        input.notificationReason === "assignment"
-      );
+      // #0112 — workspace guests receive no notifications at all
+      // (mirrored at the DB layer by skipping public.emit_notification
+      // for guest recipients).
+      return false;
     case "create_board":
       return false;
     default:
