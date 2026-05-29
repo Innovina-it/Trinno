@@ -56,7 +56,7 @@ function fmtVal(field: string, v: string | null): string {
     const out = formatDate(v);
     return out === "" ? v : out;
   }
-  return v.length > 40 ? v.slice(0, 40) + "…" : v;
+  return v;
 }
 
 export function CardHistorySection({ cardId }: { cardId: string }) {
@@ -147,11 +147,11 @@ export function CardHistorySection({ cardId }: { cardId: string }) {
                   <span className="text-fg-muted shrink-0">
                     {FIELD_LABEL[r.field] ?? r.field}
                   </span>
-                  <span className="text-fg-faint">
+                  <span className="text-fg-faint min-w-0 break-words">
                     {fmtVal(r.field, r.oldValue)}
                   </span>
                   <ArrowRight className="size-3 text-fg-faint shrink-0" />
-                  <span className="text-fg">
+                  <span className="text-fg min-w-0 break-words">
                     {fmtVal(r.field, r.newValue)}
                   </span>
                   {r.actorName && (

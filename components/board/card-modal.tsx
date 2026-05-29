@@ -194,7 +194,7 @@ function fmtHistoryValue(field: string, v: string | null): string {
     const d = new Date(v);
     return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString();
   }
-  return v.length > 40 ? `${v.slice(0, 40)}...` : v;
+  return v;
 }
 
 function HistorySkeleton({ rows = 3 }: { rows?: number }) {
@@ -282,11 +282,11 @@ function CardHistoryPanel({
                   <span className="text-fg-muted shrink-0">
                     {FIELD_LABEL[r.field] ?? r.field}
                   </span>
-                  <span className="text-fg-faint">
+                  <span className="text-fg-faint min-w-0 break-words">
                     {fmtHistoryValue(r.field, r.oldValue)}
                   </span>
                   <ArrowRight className="size-3 text-fg-faint shrink-0" />
-                  <span className="text-fg">
+                  <span className="text-fg min-w-0 break-words">
                     {fmtHistoryValue(r.field, r.newValue)}
                   </span>
                   {r.actorName && (
