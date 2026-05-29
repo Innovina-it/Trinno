@@ -65,10 +65,10 @@ export function InviteMemberForm({ workspaceId }: { workspaceId: string }) {
     e.preventDefault();
     start(async () => {
       try {
-        await inviteMember({ workspaceId, email, role });
+        const res = await inviteMember({ workspaceId, email, role });
         setEmail("");
         setPreview({ state: "idle" });
-        toast.success("Invited");
+        toast.success(res.kind === "invited" ? "Invite sent" : "Added to workspace");
       } catch (err) {
         toast.error((err as Error).message);
       }
@@ -103,8 +103,8 @@ export function InviteMemberForm({ workspaceId }: { workspaceId: string }) {
           )}
           {preview.state === "exists" && "USER EXISTS"}
           {preview.state === "missing" && (
-            <span className="text-[color:var(--status-blocked)]">
-              NO USER WITH THAT EMAIL
+            <span className="text-fg-muted">
+              NEW PERSON — WE&apos;LL EMAIL AN INVITE TO SET A PASSWORD
             </span>
           )}
         </div>
@@ -130,7 +130,7 @@ export function InviteMemberForm({ workspaceId }: { workspaceId: string }) {
       </DropdownMenu>
       <Button
         type="submit"
-        disabled={pending || !email || preview.state === "missing"}
+        disabled={pending || !email}
       >
         Invite
       </Button>
