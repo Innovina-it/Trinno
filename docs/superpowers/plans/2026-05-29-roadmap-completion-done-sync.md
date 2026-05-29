@@ -67,8 +67,8 @@ Change to:
 
 - [ ] **Step 3: Apply the migration locally**
 
-Run: `npm run db:reset`
-Expected: replays all migrations through `0114` with no error; final output reports a successful reset.
+Run: `supabase migration up`
+Expected: applies pending migration `0114` only, with no error. **Do NOT run `npm run db:reset`** — it wipes the local database (all data + `auth.users`) and breaks login.
 
 - [ ] **Step 4: Type-check**
 
