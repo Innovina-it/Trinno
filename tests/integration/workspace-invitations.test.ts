@@ -290,3 +290,49 @@ describe("re-invite an unconfirmed (revoked) invitee", () => {
     expect(mem?.length).toBe(1);
   });
 });
+
+describe("invitation visibility is admin-only (#2A)", () => {
+  it("a plain member cannot read invitations; owner can; member sees no pending badge", async () => {
+    const owner = await makeUser(`vis-own-${Date.now()}@x.io`);
+    const member = await makeUser(`vis-mem-${Date.now()}@x.io`);
+    const ownerCli = userClient(owner.jwt);
+    const { data: ws } = await ownerCli.from("workspaces").select("id");
+    const wsId = ws![0].id as string;
+
+    // Add `member` as a plain member of the owner's workspace.
+    const { data: mu } = await service.auth.admin.getUserById(member.id);
+    await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: mu.user!.email!, role: "member" });
+
+    // Owner invites an external pending invitee.
+    const inviteeEmail = `vis-ext-${Date.now()}@gmail.com`;
+    const inv = await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: inviteeEmail, role: "member" });
+
+    // Owner (admin) CAN read the invitation.
+    const { data: ownerSees } = await ownerCli
+      .from("workspace_invitations")
+      .select("email")
+      .eq("workspace_id", wsId);
+    expect(ownerSees?.some((r) => r.email === inviteeEmail)).toBe(true);
+
+    // Plain member CANNOT read any invitation rows.
+    const memberCli = userClient(member.jwt);
+    const { data: memberSees } = await memberCli
+      .from("workspace_invitations")
+      .select("email")
+      .eq("workspace_id", wsId);
+    expect(memberSees?.length ?? 0).toBe(0);
+
+    // listMembers under the member's token: the pending invitee shows as a
+    // member but with pending=false (no badge), since the RLS-scoped join
+    // returns no invitation row for a non-admin.
+    const asMember = await listMembers(member.jwt, wsId);
+    const inviteeRow = asMember.find((m) => m.userId === inv.userId);
+    expect(inviteeRow).toBeTruthy();
+    expect((inviteeRow as { pending: boolean }).pending).toBe(false);
+
+    // listMembers under the owner's token: pending=true (badge shown).
+    const asOwner = await listMembers(owner.jwt, wsId);
+    const inviteeRowOwner = asOwner.find((m) => m.userId === inv.userId);
+    expect(inviteeRowOwner.pending).toBe(true);
+  });
+});
