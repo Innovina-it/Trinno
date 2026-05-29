@@ -377,11 +377,15 @@ export function RoadmapBar({
   const priority = card.priority ?? null;
   const priorityDot = priority ? PRIORITY_TINT[priority as CardPriority].dot : null;
   const isCompleted = card.completedAt != null;
-  // A late, still-open task gets a red outline. Mirrors the overdue rule
-  // used by the due pill (due-pill.tsx): not complete AND target in the
-  // past. "Closed" on the roadmap means completedAt is set
-  // (roadmap-view.tsx), so completed bars are never flagged overdue.
-  const isOverdue = !isCompleted && card.targetDate.getTime() < Date.now();
+  // A late, still-open task gets a red outline. targetDate is a calendar
+  // day stored at midnight UTC (handleSaveDates), so the task is NOT overdue
+  // for the whole of its target day — it flags only once the day after has
+  // started. Unlike the due pill (due-pill.tsx), whose dueDate carries a
+  // time-of-day and so compares directly. "Closed" on the roadmap means
+  // completedAt is set (roadmap-view.tsx), so completed bars never flag.
+  const DAY_MS = 86_400_000;
+  const isOverdue =
+    !isCompleted && card.targetDate.getTime() + DAY_MS <= Date.now();
 
   // Trailing assignee stack lives OUTSIDE the bar to the right. Suppressed
   // when there isn't enough free space before the next bar (or canvas edge)
