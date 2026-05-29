@@ -246,6 +246,17 @@ export function CardQuickView({
   const dirtyRef = useRef(false);
   const enterConfirmRef = useRef<() => void>(() => {});
 
+  // Retain the last non-null card so the dialog's close (exit) animation
+  // renders the real card content instead of flashing the "Card unavailable"
+  // fallback. base-ui keeps DialogContent mounted through the data-closed
+  // animation; on close the parent flips both `open`→false and `card`→null in
+  // the same render, so without this the fallback branch is what animates out.
+  // Only show the fallback when a card was never present (open-time race),
+  // i.e. lastCardRef is still null.
+  const lastCardRef = useRef<QuickViewCard | null>(card);
+  if (card) lastCardRef.current = card;
+  const renderCard = card ?? lastCardRef.current;
+
   const handleOpenChange = useCallback(
     (next: boolean) => {
       if (!next && dirtyRef.current) {
@@ -257,10 +268,10 @@ export function CardQuickView({
     [onOpenChange],
   );
 
-  if (!card) {
+  if (!renderCard) {
     // Defensive: card was removed between the tile rendering and the
-    // dialog opening. Render an empty dialog content so the parent can
-    // dismiss it cleanly.
+    // dialog opening (never had a card to show). Render an empty dialog
+    // content so the parent can dismiss it cleanly.
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent data-testid="card-quick-view-missing">
@@ -303,8 +314,8 @@ export function CardQuickView({
           // local drafts in useState, so a continuous mount would treat
           // the new card's field values as "edits" and show Save instead
           // of Close.
-          key={card.id}
-          card={card}
+          key={renderCard.id}
+          card={renderCard}
           memberProfiles={memberProfiles}
           availableMembers={availableMembers}
           subtaskTotal={subtaskTotal}
