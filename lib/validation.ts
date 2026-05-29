@@ -209,6 +209,14 @@ export const MoveCardInput = z.object({
 });
 export const ArchiveCardInput = z.object({ id: Uuid, archived: z.boolean() });
 
+// Roadmap complete toggle. `completed: true` stamps completed_at AND
+// moves the card to the board's 'done' list; `false` clears completed_at
+// AND returns the card to its pre-done list. See setRoadmapCompletionImpl.
+export const SetRoadmapCompletionInput = z.object({
+  cardId: Uuid,
+  completed: z.boolean(),
+});
+
 // Plan #16b-γ-G G1 — manual roadmap row reorder. `beforeId` lands ABOVE
 // the moved card, `afterId` lands BELOW; either may be null when
 // dropping at top / bottom of the board.
