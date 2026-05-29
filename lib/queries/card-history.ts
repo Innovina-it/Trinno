@@ -4,6 +4,7 @@ import { dbAsUser } from "@/lib/db/client";
 import {
   cardFieldHistory,
   cardSprintHistory,
+  lists,
   profiles,
   sprints,
 } from "@/lib/db/schema";
@@ -74,6 +75,17 @@ export async function listCardHistory(
           .filter((id): id is string => id !== null),
       ),
     );
+    // List moves store raw list UUIDs in old_value/new_value; resolve them
+    // to titles so the History feed reads "In Progress → Closed" rather
+    // than two opaque ids. Collects from BOTH sides of every list_id row.
+    const listIds = Array.from(
+      new Set(
+        fieldRows
+          .filter((r) => r.field === "list_id")
+          .flatMap((r) => [r.oldValue, r.newValue])
+          .filter((id): id is string => id !== null && id !== ""),
+      ),
+    );
 
     const actorRows = actorIds.length
       ? await tx
@@ -91,15 +103,30 @@ export async function listCardHistory(
       : [];
     const sprintNameById = new Map(sprintNameRows.map((r) => [r.id, r.name]));
 
+    const listTitleRows = listIds.length
+      ? await tx
+          .select({ id: lists.id, title: lists.title })
+          .from(lists)
+          .where(inArray(lists.id, listIds))
+      : [];
+    const listTitleById = new Map(listTitleRows.map((r) => [r.id, r.title]));
+
+    // Swap list UUIDs for their titles in list_id rows; leave a non-null
+    // value untouched if the list was hard-deleted (no title row) so the
+    // raw id still renders rather than collapsing to "—".
+    const resolveListValue = (v: string | null): string | null =>
+      v ? listTitleById.get(v) ?? v : v;
+
     const out: CardHistoryRow[] = [];
     for (const r of fieldRows) {
+      const isList = r.field === "list_id";
       out.push({
         kind: "field",
         id: r.id,
         cardId: r.cardId,
         field: r.field,
-        oldValue: r.oldValue,
-        newValue: r.newValue,
+        oldValue: isList ? resolveListValue(r.oldValue) : r.oldValue,
+        newValue: isList ? resolveListValue(r.newValue) : r.newValue,
         actorId: r.actorId,
         actorName: r.actorId ? actorById.get(r.actorId) ?? null : null,
         at: r.changedAt as Date,

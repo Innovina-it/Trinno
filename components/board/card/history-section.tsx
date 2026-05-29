@@ -17,6 +17,7 @@ const FIELD_LABEL: Record<string, string> = {
   due_date: "Due date",
   completed_at: "Completion",
   sprint_id: "Sprint",
+  list_id: "List",
   parent_card_id: "Parent",
   type: "Type",
   story_points: "Story points",
