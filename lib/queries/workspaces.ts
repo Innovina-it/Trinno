@@ -3,6 +3,7 @@ import { dbAsUser } from "@/lib/db/client";
 import {
   workspaces,
   workspaceMembers,
+  workspaceInvitations,
   boards,
   profiles,
 } from "@/lib/db/schema";
@@ -68,18 +69,28 @@ export async function listBoardMembersFor(token: string, boardId: string) {
 }
 
 export async function listMembers(token: string, workspaceId: string) {
-  return dbAsUser(token, async (tx) =>
-    tx
+  return dbAsUser(token, async (tx) => {
+    const rows = await tx
       .select({
         userId: workspaceMembers.userId,
         role: workspaceMembers.role,
         displayName: profiles.displayName,
         avatarUrl: profiles.avatarUrl,
+        pendingId: workspaceInvitations.id,
       })
       .from(workspaceMembers)
       .innerJoin(profiles, eq(profiles.id, workspaceMembers.userId))
-      .where(eq(workspaceMembers.workspaceId, workspaceId)),
-  );
+      .leftJoin(
+        workspaceInvitations,
+        and(
+          eq(workspaceInvitations.workspaceId, workspaceMembers.workspaceId),
+          eq(workspaceInvitations.userId, workspaceMembers.userId),
+          eq(workspaceInvitations.status, "pending"),
+        ),
+      )
+      .where(eq(workspaceMembers.workspaceId, workspaceId));
+    return rows.map(({ pendingId, ...m }) => ({ ...m, pending: pendingId !== null }));
+  });
 }
 
 export async function listBoardsInWorkspace(

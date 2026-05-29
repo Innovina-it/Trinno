@@ -13,6 +13,7 @@ type Member = {
   role: "owner" | "admin" | "member" | "guest";
   displayName: string;
   avatarUrl: string | null;
+  pending: boolean;
 };
 
 export function MemberList({
@@ -39,6 +40,11 @@ export function MemberList({
           </Avatar>
           <span className="flex-1">{m.displayName}</span>
           <Badge variant="outline">{m.role}</Badge>
+          {m.pending && (
+            <Badge variant="outline" className="text-fg-faint">
+              Pending · invite sent
+            </Badge>
+          )}
           <Select
             value={m.role}
             disabled={m.role === "owner" || pending}

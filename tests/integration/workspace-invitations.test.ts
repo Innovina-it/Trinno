@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { inviteMemberImpl } from "@/actions/workspace-members";
+import { listMembers } from "@/lib/queries/workspaces";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -183,5 +184,23 @@ describe("workspace_invitations table + RLS", () => {
       status: "pending",
     });
     expect(dupErr).not.toBeNull();
+  });
+});
+
+describe("listMembers pending flag", () => {
+  it("flags an invited-but-unaccepted member as pending", async () => {
+    const owner = await makeUser(`pend-own-${Date.now()}@x.io`);
+    const ownerCli = userClient(owner.jwt);
+    const { data: ws } = await ownerCli.from("workspaces").select("id");
+    const wsId = ws![0].id as string;
+    const email = `pend-${Date.now()}@gmail.com`;
+
+    const res = await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email, role: "member" });
+
+    const members = await listMembers(owner.jwt, wsId);
+    const ow: any = members.find((m: any) => m.userId === owner.id);
+    const inv: any = members.find((m: any) => m.userId === res.userId);
+    expect(ow.pending).toBe(false);
+    expect(inv.pending).toBe(true);
   });
 });
