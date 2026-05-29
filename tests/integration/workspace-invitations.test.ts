@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
+import { inviteMemberImpl } from "@/actions/workspace-members";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -58,6 +59,87 @@ describe("invitation acceptance trigger", () => {
       .single();
     expect(after!.status).toBe("accepted");
     expect(after!.accepted_at).not.toBeNull();
+  });
+});
+
+describe("inviteMemberImpl auto-detect", () => {
+  it("adds an existing user directly with no invitation row", async () => {
+    const owner = await makeUser(`own1-${Date.now()}@x.io`);
+    const existing = await makeUser(`exist-${Date.now()}@x.io`);
+    const ownerCli = userClient(owner.jwt);
+    const { data: ws } = await ownerCli.from("workspaces").select("id");
+    const wsId = ws![0].id as string;
+
+    const { data: eu } = await service.auth.admin.getUserById(existing.id);
+    const email = eu.user!.email!;
+
+    const res = await inviteMemberImpl(owner.jwt, {
+      workspaceId: wsId,
+      email,
+      role: "member",
+    });
+    expect(res.kind).toBe("added");
+    expect(res.userId).toBe(existing.id);
+
+    const { data: inv } = await service
+      .from("workspace_invitations")
+      .select("id")
+      .eq("workspace_id", wsId);
+    expect(inv?.length ?? 0).toBe(0);
+
+    const { data: mem } = await service
+      .from("workspace_members")
+      .select("user_id")
+      .eq("workspace_id", wsId)
+      .eq("user_id", existing.id);
+    expect(mem?.length).toBe(1);
+  });
+
+  it("invites a brand-new email: invitation + membership + auth user", async () => {
+    const owner = await makeUser(`own2-${Date.now()}@x.io`);
+    const ownerCli = userClient(owner.jwt);
+    const { data: ws } = await ownerCli.from("workspaces").select("id");
+    const wsId = ws![0].id as string;
+    const email = `fresh-${Date.now()}@gmail.com`;
+
+    const res = await inviteMemberImpl(owner.jwt, {
+      workspaceId: wsId,
+      email,
+      role: "member",
+    });
+    expect(res.kind).toBe("invited");
+
+    const { data: inv } = await service
+      .from("workspace_invitations")
+      .select("status, user_id")
+      .eq("workspace_id", wsId)
+      .eq("email", email)
+      .single();
+    expect(inv!.status).toBe("pending");
+    expect(inv!.user_id).toBe(res.userId);
+
+    const { data: mem } = await service
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", wsId)
+      .eq("user_id", res.userId);
+    expect(mem?.length).toBe(1);
+
+    const { data: u } = await service.auth.admin.getUserById(res.userId);
+    expect(u.user?.email).toBe(email);
+  });
+
+  it("rejects a duplicate pending invite for the same email", async () => {
+    const owner = await makeUser(`own3-${Date.now()}@x.io`);
+    const ownerCli = userClient(owner.jwt);
+    const { data: ws } = await ownerCli.from("workspaces").select("id");
+    const wsId = ws![0].id as string;
+    const email = `dup-${Date.now()}@gmail.com`;
+
+    await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email, role: "member" });
+    await expect(
+      inviteMemberImpl(owner.jwt, { workspaceId: wsId, email, role: "member" }),
+    ).rejects.toThrow();
   });
 });
 

@@ -1,13 +1,14 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { sql, and, eq } from "drizzle-orm";
+import { sql, and, eq, isNull } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { workspaceMembers } from "@/lib/db/schema";
+import { workspaceMembers, workspaceInvitations } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
   InviteMemberInput, ChangeMemberRoleInput, RemoveMemberInput,
 } from "@/lib/validation";
 import { StructuredError } from "@/lib/errors";
+import { getServiceSupabase } from "@/lib/supabase/service-role";
 
 type MemberTx = Parameters<Parameters<typeof dbAsUser>[1]>[0];
 
@@ -39,39 +40,139 @@ async function assertCanManageWorkspaceMembers(
   }
 }
 
+export type InviteResult = { kind: "added" | "invited"; userId: string };
+
 export async function inviteMemberImpl(
   token: string,
   input: { workspaceId: string; email: string; role: "admin" | "member" | "guest" },
-) {
+): Promise<InviteResult> {
   const parsed = InviteMemberInput.parse(input);
+  const email = parsed.email.toLowerCase();
   const actorId = decodeSub(token);
-  return dbAsUser(token, async (tx) => {
-    await assertCanManageWorkspaceMembers(tx, parsed.workspaceId, actorId);
-    const lookup = await tx.execute(
-      sql`select public.find_user_id_by_email(${parsed.email}) as id`,
-    );
-    const userId = (lookup as unknown as { id: string | null }[])[0]?.id;
-    if (!userId)
-      throw new StructuredError(
-        "VALIDATION_ERROR",
-        "No user with that email",
-        { kind: "user-not-found" },
-      );
 
-    const [row] = await tx.insert(workspaceMembers)
-      .values({ workspaceId: parsed.workspaceId, userId, role: parsed.role })
-      .onConflictDoNothing()
-      .returning();
-    if (!row) {
-      const existing = await tx.select().from(workspaceMembers).where(and(
-        eq(workspaceMembers.workspaceId, parsed.workspaceId),
-        eq(workspaceMembers.userId, userId),
-      ));
-      if (existing.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
-      return existing[0];
+  // 1. Authorize + detect whether the email already has an account (RLS tx),
+  //    and guard against a duplicate pending invite at the same time.
+  const existingUserId = await dbAsUser(token, async (tx) => {
+    await assertCanManageWorkspaceMembers(tx, parsed.workspaceId, actorId);
+
+    // Duplicate-invite guard runs regardless of whether the email resolves to
+    // an existing user (an unconfirmed invited user is still "existing" in
+    // auth.users, so we must check invitations before the user lookup).
+    const [dup] = await tx
+      .select({ id: workspaceInvitations.id })
+      .from(workspaceInvitations)
+      .where(and(
+        eq(workspaceInvitations.workspaceId, parsed.workspaceId),
+        eq(workspaceInvitations.email, email),
+        eq(workspaceInvitations.status, "pending"),
+      ))
+      .limit(1);
+    if (dup) {
+      throw new StructuredError("ALREADY_INVITED", "An invite is already pending for this email.");
     }
-    return row;
+
+    const lookup = await tx.execute(
+      sql`select public.find_user_id_by_email(${email}) as id`,
+    );
+    return (lookup as unknown as { id: string | null }[])[0]?.id ?? null;
   });
+
+  // 2a. Existing user → direct add (preserves prior behavior).
+  if (existingUserId) {
+    await dbAsUser(token, async (tx) => {
+      await tx
+        .insert(workspaceMembers)
+        .values({ workspaceId: parsed.workspaceId, userId: existingUserId, role: parsed.role })
+        .onConflictDoNothing();
+    });
+    return { kind: "added", userId: existingUserId };
+  }
+
+  // 2b. New email → create the pending invitation BEFORE inviting
+  // (the before-user-created hook reads it).
+  await dbAsUser(token, async (tx) => {
+    await tx.insert(workspaceInvitations).values({
+      workspaceId: parsed.workspaceId,
+      email,
+      role: parsed.role,
+      invitedBy: actorId,
+      status: "pending",
+    });
+  });
+
+  // 3. Native Supabase invite (creates the unconfirmed user + emails the link).
+  const sb = getServiceSupabase();
+  const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/accept-invite`;
+  try {
+    const { data, error } = await sb.auth.admin.inviteUserByEmail(email, { redirectTo });
+
+    if (error || !data?.user) {
+      // Race: the email got registered between step 1 and now → fall back to direct add.
+      // Prefer the stable error code; fall back to the message for resilience.
+      const code = (error as { code?: string } | null)?.code;
+      const alreadyRegistered =
+        code === "email_exists" ||
+        code === "user_already_exists" ||
+        !!error?.message?.toLowerCase().includes("already");
+      if (alreadyRegistered) {
+        const retryId = await dbAsUser(token, async (tx) => {
+          const r = await tx.execute(sql`select public.find_user_id_by_email(${email}) as id`);
+          return (r as unknown as { id: string | null }[])[0]?.id ?? null;
+        });
+        if (retryId) {
+          await dbAsUser(token, async (tx) => {
+            await tx
+              .update(workspaceInvitations)
+              .set({ status: "revoked" })
+              .where(and(
+                eq(workspaceInvitations.workspaceId, parsed.workspaceId),
+                eq(workspaceInvitations.email, email),
+                eq(workspaceInvitations.status, "pending"),
+              ));
+            await tx
+              .insert(workspaceMembers)
+              .values({ workspaceId: parsed.workspaceId, userId: retryId, role: parsed.role })
+              .onConflictDoNothing();
+          });
+          return { kind: "added", userId: retryId };
+        }
+      }
+      throw new StructuredError("INVITE_FAILED", error?.message ?? "Failed to send invitation");
+    }
+
+    const newUserId = data.user.id;
+    await dbAsUser(token, async (tx) => {
+      await tx
+        .update(workspaceInvitations)
+        .set({ userId: newUserId })
+        .where(and(
+          eq(workspaceInvitations.workspaceId, parsed.workspaceId),
+          eq(workspaceInvitations.email, email),
+          eq(workspaceInvitations.status, "pending"),
+        ));
+      await tx
+        .insert(workspaceMembers)
+        .values({ workspaceId: parsed.workspaceId, userId: newUserId, role: parsed.role })
+        .onConflictDoNothing();
+    });
+    return { kind: "invited", userId: newUserId };
+  } catch (e) {
+    // Roll back the bypass-granting invitation so it cannot linger.
+    // Best-effort: a cleanup failure must not mask the original error.
+    try {
+      await dbAsUser(token, async (tx) => {
+        await tx.delete(workspaceInvitations).where(and(
+          eq(workspaceInvitations.workspaceId, parsed.workspaceId),
+          eq(workspaceInvitations.email, email),
+          eq(workspaceInvitations.status, "pending"),
+          isNull(workspaceInvitations.userId),
+        ));
+      });
+    } catch {
+      // swallow — surface the original failure below
+    }
+    throw StructuredError.fromUnknown(e, "INVITE_FAILED");
+  }
 }
 
 export async function changeMemberRoleImpl(
@@ -122,7 +223,7 @@ function revalidateWorkspace(workspaceId: string) {
   revalidatePath("/dashboards", "layout");
 }
 
-export async function inviteMember(input: Parameters<typeof inviteMemberImpl>[1]) {
+export async function inviteMember(input: Parameters<typeof inviteMemberImpl>[1]): Promise<InviteResult> {
   await requireUser();
   const token = (await getSessionToken())!;
   const r = await inviteMemberImpl(token, input);
