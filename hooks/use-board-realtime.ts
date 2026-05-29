@@ -59,6 +59,7 @@ function rowToCard(r: Record<string, unknown>): CardRow {
     roadmapOrder: (r.roadmap_order ?? null) as number | null,
     ownerId: (r.owner_id ?? null) as string | null,
     completedAt: r.completed_at ? new Date(r.completed_at as string) : null,
+    preDoneListId: (r.pre_done_list_id ?? null) as string | null,
   };
 }
 

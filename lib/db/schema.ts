@@ -163,6 +163,9 @@ export const cards = pgTable("cards", {
   coverValue: text("cover_value"),
   ownerId: uuid("owner_id"),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  // Roadmap completion sync: the list this card was in right before the
+  // roadmap auto-moved it to 'done'. Consumed + cleared on un-complete.
+  preDoneListId: uuid("pre_done_list_id"),
 });
 
 export const labels = pgTable("labels", {
