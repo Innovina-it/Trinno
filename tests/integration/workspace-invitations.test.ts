@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
-import { inviteMemberImpl, resendInvitationImpl } from "@/actions/workspace-members";
+import { inviteMemberImpl, resendInvitationImpl, removeMemberImpl } from "@/actions/workspace-members";
 import { listMembers } from "@/lib/queries/workspaces";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -222,5 +222,33 @@ describe("resendInvitation", () => {
     await expect(
       resendInvitationImpl(owner.jwt, { workspaceId: wsId, email: `nobody-${Date.now()}@gmail.com` }),
     ).rejects.toThrow();
+  });
+});
+
+describe("removeMember revokes a pending invitation", () => {
+  it("removes the membership and marks the invitation revoked", async () => {
+    const owner = await makeUser(`rev-own-${Date.now()}@x.io`);
+    const ownerCli = userClient(owner.jwt);
+    const { data: ws } = await ownerCli.from("workspaces").select("id");
+    const wsId = ws![0].id as string;
+    const email = `rev-${Date.now()}@gmail.com`;
+
+    const res = await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email, role: "member" });
+    await removeMemberImpl(owner.jwt, { workspaceId: wsId, userId: res.userId });
+
+    const { data: mem } = await service
+      .from("workspace_members")
+      .select("user_id")
+      .eq("workspace_id", wsId)
+      .eq("user_id", res.userId);
+    expect(mem?.length ?? 0).toBe(0);
+
+    const { data: inv } = await service
+      .from("workspace_invitations")
+      .select("status")
+      .eq("workspace_id", wsId)
+      .eq("email", email)
+      .single();
+    expect(inv!.status).toBe("revoked");
   });
 });

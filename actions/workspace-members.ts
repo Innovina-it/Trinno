@@ -248,6 +248,15 @@ export async function removeMemberImpl(
       eq(workspaceMembers.userId, parsed.userId),
     )).returning({ userId: workspaceMembers.userId });
     if (r.length === 0) throw new StructuredError("ACCESS_DENIED", "Forbidden");
+    // If this member was a not-yet-accepted invitee, revoke the invitation so
+    // the domain-gate bypass evaporates.
+    await tx.update(workspaceInvitations)
+      .set({ status: "revoked" })
+      .where(and(
+        eq(workspaceInvitations.workspaceId, parsed.workspaceId),
+        eq(workspaceInvitations.userId, parsed.userId),
+        eq(workspaceInvitations.status, "pending"),
+      ));
   });
 }
 
