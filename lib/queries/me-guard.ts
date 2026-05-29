@@ -13,16 +13,30 @@ export async function listMyGuestWorkspaceIds(
   token: string,
   userId: string,
 ): Promise<string[]> {
-  return dbAsUser(token, async (tx) => {
-    const rows = await tx
-      .select({ workspaceId: workspaceMembers.workspaceId })
-      .from(workspaceMembers)
-      .where(
-        and(
-          eq(workspaceMembers.userId, userId),
-          eq(workspaceMembers.role, "guest"),
-        ),
-      );
-    return rows.map((r) => r.workspaceId);
-  });
+  try {
+    return await dbAsUser(token, async (tx) => {
+      const rows = await tx
+        .select({ workspaceId: workspaceMembers.workspaceId })
+        .from(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.userId, userId),
+            eq(workspaceMembers.role, "guest"),
+          ),
+        );
+      return rows.map((r) => r.workspaceId);
+    });
+  } catch (error) {
+    // Non-fatal: this lookup must never take down the /me dashboard. A
+    // failure here (e.g. a database whose workspace_role enum is missing
+    // the 'guest' value) is logged for diagnosis, then we degrade safely
+    // to "no guest workspaces". Worst case the dashboard does not filter
+    // out guest workspaces, rather than 500-ing the whole page.
+    console.error(
+      `[me-guard] listMyGuestWorkspaceIds failed for user ${userId}; ` +
+        `falling back to empty list`,
+      error,
+    );
+    return [];
+  }
 }
