@@ -86,7 +86,9 @@ export async function listMyWeekCards(
       .orderBy(asc(cards.startDate))
       .limit(MAX_MY_WEEK_ROWS);
 
-    // Member rows
+    // Member rows — omit `excludeGuest`: cards where the guest is an
+    // assignee in a shared workspace are "tasks assigned to you" and stay
+    // visible. Owner rows keep the guest filter above.
     const memberRows = await tx
       .select({ ...baseSelect })
       .from(cardMembers)
@@ -97,7 +99,6 @@ export async function listMyWeekCards(
         and(
           dateFilter,
           eq(cardMembers.userId, userId),
-          excludeGuest,
         ),
       )
       .orderBy(asc(cards.startDate))

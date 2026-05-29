@@ -1,7 +1,9 @@
-// Helper used by every /me dashboard query to exclude workspaces where
-// the current user is a guest. Guests in a shared workspace must not
-// see ANY of that workspace's content on their personal dashboard,
-// even when they happen to be assignee/owner of a card there.
+// Helper used by /me dashboard queries to find workspaces where the
+// current user is a guest. Guests must not see a shared workspace's
+// general content on their personal dashboard (sprints, watchlist,
+// inbox, owned cards). The ONE exception: cards explicitly assigned to
+// them (a card_members row) still surface — those query branches omit
+// this filter on purpose. See callers for the owner-keep/member-drop split.
 
 import { and, eq } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";

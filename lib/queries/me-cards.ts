@@ -80,6 +80,10 @@ export async function listMyOpenCards(token: string): Promise<MyCard[]> {
       .orderBy(asc(cards.createdAt))
       .limit(MAX_OPEN_CARDS);
 
+    // Member branch intentionally omits `excludeGuest`: a card where the
+    // guest is an explicit member (assignee) IS "a task assigned to you"
+    // and must surface even in a guest workspace. Owner-only cards in a
+    // guest workspace stay hidden (owner branch keeps the guest filter).
     const memberRows = await tx
       .select(baseSelect)
       .from(cardMembers)
@@ -92,7 +96,6 @@ export async function listMyOpenCards(token: string): Promise<MyCard[]> {
           eq(cards.archived, false),
           isNull(cards.completedAt),
           eq(cardMembers.userId, userId),
-          excludeGuest,
         ),
       )
       .orderBy(asc(cards.createdAt))
@@ -169,6 +172,8 @@ export async function getMyTodayCounts(
       )
       .limit(MAX_TODAY_RAW);
 
+    // Member branch omits `excludeGuest` so cards assigned to the guest in
+    // a shared workspace still count toward their today/overdue totals.
     const memberRows = await tx
       .select({
         id: cards.id,
@@ -182,7 +187,6 @@ export async function getMyTodayCounts(
         and(
           eq(cards.archived, false),
           eq(cardMembers.userId, userId),
-          excludeGuest,
         ),
       )
       .limit(MAX_TODAY_RAW);

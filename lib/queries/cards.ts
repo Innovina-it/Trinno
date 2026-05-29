@@ -56,8 +56,8 @@ export async function listAssignedAcrossWorkspaces(
       workspaceIds && workspaceIds.length > 0
         ? inArray(boards.workspaceId, workspaceIds)
         : undefined;
-    // /me timeline must hide workspaces where the user is a guest — even
-    // if they're owner/assignee of a card there.
+    // /me timeline hides guest-workspace content the guest only owns, but
+    // keeps cards explicitly assigned to them (see member branch below).
     const excludeGuest =
       guestWsIds.length > 0
         ? notInArray(boards.workspaceId, guestWsIds)
@@ -98,6 +98,9 @@ export async function listAssignedAcrossWorkspaces(
       .orderBy(asc(cards.startDate))
       .limit(MAX_CROSS_WS_CARDS);
 
+    // Member branch omits `excludeGuest`: a card where the guest is an
+    // explicit member (assignee) is a task assigned to them and stays on
+    // the timeline even in a guest workspace. Owner rows keep the filter.
     const memberRows = await tx
       .select(baseSelect)
       .from(cardMembers)
@@ -111,7 +114,6 @@ export async function listAssignedAcrossWorkspaces(
           isNotNull(cards.targetDate),
           eq(cardMembers.userId, userId),
           wsFilter,
-          excludeGuest,
         ),
       )
       .orderBy(asc(cards.startDate))
