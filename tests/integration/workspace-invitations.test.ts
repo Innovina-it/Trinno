@@ -27,6 +27,40 @@ function userClient(jwt: string) {
   });
 }
 
+describe("invitation acceptance trigger", () => {
+  it("flips status to accepted when the user confirms their email", async () => {
+    const a = await makeUser(`acc-owner-${Date.now()}@x.io`);
+    const aCli = userClient(a.jwt);
+    const { data: ws } = await aCli.from("workspaces").select("id");
+    const wsId = ws![0].id as string;
+
+    const email = `acc-invitee-${Date.now()}@gmail.com`;
+    const { data: created } = await service.auth.admin.createUser({
+      email,
+      email_confirm: false,
+    });
+    const inviteeId = created.user!.id;
+    await service.from("workspace_invitations").insert({
+      workspace_id: wsId,
+      email,
+      role: "member",
+      invited_by: a.id,
+      user_id: inviteeId,
+      status: "pending",
+    });
+
+    await service.auth.admin.updateUserById(inviteeId, { email_confirm: true });
+
+    const { data: after } = await service
+      .from("workspace_invitations")
+      .select("status, accepted_at")
+      .eq("user_id", inviteeId)
+      .single();
+    expect(after!.status).toBe("accepted");
+    expect(after!.accepted_at).not.toBeNull();
+  });
+});
+
 describe("workspace_invitations table + RLS", () => {
   it("admin can insert/select; non-member cannot select; pending is unique", async () => {
     const a = await makeUser(`inv-a-${Date.now()}@x.io`);
