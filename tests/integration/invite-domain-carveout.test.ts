@@ -53,3 +53,24 @@ describe("auth_block_external_domains carve-out", () => {
     expect(r2.error).toBeTruthy();
   });
 });
+
+describe("auth_block_external_domains case-insensitive carve-out (#3A)", () => {
+  it("allows signup for a pending invite stored with a mixed-case email", async () => {
+    const email = `Mixed-${Date.now()}@Gmail.com`; // stored mixed-case (no app lowercasing)
+    const [{ id: ownerId }] = await sql`
+      select id from public.profiles limit 1
+    `;
+    const [{ id: wsId }] = await sql`
+      insert into public.workspaces (name, owner_id)
+      values ('mixedcase-ws', ${ownerId}) returning id
+    `;
+    await sql`
+      insert into public.workspace_invitations
+        (workspace_id, email, role, invited_by, status)
+      values (${wsId}, ${email}, 'member', ${ownerId}, 'pending')
+    `;
+    // Signup arrives lowercased; carve-out must still match the mixed-case row.
+    const r = await gate(email.toLowerCase());
+    expect(r).toEqual({});
+  });
+});
