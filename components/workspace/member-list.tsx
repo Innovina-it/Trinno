@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, type SelectOption } from "@/components/ui/select";
-import { changeMemberRole, removeMember } from "@/actions/workspace-members";
+import { changeMemberRole, removeMember, resendInvitation } from "@/actions/workspace-members";
 import { useWorkspaceMembersSync } from "@/hooks/use-workspace-members-sync";
 import { toast } from "sonner";
 
@@ -14,6 +14,7 @@ type Member = {
   displayName: string;
   avatarUrl: string | null;
   pending: boolean;
+  email?: string | null;
 };
 
 export function MemberList({
@@ -44,6 +45,25 @@ export function MemberList({
             <Badge variant="outline" className="text-fg-faint">
               Pending · invite sent
             </Badge>
+          )}
+          {m.pending && m.email && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  try {
+                    await resendInvitation({ workspaceId, email: m.email! });
+                    toast.success("Invite re-sent");
+                  } catch (err) {
+                    toast.error((err as Error).message);
+                  }
+                })
+              }
+            >
+              Resend
+            </Button>
           )}
           <Select
             value={m.role}

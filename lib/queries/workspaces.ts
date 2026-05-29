@@ -77,6 +77,7 @@ export async function listMembers(token: string, workspaceId: string) {
         displayName: profiles.displayName,
         avatarUrl: profiles.avatarUrl,
         pendingId: workspaceInvitations.id,
+        pendingEmail: workspaceInvitations.email,
       })
       .from(workspaceMembers)
       .innerJoin(profiles, eq(profiles.id, workspaceMembers.userId))
@@ -89,7 +90,11 @@ export async function listMembers(token: string, workspaceId: string) {
         ),
       )
       .where(eq(workspaceMembers.workspaceId, workspaceId));
-    return rows.map(({ pendingId, ...m }) => ({ ...m, pending: pendingId !== null }));
+    return rows.map(({ pendingId, pendingEmail, ...m }) => ({
+      ...m,
+      pending: pendingId !== null,
+      email: pendingEmail,
+    }));
   });
 }
 

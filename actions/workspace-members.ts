@@ -2,13 +2,14 @@
 import { revalidatePath } from "next/cache";
 import { sql, and, eq, isNull } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { workspaceMembers, workspaceInvitations } from "@/lib/db/schema";
+import { workspaceMembers, workspaceInvitations, workspaces } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
-  InviteMemberInput, ChangeMemberRoleInput, RemoveMemberInput,
+  InviteMemberInput, ChangeMemberRoleInput, RemoveMemberInput, ResendInvitationInput,
 } from "@/lib/validation";
 import { StructuredError } from "@/lib/errors";
 import { getServiceSupabase } from "@/lib/supabase/service-role";
+import { sendInviteEmail } from "@/lib/invite-email";
 
 type MemberTx = Parameters<Parameters<typeof dbAsUser>[1]>[0];
 
@@ -173,6 +174,45 @@ export async function inviteMemberImpl(
     }
     throw StructuredError.fromUnknown(e, "INVITE_FAILED");
   }
+}
+
+export async function resendInvitationImpl(
+  token: string,
+  input: { workspaceId: string; email: string },
+): Promise<void> {
+  const parsed = ResendInvitationInput.parse(input);
+  const email = parsed.email.toLowerCase();
+  const actorId = decodeSub(token);
+
+  const workspaceName = await dbAsUser(token, async (tx) => {
+    await assertCanManageWorkspaceMembers(tx, parsed.workspaceId, actorId);
+    const [inv] = await tx
+      .select({ id: workspaceInvitations.id })
+      .from(workspaceInvitations)
+      .where(and(
+        eq(workspaceInvitations.workspaceId, parsed.workspaceId),
+        eq(workspaceInvitations.email, email),
+        eq(workspaceInvitations.status, "pending"),
+      ))
+      .limit(1);
+    if (!inv) {
+      throw new StructuredError("NOT_FOUND", "No pending invitation for that email.");
+    }
+    const [ws] = await tx
+      .select({ name: workspaces.name })
+      .from(workspaces)
+      .where(eq(workspaces.id, parsed.workspaceId))
+      .limit(1);
+    return ws?.name ?? "your workspace";
+  });
+
+  await sendInviteEmail(email, workspaceName);
+}
+
+export async function resendInvitation(input: Parameters<typeof resendInvitationImpl>[1]): Promise<void> {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  await resendInvitationImpl(token, input);
 }
 
 export async function changeMemberRoleImpl(

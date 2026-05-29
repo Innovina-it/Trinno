@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
-import { inviteMemberImpl } from "@/actions/workspace-members";
+import { inviteMemberImpl, resendInvitationImpl } from "@/actions/workspace-members";
 import { listMembers } from "@/lib/queries/workspaces";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -202,5 +202,25 @@ describe("listMembers pending flag", () => {
     const inv: any = members.find((m: any) => m.userId === res.userId);
     expect(ow.pending).toBe(false);
     expect(inv.pending).toBe(true);
+  });
+});
+
+describe("resendInvitation", () => {
+  it("succeeds for a pending invite, throws for an unknown one", async () => {
+    const owner = await makeUser(`res-own-${Date.now()}@x.io`);
+    const ownerCli = userClient(owner.jwt);
+    const { data: ws } = await ownerCli.from("workspaces").select("id");
+    const wsId = ws![0].id as string;
+    const email = `res-${Date.now()}@gmail.com`;
+
+    await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email, role: "member" });
+
+    await expect(
+      resendInvitationImpl(owner.jwt, { workspaceId: wsId, email }),
+    ).resolves.toBeUndefined();
+
+    await expect(
+      resendInvitationImpl(owner.jwt, { workspaceId: wsId, email: `nobody-${Date.now()}@gmail.com` }),
+    ).rejects.toThrow();
   });
 });
