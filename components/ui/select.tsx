@@ -100,6 +100,7 @@ export function Select({
   }
 
   const heightCls = size === "sm" ? "h-8" : "h-9";
+  const textCls = size === "sm" ? "text-xs" : "text-sm";
 
   return (
     <div ref={wrapRef} className={cn("relative inline-block", className)}>
@@ -112,7 +113,8 @@ export function Select({
         aria-expanded={open}
         data-testid={testId}
         className={cn(
-          "inline-flex items-center justify-between gap-2 px-2.5 rounded-md border border-hairline-hi bg-[color:var(--surface)] text-fg hover:bg-[color:var(--surface-strong)] disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 text-sm tabular-nums w-full",
+          "inline-flex items-center justify-between gap-2 px-2.5 rounded-md border border-hairline-hi bg-[color:var(--surface)] text-fg hover:bg-[color:var(--surface-strong)] disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 tabular-nums w-full",
+          textCls,
           heightCls,
           "[@media(hover:none)_and_(pointer:coarse)]:min-h-11",
         )}
@@ -149,7 +151,8 @@ export function Select({
                   data-active={active ? "true" : undefined}
                   onClick={() => pick(o.value)}
                   className={cn(
-                    "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors focus:outline-none disabled:opacity-50",
+                    "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors focus:outline-none disabled:opacity-50",
+                    textCls,
                     "[@media(hover:none)_and_(pointer:coarse)]:min-h-11",
                     active
                       ? "bg-[color:var(--surface-hi)] text-fg"
