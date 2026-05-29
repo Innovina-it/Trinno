@@ -252,3 +252,41 @@ describe("removeMember revokes a pending invitation", () => {
     expect(inv!.status).toBe("revoked");
   });
 });
+
+describe("re-invite an unconfirmed (revoked) invitee", () => {
+  it("re-issues the invite instead of silently direct-adding", async () => {
+    const owner = await makeUser(`reinv-own-${Date.now()}@x.io`);
+    const ownerCli = userClient(owner.jwt);
+    const { data: ws } = await ownerCli.from("workspaces").select("id");
+    const wsId = ws![0].id as string;
+    const email = `reinv-${Date.now()}@gmail.com`;
+
+    // First invite → unconfirmed user + pending invitation + membership.
+    const first = await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email, role: "member" });
+    expect(first.kind).toBe("invited");
+
+    // Revoke (remove the pending member): membership gone, invitation revoked.
+    await removeMemberImpl(owner.jwt, { workspaceId: wsId, userId: first.userId });
+
+    // Re-invite the same (still unconfirmed) email.
+    const second = await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email, role: "member" });
+    expect(second.kind).toBe("invited");        // NOT "added"
+    expect(second.userId).toBe(first.userId);
+
+    // A fresh pending invitation exists again, and membership is re-added.
+    const { data: pend } = await service
+      .from("workspace_invitations")
+      .select("status")
+      .eq("workspace_id", wsId)
+      .eq("email", email)
+      .eq("status", "pending");
+    expect(pend?.length).toBe(1);
+
+    const { data: mem } = await service
+      .from("workspace_members")
+      .select("user_id")
+      .eq("workspace_id", wsId)
+      .eq("user_id", first.userId);
+    expect(mem?.length).toBe(1);
+  });
+});

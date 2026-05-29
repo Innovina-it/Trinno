@@ -78,8 +78,43 @@ export async function inviteMemberImpl(
     return (lookup as unknown as { id: string | null }[])[0]?.id ?? null;
   });
 
-  // 2a. Existing user → direct add (preserves prior behavior).
+  // 2a. Existing user. If they're UNCONFIRMED (a prior invitee who was revoked
+  // or never set a password), direct-adding would strand them as a member who
+  // can't sign in — re-issue the invite instead. Confirmed users are added
+  // directly (prior behavior).
   if (existingUserId) {
+    const sb = getServiceSupabase();
+    const { data: existing } = await sb.auth.admin.getUserById(existingUserId);
+    const unconfirmed = !!existing?.user && !existing.user.email_confirmed_at;
+
+    if (unconfirmed) {
+      const workspaceName = await dbAsUser(token, async (tx) => {
+        await tx
+          .insert(workspaceInvitations)
+          .values({
+            workspaceId: parsed.workspaceId,
+            email,
+            role: parsed.role,
+            invitedBy: actorId,
+            userId: existingUserId,
+            status: "pending",
+          })
+          .onConflictDoNothing();
+        await tx
+          .insert(workspaceMembers)
+          .values({ workspaceId: parsed.workspaceId, userId: existingUserId, role: parsed.role })
+          .onConflictDoNothing();
+        const [ws] = await tx
+          .select({ name: workspaces.name })
+          .from(workspaces)
+          .where(eq(workspaces.id, parsed.workspaceId))
+          .limit(1);
+        return ws?.name ?? "your workspace";
+      });
+      await sendInviteEmail(email, workspaceName);
+      return { kind: "invited", userId: existingUserId };
+    }
+
     await dbAsUser(token, async (tx) => {
       await tx
         .insert(workspaceMembers)
