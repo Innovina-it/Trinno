@@ -10,6 +10,7 @@ import { toggleCardMember } from "@/actions/card-members";
 import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
+import { type StatusKind } from "@/lib/status";
 import {
   Dialog,
   DialogContent,
@@ -55,6 +56,21 @@ function plus14ISO(): string {
 // "sub-board" is a UX-only value: picking it creates a regular task card
 // AND promotes it to a sub-board. The DB column `cards.type` still gets
 // 'task' — sub-boardness lives on `boards.parent_card_id`.
+// Pick the list a new card should default into, given that board's lists
+// in display (position) order. Prefer the mapped "todo" column. With no
+// todo list, fall back to the first list that is NOT a "done" column — a
+// board reordered to lead with a done list (e.g. "Closed") must never
+// default new cards into a completed state. Only land on a done list when
+// every list on the board is done.
+function pickDefaultListId(
+  ordered: { id: string; statusKind: StatusKind | null }[],
+): string | null {
+  const todo = ordered.find((l) => l.statusKind === "todo");
+  if (todo) return todo.id;
+  const nonDone = ordered.find((l) => l.statusKind !== "done");
+  return (nonDone ?? ordered[0])?.id ?? null;
+}
+
 type CardType = "task" | "bug" | "sub-board";
 type TypeOption = {
   value: CardType;
@@ -192,8 +208,8 @@ export function NewCardDialog({
         .sort((a, b) => (a.position < b.position ? -1 : 1)),
     [lists, boardId],
   );
-  const todoListId = useMemo(
-    () => listsForBoard.find((l) => l.statusKind === "todo")?.id ?? null,
+  const defaultListId = useMemo(
+    () => pickDefaultListId(listsForBoard),
     [listsForBoard],
   );
 
@@ -242,11 +258,12 @@ export function NewCardDialog({
     }
     if (!boardId) return;
     if (listsForBoard.find((l) => l.id === listId)) return;
-    // Task 10 — prefer the board's todo list; only fall back to first
-    // list (by position) if no list is mapped to status_kind=todo.
-    setListId(todoListId ?? listsForBoard[0]?.id ?? "");
+    // Prefer the board's todo list; with none, fall back to the first
+    // non-done list (never a "done" column like Closed), and only to the
+    // first list outright if every list is done. See pickDefaultListId.
+    setListId(defaultListId ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, defaultList, boardId, listsForBoard, todoListId, lists]);
+  }, [open, defaultList, boardId, listsForBoard, defaultListId, lists]);
   // Dialog stays mounted across opens, so useState initializers run once
   // at first render — meaning the start/target defaults from a roadmap
   // drag-paint were captured only on initial mount. Re-seed dates on every
@@ -273,14 +290,11 @@ export function NewCardDialog({
     if (!parent) return;
     if (parent.boardId && parent.boardId !== boardId) {
       setBoardId(parent.boardId);
-      const todo =
-        lists.find(
-          (l) => l.boardId === parent.boardId && l.statusKind === "todo",
-        ) ??
-        lists
-          .filter((l) => l.boardId === parent.boardId)
-          .sort((a, b) => (a.position < b.position ? -1 : 1))[0];
-      setListId(todo?.id ?? "");
+      const ordered = lists
+        .filter((l) => l.boardId === parent.boardId)
+        .slice()
+        .sort((a, b) => (a.position < b.position ? -1 : 1));
+      setListId(pickDefaultListId(ordered) ?? "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, parentId]);
@@ -343,10 +357,7 @@ export function NewCardDialog({
           .filter((l) => l.boardId === parent.boardId)
           .slice()
           .sort((a, b) => (a.position < b.position ? -1 : 1));
-        const snap =
-          parentLists.find((l) => l.statusKind === "todo")?.id ??
-          parentLists[0]?.id ??
-          "";
+        const snap = pickDefaultListId(parentLists) ?? "";
         if (!snap) {
           toast.error("Parent card's board has no list to receive the subtask");
           return;
