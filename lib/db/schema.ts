@@ -66,6 +66,20 @@ export const workspaceMembers = pgTable(
   (t) => ({ pk: primaryKey({ columns: [t.workspaceId, t.userId] }) }),
 );
 
+export const workspaceInvitations = pgTable("workspace_invitations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull(),
+  email: text("email").notNull(),
+  role: workspaceRole("role").notNull(),
+  invitedBy: uuid("invited_by").notNull(),
+  userId: uuid("user_id"),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+});
+
 export const boards = pgTable(
   "boards",
   {
