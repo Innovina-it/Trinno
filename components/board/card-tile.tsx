@@ -76,6 +76,7 @@ export function CardTile({
     getCardStatusKind({ listId: card.listId }, s.lists),
   );
   const isSelected = useBoardStore((s) => s.selectedCardIds.has(card.id));
+  const link = useBoardStore((s) => s.cardLinkByCard[card.id]);
   const anySelected = useBoardStore((s) => s.selectedCardIds.size > 0);
   const toggleSelected = useBoardStore((s) => s.toggleSelected);
   const selectRangeTo = useBoardStore((s) => s.selectRangeTo);
@@ -603,12 +604,22 @@ export function CardTile({
               style={{ fontFamily: "inherit" }}
             />
           ) : (
-            <span
-              className="hover-underline-signal group-hover/card:hover-underline-signal-active inline break-words [overflow-wrap:anywhere]"
-              onDoubleClick={enterEdit}
-            >
-              {card.title}
-            </span>
+            <>
+              <span
+                className="hover-underline-signal group-hover/card:hover-underline-signal-active inline break-words [overflow-wrap:anywhere]"
+                onDoubleClick={enterEdit}
+              >
+                {card.title}
+              </span>
+              {link?.url && (
+                <span
+                  aria-label="Link"
+                  title={link.url}
+                  style={{ background: link.color }}
+                  className="ml-1 inline-block size-2.5 rotate-45 rounded-[2px] align-middle shrink-0"
+                />
+              )}
+            </>
           )}
         </span>
       </div>
