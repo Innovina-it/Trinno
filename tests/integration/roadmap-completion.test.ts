@@ -5,10 +5,12 @@ import { dbAsUser } from "@/lib/db/client";
 import { lists, cards } from "@/lib/db/schema";
 import { createWorkspaceImpl } from "@/actions/workspaces";
 import { createBoardImpl } from "@/actions/boards";
-import { createListImpl, setListStatusKindImpl } from "@/actions/lists";
+import { createListImpl, setListStatusKindImpl, deleteListImpl } from "@/actions/lists";
 import {
   createCardImpl,
   moveCardImpl,
+  updateCardImpl,
+  bulkSetCompletedImpl,
   setRoadmapCompletionImpl,
 } from "@/actions/cards";
 
@@ -144,6 +146,110 @@ describe("setRoadmapCompletionImpl", () => {
     expect(r.listId).toBe(other.id);
     const card = await readCard(u.jwt, c.id);
     expect(card.completedAt).toBeNull();
+    expect(card.preDoneListId).toBeNull();
+  });
+
+  it("INT-09: source list with no status_kind — complete moves to done, un-complete returns to it", async () => {
+    const u = await makeUser("rc-9");
+    const b = await makeBoard(u.jwt);
+    // No setListStatusKind → status_kind stays null (unmapped / backlog-style).
+    const backlog = await createListImpl(u.jwt, { boardId: b.id, title: "Backlog" });
+    const c = await createCardImpl(u.jwt, { listId: backlog.id, title: "C" });
+
+    await setRoadmapCompletionImpl(u.jwt, { cardId: c.id, completed: true });
+    let card = await readCard(u.jwt, c.id);
+    expect(card.preDoneListId).toBe(backlog.id);
+    expect(await statusKindOf(u.jwt, card.listId)).toBe("done");
+
+    await setRoadmapCompletionImpl(u.jwt, { cardId: c.id, completed: false });
+    card = await readCard(u.jwt, c.id);
+    expect(card.listId).toBe(backlog.id);
+    expect(card.preDoneListId).toBeNull();
+  });
+
+  it("INT-12: repeated complete/un-complete cycles end in the original list with a clean pointer", async () => {
+    const u = await makeUser("rc-12");
+    const b = await makeBoard(u.jwt);
+    const todo = await createListImpl(u.jwt, { boardId: b.id, title: "Todo" });
+    await setListStatusKindImpl(u.jwt, { id: todo.id, statusKind: "todo" });
+    const c = await createCardImpl(u.jwt, { listId: todo.id, title: "C" });
+
+    for (let i = 0; i < 2; i += 1) {
+      await setRoadmapCompletionImpl(u.jwt, { cardId: c.id, completed: true });
+      const done = await readCard(u.jwt, c.id);
+      expect(await statusKindOf(u.jwt, done.listId)).toBe("done");
+      expect(done.preDoneListId).toBe(todo.id);
+
+      await setRoadmapCompletionImpl(u.jwt, { cardId: c.id, completed: false });
+      const back = await readCard(u.jwt, c.id);
+      expect(back.listId).toBe(todo.id);
+      expect(back.preDoneListId).toBeNull();
+      expect(back.completedAt).toBeNull();
+    }
+  });
+
+  it("INT-13: prior list deleted before un-complete — card stays in done, pointer FK-nulled, no throw", async () => {
+    const u = await makeUser("rc-13");
+    const b = await makeBoard(u.jwt);
+    const todo = await createListImpl(u.jwt, { boardId: b.id, title: "Todo" });
+    await setListStatusKindImpl(u.jwt, { id: todo.id, statusKind: "todo" });
+    const c = await createCardImpl(u.jwt, { listId: todo.id, title: "C" });
+
+    const r = await setRoadmapCompletionImpl(u.jwt, { cardId: c.id, completed: true });
+    const doneListId = r.listId;
+
+    // The card moved out of `todo` into `done`, so `todo` is now empty and
+    // safe to delete. The FK cards.pre_done_list_id -> lists ON DELETE SET NULL
+    // should null the stored pointer.
+    await deleteListImpl(u.jwt, { id: todo.id });
+    expect((await readCard(u.jwt, c.id)).preDoneListId).toBeNull();
+
+    const r2 = await setRoadmapCompletionImpl(u.jwt, { cardId: c.id, completed: false });
+    expect(r2.listId).toBe(doneListId); // stayed in done (nothing to revert to)
+    expect((await readCard(u.jwt, c.id)).completedAt).toBeNull();
+  });
+
+  it("INT-17: due_complete mirror (trigger 0062) tracks completion through the roadmap toggle", async () => {
+    const u = await makeUser("rc-17");
+    const b = await makeBoard(u.jwt);
+    const todo = await createListImpl(u.jwt, { boardId: b.id, title: "Todo" });
+    await setListStatusKindImpl(u.jwt, { id: todo.id, statusKind: "todo" });
+    const c = await createCardImpl(u.jwt, { listId: todo.id, title: "C" });
+
+    await setRoadmapCompletionImpl(u.jwt, { cardId: c.id, completed: true });
+    expect((await readCard(u.jwt, c.id)).dueComplete).toBe(true);
+
+    await setRoadmapCompletionImpl(u.jwt, { cardId: c.id, completed: false });
+    expect((await readCard(u.jwt, c.id)).dueComplete).toBe(false);
+  });
+});
+
+describe("scope guard — board-side completion must NOT move the card", () => {
+  it("REGR-01: updateCard({completed}) sets completion but never touches listId", async () => {
+    const u = await makeUser("rg-1");
+    const b = await makeBoard(u.jwt);
+    const todo = await createListImpl(u.jwt, { boardId: b.id, title: "Todo" });
+    await setListStatusKindImpl(u.jwt, { id: todo.id, statusKind: "todo" });
+    const c = await createCardImpl(u.jwt, { listId: todo.id, title: "C" });
+
+    await updateCardImpl(u.jwt, { id: c.id, completed: true });
+    const card = await readCard(u.jwt, c.id);
+    expect(card.completedAt).not.toBeNull();
+    expect(card.listId).toBe(todo.id); // NOT moved to a done list
+    expect(card.preDoneListId).toBeNull(); // no pointer recorded
+  });
+
+  it("REGR-04: bulkSetCompleted sets completion but does not move cards", async () => {
+    const u = await makeUser("rg-4");
+    const b = await makeBoard(u.jwt);
+    const todo = await createListImpl(u.jwt, { boardId: b.id, title: "Todo" });
+    await setListStatusKindImpl(u.jwt, { id: todo.id, statusKind: "todo" });
+    const c = await createCardImpl(u.jwt, { listId: todo.id, title: "C" });
+
+    await bulkSetCompletedImpl(u.jwt, { cardIds: [c.id], completed: true });
+    const card = await readCard(u.jwt, c.id);
+    expect(card.completedAt).not.toBeNull();
+    expect(card.listId).toBe(todo.id);
     expect(card.preDoneListId).toBeNull();
   });
 });
