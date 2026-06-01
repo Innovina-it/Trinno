@@ -2,23 +2,23 @@
 /**
  * Task 6 — Roadmap list view.
  *
- * A flat, hierarchical alternative to the Gantt timeline. The same data
+ * A flat, sortable table alternative to the Gantt timeline. The same data
  * the timeline reads (cards + members + components from the workspace
- * store) drives this view, so no extra queries are needed. The list is
- * organized as:
+ * store) drives this view, so no extra queries are needed.
  *
- *   lane-anchor → task/story/bug → subtask
- *
- * within each lane the parent rows render in `startDate` ASC order
- * (NULLS LAST). Subtasks live nested under their parent and follow the
- * same ordering. The component is intentionally read-only: the goal is a
- * scannable, ordered overview — drag-edit + inline create still live on
- * the Gantt canvas.
+ * It is a TABLE, not a tree: every card is one flat row, and the whole
+ * set sorts by the active column so the column reads top-to-bottom
+ * monotonically. The column headers are clickable — click to sort by that
+ * column, click again to flip asc/desc (default `startDate` ASC, empty
+ * values last). Parent→child nesting is deliberately dropped here because
+ * it breaks column sort; the anchor → task → subtask hierarchy lives on
+ * the Gantt. Rows are read-only: drag-edit + inline create stay on the
+ * Gantt canvas.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Check, CornerLeftUp } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, CornerLeftUp } from "lucide-react";
 import {
   useWorkspaceStore,
   type WorkspaceState,
@@ -26,13 +26,69 @@ import {
 import { PRIORITY_TINT, type CardPriority } from "@/components/board/card/priority-picker";
 
 import { formatDate } from "@/lib/format-date";
+import {
+  compareCards,
+  type SortDir,
+  type SortKey,
+} from "@/lib/roadmap/list-sort";
 
 type StoreCard = WorkspaceState["cards"][number];
 
-function timeOf(d: Date | string | null): number {
-  if (!d) return Number.POSITIVE_INFINITY; // NULLS LAST in ASC sort
-  const dt = d instanceof Date ? d : new Date(d);
-  return Number.isNaN(dt.getTime()) ? Number.POSITIVE_INFINITY : dt.getTime();
+function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) {
+    return (
+      <ArrowUpDown
+        aria-hidden
+        className="size-3 shrink-0 opacity-0 transition-opacity group-hover/sort:opacity-40"
+      />
+    );
+  }
+  const Icon = dir === "asc" ? ArrowUp : ArrowDown;
+  return <Icon aria-hidden strokeWidth={2.5} className="size-3 shrink-0" />;
+}
+
+function SortHeader({
+  columnKey,
+  label,
+  active,
+  dir,
+  onSort,
+  align = "left",
+  srLabel = false,
+}: {
+  columnKey: SortKey;
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  onSort: (k: SortKey) => void;
+  align?: "left" | "right" | "center";
+  srLabel?: boolean;
+}) {
+  const justify =
+    align === "right"
+      ? "justify-end"
+      : align === "center"
+        ? "justify-center"
+        : "justify-start";
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(columnKey)}
+      data-testid={`roadmap-list-sort-${columnKey}`}
+      data-active={active ? "" : undefined}
+      aria-label={`Sort by ${label.toLowerCase()}${
+        active ? (dir === "asc" ? " (ascending)" : " (descending)") : ""
+      }`}
+      className={[
+        "group/sort flex items-center gap-1 -mx-1 rounded px-1 transition-colors hover:text-fg focus-visible:text-fg focus-visible:outline-none",
+        justify,
+        active ? "text-fg" : "",
+      ].join(" ")}
+    >
+      <span className={srLabel ? "sr-only" : undefined}>{label}</span>
+      <SortArrow active={active} dir={dir} />
+    </button>
+  );
 }
 
 function PriorityDot({ priority }: { priority: CardPriority | null }) {
@@ -93,6 +149,20 @@ export function RoadmapListView({
   const storeProfiles = useWorkspaceStore((s) => s.workspaceProfiles);
   const storeSubBoards = useWorkspaceStore((s) => s.subBoards);
 
+  // Active sort column + direction. Defaults to start-date ascending,
+  // matching how the Gantt reads chronologically left-to-right.
+  const [sortKey, setSortKey] = useState<SortKey>("start");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
   const laneAnchorIds = useMemo(
     () =>
       new Set<string>(
@@ -108,64 +178,26 @@ export function RoadmapListView({
     [storeProfiles],
   );
 
-  // Build the tree. Cards already live in a flat list, so we group by
-  // parent and walk a depth-first traversal that emits one row per card
-  // in startDate-ASC order at every level.
+  // Flat, sortable table. Every visible card is ordered by the active
+  // column, so the sorted column reads top-to-bottom monotonically (e.g.
+  // START ASC = oldest start date first, across ALL rows). Parent→child
+  // nesting is intentionally NOT applied here: a tree breaks column sort
+  // (a child's date floats under its parent regardless of value). The
+  // hierarchy lives on the Gantt; the list view is the flat table.
   const rows = useMemo<Row[]>(() => {
+    const ownerNameOf = (c: StoreCard): string | null =>
+      c.ownerId ? profileById.get(c.ownerId) ?? null : null;
+
     const visible = storeCards.filter(
       (c) =>
         !c.archived &&
         (filteredCardIds == null || filteredCardIds.has(c.id)),
     );
-    const byParent = new Map<string | null, StoreCard[]>();
-    const byId = new Map<string, StoreCard>();
-    for (const c of visible) {
-      byId.set(c.id, c);
-      const arr = byParent.get(c.parentCardId ?? null) ?? [];
-      arr.push(c);
-      byParent.set(c.parentCardId ?? null, arr);
-    }
-    // Sort each bucket once by startDate ASC, NULLS LAST, then title.
-    for (const arr of byParent.values()) {
-      arr.sort((a, b) => {
-        const ta = timeOf(a.startDate);
-        const tb = timeOf(b.startDate);
-        if (ta !== tb) return ta - tb;
-        return a.title.localeCompare(b.title);
-      });
-    }
-    const out: Row[] = [];
-    // Top-level entry points: lane-anchor cards first (cards that have a
-    // sub-board attached via boards.parent_card_id), then any other
-    // top-level card. Lane anchors get their own root row so the hierarchy
-    // reads anchor → child → subtask top-down.
-    const topLevel = byParent.get(null) ?? [];
-    const anchorsFirst = topLevel.slice().sort((a, b) => {
-      const ae = laneAnchorIds.has(a.id) ? 0 : 1;
-      const be = laneAnchorIds.has(b.id) ? 0 : 1;
-      if (ae !== be) return ae - be;
-      const ta = timeOf(a.startDate);
-      const tb = timeOf(b.startDate);
-      if (ta !== tb) return ta - tb;
-      return a.title.localeCompare(b.title);
-    });
-
-    function emit(card: StoreCard, depth: 0 | 1 | 2) {
-      const children = byParent.get(card.id) ?? [];
-      out.push({ card, depth, hasChildren: children.length > 0 });
-      for (const child of children) {
-        // Depth caps at 2 (subtask). Anything deeper is rare but we keep
-        // it at 2 so layout doesn't degrade — the tree shape itself still
-        // reflects the parent chain via order, even when extra nesting
-        // exists in the data.
-        const nextDepth: 0 | 1 | 2 =
-          depth === 0 ? 1 : depth === 1 ? 2 : 2;
-        emit(child, nextDepth);
-      }
-    }
-    for (const top of anchorsFirst) emit(top, laneAnchorIds.has(top.id) ? 0 : 1);
-    return out;
-  }, [storeCards, filteredCardIds, laneAnchorIds]);
+    return visible
+      .slice()
+      .sort((a, b) => compareCards(a, b, sortKey, sortDir, ownerNameOf))
+      .map((card) => ({ card, depth: 0 as const, hasChildren: false }));
+  }, [storeCards, filteredCardIds, profileById, sortKey, sortDir]);
 
   // Owner-display lookup pulled from the workspace profiles array.
   function ownerName(card: StoreCard): string | null {
@@ -201,11 +233,47 @@ export function RoadmapListView({
         className="sticky top-0 z-10 grid items-center gap-3 border-b border-hairline bg-[color:var(--surface-strong)] px-3 py-2 mono-meta-sm text-fg-faint"
         style={{ gridTemplateColumns: "minmax(0,1fr) 7rem 7rem 2rem 1.5rem" }}
       >
-        <span>TITLE</span>
-        <span className="text-right tabular-nums">START</span>
-        <span className="text-right tabular-nums">TARGET</span>
-        <span className="text-center">OWNER</span>
-        <span className="sr-only">Status</span>
+        <SortHeader
+          columnKey="title"
+          label="TITLE"
+          align="left"
+          active={sortKey === "title"}
+          dir={sortDir}
+          onSort={toggleSort}
+        />
+        <SortHeader
+          columnKey="start"
+          label="START"
+          align="right"
+          active={sortKey === "start"}
+          dir={sortDir}
+          onSort={toggleSort}
+        />
+        <SortHeader
+          columnKey="target"
+          label="TARGET"
+          align="right"
+          active={sortKey === "target"}
+          dir={sortDir}
+          onSort={toggleSort}
+        />
+        <SortHeader
+          columnKey="owner"
+          label="OWNER"
+          align="center"
+          active={sortKey === "owner"}
+          dir={sortDir}
+          onSort={toggleSort}
+        />
+        <SortHeader
+          columnKey="status"
+          label="Status"
+          srLabel
+          align="center"
+          active={sortKey === "status"}
+          dir={sortDir}
+          onSort={toggleSort}
+        />
       </div>
       <ul className="divide-y divide-hairline">
         {rows.map(({ card, depth }) => {
