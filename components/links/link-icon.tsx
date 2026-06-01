@@ -1,0 +1,81 @@
+"use client";
+import { Link2, Cloud } from "lucide-react";
+import { useLongPress } from "@/lib/hooks/use-long-press";
+
+export type LinkIconVariant = "card" | "workspace";
+
+function openUrl(url: string) {
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+// Diamond = rotated square.
+function Diamond({ color, size = 12 }: { color: string; size?: number }) {
+  return (
+    <span
+      aria-hidden
+      style={{ width: size, height: size, background: color }}
+      className="inline-block rotate-45 rounded-[2px] shrink-0"
+    />
+  );
+}
+
+/**
+ * - No link + canEdit  -> chain. Click = onEdit (create).
+ * - Link set           -> diamond (card) / cloud (workspace). Click = open URL.
+ *                         Hold ~500ms = onEdit (only when canEdit).
+ * - No link + !canEdit -> renders nothing.
+ */
+export function LinkIcon({
+  variant,
+  url,
+  color,
+  canEdit,
+  onEdit,
+}: {
+  variant: LinkIconVariant;
+  url: string | null;
+  color?: string | null;
+  canEdit: boolean;
+  onEdit: () => void;
+}) {
+  const hasLink = !!url;
+  const press = useLongPress({
+    onClick: () => (hasLink ? openUrl(url!) : onEdit()),
+    onLongPress: hasLink && canEdit ? onEdit : undefined,
+  });
+
+  if (!hasLink && !canEdit) return null;
+
+  const label = !hasLink
+    ? "Aggiungi link"
+    : canEdit
+      ? "Apri link (tieni premuto per modificare)"
+      : "Apri link";
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          if (hasLink) openUrl(url!);
+          else onEdit();
+        }
+      }}
+      {...press}
+      className="inline-flex items-center justify-center size-5 rounded hover:bg-fg/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+      data-testid={`link-icon-${variant}`}
+      data-haslink={hasLink ? "1" : "0"}
+    >
+      {!hasLink ? (
+        <Link2 className="size-3.5 text-fg-faint" />
+      ) : variant === "workspace" ? (
+        <Cloud className="size-3.5" style={{ color: "var(--accent-cyan)" }} />
+      ) : (
+        <Diamond color={color || "#facc15"} />
+      )}
+    </button>
+  );
+}
