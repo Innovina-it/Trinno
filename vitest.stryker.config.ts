@@ -18,6 +18,8 @@ export default defineConfig({
       "tests/integration/workspace-invitations.test.ts",
       "tests/integration/invite-domain-carveout.test.ts",
       "tests/integration/invite-failure.test.ts",
+      "tests/integration/invite-race.test.ts",
+      "tests/unit/invite-email.test.ts",
     ],
     testTimeout: 15000,
   },
