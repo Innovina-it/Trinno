@@ -9,6 +9,7 @@ const PUBLIC_PATH_EXACT = new Set<string>([
   "/signup",
   "/forgot-password",
   "/reset-password",
+  "/accept-invite",
   "/favicon.ico",
 ]);
 
