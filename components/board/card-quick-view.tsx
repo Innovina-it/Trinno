@@ -193,6 +193,7 @@ function toDateValue(d: Date | string | null | undefined): Date | null {
   );
 }
 
+
 export function CardQuickView({
   card,
   memberProfiles,
@@ -437,6 +438,9 @@ function CardQuickViewBody({
     useState<Date | string | null>(card.startDate);
   const [targetDraft, setTargetDraft] =
     useState<Date | string | null>(card.targetDate);
+  // Controlled-open for the start picker so the target picker can pop it
+  // open when the user reaches for a target with no start set yet.
+  const [startPickerOpen, setStartPickerOpen] = useState(false);
   // Subtasks added during this open session are queued as drafts and
   // committed on Save, matching the deferred-commit contract for the rest
   // of the fields. Discard drops them. Without this, an auto-saved subtask
@@ -547,6 +551,16 @@ function CardQuickViewBody({
 
   const commitSave = useCallback(async () => {
     if (saving) return;
+    // Quick-view edits both dates as free-standing drafts (no swap logic like
+    // DateRangePopover), so guard the ordering invariant here before saving —
+    // the minDate floor on the target picker normally prevents this, but text
+    // entry / a later start edit can still invert the pair.
+    const startVal = toDateValue(startDraft);
+    const targetVal = toDateValue(targetDraft);
+    if (startVal && targetVal && targetVal.getTime() < startVal.getTime()) {
+      toast.error("Target must be on or after start");
+      return;
+    }
     const patch: PatchInput = {};
     if (titleChanged) patch.title = trimmedTitle;
     if (descChanged) patch.description = descDraft.length === 0 ? null : descDraft;
@@ -660,9 +674,20 @@ function CardQuickViewBody({
   const toggleCompleted = useCallback(() => {
     setCompletedDraft((prev) => !prev);
   }, []);
-  const setStartDate = useCallback((v: Date | null) => {
-    setStartDraft(v);
-  }, []);
+  const setStartDate = useCallback(
+    (v: Date | null) => {
+      // Preserve the existing span: if both dates were set and the start
+      // moves, slide the target by the same delta so the duration is kept.
+      const oldStart = toDateValue(startDraft);
+      const tgt = toDateValue(targetDraft);
+      if (v && oldStart && tgt) {
+        const delta = v.getTime() - oldStart.getTime();
+        if (delta !== 0) setTargetDraft(new Date(tgt.getTime() + delta));
+      }
+      setStartDraft(v);
+    },
+    [startDraft, targetDraft],
+  );
   const setTargetDate = useCallback((v: Date | null) => {
     setTargetDraft(v);
   }, []);
@@ -925,6 +950,9 @@ function CardQuickViewBody({
                     onChange={setStartDate}
                     triggerLabel="Set start"
                     inputLabel="Start date"
+                    defaultToToday
+                    open={startPickerOpen}
+                    onOpenChange={setStartPickerOpen}
                   />
                 </div>
               ) : (
@@ -942,6 +970,13 @@ function CardQuickViewBody({
                     onChange={setTargetDate}
                     triggerLabel="Set target"
                     inputLabel="Target date"
+                    // Target can't precede start; start itself is unconstrained.
+                    minDate={toDateValue(startDraft)}
+                    defaultToToday
+                    // No start yet → reaching for the target pops the start
+                    // picker open instead; start must be filled first.
+                    blockOpen={!toDateValue(startDraft)}
+                    onBlockedOpen={() => setStartPickerOpen(true)}
                   />
                 </div>
               ) : (

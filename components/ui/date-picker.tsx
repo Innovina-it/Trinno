@@ -85,6 +85,12 @@ export function DatePicker({
   triggerLabel = "Set date",
   inputLabel = "Date",
   align = "left",
+  minDate,
+  defaultToToday = false,
+  open: controlledOpen,
+  onOpenChange,
+  blockOpen = false,
+  onBlockedOpen,
 }: {
   value: Date | null;
   onChange: (next: Date | null) => void;
@@ -92,11 +98,49 @@ export function DatePicker({
   triggerLabel?: string;
   inputLabel?: string;
   align?: "left" | "right";
+  // Earliest selectable day (inclusive). Days before it are muted and
+  // non-pickable across grid, keyboard, text entry, and presets. Absent =
+  // any day allowed (the historical behavior — keeps non-task callers intact).
+  minDate?: Date | null;
+  // Opt-in: when the field is empty and the calendar opens, commit today
+  // (clamped up to minDate) as the value. Off by default so shared callers
+  // like the due-date picker never auto-stamp a date just by being opened.
+  defaultToToday?: boolean;
+  // Controlled open: when provided, the parent owns the open/closed state
+  // (e.g. so a sibling picker can pop this one open). Absent = self-managed.
+  open?: boolean;
+  onOpenChange?: (next: boolean) => void;
+  // Gate opening: when blockOpen is true, a trigger interaction calls
+  // onBlockedOpen instead of opening the calendar — used to force a
+  // prerequisite field (e.g. "set start before target") to be filled first.
+  blockOpen?: boolean;
+  onBlockedOpen?: () => void;
 }) {
   const today = startOfDayUTC(new Date());
+  const min = minDate ? startOfDayUTC(minDate) : null;
+  const belowMin = (d: Date): boolean => Boolean(min && d.getTime() < min.getTime());
   const formattedValue = formatDate(value);
-  const seed = startOfDayUTC(value ?? new Date());
-  const [open, setOpen] = useState(false);
+  // Seed the calendar's focus on a *selectable* day so keyboard-Enter never
+  // lands on a disabled cell. The displayed value may legitimately predate
+  // min (a legacy card with a past date), so clamp the focus seed up to min.
+  const rawSeed = startOfDayUTC(value ?? new Date());
+  const seed = min && rawSeed.getTime() < min.getTime() ? min : rawSeed;
+  const [openState, setOpenState] = useState(false);
+  const open = controlledOpen ?? openState;
+  const setOpen = (next: boolean) => {
+    onOpenChange?.(next);
+    if (controlledOpen === undefined) setOpenState(next);
+  };
+  // Funnel every "open the calendar" entry point through here so blockOpen
+  // can divert to onBlockedOpen instead (and disabled stays a hard stop).
+  const tryOpen = () => {
+    if (disabled) return;
+    if (blockOpen) {
+      onBlockedOpen?.();
+      return;
+    }
+    setOpen(true);
+  };
   const [text, setText] = useState(formattedValue);
   const [anchor, setAnchor] = useState(() =>
     new Date(Date.UTC(seed.getUTCFullYear(), seed.getUTCMonth(), 1)),
@@ -111,7 +155,19 @@ export function DatePicker({
 
   useEffect(() => {
     if (!open) return;
-    const nextSeed = startOfDayUTC(value ?? new Date());
+    // defaultToToday: an empty field commits today (clamped up to min, so a
+    // target whose start is in the future defaults to the start, never below
+    // it) the moment its calendar opens.
+    if (defaultToToday && value == null) {
+      const def = min && today.getTime() < min.getTime() ? min : today;
+      onChange(def);
+      setText(formatDate(def));
+      setAnchor(new Date(Date.UTC(def.getUTCFullYear(), def.getUTCMonth(), 1)));
+      setFocusDay(def);
+      return;
+    }
+    const raw = startOfDayUTC(value ?? new Date());
+    const nextSeed = min && raw.getTime() < min.getTime() ? min : raw;
     setAnchor(new Date(Date.UTC(nextSeed.getUTCFullYear(), nextSeed.getUTCMonth(), 1)));
     setFocusDay(nextSeed);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -134,9 +190,12 @@ export function DatePicker({
       document.removeEventListener("mousedown", onDocClick);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+    // setOpen is a stable-enough closure recreated each render; re-binding the
+    // listeners on it is unnecessary and only the open flag should re-run this.
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function pickDay(day: Date) {
+    if (belowMin(day)) return;
     onChange(day);
     setText(formatDate(day));
     setOpen(false);
@@ -152,7 +211,10 @@ export function DatePicker({
   }
 
   function nudgeFocus(deltaDays: number) {
-    const next = addDaysUTC(focusDay, deltaDays);
+    const moved = addDaysUTC(focusDay, deltaDays);
+    // Keyboard focus must stay on a selectable day — clamp up to min so
+    // arrow-keys can't park the cursor on a disabled (pre-min) cell.
+    const next = min && moved.getTime() < min.getTime() ? min : moved;
     setFocusDay(next);
 
     if (
@@ -181,19 +243,27 @@ export function DatePicker({
       pickDay(focusDay);
     } else if (e.key.toLowerCase() === "t") {
       e.preventDefault();
-      setFocusDay(today);
-      setAnchor(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)));
+      // "Today" shortcut — but never focus a disabled day; clamp to min.
+      const jump = min && today.getTime() < min.getTime() ? min : today;
+      setFocusDay(jump);
+      setAnchor(new Date(Date.UTC(jump.getUTCFullYear(), jump.getUTCMonth(), 1)));
     }
   }
 
   function onDisplayKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      setOpen(true);
+      tryOpen();
     }
   }
 
   function onTextChange(nextText: string) {
+    // While gated (blockOpen), the field commits nothing — the prerequisite
+    // field must be filled first. onBlockedOpen already fired on focus.
+    if (blockOpen) {
+      onBlockedOpen?.();
+      return;
+    }
     setText(nextText);
 
     if (nextText.trim() === "") {
@@ -202,7 +272,10 @@ export function DatePicker({
     }
 
     const parsed = parseDisplayDate(nextText);
-    if (parsed) {
+    // A parseable date before min is treated as not-yet-valid: we keep the
+    // typed text (so the user can keep editing) but don't commit it. The
+    // aria-invalid flag below reflects the same rule.
+    if (parsed && !belowMin(parsed)) {
       onChange(parsed);
       setAnchor(new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), 1)));
       setFocusDay(parsed);
@@ -212,7 +285,9 @@ export function DatePicker({
   const cells = buildMonth(anchor);
   const cellsNext = buildMonth(addMonths(anchor, 1));
   const isEmpty = !text.trim();
-  const invalid = Boolean(text.trim()) && !parseDisplayDate(text);
+  const parsedText = parseDisplayDate(text);
+  const invalid =
+    Boolean(text.trim()) && (!parsedText || belowMin(parsedText));
   const inputClassName =
     "h-full w-32 bg-transparent pr-2.5 font-mono text-[0.8rem] tabular-nums outline-none placeholder:text-fg-faint " +
     (isEmpty ? "text-fg-faint" : "text-fg");
@@ -227,6 +302,10 @@ export function DatePicker({
           "inline-flex items-center gap-1.5 h-8 rounded-md border border-hairline-hi bg-[color:var(--surface)] text-fg hover:bg-[color:var(--surface-strong)] disabled:opacity-50 transition-colors focus-within:ring-1 focus-within:ring-fg/40 cursor-text",
         onClick: () => {
           if (disabled) return;
+          if (blockOpen) {
+            onBlockedOpen?.();
+            return;
+          }
           setOpen(true);
           inputRef.current?.focus();
         },
@@ -246,9 +325,9 @@ export function DatePicker({
         ref: inputRef,
         onClick: (e: MouseEvent<HTMLInputElement>) => {
           e.stopPropagation();
-          setOpen(true);
+          tryOpen();
         },
-        onFocus: () => setOpen(true),
+        onFocus: () => tryOpen(),
         onKeyDown: onDisplayKeyDown,
         onChange: (e: ChangeEvent<HTMLInputElement>) => onTextChange(e.target.value),
         "data-testid": "date-picker-display",
@@ -270,19 +349,28 @@ export function DatePicker({
           createElement(
             "div",
             { className: "flex items-center gap-1.5 mb-3 px-1" },
-            PRESETS.map((preset) =>
-              createElement(
+            PRESETS.map((preset) => {
+              // A preset that resolves before min is dead — mute it and drop
+              // the click so it can't smuggle a pre-min date past pickDay.
+              const presetDisabled = belowMin(addDaysUTC(today, preset.days));
+              return createElement(
                 "button",
                 {
                   key: preset.label,
                   type: "button",
-                  onClick: () => applyPreset(preset.days),
+                  disabled: presetDisabled,
+                  onClick: presetDisabled
+                    ? undefined
+                    : () => applyPreset(preset.days),
                   className:
-                    "chip mono-meta-sm px-2 py-1 hover:bg-[color:var(--surface-hi)] hover:text-fg",
+                    "chip mono-meta-sm px-2 py-1 " +
+                    (presetDisabled
+                      ? "opacity-40 cursor-not-allowed"
+                      : "hover:bg-[color:var(--surface-hi)] hover:text-fg"),
                 },
                 preset.label,
-              ),
-            ),
+              );
+            }),
             createElement(
               "span",
               { className: "ml-auto mono-meta-sm text-fg-faint" },
@@ -321,6 +409,7 @@ export function DatePicker({
                 today,
                 focusDay,
                 selected: value,
+                minDate: min,
                 onPick: pickDay,
                 onPrev: monthIndex === 0 ? () => setAnchor(addMonths(anchor, -1)) : undefined,
                 onNext: monthIndex === 1 ? () => setAnchor(addMonths(anchor, 1)) : undefined,
@@ -339,6 +428,7 @@ function MonthGrid({
   today,
   focusDay,
   selected,
+  minDate,
   onPick,
   onPrev,
   onNext,
@@ -348,6 +438,7 @@ function MonthGrid({
   today: Date;
   focusDay: Date;
   selected: Date | null;
+  minDate: Date | null;
   onPick: (day: Date) => void;
   onPrev?: () => void;
   onNext?: () => void;
@@ -408,24 +499,34 @@ function MonthGrid({
           const isSelected = Boolean(selected && isSameDay(day, selected));
           const isToday = isSameDay(day, today);
           const isFocus = isSameDay(day, focusDay);
-          const palette = isSelected
-            ? "bg-fg text-[#0a0a0a] hover:bg-fg"
-            : !inMonth
-              ? "text-fg-faint/50 hover:bg-[color:var(--surface-strong)] hover:text-fg-muted"
-              : "text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)]";
-          const ring = isToday && !isSelected
-            ? " ring-1 ring-fg/40 ring-inset"
-            : isFocus && !isSelected
-              ? " outline-none ring-1 ring-fg/60"
-              : "";
+          // Pre-min days are non-pickable: muted, no hover, not focusable.
+          const isDisabled = Boolean(
+            minDate && day.getTime() < minDate.getTime(),
+          );
+          const palette = isDisabled
+            ? "text-fg-faint/30 cursor-not-allowed"
+            : isSelected
+              ? "bg-fg text-[#0a0a0a] hover:bg-fg"
+              : !inMonth
+                ? "text-fg-faint/50 hover:bg-[color:var(--surface-strong)] hover:text-fg-muted"
+                : "text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)]";
+          const ring = isDisabled
+            ? ""
+            : isToday && !isSelected
+              ? " ring-1 ring-fg/40 ring-inset"
+              : isFocus && !isSelected
+                ? " outline-none ring-1 ring-fg/60"
+                : "";
 
           return createElement(
             "button",
             {
               key: day.toISOString(),
               type: "button",
-              tabIndex: isFocus ? 0 : -1,
-              onClick: () => onPick(day),
+              disabled: isDisabled,
+              "aria-disabled": isDisabled || undefined,
+              tabIndex: isFocus && !isDisabled ? 0 : -1,
+              onClick: isDisabled ? undefined : () => onPick(day),
               className:
                 "size-7 inline-flex items-center justify-center text-[0.78rem] font-mono tabular-nums transition-colors rounded-md " +
                 palette +

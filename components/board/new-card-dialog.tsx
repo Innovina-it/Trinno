@@ -595,7 +595,19 @@ export function NewCardDialog({
               <div data-testid="roadmap-new-card-start">
                 <DatePicker
                   value={isoToDate(start)}
-                  onChange={(d) => setStart(dateToIso(d))}
+                  onChange={(d) => {
+                    // Keep the span: moving start with a target set slides the
+                    // target by the same delta so the duration is preserved.
+                    const oldStart = isoToDate(start);
+                    const tgt = isoToDate(target);
+                    if (d && oldStart && tgt) {
+                      const delta = d.getTime() - oldStart.getTime();
+                      if (delta !== 0) {
+                        setTarget(dateToIso(new Date(tgt.getTime() + delta)));
+                      }
+                    }
+                    setStart(dateToIso(d));
+                  }}
                   triggerLabel="Set start"
                   inputLabel="Start date"
                 />
@@ -609,6 +621,8 @@ export function NewCardDialog({
                   onChange={(d) => setTarget(dateToIso(d))}
                   triggerLabel="Set target"
                   inputLabel="Target date"
+                  // Target can't precede start; start itself is unconstrained.
+                  minDate={isoToDate(start)}
                 />
               </div>
             </div>

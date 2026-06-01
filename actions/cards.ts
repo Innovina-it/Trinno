@@ -183,6 +183,21 @@ export async function createCardImpl(token: string, input: {
       if (!targetDate && parentDefaults.targetDate) targetDate = parentDefaults.targetDate;
     }
 
+    // Date-ordering invariant (mirrors updateCardImpl): a new card's target
+    // must never precede its start, whether the dates came from the client
+    // or were inherited from a parent above.
+    if (
+      startDate instanceof Date &&
+      targetDate instanceof Date &&
+      targetDate.getTime() < startDate.getTime()
+    ) {
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        "Target date must be on or after start date",
+        { kind: "target-before-start" },
+      );
+    }
+
     // Default ownerId to the parent owner for subtasks, otherwise creator,
     // when the client didn't supply one.
     // Distinguish "not provided" (undefined) from "explicitly null" so the
@@ -484,6 +499,35 @@ export async function updateCardImpl(token: string, input: {
             if (needTarget && parent.targetDate) patch.targetDate = parent.targetDate;
           }
         }
+      }
+    }
+    // Date-ordering invariant: a card's target must never precede its start,
+    // no matter the entry path (quick-view, roadmap drag, a direct action
+    // call). The UI pickers floor this, but the server is the real backstop.
+    // Validate the *effective* pair — the patch value when present, else the
+    // card's currently-stored value — and only read when one side is missing.
+    if (patch.startDate !== undefined || patch.targetDate !== undefined) {
+      let effStart = patch.startDate as Date | null | undefined;
+      let effTarget = patch.targetDate as Date | null | undefined;
+      if (effStart === undefined || effTarget === undefined) {
+        const [existing] = await tx
+          .select({ startDate: cards.startDate, targetDate: cards.targetDate })
+          .from(cards)
+          .where(eq(cards.id, parsed.id))
+          .limit(1);
+        if (effStart === undefined) effStart = existing?.startDate ?? null;
+        if (effTarget === undefined) effTarget = existing?.targetDate ?? null;
+      }
+      if (
+        effStart instanceof Date &&
+        effTarget instanceof Date &&
+        effTarget.getTime() < effStart.getTime()
+      ) {
+        throw new StructuredError(
+          "VALIDATION_ERROR",
+          "Target date must be on or after start date",
+          { kind: "target-before-start" },
+        );
       }
     }
     try {

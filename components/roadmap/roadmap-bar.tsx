@@ -663,7 +663,19 @@ export function RoadmapBar({
               <div data-testid="roadmap-bar-dates-start">
                 <DatePicker
                   value={isoToDate(datesStart)}
-                  onChange={(d) => setDatesStart(dateToIso(d))}
+                  onChange={(d) => {
+                    // Keep the span: moving start with a target set slides the
+                    // target by the same delta so the duration is preserved.
+                    const oldStart = isoToDate(datesStart);
+                    const tgt = isoToDate(datesTarget);
+                    if (d && oldStart && tgt) {
+                      const delta = d.getTime() - oldStart.getTime();
+                      if (delta !== 0) {
+                        setDatesTarget(dateToIso(new Date(tgt.getTime() + delta)));
+                      }
+                    }
+                    setDatesStart(dateToIso(d));
+                  }}
                   triggerLabel="Set start"
                   inputLabel="Start date"
                 />
@@ -677,6 +689,8 @@ export function RoadmapBar({
                   onChange={(d) => setDatesTarget(dateToIso(d))}
                   triggerLabel="Set target"
                   inputLabel="Target date"
+                  // Target can't precede start; start itself is unconstrained.
+                  minDate={isoToDate(datesStart)}
                 />
               </div>
             </div>
