@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import type { WorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import type { WorkspaceRole } from "@/lib/permissions/guest-guard";
+import type { CardUrlLink } from "@/lib/links/types";
 
 // Plan #16b-β — per-workspace zustand store. Mirrors the BoardStoreProvider
 // context pattern but scopes to a workspace, so cross-board views (Roadmap,
@@ -34,6 +35,15 @@ type Profile = WorkspaceSnapshot["workspaceProfiles"][number];
 type Board = WorkspaceSnapshot["boards"][number];
 type SubBoard = WorkspaceSnapshot["subBoards"][number];
 
+// Plan #links — the workspace store carries the same per-card URL-link map the
+// board store does, so roadmap gantt + list surfaces (which read from this
+// store, not the board store) can render the per-card link diamond. Seeded
+// from the snapshot (optional so older/legacy snapshot producers still
+// construct a valid store) and kept live by optimistic writes + CDC echoes.
+type WorkspaceSnapshotInit = WorkspaceSnapshot & {
+  cardLinkByCard?: Record<string, CardUrlLink>;
+};
+
 export type WorkspaceState = {
   workspaceId: string;
   // Plan #links — the viewer's id and workspace role, surfaced from the
@@ -54,14 +64,17 @@ export type WorkspaceState = {
   cardMembers: CardMember[];
   workspaceProfiles: Profile[];
   subBoards: SubBoard[];
+  cardLinkByCard: Record<string, CardUrlLink>;
+  setCardLink: (l: CardUrlLink) => void;
+  removeCardLinkLocal: (cardId: string) => void;
 
-  setSnapshot: (s: Omit<WorkspaceSnapshot, "workspaceId">) => void;
+  setSnapshot: (s: Omit<WorkspaceSnapshotInit, "workspaceId">) => void;
   // Like setSnapshot but skips collections that are already kept live by
   // per-row CDC subscriptions (cards, lists, sprints, links, members,
   // versions). Replacing those wholesale would clobber pending optimistic
   // patches (e.g. a roadmap bar drag mid-persist) with stale snapshot data.
   mergeSnapshotPreservingRealtime: (
-    s: Omit<WorkspaceSnapshot, "workspaceId">,
+    s: Omit<WorkspaceSnapshotInit, "workspaceId">,
   ) => void;
 
   upsertList: (l: List) => void;
@@ -97,7 +110,7 @@ export type WorkspaceState = {
   removeSubBoard: (id: string) => void;
 };
 
-export function createWorkspaceStore(initial: WorkspaceSnapshot) {
+export function createWorkspaceStore(initial: WorkspaceSnapshotInit) {
   return createStore<WorkspaceState>((set) => ({
     workspaceId: initial.workspaceId,
     // Default to "" / null so older snapshot producers that predate these
@@ -117,17 +130,36 @@ export function createWorkspaceStore(initial: WorkspaceSnapshot) {
     cardMembers: initial.cardMembers,
     workspaceProfiles: initial.workspaceProfiles,
     subBoards: initial.subBoards,
+    cardLinkByCard: initial.cardLinkByCard ?? {},
 
-    setSnapshot: (s) => set({ ...s }),
+    setCardLink: (l) =>
+      set((state) => ({
+        cardLinkByCard: { ...state.cardLinkByCard, [l.cardId]: l },
+      })),
+    removeCardLinkLocal: (cardId) =>
+      set((state) => {
+        const next = { ...state.cardLinkByCard };
+        delete next[cardId];
+        return { cardLinkByCard: next };
+      }),
+
+    setSnapshot: (s) =>
+      set({ ...s, cardLinkByCard: s.cardLinkByCard ?? {} }),
     mergeSnapshotPreservingRealtime: (s) =>
-      set({
+      set((state) => ({
         autoAssignCreator: s.autoAssignCreator,
         boards: s.boards,
         components: s.components,
         cardComponents: s.cardComponents,
         workspaceProfiles: s.workspaceProfiles,
         subBoards: s.subBoards,
-      }),
+        // cardLinkByCard is kept live by optimistic writes + CDC echoes, so a
+        // stale snapshot must not clobber a pending local link. Seed it only
+        // when the incoming snapshot actually carries the field; otherwise
+        // preserve the current realtime-maintained map (matching how the
+        // other CDC-backed per-card collections are left untouched here).
+        cardLinkByCard: s.cardLinkByCard ?? state.cardLinkByCard,
+      })),
 
     upsertList: (l) =>
       set((st) => ({
