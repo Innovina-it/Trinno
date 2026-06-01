@@ -58,8 +58,11 @@ Click opens URL; hold opens the edit dialog when the user can edit.
 | User / state | Icon | Click | Hold ~500ms |
 |---|---|---|---|
 | anyone, **no link** | (nothing) | — | — |
-| any member, **link set** | ☁ cloud (nuvoletta) | opens URL | — |
+| member **or guest**, **link set** | ☁ cloud (nuvoletta) | opens URL | — |
 | owner/admin, **link set** | ☁ cloud | opens URL | opens dialog (edit, URL only) |
+
+> Guests have the same open-on-click behaviour as members on the workspace link
+> (read access covers `guest`); only the edit-on-hold path is owner/admin-only.
 
 Initial creation of the workspace link happens in **workspace settings**, not via the icon
 (the icon does not exist while the value is empty).
