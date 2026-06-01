@@ -486,7 +486,7 @@ describe("inviteWorkspaceRedirect (#A3)", () => {
     return { data: data.session!.access_token } as unknown as { data: string };
   }
 
-  it.fails("returns the inviting workspace for the invitee", async () => {
+  it("returns the inviting workspace for the invitee", async () => {
     const owner = await makeUser(`r-own-${uniq()}@x.io`);
     const { data: ws } = await userClient(owner.jwt).from("workspaces").select("id");
     const wsId = ws![0].id as string;
