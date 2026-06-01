@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { STATUS_LABEL, type StatusKind } from "@/lib/status";
-import { archiveCard, updateCard } from "@/actions/cards";
+import { archiveCard, setRoadmapCompletion, updateCard } from "@/actions/cards";
 import { formatDate } from "@/lib/format-date";
 import {
   PRIORITY_TINT,
@@ -318,7 +318,7 @@ export function RoadmapBar({
     });
     startTransition(async () => {
       try {
-        await updateCard({ id: card.id, completed: next });
+        await setRoadmapCompletion({ cardId: card.id, completed: next });
       } catch (err) {
         // Roll back optimistic patch.
         patchCardLocal(card.id, {

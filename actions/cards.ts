@@ -19,7 +19,7 @@ import { positionBetween } from "@/lib/ordering";
 import {
   CreateCardInput, UpdateCardInput, MoveCardInput, ArchiveCardInput,
   CascadeShiftBlockedInput, ReorderRoadmapRowInput, Uuid, CardPriority,
-  BulkSetCompletedInput,
+  BulkSetCompletedInput, SetRoadmapCompletionInput,
 } from "@/lib/validation";
 import {
   computeNewRank,
@@ -616,6 +616,109 @@ export async function moveCardToStatusImpl(
   });
 }
 
+/**
+ * Roadmap complete-toggle handler. Keeps the board list in lockstep with
+ * the gantt completion state — WITHOUT touching updateCard (which by
+ * invariant #0111 never changes listId).
+ *
+ * completed=true:
+ *   - if the card is not already in a 'done' list: record its current
+ *     list in pre_done_list_id, then move it to the board's 'done' list
+ *     (moveCardToStatusImpl creates one if the board has none).
+ *   - stamp completed_at = now().
+ * completed=false:
+ *   - clear completed_at and pre_done_list_id.
+ *   - revert ONLY if the card is currently in a 'done' list AND we have a
+ *     stored pre_done_list_id (still present — FK is ON DELETE SET NULL).
+ *     If the user manually moved it elsewhere after completing, leave it.
+ *
+ * No shared transaction across the move impls — matches the established
+ * cross-impl pattern (moveCardToStatusImpl, syncParentFromSubtaskImpl).
+ */
+export async function setRoadmapCompletionImpl(
+  token: string,
+  input: { cardId: string; completed: boolean },
+): Promise<{ cardId: string; boardId: string; listId: string }> {
+  const parsed = SetRoadmapCompletionInput.parse(input);
+  const actorId = decodeSub(token);
+
+  const probe = await dbAsUser(token, async (tx) => {
+    const [card] = await tx
+      .select({
+        boardId: cards.boardId,
+        listId: cards.listId,
+        preDoneListId: cards.preDoneListId,
+      })
+      .from(cards)
+      .where(eq(cards.id, parsed.cardId));
+    if (!card) return null;
+    // Completion is a non-guest write (mirrors updateCardImpl's gate).
+    assertNotGuest(await getWorkspaceRoleForCard(tx, parsed.cardId, actorId));
+    const [list] = await tx
+      .select({ statusKind: lists.statusKind })
+      .from(lists)
+      .where(eq(lists.id, card.listId));
+    return {
+      boardId: card.boardId,
+      listId: card.listId,
+      preDoneListId: card.preDoneListId,
+      currentStatusKind: list?.statusKind ?? null,
+    };
+  });
+  if (!probe) throw new StructuredError("ACCESS_DENIED", "Forbidden");
+
+  let resultListId = probe.listId;
+
+  if (parsed.completed) {
+    const movingToDone = probe.currentStatusKind !== "done";
+    await dbAsUser(token, (tx) =>
+      tx
+        .update(cards)
+        .set(
+          movingToDone
+            ? { completedAt: new Date(), preDoneListId: probe.listId }
+            : { completedAt: new Date() },
+        )
+        .where(eq(cards.id, parsed.cardId)),
+    );
+    if (movingToDone) {
+      const moved = await moveCardToStatusImpl(token, {
+        cardId: parsed.cardId,
+        statusKind: "done",
+      });
+      resultListId = moved.listId;
+    }
+  } else {
+    const reverting =
+      probe.currentStatusKind === "done" && probe.preDoneListId != null;
+    await dbAsUser(token, (tx) =>
+      tx
+        .update(cards)
+        .set({ completedAt: null, preDoneListId: null })
+        .where(eq(cards.id, parsed.cardId)),
+    );
+    if (reverting) {
+      const pos = await dbAsUser(token, async (tx) => {
+        const [last] = await tx
+          .select({ position: cards.position })
+          .from(cards)
+          .where(eq(cards.listId, probe.preDoneListId!))
+          .orderBy(desc(cards.position))
+          .limit(1);
+        return positionBetween(last?.position ?? null, null);
+      });
+      const moved = await moveCardImpl(token, {
+        id: parsed.cardId,
+        listId: probe.preDoneListId!,
+        position: pos,
+      });
+      resultListId = moved.listId;
+    }
+  }
+
+  return { cardId: parsed.cardId, boardId: probe.boardId, listId: resultListId };
+}
+
 export async function archiveCardImpl(token: string, input: { id: string; archived: boolean }) {
   const parsed = ArchiveCardInput.parse(input);
   const actorId = decodeSub(token);
@@ -1098,6 +1201,15 @@ export async function archiveCard(input: { id: string; archived: boolean }) {
   await requireUser();
   const t = (await getSessionToken())!;
   const r = await archiveCardImpl(t, input);
+  revalidatePath(`/b/${r.boardId}`);
+  return r;
+}
+export async function setRoadmapCompletion(input: {
+  cardId: string; completed: boolean;
+}) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const r = await setRoadmapCompletionImpl(t, input);
   revalidatePath(`/b/${r.boardId}`);
   return r;
 }
