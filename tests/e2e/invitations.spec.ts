@@ -52,14 +52,10 @@ test("owner invites a new external user → pending badge + resend", async ({ pa
   await expect(page.getByRole("button", { name: /resend/i })).toBeVisible();
 });
 
-// KNOWN-UNRESOLVED (flagged for follow-up): a clean invitee (no prior session)
-// landing on /accept-invite#access_token=... never gets a session cookie set —
-// the @supabase/ssr browser client does not consume the implicit-hash tokens
-// here, so updateUser() fails "link expired". Open question: whether the real
-// email flow routes through /auth/callback?code= (PKCE) instead of a direct
-// hash redirect, and whether the shared reset-password flow has the same issue.
-// Needs focused auth-flow investigation before asserting a product fix.
-test.fixme("invitee accepts via email link → sets password → lands in workspace", async ({ page, request }) => {
+// Full accept leg: invitee lands on /accept-invite with the session in the URL
+// hash (implicit flow); accept-invite-form parses the hash + setSession() to
+// establish the cookie session, then updateUser() sets the password.
+test("invitee accepts via email link → sets password → lands in workspace", async ({ page, request }) => {
   // Owner must use an allowed domain (@innovina.it).
   const owner = `acc-own-${Date.now()}@innovina.it`;
   const wsId = await signupOwner(page, owner);

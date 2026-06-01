@@ -26,9 +26,39 @@ export function AcceptInviteForm() {
 
   useEffect(() => {
     const supa = createSupabaseBrowser();
-    supa.auth.getSession().then(({ data }) => {
-      if (!data.session) setErr("Invite link expired or invalid. Ask the admin to resend it.");
-    });
+    async function init() {
+      // Supabase admin invite links (inviteUserByEmail) verify server-side and
+      // redirect here with the session in the URL *hash* (implicit flow). The
+      // @supabase/ssr browser client uses PKCE and does NOT auto-consume that
+      // hash, so we parse it and establish the session explicitly. Fall back to
+      // any existing session (e.g. a code-flow callback already ran).
+      const raw = window.location.hash.startsWith("#")
+        ? window.location.hash.slice(1)
+        : "";
+      const params = new URLSearchParams(raw);
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token");
+      if (accessToken && refreshToken) {
+        const { error } = await supa.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (!error) {
+          // Drop the tokens from the URL so a reload can't replay them.
+          window.history.replaceState(
+            null,
+            "",
+            window.location.pathname + window.location.search,
+          );
+          return;
+        }
+      }
+      const { data } = await supa.auth.getSession();
+      if (!data.session) {
+        setErr("Invite link expired or invalid. Ask the admin to resend it.");
+      }
+    }
+    void init();
   }, []);
 
   async function onSubmit(e: React.FormEvent) {
