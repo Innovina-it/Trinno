@@ -282,6 +282,23 @@ export const CreateCardLinkInput = z.object({
 });
 export const DeleteCardLinkInput = z.object({ id: Uuid });
 
+// Link entity (URL links on cards/workspaces) — distinct from CardLink relations above.
+export const LinkColor = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, "color must be a #rrggbb hex");
+export const UpsertCardLinkInput = z.object({
+  cardId: Uuid,
+  url: z.string().trim().min(1).max(2048),
+  color: LinkColor,
+});
+export const UpsertWorkspaceLinkInput = z.object({
+  workspaceId: Uuid,
+  url: z.string().trim().min(1).max(2048),
+});
+export const RemoveCardLinkInput = z.object({ cardId: Uuid });
+export const RemoveWorkspaceLinkInput = z.object({ workspaceId: Uuid });
+
 export const SprintStateZ = z.enum(["planned", "active", "completed"]);
 export const CreateSprintInput = z.object({
   workspaceId: Uuid,
