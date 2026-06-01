@@ -530,3 +530,47 @@ describe("email normalization (#A3-email)", () => {
     ).rejects.toThrow();
   });
 });
+
+describe("admin (non-owner) CAN manage members (#K1)", () => {
+  const uniq = () => `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  it("an admin can invite, resend, and remove", async () => {
+    const owner = await makeUser(`k1-own-${uniq()}@x.io`);
+    const admin = await makeUser(`k1-adm-${uniq()}@x.io`);
+    const { data: ws } = await userClient(owner.jwt).from("workspaces").select("id");
+    const wsId = ws![0].id as string;
+    const adminEmail = (await service.auth.admin.getUserById(admin.id)).data.user!.email!;
+    await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: adminEmail, role: "admin" });
+
+    const ext = `k1-ext-${uniq()}@gmail.com`;
+    const r = await inviteMemberImpl(admin.jwt, { workspaceId: wsId, email: ext, role: "member" });
+    expect(r.kind).toBe("invited");
+    await expect(resendInvitationImpl(admin.jwt, { workspaceId: wsId, email: ext })).resolves.toBeUndefined();
+    await expect(removeMemberImpl(admin.jwt, { workspaceId: wsId, userId: r.userId })).resolves.toBeUndefined();
+  });
+});
+
+describe("structured error codes (#K3)", () => {
+  const uniq = () => `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  it("rejections carry ROLE_INSUFFICIENT / ALREADY_INVITED / NOT_FOUND codes", async () => {
+    const owner = await makeUser(`k3-own-${uniq()}@x.io`);
+    const member = await makeUser(`k3-mem-${uniq()}@x.io`);
+    const { data: ws } = await userClient(owner.jwt).from("workspaces").select("id");
+    const wsId = ws![0].id as string;
+    const mEmail = (await service.auth.admin.getUserById(member.id)).data.user!.email!;
+    await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: mEmail, role: "member" });
+
+    await expect(
+      inviteMemberImpl(member.jwt, { workspaceId: wsId, email: `z-${uniq()}@gmail.com`, role: "member" }),
+    ).rejects.toMatchObject({ code: "ROLE_INSUFFICIENT" });
+
+    const dupe = `k3-dup-${uniq()}@gmail.com`;
+    await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: dupe, role: "member" });
+    await expect(
+      inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: dupe, role: "member" }),
+    ).rejects.toMatchObject({ code: "ALREADY_INVITED" });
+
+    await expect(
+      resendInvitationImpl(owner.jwt, { workspaceId: wsId, email: `k3-none-${uniq()}@gmail.com` }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
