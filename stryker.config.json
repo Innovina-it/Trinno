@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "vitest": { "configFile": "vitest.stryker.config.ts" },
+  "mutate": ["actions/workspace-members.ts", "lib/invite-email.ts"],
+  "concurrency": 1,
+  "coverageAnalysis": "off",
+  "timeoutMS": 60000,
+  "reporters": ["clear-text", "json", "html"]
+}

@@ -16,6 +16,10 @@
 /playwright-report
 /playwright/.cache
 
+# stryker mutation testing artifacts
+/.stryker-tmp
+/reports/mutation
+
 # next.js
 /.next/
 /out/
