@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { inviteMemberImpl, resendInvitationImpl, removeMemberImpl } from "@/actions/workspace-members";
+import { inviteWorkspaceRedirectImpl } from "@/actions/auth";
 import { listMembers } from "@/lib/queries/workspaces";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -465,5 +466,67 @@ describe("invitation lifecycle / state machine (#A2)", () => {
     const statuses = (invs ?? []).map((i) => i.status);
     expect(statuses.length).toBe(2);
     expect(statuses.every((s) => s === "accepted")).toBe(true);
+  });
+});
+
+describe("inviteWorkspaceRedirect (#A3)", () => {
+  const uniq = () => `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+
+  // Helper: invite an external email, then give that invitee a usable session
+  // (set password + confirm via admin) so we can call the Impl with their JWT.
+  async function inviteAndSignIn(ownerJwt: string, wsId: string, email: string) {
+    const r = await inviteMemberImpl(ownerJwt, { workspaceId: wsId, email, role: "member" });
+    await service.auth.admin.updateUserById(r.userId, { password: "passw0rd!", email_confirm: true });
+    const { data: s } = await createSignIn(email);
+    return { userId: r.userId, jwt: s };
+  }
+  async function createSignIn(email: string): Promise<{ data: string }> {
+    const { createClient } = await import("@supabase/supabase-js");
+    const { data } = await createClient(url, anon).auth.signInWithPassword({ email, password: "passw0rd!" });
+    return { data: data.session!.access_token } as unknown as { data: string };
+  }
+
+  it.fails("returns the inviting workspace for the invitee", async () => {
+    const owner = await makeUser(`r-own-${uniq()}@x.io`);
+    const { data: ws } = await userClient(owner.jwt).from("workspaces").select("id");
+    const wsId = ws![0].id as string;
+    const email = `r-inv-${uniq()}@gmail.com`;
+    const invitee = await inviteAndSignIn(owner.jwt, wsId, email);
+
+    const redirect = await inviteWorkspaceRedirectImpl(invitee.jwt);
+    expect(redirect).toBe(wsId);
+  });
+
+  it("returns null for a user with no invitation", async () => {
+    const u = await makeUser(`r-none-${uniq()}@x.io`);
+    const redirect = await inviteWorkspaceRedirectImpl(u.jwt);
+    expect(redirect).toBeNull();
+  });
+});
+
+describe("email normalization (#A3-email)", () => {
+  const uniq = () => `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  async function ownerWs() {
+    const owner = await makeUser(`en-own-${uniq()}@x.io`);
+    const { data: ws } = await userClient(owner.jwt).from("workspaces").select("id");
+    return { owner, wsId: ws![0].id as string };
+  }
+
+  it("stores the invitee email trimmed + lowercased", async () => {
+    const { owner, wsId } = await ownerWs();
+    const raw = `  MiXeD-${uniq()}@GMAIL.com  `;
+    const res = await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: raw, role: "member" });
+    const { data: inv } = await service
+      .from("workspace_invitations").select("email").eq("user_id", res.userId).single();
+    expect(inv!.email).toBe(raw.trim().toLowerCase());
+  });
+
+  it("detects duplicate invites case-insensitively", async () => {
+    const { owner, wsId } = await ownerWs();
+    const base = `casedup-${uniq()}@gmail.com`;
+    await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: base.toUpperCase(), role: "member" });
+    await expect(
+      inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: base, role: "member" }),
+    ).rejects.toThrow();
   });
 });
