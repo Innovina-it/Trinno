@@ -334,7 +334,7 @@ describe("invitation visibility is admin-only (#2A)", () => {
     // listMembers under the owner's token: pending=true (badge shown).
     const asOwner = await listMembers(owner.jwt, wsId);
     const inviteeRowOwner = asOwner.find((m) => m.userId === inv.userId);
-    expect(inviteeRowOwner.pending).toBe(true);
+    expect((inviteeRowOwner as { pending: boolean }).pending).toBe(true);
   });
 });
 
