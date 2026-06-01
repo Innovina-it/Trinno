@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import type { WorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
+import type { WorkspaceRole } from "@/lib/permissions/guest-guard";
 
 // Plan #16b-β — per-workspace zustand store. Mirrors the BoardStoreProvider
 // context pattern but scopes to a workspace, so cross-board views (Roadmap,
@@ -35,6 +36,11 @@ type SubBoard = WorkspaceSnapshot["subBoards"][number];
 
 export type WorkspaceState = {
   workspaceId: string;
+  // Plan #links — the viewer's id and workspace role, surfaced from the
+  // server snapshot so UI under WorkspaceStoreContext can gate owner/admin-
+  // only affordances (link writes) without a server round-trip.
+  viewerId: string;
+  viewerRole: WorkspaceRole;
   autoAssignCreator: boolean;
   boards: Board[];
   lists: List[];
@@ -94,6 +100,10 @@ export type WorkspaceState = {
 export function createWorkspaceStore(initial: WorkspaceSnapshot) {
   return createStore<WorkspaceState>((set) => ({
     workspaceId: initial.workspaceId,
+    // Default to "" / null so older snapshot producers that predate these
+    // fields still construct a valid store.
+    viewerId: initial.viewerId ?? "",
+    viewerRole: initial.viewerRole ?? null,
     autoAssignCreator: initial.autoAssignCreator,
     boards: initial.boards,
     lists: initial.lists,

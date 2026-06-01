@@ -1,6 +1,7 @@
 import { cache } from "react";
-import { eq, inArray, asc } from "drizzle-orm";
+import { eq, inArray, asc, and, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
+import type { WorkspaceRole } from "@/lib/permissions/guest-guard";
 import {
   boards,
   cards,
@@ -26,6 +27,13 @@ import {
 
 export type WorkspaceSnapshot = {
   workspaceId: string;
+  // Plan #links — the requesting user's id and their workspace_members.role
+  // for THIS workspace (null if not a member, e.g. service paths). The client
+  // store exposes these so UI can gate owner/admin-only affordances (link
+  // writes) without a server round-trip. Derived server-side from auth.uid()
+  // within the RLS-scoped transaction.
+  viewerId: string;
+  viewerRole: WorkspaceRole;
   // Per-workspace toggle: when true, the server-side createCard path
   // auto-inserts the creator into card_members. The client mirrors this
   // by seeding the assignee picker in the new-card dialog so the UI
@@ -129,6 +137,30 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
       .where(eq(workspaces.id, workspaceId))
       .limit(1);
     const autoAssignCreator = wsRow?.autoAssignCreator ?? false;
+
+    // The requesting user's id and workspace role. auth.uid() reads the JWT
+    // claims already bound to this RLS-scoped transaction by dbAsUser, so it
+    // is the authoritative viewer identity. The role lookup is membership in
+    // THIS workspace (null when the caller is not a member).
+    const uidRows = (await tx.execute(
+      sql`select auth.uid()::text as uid`,
+    )) as unknown as Array<{ uid: string | null }>;
+    const viewerId = uidRows[0]?.uid ?? "";
+    const [roleRow] = viewerId
+      ? await tx
+          .select({ role: workspaceMembers.role })
+          .from(workspaceMembers)
+          .where(
+            and(
+              eq(workspaceMembers.workspaceId, workspaceId),
+              eq(workspaceMembers.userId, viewerId),
+            ),
+          )
+          .limit(1)
+      : [];
+    const viewerRole: WorkspaceRole =
+      (roleRow?.role as WorkspaceRole | undefined) ?? null;
+
     const boardRows = await tx
       .select({
         id: boards.id,
@@ -188,6 +220,8 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         .orderBy(asc(versions.name));
       return {
         workspaceId,
+        viewerId,
+        viewerRole,
         autoAssignCreator,
         boards: [],
         lists: [],
@@ -357,6 +391,8 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
 
     return {
       workspaceId,
+      viewerId,
+      viewerRole,
       autoAssignCreator,
       boards: boardRows.map((b) => ({
         id: b.id,

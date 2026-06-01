@@ -20,6 +20,8 @@ import type { WorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 function makeSnapshot(sprints: WorkspaceSnapshot["sprints"]): WorkspaceSnapshot {
   return {
     workspaceId: "w1",
+    viewerId: "u1",
+    viewerRole: "owner",
     autoAssignCreator: false,
     boards: [],
     lists: [],
