@@ -13,14 +13,24 @@ async function signupOwner(page: Page, email: string): Promise<string> {
 }
 
 test("owner invites a new external user → pending badge + resend", async ({ page }) => {
-  const owner = `inv-own-${Date.now()}@example.com`;
+  // Owner must use an allowed domain (@innovina.it); external invitee goes
+  // through auth.admin.inviteUserByEmail which bypasses the domain hook.
+  const owner = `inv-own-${Date.now()}@innovina.it`;
   const wsId = await signupOwner(page, owner);
   const invitee = `inv-ext-${Date.now()}@gmail.com`;
   // The member list renders the local part of the email as displayName
   // (set by the handle_new_user trigger: local_part = split_part(email, '@', 1)).
   const inviteeDisplay = invitee.split("@")[0];
 
-  await page.goto(`/w/${wsId}/settings`);
+  // Navigate to settings; retry once in case Next.js dev-mode RSC streaming
+  // aborts on first cold compile of the settings route.
+  await page.goto(`/w/${wsId}/settings`).catch(async (e) => {
+    if ((e as Error).message?.includes("ERR_ABORTED")) {
+      await page.goto(`/w/${wsId}/settings`);
+    } else {
+      throw e;
+    }
+  });
   await page.getByLabel("Email").fill(invitee);
   await page.getByRole("button", { name: /^invite$/i }).click();
 
@@ -29,7 +39,13 @@ test("owner invites a new external user → pending badge + resend", async ({ pa
 
   // Roster shows the pending invitee with the badge + a Resend control.
   // Reload to pick up the server-side re-render after revalidatePath.
-  await page.goto(`/w/${wsId}/settings`);
+  await page.goto(`/w/${wsId}/settings`).catch(async (e) => {
+    if ((e as Error).message?.includes("ERR_ABORTED")) {
+      await page.goto(`/w/${wsId}/settings`);
+    } else {
+      throw e;
+    }
+  });
   // The member row shows displayName (local part of email).
   await expect(page.getByText(inviteeDisplay)).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText(/pending · invite sent/i)).toBeVisible();
@@ -37,11 +53,18 @@ test("owner invites a new external user → pending badge + resend", async ({ pa
 });
 
 test("invitee accepts via email link → sets password → lands in workspace", async ({ page, request }) => {
-  const owner = `acc-own-${Date.now()}@example.com`;
+  // Owner must use an allowed domain (@innovina.it).
+  const owner = `acc-own-${Date.now()}@innovina.it`;
   const wsId = await signupOwner(page, owner);
   const invitee = `acc-ext-${Date.now()}@gmail.com`;
 
-  await page.goto(`/w/${wsId}/settings`);
+  await page.goto(`/w/${wsId}/settings`).catch(async (e) => {
+    if ((e as Error).message?.includes("ERR_ABORTED")) {
+      await page.goto(`/w/${wsId}/settings`);
+    } else {
+      throw e;
+    }
+  });
   await page.getByLabel("Email").fill(invitee);
   await page.getByRole("button", { name: /^invite$/i }).click();
   await expect(page.getByText(/invite sent/i)).toBeVisible({ timeout: 15_000 });
