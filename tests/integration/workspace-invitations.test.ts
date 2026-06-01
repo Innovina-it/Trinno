@@ -403,3 +403,67 @@ describe("invitation authorization negatives (#A1)", () => {
     expect(insErr).not.toBeNull();
   });
 });
+
+describe("invitation lifecycle / state machine (#A2)", () => {
+  const uniq = () => `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  async function ownerWs() {
+    const owner = await makeUser(`lc-own-${uniq()}@x.io`);
+    const { data: ws } = await userClient(owner.jwt).from("workspaces").select("id");
+    return { owner, wsId: ws![0].id as string };
+  }
+
+  it("invite → accept → re-invite (now confirmed) returns 'added', not 'invited'", async () => {
+    const { owner, wsId } = await ownerWs();
+    const email = `lc-conf-${uniq()}@gmail.com`;
+    const first = await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email, role: "member" });
+    expect(first.kind).toBe("invited");
+    // Accept (confirm) the invitee.
+    await service.auth.admin.updateUserById(first.userId, { email_confirm: true });
+    // Remove then re-invite the now-CONFIRMED user.
+    await removeMemberImpl(owner.jwt, { workspaceId: wsId, userId: first.userId });
+    const second = await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email, role: "member" });
+    expect(second.kind).toBe("added");
+    expect(second.userId).toBe(first.userId);
+  });
+
+  it("double-confirm is idempotent (trigger does not error, stays accepted)", async () => {
+    const { owner, wsId } = await ownerWs();
+    const email = `lc-dbl-${uniq()}@gmail.com`;
+    const r = await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email, role: "member" });
+    await service.auth.admin.updateUserById(r.userId, { email_confirm: true });
+    // Second confirm/update must not throw nor regress the status.
+    await service.auth.admin.updateUserById(r.userId, { email_confirm: true });
+    const { data: inv } = await service
+      .from("workspace_invitations").select("status").eq("user_id", r.userId).single();
+    expect(inv!.status).toBe("accepted");
+  });
+
+  it("removing an ACCEPTED member deletes membership but leaves invitation accepted", async () => {
+    const { owner, wsId } = await ownerWs();
+    const email = `lc-rmacc-${uniq()}@gmail.com`;
+    const r = await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email, role: "member" });
+    await service.auth.admin.updateUserById(r.userId, { email_confirm: true }); // → accepted
+    await removeMemberImpl(owner.jwt, { workspaceId: wsId, userId: r.userId });
+    const { data: mem } = await service.from("workspace_members")
+      .select("user_id").eq("workspace_id", wsId).eq("user_id", r.userId);
+    expect(mem?.length ?? 0).toBe(0); // membership gone
+    const { data: inv } = await service.from("workspace_invitations")
+      .select("status").eq("workspace_id", wsId).eq("email", email).single();
+    expect(inv!.status).toBe("accepted"); // revoke only touches pending; accepted stays
+  });
+
+  it("cross-workspace invites of the same email: confirm flips ALL pending to accepted", async () => {
+    const a = await ownerWs();
+    const b = await ownerWs();
+    const email = `lc-cross-${uniq()}@gmail.com`;
+    const r1 = await inviteMemberImpl(a.owner.jwt, { workspaceId: a.wsId, email, role: "member" });
+    const r2 = await inviteMemberImpl(b.owner.jwt, { workspaceId: b.wsId, email, role: "member" });
+    expect(r2.userId).toBe(r1.userId); // same auth user reused
+    await service.auth.admin.updateUserById(r1.userId, { email_confirm: true });
+    const { data: invs } = await service.from("workspace_invitations")
+      .select("workspace_id,status").eq("email", email);
+    const statuses = (invs ?? []).map((i) => i.status);
+    expect(statuses.length).toBe(2);
+    expect(statuses.every((s) => s === "accepted")).toBe(true);
+  });
+});
