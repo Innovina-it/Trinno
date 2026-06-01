@@ -6,6 +6,7 @@ import {
   pixelsPerDay,
   gridStartFor,
   gridEndFor,
+  preservedScrollLeft,
   xForDate,
 } from "@/lib/roadmap/dates";
 
@@ -100,5 +101,54 @@ describe("xForDate", () => {
   it("handles negative offsets (date before gridStart)", () => {
     const start = new Date("2026-05-01T00:00:00Z");
     expect(xForDate(new Date("2026-04-29T00:00:00Z"), start, 24)).toBe(-48);
+  });
+});
+
+describe("preservedScrollLeft (anchor-preserving zoom)", () => {
+  const grid = new Date("2025-06-01T00:00:00Z");
+
+  it("keeps the center date fixed when zooming IN (same grid)", () => {
+    // prevScrollLeft 500 + half of 1000 = centerPx 1000; at 10 ppd that is
+    // day index 100 from gridStart. At 20 ppd the same day sits at px 2000,
+    // so scrollLeft must be 2000 - 500 = 1500.
+    const next = preservedScrollLeft(500, 1000, grid, 10, grid, 20, 100_000);
+    expect(next).toBe(1500);
+    // The same center day under the new geometry.
+    expect((next + 1000 / 2) / 20).toBe(100);
+  });
+
+  it("keeps the center date fixed when zooming OUT (same grid)", () => {
+    // centerPx 2000 at 10 ppd = day 200; at 5 ppd → 1000 - 500 = 500.
+    const next = preservedScrollLeft(1500, 1000, grid, 10, grid, 5, 100_000);
+    expect(next).toBe(500);
+    expect((next + 1000 / 2) / 5).toBe(200);
+  });
+
+  it("clamps to 0 at the start edge", () => {
+    // centerPx 700 at 10 ppd = day 70; at 2 ppd → 140 - 500 = -360 → 0.
+    expect(preservedScrollLeft(200, 1000, grid, 10, grid, 2, 100_000)).toBe(0);
+  });
+
+  it("clamps to maxScrollLeft at the end edge", () => {
+    // centerPx 5500 at 10 ppd = day 550; at 40 ppd → 22000 - 500 = 21500,
+    // but maxScrollLeft is 10000, so it clamps.
+    expect(preservedScrollLeft(5000, 1000, grid, 10, grid, 40, 10_000)).toBe(
+      10_000,
+    );
+  });
+
+  it("accounts for a grid-origin shift", () => {
+    // Same ppd, but the new grid starts 31 days earlier (2025-05-01). The
+    // center day (100 from the old grid) becomes 131 from the new grid, so
+    // scrollLeft = 131*10 - 500 = 810.
+    const nextGrid = new Date("2025-05-01T00:00:00Z");
+    expect(preservedScrollLeft(500, 1000, grid, 10, nextGrid, 10, 100_000)).toBe(
+      810,
+    );
+  });
+
+  it("falls back to a clamped prev scrollLeft when a ppd is non-positive", () => {
+    expect(preservedScrollLeft(900, 1000, grid, 0, grid, 20, 500)).toBe(500);
+    expect(preservedScrollLeft(300, 1000, grid, 10, grid, 0, 500)).toBe(300);
   });
 });

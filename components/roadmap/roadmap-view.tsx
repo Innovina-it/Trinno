@@ -2,6 +2,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -24,6 +25,7 @@ import {
   gridEndFor,
   gridStartFor,
   pixelsPerDay,
+  preservedScrollLeft,
   startOfDay,
   xForDate,
   type Zoom,
@@ -1276,6 +1278,19 @@ export function RoadmapView({
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
   function setZoom(next: Zoom) {
+    // Anchor-preserving zoom: capture the geometry that maps the viewport
+    // CENTER to a date NOW, while the old ppd/gridStart still apply. The
+    // layout effect below re-derives scrollLeft once the new scale commits so
+    // the same date stays centered instead of the viewport jumping elsewhere.
+    const sc = scrollerRef.current;
+    if (sc) {
+      pendingScaleAnchorRef.current = {
+        scrollLeft: sc.scrollLeft,
+        viewportWidth: sc.clientWidth,
+        gridStart,
+        ppd: effectivePpd,
+      };
+    }
     // Picking a discrete zoom (header select, or programmatic) exits any
     // continuous-resize state from the mini-map so the new zoom's native
     // ppd takes effect immediately.
@@ -1680,6 +1695,39 @@ export function RoadmapView({
       sc.scrollLeft = Math.max(0, Math.min(max, desired));
     });
   }, [gridStart, effectivePpd, now]);
+
+  // Anchor-preserving discrete zoom. `setZoom` (header dropdown, mobile sheet,
+  // and the +/- keyboard shortcuts) stashes the pre-change geometry here; once
+  // the new effectivePpd/gridStart commit, re-center the same date so changing
+  // the time scale zooms around the viewport center instead of jumping. Only
+  // fires when a discrete zoom was requested (ref non-null) — container
+  // resizes, the one-time initial anchor, jump-to-date, focus, and the
+  // mini-map's continuous edge-drag re-anchor all leave the ref null, so this
+  // effect is a no-op for them. Mirrors the mini-map's edge-drag re-anchor
+  // pattern (a layout effect keyed on ppd/grid that re-pins scrollLeft).
+  const pendingScaleAnchorRef = useRef<{
+    scrollLeft: number;
+    viewportWidth: number;
+    gridStart: Date;
+    ppd: number;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const pending = pendingScaleAnchorRef.current;
+    if (!pending) return;
+    pendingScaleAnchorRef.current = null;
+    const sc = scrollerRef.current;
+    if (!sc) return;
+    const max = Math.max(0, sc.scrollWidth - sc.clientWidth);
+    sc.scrollLeft = preservedScrollLeft(
+      pending.scrollLeft,
+      pending.viewportWidth,
+      pending.gridStart,
+      pending.ppd,
+      gridStart,
+      effectivePpd,
+      max,
+    );
+  }, [gridStart, effectivePpd]);
 
   // Plan #16b-α (#4) — when the URL carries `?focus=<cardId>`, scroll the
   // matching bar into view and flash a 1.5s outline ring. We re-run when the

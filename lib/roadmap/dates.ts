@@ -87,3 +87,39 @@ export function gridEndFor(start: Date, zoom: Zoom): Date {
 export function xForDate(date: Date, gridStart: Date, ppd: number): number {
   return dayDiff(gridStart, date) * ppd;
 }
+
+/**
+ * Recompute `scrollLeft` so the date currently under the viewport CENTER stays
+ * anchored across a time-scale (zoom) change. A discrete scale change alters
+ * `pixelsPerDay` (and sometimes the snapped `gridStart`) while the browser
+ * keeps the raw `scrollLeft` constant — which silently re-points the viewport
+ * at a different date. This derives the absolute center date from the OLD
+ * geometry, then returns the `scrollLeft` that re-centers that same date under
+ * the NEW geometry, clamped to `[0, maxScrollLeft]`.
+ *
+ * Pure + framework-free so the math is unit-testable; the React wiring lives in
+ * RoadmapView (capture prev geometry on the scale-change request, apply here in
+ * a layout effect once the new ppd/gridStart commit). Grid origins are
+ * day-aligned in this app, so the origin shift is computed in fractional days
+ * straight from the timestamps (no rounding assumption).
+ */
+export function preservedScrollLeft(
+  prevScrollLeft: number,
+  viewportWidth: number,
+  prevGridStart: Date,
+  prevPpd: number,
+  nextGridStart: Date,
+  nextPpd: number,
+  maxScrollLeft: number,
+): number {
+  const clamp = (v: number) => Math.max(0, Math.min(maxScrollLeft, v));
+  // Degenerate density (e.g. unresolved "fit" sentinel) — nothing meaningful
+  // to re-anchor, so preserve the existing position within range.
+  if (prevPpd <= 0 || nextPpd <= 0) return clamp(prevScrollLeft);
+  const centerPx = prevScrollLeft + viewportWidth / 2;
+  const centerDays = centerPx / prevPpd;
+  const gridShiftDays =
+    (prevGridStart.getTime() - nextGridStart.getTime()) / MS_PER_DAY;
+  const nextCenterDays = centerDays + gridShiftDays;
+  return clamp(nextCenterDays * nextPpd - viewportWidth / 2);
+}
