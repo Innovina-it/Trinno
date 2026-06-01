@@ -336,3 +336,70 @@ describe("invitation visibility is admin-only (#2A)", () => {
     expect(inviteeRowOwner.pending).toBe(true);
   });
 });
+
+describe("invitation authorization negatives (#A1)", () => {
+  async function setupWs() {
+    const owner = await makeUser(`a1-own-${Date.now()}-${Math.floor(Math.random()*1e6)}@x.io`);
+    const ownerCli = userClient(owner.jwt);
+    const { data: ws } = await ownerCli.from("workspaces").select("id");
+    return { owner, wsId: ws![0].id as string };
+  }
+
+  it("a plain member cannot invite / resend / remove", async () => {
+    const { owner, wsId } = await setupWs();
+    const member = await makeUser(`a1-mem-${Date.now()}-${Math.floor(Math.random()*1e6)}@x.io`);
+    const mEmail = (await service.auth.admin.getUserById(member.id)).data.user!.email!;
+    await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: mEmail, role: "member" });
+
+    await expect(
+      inviteMemberImpl(member.jwt, { workspaceId: wsId, email: `x-${Date.now()}@gmail.com`, role: "member" }),
+    ).rejects.toThrow();
+    await expect(
+      resendInvitationImpl(member.jwt, { workspaceId: wsId, email: `x-${Date.now()}@gmail.com` }),
+    ).rejects.toThrow();
+    await expect(
+      removeMemberImpl(member.jwt, { workspaceId: wsId, userId: owner.id }),
+    ).rejects.toThrow();
+  });
+
+  it("a guest cannot invite", async () => {
+    const { owner, wsId } = await setupWs();
+    const guest = await makeUser(`a1-guest-${Date.now()}-${Math.floor(Math.random()*1e6)}@x.io`);
+    const gEmail = (await service.auth.admin.getUserById(guest.id)).data.user!.email!;
+    await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: gEmail, role: "guest" });
+
+    await expect(
+      inviteMemberImpl(guest.jwt, { workspaceId: wsId, email: `g-${Date.now()}@gmail.com`, role: "member" }),
+    ).rejects.toThrow();
+  });
+
+  it("a non-member cannot invite", async () => {
+    const { wsId } = await setupWs();
+    const outsider = await makeUser(`a1-out-${Date.now()}-${Math.floor(Math.random()*1e6)}@x.io`);
+    await expect(
+      inviteMemberImpl(outsider.jwt, { workspaceId: wsId, email: `o-${Date.now()}@gmail.com`, role: "member" }),
+    ).rejects.toThrow();
+  });
+
+  it("role 'owner' is rejected by validation", async () => {
+    const { owner, wsId } = await setupWs();
+    await expect(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: `own-${Date.now()}@gmail.com`, role: "owner" as any }),
+    ).rejects.toThrow();
+  });
+
+  it("RLS blocks a non-admin member from writing workspace_invitations directly", async () => {
+    const { owner, wsId } = await setupWs();
+    const member = await makeUser(`a1-rls-${Date.now()}-${Math.floor(Math.random()*1e6)}@x.io`);
+    const mEmail = (await service.auth.admin.getUserById(member.id)).data.user!.email!;
+    await inviteMemberImpl(owner.jwt, { workspaceId: wsId, email: mEmail, role: "member" });
+
+    const memberCli = userClient(member.jwt);
+    // INSERT must be denied by RLS.
+    const { error: insErr } = await memberCli.from("workspace_invitations").insert({
+      workspace_id: wsId, email: `rls-${Date.now()}@gmail.com`, role: "member", invited_by: member.id, status: "pending",
+    });
+    expect(insErr).not.toBeNull();
+  });
+});
