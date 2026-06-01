@@ -293,6 +293,22 @@ export const cardLinks = pgTable("card_links", {
     .defaultNow(),
 });
 
+export const linkScope = pgEnum("link_scope", ["workspace", "card"]);
+
+export const links = pgTable("links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  scope: linkScope("scope").notNull(),
+  workspaceId: uuid("workspace_id").notNull(),
+  cardId: uuid("card_id"),
+  url: text("url").notNull(),
+  color: text("color"),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type LinkRow = typeof links.$inferSelect;
+
 export const sprintState = pgEnum("sprint_state", [
   "planned",
   "active",
