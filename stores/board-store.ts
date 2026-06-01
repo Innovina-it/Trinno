@@ -26,6 +26,7 @@ import type {
   BoardMemberRole,
   CardSubboardRow,
 } from "@/lib/queries/board-snapshot";
+import type { CardUrlLink } from "@/lib/links/types";
 
 export type BoardSnapshotInit = {
   boardId: string;
@@ -46,6 +47,7 @@ export type BoardSnapshotInit = {
   boardMembers: BoardMemberRole[];
   workspaceProfiles: BoardProfile[];
   cardSubboards: CardSubboardRow[];
+  cardLinkByCard?: Record<string, CardUrlLink>;
 };
 
 export type BoardState = {
@@ -67,6 +69,9 @@ export type BoardState = {
   boardMembers: BoardMemberRole[];
   workspaceProfiles: BoardProfile[];
   cardSubboards: CardSubboardRow[];
+  cardLinkByCard: Record<string, CardUrlLink>;
+  setCardLink: (l: CardUrlLink) => void;
+  removeCardLinkLocal: (cardId: string) => void;
 
   upsertCardSubboard: (row: CardSubboardRow) => void;
   removeCardSubboard: (cardId: string) => void;
@@ -171,6 +176,7 @@ export function createBoardStore(initial: BoardSnapshotInit) {
     boardMembers: initial.boardMembers,
     workspaceProfiles: initial.workspaceProfiles,
     cardSubboards: initial.cardSubboards,
+    cardLinkByCard: initial.cardLinkByCard ?? {},
 
     upsertCardSubboard: (row) =>
       set((state) => ({
@@ -537,6 +543,17 @@ export function createBoardStore(initial: BoardSnapshotInit) {
       set((state) => ({
         attachments: state.attachments.filter((a) => a.id !== id),
       })),
+
+    setCardLink: (l) =>
+      set((state) => ({
+        cardLinkByCard: { ...state.cardLinkByCard, [l.cardId]: l },
+      })),
+    removeCardLinkLocal: (cardId) =>
+      set((state) => {
+        const next = { ...state.cardLinkByCard };
+        delete next[cardId];
+        return { cardLinkByCard: next };
+      }),
 
     addCardLink: (l) =>
       set((state) =>
