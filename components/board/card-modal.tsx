@@ -47,6 +47,7 @@ import { ParentPicker } from "./card/parent-picker";
 import { WatchToggle } from "./card/watch-toggle";
 import { SubtasksSection } from "./card/subtasks-section";
 import { CardLinksSection } from "./card/card-links-section";
+import { LinkSection } from "@/components/board/card/link-section";
 import { SprintPicker, type SprintLite } from "@/components/sprint/sprint-picker";
 import { StoryPointsPicker } from "./card/story-points-picker";
 import { TimeSection } from "./card/time-section";
@@ -1127,6 +1128,7 @@ export function CardModal({
         {card.boardId && (
           <CardLinksSection cardId={card.id} boardId={card.boardId} />
         )}
+        <LinkSection cardId={card.id} />
         <AttachmentsSection cardId={card.id} />
       </AccordionGroup>
 
