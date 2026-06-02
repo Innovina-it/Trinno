@@ -133,6 +133,7 @@ describe("default board lists and subtask owner defaults", () => {
         position: positionsBetween(null, null, DEFAULT_LIST_TEMPLATES.length)[
           position
         ],
+        statusKind: list.statusKind,
       })),
     );
     expect(defaultListInsert?.values).toHaveLength(3);

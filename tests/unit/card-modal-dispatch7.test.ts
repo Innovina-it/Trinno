@@ -18,8 +18,11 @@ describe("dispatch 7 card modal and quick view fixes", () => {
   });
 
   it("uses the saved card type as the active type chip source", () => {
+    // quick-view derives the active type from the saved card.type and marks
+    // the matching chip with data-active.
     expect(quickView).toContain('const cardType = card.type ?? "task";');
-    expect(quickView).toContain('data-active={selected ? "true" : "false"}');
+    expect(quickView).toContain('"data-active": selected ? "true" : "false"');
+    // card-modal prefers the live store row, falling back to the SSR prop.
     expect(modal).toContain('const activeCardType = liveCard?.type ?? card.type ?? "task";');
     expect(modal).toContain("type={activeCardType}");
   });

@@ -17,17 +17,30 @@ describe("card type lock and new-card date dedup contracts", () => {
     expect(dialog).not.toMatch(/\bdueDate\s*:/);
   });
 
-  it("locks the edit-mode type chip for every current card type", () => {
+  it("type picker offers task+bug and is editable after creation", () => {
     const typePicker = source("components/board/card/type-picker.tsx");
 
-    expect(typePicker).toContain('{ id: "story"');
-    expect(typePicker).toContain('{ id: "task"');
-    expect(typePicker).toContain('{ id: "subtask"');
-    expect(typePicker).toContain('{ id: "bug"');
-    expect(typePicker).toContain('data-testid="card-type-locked"');
-    expect(typePicker).toContain('title="Type is fixed at creation"');
-    expect(typePicker).toContain('aria-disabled="true"');
-    expect(typePicker).toContain("pointer-events-none");
-    expect(typePicker).toContain("disabled");
+    // Selectable types after the retire pass are task + bug only.
+    expect(typePicker).toContain('type EditableType = "task" | "bug";');
+    expect(typePicker).toContain('{ id: "task", label: "Task"');
+    expect(typePicker).toContain('{ id: "bug",  label: "Bug"');
+
+    // Legacy types render display-only (chip), never offered in the picker.
+    expect(typePicker).toContain("const LEGACY_TYPES");
+    expect(typePicker).toContain('story:             { label: "Story" }');
+    expect(typePicker).toContain('subtask:           { label: "Subtask"');
+    expect(typePicker).toContain('"legacy-subboard": { label: "Sub-board"');
+
+    // Editable affordance for non-guests: trigger + per-type options. The
+    // old creation-time lock is gone by design (type has no structural
+    // meaning after epic retirement).
+    expect(typePicker).toContain("const editable = !!cardId && !isGuest;");
+    expect(typePicker).toContain('data-testid="card-type-edit"');
+    expect(typePicker).toContain("data-testid={`card-type-option-${opt.id}`}");
+    expect(typePicker).not.toContain('data-testid="card-type-locked"');
+    expect(typePicker).not.toContain("Type is fixed at creation");
+
+    // Guests get the read-only display chip.
+    expect(typePicker).toContain('data-testid="card-type-display"');
   });
 });
