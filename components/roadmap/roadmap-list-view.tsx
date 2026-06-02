@@ -17,6 +17,7 @@
  */
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, CornerLeftUp } from "lucide-react";
 import {
@@ -24,6 +25,10 @@ import {
   type WorkspaceState,
 } from "@/stores/workspace-store";
 import { PRIORITY_TINT, type CardPriority } from "@/components/board/card/priority-picker";
+import { LinkIcon } from "@/components/links/link-icon";
+import { LinkEditDialog } from "@/components/links/link-edit-dialog";
+import { DEFAULT_LINK_COLOR } from "@/lib/links/colors";
+import { upsertCardLink, removeCardLink } from "@/actions/links";
 
 import { formatDate } from "@/lib/format-date";
 import {
@@ -123,6 +128,66 @@ function OwnerAvatar({
         {displayName.slice(0, 2).toUpperCase()}
       </AvatarFallback>
     </Avatar>
+  );
+}
+
+/**
+ * Per-row link diamond. List view shows the diamond ONLY when a link
+ * exists (no chain placeholder, per spec). Click opens the URL; long-
+ * press opens the edit dialog when the viewer can edit. The wrapper
+ * stops pointer/click propagation so interacting with the diamond never
+ * fires the row's own open-card handler on the title button.
+ */
+function RowLinkIcon({ cardId }: { cardId: string }) {
+  const link = useWorkspaceStore((s) => s.cardLinkByCard[cardId]);
+  const setCardLink = useWorkspaceStore((s) => s.setCardLink);
+  const removeCardLinkLocal = useWorkspaceStore((s) => s.removeCardLinkLocal);
+  const viewerRole = useWorkspaceStore((s) => s.viewerRole);
+  const canEdit = viewerRole === "owner" || viewerRole === "admin";
+  const [open, setOpen] = useState(false);
+
+  if (!link?.url) return null;
+
+  return (
+    <>
+      <span
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        className="inline-flex shrink-0"
+      >
+        <LinkIcon
+          variant="card"
+          url={link.url}
+          color={link.color}
+          canEdit={canEdit}
+          onEdit={() => setOpen(true)}
+        />
+      </span>
+      <LinkEditDialog
+        open={open}
+        onOpenChange={setOpen}
+        scope="card"
+        initialUrl={link.url}
+        initialColor={link.color ?? DEFAULT_LINK_COLOR}
+        onSave={async ({ url, color }) => {
+          setCardLink({ id: link.id, cardId, url, color });
+          const res = await upsertCardLink({ cardId, url, color });
+          if (res.ok)
+            setCardLink({
+              id: res.data.id,
+              cardId,
+              url: res.data.url ?? url,
+              color: res.data.color ?? color,
+            });
+          else toast.error(res.error.message);
+        }}
+        onRemove={async () => {
+          removeCardLinkLocal(cardId);
+          const res = await removeCardLink({ cardId });
+          if (!res.ok) toast.error(res.error.message);
+        }}
+      />
+    </>
   );
 }
 
@@ -314,6 +379,7 @@ export function RoadmapListView({
                 >
                   {card.title}
                 </button>
+                <RowLinkIcon cardId={card.id} />
                 {/* Type chip — surfaces what kind of card this row is so
                     the depth indent reads unambiguously. */}
                 <span
