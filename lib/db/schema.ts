@@ -309,6 +309,42 @@ export const links = pgTable("links", {
 
 export type LinkRow = typeof links.$inferSelect;
 
+export const roadmapBaselines = pgTable("roadmap_baselines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull(),
+  name: text("name").notNull(),
+  note: text("note"),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const roadmapBaselineEntries = pgTable("roadmap_baseline_entries", {
+  baselineId: uuid("baseline_id").notNull(),
+  cardId: uuid("card_id").notNull(),
+  title: text("title").notNull(),
+  startDate: timestamp("start_date", { withTimezone: true }),
+  targetDate: timestamp("target_date", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  roadmapOrder: integer("roadmap_order"),
+  sprintId: uuid("sprint_id"),
+  parentCardId: uuid("parent_card_id"),
+}, (t) => ({ pk: primaryKey({ columns: [t.baselineId, t.cardId] }) }));
+
+export const roadmapBaselineAssignees = pgTable("roadmap_baseline_assignees", {
+  baselineId: uuid("baseline_id").notNull(),
+  cardId: uuid("card_id").notNull(),
+  userId: uuid("user_id").notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.baselineId, t.cardId, t.userId] }) }));
+
+export const roadmapBaselineMilestones = pgTable("roadmap_baseline_milestones", {
+  baselineId: uuid("baseline_id").notNull(),
+  milestoneId: uuid("milestone_id").notNull(),
+  name: text("name").notNull(),
+  date: timestamp("date", { withTimezone: true }),
+}, (t) => ({ pk: primaryKey({ columns: [t.baselineId, t.milestoneId] }) }));
+
+export type RoadmapBaselineRow = typeof roadmapBaselines.$inferSelect;
+
 export const sprintState = pgEnum("sprint_state", [
   "planned",
   "active",
