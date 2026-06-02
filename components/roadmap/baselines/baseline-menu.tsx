@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { GitCompare, History, Plus, X } from "lucide-react";
+import { GitCompare, History, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -10,9 +10,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { deleteRoadmapBaseline } from "@/actions/roadmap-baselines";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { formatDate } from "@/lib/format-date";
+import { toast } from "sonner";
 import { BaselineSaveDialog } from "./baseline-save-dialog";
+import { BaselineRenameDialog } from "./baseline-rename-dialog";
 
 export function BaselineMenu({
   workspaceId,
@@ -29,6 +32,25 @@ export function BaselineMenu({
 
   const canManage = viewerRole === "owner" || viewerRole === "admin";
   const [saveOpen, setSaveOpen] = useState(false);
+  const [renameId, setRenameId] = useState<string | null>(null);
+
+  async function handleDelete(id: string, name: string) {
+    if (
+      !window.confirm(
+        `Delete baseline "${name}" PERMANENTLY? This cannot be undone.`,
+      )
+    )
+      return;
+    const res = await deleteRoadmapBaseline({ id });
+    if (res.ok) {
+      setBaselines(baselines.filter((x) => x.id !== id));
+      if (compareBaselineId === id) setCompareBaselineId(null);
+    } else {
+      toast.error(res.error.message);
+    }
+  }
+
+  const renameTarget = baselines.find((b) => b.id === renameId) ?? null;
 
   return (
     <>
@@ -81,6 +103,36 @@ export function BaselineMenu({
                         {formatDate(new Date(b.createdAt))}
                       </span>
                     </span>
+                    {canManage && (
+                      <span className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          aria-label="Rename baseline"
+                          data-testid={`baseline-rename-${b.id}`}
+                          className="rounded p-1 text-fg-faint hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setRenameId(b.id);
+                          }}
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Delete baseline"
+                          data-testid={`baseline-delete-${b.id}`}
+                          className="rounded p-1 text-fg-faint hover:text-[color:var(--accent-rose)] hover:bg-[rgb(255_255_255/0.08)]"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void handleDelete(b.id, b.name);
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </span>
+                    )}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuGroup>
@@ -108,6 +160,25 @@ export function BaselineMenu({
           onOpenChange={setSaveOpen}
           workspaceId={workspaceId}
           onSaved={(meta) => setBaselines([meta, ...baselines])}
+        />
+      )}
+
+      {canManage && renameTarget && (
+        <BaselineRenameDialog
+          open={renameId !== null}
+          onOpenChange={(o) => {
+            if (!o) setRenameId(null);
+          }}
+          baseline={renameTarget}
+          onRenamed={(next) =>
+            setBaselines(
+              baselines.map((x) =>
+                x.id === next.id
+                  ? { ...x, name: next.name, note: next.note }
+                  : x,
+              ),
+            )
+          }
         />
       )}
     </>
