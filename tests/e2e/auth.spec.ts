@@ -1,7 +1,8 @@
 import { test, expect } from "@playwright/test";
 
 test("signup → confirm → home → logout", async ({ page }) => {
-  const email = `e2e-${Date.now()}@example.com`;
+  // Allowed domain (the email-domain hook rejects @example.com).
+  const email = `e2e-${Date.now()}@innovina.it`;
 
   await page.context().addCookies([
     { name: "tr_seed_demo", value: "minimal", domain: "localhost", path: "/" },
