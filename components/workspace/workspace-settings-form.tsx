@@ -1,8 +1,11 @@
 "use client";
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LinkEditDialog } from "@/components/links/link-edit-dialog";
+import { upsertWorkspaceLink, removeWorkspaceLink } from "@/actions/links";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,12 +26,16 @@ import { toast } from "sonner";
 
 export function WorkspaceSettingsForm({
   workspace,
+  workspaceLink,
 }: {
   workspace: { id: string; name: string; autoAssignCreator: boolean };
+  workspaceLink?: { url: string } | null;
 }) {
+  const router = useRouter();
   const [name, setName] = useState(workspace.name);
   const [autoAssign, setAutoAssign] = useState(workspace.autoAssignCreator);
   const [pending, start] = useTransition();
+  const [linkOpen, setLinkOpen] = useState(false);
 
   function rename(e: React.FormEvent) {
     e.preventDefault();
@@ -117,6 +124,55 @@ export function WorkspaceSettingsForm({
           </span>
         </span>
       </label>
+
+      <section id="link" className="space-y-2 scroll-mt-20">
+        <Label htmlFor="ws-link">Cartella condivisa (link)</Label>
+        <p className="text-xs text-fg-faint">
+          Mostrato come icona cloud accanto al nome del workspace. Visibile a
+          tutti i membri; modificabile solo da owner/admin.
+        </p>
+        <div className="flex items-center gap-2">
+          <Input
+            id="ws-link"
+            readOnly
+            value={workspaceLink?.url ?? "Nessun link"}
+            className="max-w-xs"
+          />
+          <Button
+            type="button"
+            onClick={() => setLinkOpen(true)}
+            data-testid="ws-link-manage"
+          >
+            Modifica
+          </Button>
+        </div>
+        <LinkEditDialog
+          open={linkOpen}
+          onOpenChange={setLinkOpen}
+          scope="workspace"
+          initialUrl={workspaceLink?.url ?? ""}
+          onSave={async ({ url }) => {
+            const res = await upsertWorkspaceLink({
+              workspaceId: workspace.id,
+              url,
+            });
+            if (res.ok) router.refresh();
+            else toast.error(res.error.message);
+          }}
+          onRemove={
+            workspaceLink?.url
+              ? async () => {
+                  const res = await removeWorkspaceLink({
+                    workspaceId: workspace.id,
+                  });
+                  if (res.ok) router.refresh();
+                  else toast.error(res.error.message);
+                }
+              : undefined
+          }
+        />
+      </section>
+
       <AlertDialog>
         <AlertDialogTrigger
           render={

@@ -8,6 +8,9 @@ import { InviteMemberForm } from "@/components/workspace/invite-member-form";
 import { VersionsPanel } from "@/components/versions/versions-panel";
 import { WorkspaceCalendarPanel } from "@/components/workspace/workspace-calendar-panel";
 import { listWorkspaceCalendar } from "@/lib/queries/workspace-holidays";
+import { and, eq } from "drizzle-orm";
+import { dbAsUser } from "@/lib/db/client";
+import { links } from "@/lib/db/schema";
 
 export default async function WorkspaceSettingsPage({
   params,
@@ -19,9 +22,19 @@ export default async function WorkspaceSettingsPage({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
-  const [members, calendarRows] = await Promise.all([
+  const [members, calendarRows, workspaceLink] = await Promise.all([
     listMembers(token, workspaceId),
     listWorkspaceCalendar(token, workspaceId),
+    dbAsUser(token, async (tx) => {
+      const [row] = await tx
+        .select({ url: links.url })
+        .from(links)
+        .where(
+          and(eq(links.workspaceId, workspaceId), eq(links.scope, "workspace")),
+        )
+        .limit(1);
+      return row ?? null;
+    }).catch(() => null),
   ]);
 
   return (
@@ -48,6 +61,7 @@ export default async function WorkspaceSettingsPage({
               name: ws.name,
               autoAssignCreator: ws.autoAssignCreator,
             }}
+            workspaceLink={workspaceLink}
           />
         </div>
       </section>

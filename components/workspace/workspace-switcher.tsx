@@ -12,6 +12,10 @@ import {
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { CreateWorkspaceDialog } from "@/components/workspace/create-workspace-dialog";
+import { LinkIcon } from "@/components/links/link-icon";
+import { LinkEditDialog } from "@/components/links/link-edit-dialog";
+import { upsertWorkspaceLink, removeWorkspaceLink } from "@/actions/links";
+import { toast } from "sonner";
 import { useMemo, useState } from "react";
 
 export type WorkspaceLite = { id: string; name: string };
@@ -55,14 +59,19 @@ const PERSONAL_ROUTES = [
 export function WorkspaceSwitcher({
   workspaces,
   activeId,
+  activeWorkspaceLink,
+  canEditWorkspaceLink,
 }: {
   workspaces: WorkspaceLite[];
   activeId?: string;
+  activeWorkspaceLink?: { url: string } | null;
+  canEditWorkspaceLink?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const [openCreate, setOpenCreate] = useState(false);
   const [q, setQ] = useState("");
+  const [wsLinkOpen, setWsLinkOpen] = useState(false);
 
   // Personal routes (/inbox, /timeline, ...) are workspace-agnostic. This is
   // reactive via usePathname, unlike `activeId` which the (app) layout computes
@@ -104,6 +113,7 @@ export function WorkspaceSwitcher({
 
   return (
     <>
+      <div className="inline-flex items-center gap-1">
       <DropdownMenu
         onOpenChange={(o) => {
           if (!o) setQ("");
@@ -211,6 +221,38 @@ export function WorkspaceSwitcher({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      {active && activeWorkspaceLink?.url && (
+        <>
+          <LinkIcon
+            variant="workspace"
+            url={activeWorkspaceLink.url}
+            canEdit={!!canEditWorkspaceLink}
+            onEdit={() => setWsLinkOpen(true)}
+          />
+          {canEditWorkspaceLink && (
+            <LinkEditDialog
+              open={wsLinkOpen}
+              onOpenChange={setWsLinkOpen}
+              scope="workspace"
+              initialUrl={activeWorkspaceLink.url}
+              onSave={async ({ url }) => {
+                const res = await upsertWorkspaceLink({
+                  workspaceId: active.id,
+                  url,
+                });
+                if (res.ok) router.refresh();
+                else toast.error(res.error.message);
+              }}
+              onRemove={async () => {
+                const res = await removeWorkspaceLink({ workspaceId: active.id });
+                if (res.ok) router.refresh();
+                else toast.error(res.error.message);
+              }}
+            />
+          )}
+        </>
+      )}
+      </div>
       <CreateWorkspaceDialog open={openCreate} onOpenChange={setOpenCreate} />
     </>
   );

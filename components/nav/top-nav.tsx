@@ -54,11 +54,15 @@ export function TopNav({
   userId,
   workspaces,
   activeWorkspaceId,
+  activeWorkspaceLink,
+  canEditWorkspaceLink,
 }: {
   email: string;
   userId: string;
   workspaces: WorkspaceLite[];
   activeWorkspaceId?: string;
+  activeWorkspaceLink?: { url: string } | null;
+  canEditWorkspaceLink?: boolean;
 }) {
   const pathname = usePathname() ?? "";
   useWorkspaceMembershipSync(userId);
@@ -142,6 +146,8 @@ export function TopNav({
               <WorkspaceSwitcher
                 workspaces={workspaces}
                 activeId={activeWorkspaceId}
+                activeWorkspaceLink={activeWorkspaceLink}
+                canEditWorkspaceLink={canEditWorkspaceLink}
               />
             )}
           </div>

@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { TopNav } from "@/components/nav/top-nav";
 import { TourOverlay } from "@/components/onboarding/tour-overlay";
@@ -14,10 +14,10 @@ import { VersionWatcher } from "@/components/system/version-watcher";
 import { getUserPreferences } from "@/actions/profile-preferences";
 import { UserPreferencesProvider } from "@/lib/preferences/provider";
 import { PreferencesBodyMirror } from "@/components/preferences-body-mirror";
-import { listWorkspaces } from "@/lib/queries/workspaces";
+import { listWorkspaces, getWorkspaceRole } from "@/lib/queries/workspaces";
 import { listFavoriteBoards, listRecentBoardViews } from "@/lib/queries/favorites";
 import { dbAsUser } from "@/lib/db/client";
-import { profiles, boards, dashboards } from "@/lib/db/schema";
+import { profiles, boards, dashboards, links } from "@/lib/db/schema";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -166,6 +166,34 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const initialPreferences =
     preferencesResult.status === "fulfilled" ? preferencesResult.value : {};
 
+  // Task 16 — the active workspace's optional shared-folder link plus the
+  // viewer's role, so the switcher can render a cloud icon (all members can
+  // open; only owner/admin can edit). Best-effort: any RLS/transient failure
+  // falls back to "no link / cannot edit" and simply hides the icon.
+  let activeWorkspaceLink: { url: string } | null = null;
+  let canEditWorkspaceLink = false;
+  if (activeWorkspaceId) {
+    const wsId = activeWorkspaceId;
+    const [linkRes, roleRes] = await Promise.allSettled([
+      dbAsUser(token, async (tx) => {
+        const [row] = await tx
+          .select({ url: links.url })
+          .from(links)
+          .where(and(eq(links.workspaceId, wsId), eq(links.scope, "workspace")))
+          .limit(1);
+        return row ?? null;
+      }),
+      getWorkspaceRole(token, wsId, user.id),
+    ]);
+    if (linkRes.status === "fulfilled" && linkRes.value) {
+      activeWorkspaceLink = { url: linkRes.value.url };
+    }
+    if (roleRes.status === "fulfilled") {
+      canEditWorkspaceLink =
+        roleRes.value === "owner" || roleRes.value === "admin";
+    }
+  }
+
   return (
     <UserPreferencesProvider initial={initialPreferences}>
       <PreferencesBodyMirror />
@@ -174,6 +202,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         userId={user.id}
         workspaces={ws.map(w => ({ id: w.id, name: w.name }))}
         activeWorkspaceId={activeWorkspaceId}
+        activeWorkspaceLink={activeWorkspaceLink}
+        canEditWorkspaceLink={canEditWorkspaceLink}
       />
       <main id="main" className="min-h-[calc(100dvh-3.5rem)]">{children}</main>
       {showTour && <TourOverlay />}
