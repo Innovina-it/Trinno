@@ -39,6 +39,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
+import { LinkIcon } from "@/components/links/link-icon";
+import { LinkEditDialog } from "@/components/links/link-edit-dialog";
+import { upsertCardLink, removeCardLink } from "@/actions/links";
+import { DEFAULT_LINK_COLOR } from "@/lib/links/colors";
 
 export type RoadmapBarAssignee = {
   id: string;
@@ -223,6 +227,15 @@ export function RoadmapBar({
 }) {
   const router = useRouter();
   const patchCardLocal = useWorkspaceStore((s) => s.patchCard);
+  // Plan #links — per-card URL link, surfaced as a coloured diamond between
+  // the bar and its assignee stack. Read from the WorkspaceStore (lives at
+  // the roadmap layer, unlike the board store).
+  const link = useWorkspaceStore((s) => s.cardLinkByCard[card.id]);
+  const setCardLink = useWorkspaceStore((s) => s.setCardLink);
+  const removeCardLinkLocal = useWorkspaceStore((s) => s.removeCardLinkLocal);
+  const viewerRole = useWorkspaceStore((s) => s.viewerRole);
+  const canEditLink = viewerRole === "owner" || viewerRole === "admin";
+  const [linkOpen, setLinkOpen] = useState(false);
   const dot = TYPE_DOT[card.type] ?? "bg-fg/40";
   const [menu, setMenu] = useState<CardContextMenuPosition | null>(null);
   const [datesOpen, setDatesOpen] = useState(false);
@@ -399,6 +412,16 @@ export function RoadmapBar({
   const showAssignees =
     assignees.length > 0 && availableSpaceRight >= stackRequired;
 
+  // Plan #links — when a link exists we render a 20px (size-5) diamond
+  // button immediately to the right of the bar, with a 4px gap from the
+  // bar edge. The trailing assignee stack (also absolutely positioned)
+  // is then pushed right by the diamond's footprint so the two never
+  // overlap. No link => no reserved space => identical layout to before.
+  const hasLink = !!link?.url;
+  const LINK_ICON_W = 20;
+  const linkOffset = hasLink ? LINK_ICON_W + 4 : 0;
+  const barRight = x + Math.max(width, 12);
+
   // Bars below this width can't fit a readable title + overflow trigger
   // without colliding into a "T... ⋯" mush. Below the threshold we strip
   // internals to a single type dot; full info comes via hover tooltip
@@ -561,13 +584,40 @@ export function RoadmapBar({
           </button>
         )}
       </div>
+      {hasLink && (
+        // Coloured link diamond, sits between the bar's right edge and the
+        // assignee stack. Absolutely positioned (the bar + assignees are
+        // siblings in the canvas, not a flex row), vertically centred on the
+        // 28px-tall bar. The wrapping span stops pointer/context events from
+        // bubbling to the canvas so a click/hold on the diamond never kicks
+        // off the bar's drag (`onMoveStart`) — note onMoveStart fires from
+        // the bar's own onPointerDown, but the bar's resize/overflow handles
+        // already rely on stopPropagation, so we mirror that here.
+        <span
+          data-testid="roadmap-bar-link"
+          className="absolute z-10 pointer-events-auto"
+          style={{ left: barRight + 4, top: row * 36 + 8 }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.stopPropagation()}
+        >
+          <LinkIcon
+            variant="card"
+            url={link.url}
+            color={link.color}
+            canEdit={canEditLink}
+            onEdit={() => setLinkOpen(true)}
+          />
+        </span>
+      )}
       {showAssignees && (
         <span
           aria-label={`Assignees: ${assignees.map((a) => a.displayName).join(", ")}`}
           data-testid="roadmap-bar-assignees"
           className="absolute flex items-center -space-x-1 pointer-events-none"
           style={{
-            left: x + Math.max(width, 12) + 4,
+            left: barRight + 4 + linkOffset,
             top: row * 36 + 10,
             height: 16,
           }}
@@ -713,6 +763,32 @@ export function RoadmapBar({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {link?.url && (
+        <LinkEditDialog
+          open={linkOpen}
+          onOpenChange={setLinkOpen}
+          scope="card"
+          initialUrl={link.url}
+          initialColor={link.color ?? DEFAULT_LINK_COLOR}
+          onSave={async ({ url, color }) => {
+            setCardLink({ id: link.id, cardId: card.id, url, color });
+            const res = await upsertCardLink({ cardId: card.id, url, color });
+            if (res.ok)
+              setCardLink({
+                id: res.data.id,
+                cardId: card.id,
+                url: res.data.url ?? url,
+                color: res.data.color ?? color,
+              });
+            else toast.error(res.error.message);
+          }}
+          onRemove={async () => {
+            removeCardLinkLocal(card.id);
+            const res = await removeCardLink({ cardId: card.id });
+            if (!res.ok) toast.error(res.error.message);
+          }}
+        />
+      )}
     </>
   );
 }
