@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { eq, inArray, asc, and, sql } from "drizzle-orm";
+import { eq, inArray, asc, desc, and, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import type { WorkspaceRole } from "@/lib/permissions/guest-guard";
 import type { CardUrlLink } from "@/lib/links/types";
@@ -19,7 +19,9 @@ import {
   profiles,
   workspaceMembers,
   workspaces,
+  roadmapBaselines,
 } from "@/lib/db/schema";
+import type { BaselineMeta } from "@/lib/baselines/types";
 
 // Plan #16b-β — single-transaction snapshot loader for the per-workspace
 // store. Loads all readable boards in the workspace, plus the cards / sprints
@@ -133,6 +135,9 @@ export type WorkspaceSnapshot = {
   // legacy snapshot fixtures that construct this literal stay valid; the
   // store defaults it to {}.
   cardLinkByCard?: Record<string, CardUrlLink>;
+  // Baseline metadata for the Baselines menu in the roadmap toolbar.
+  // Optional so legacy snapshot fixtures stay valid; the store defaults it to [].
+  baselines?: BaselineMeta[];
 };
 
 export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
@@ -227,6 +232,19 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         .from(versions)
         .where(eq(versions.workspaceId, workspaceId))
         .orderBy(asc(versions.name));
+      const baselineRowsShort = await tx
+        .select()
+        .from(roadmapBaselines)
+        .where(eq(roadmapBaselines.workspaceId, workspaceId))
+        .orderBy(desc(roadmapBaselines.createdAt));
+      const baselines: BaselineMeta[] = baselineRowsShort.map((b) => ({
+        id: b.id,
+        workspaceId: b.workspaceId,
+        name: b.name,
+        note: b.note,
+        createdBy: b.createdBy,
+        createdAt: b.createdAt.toISOString(),
+      }));
       return {
         workspaceId,
         viewerId,
@@ -245,6 +263,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         workspaceProfiles: profileRows,
         subBoards: [],
         cardLinkByCard: {},
+        baselines,
       };
     }
 
@@ -425,6 +444,20 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         parentCardId: b.parentCardId,
       }));
 
+    const baselineRows = await tx
+      .select()
+      .from(roadmapBaselines)
+      .where(eq(roadmapBaselines.workspaceId, workspaceId))
+      .orderBy(desc(roadmapBaselines.createdAt));
+    const baselines: BaselineMeta[] = baselineRows.map((b) => ({
+      id: b.id,
+      workspaceId: b.workspaceId,
+      name: b.name,
+      note: b.note,
+      createdBy: b.createdBy,
+      createdAt: b.createdAt.toISOString(),
+    }));
+
     return {
       workspaceId,
       viewerId,
@@ -449,6 +482,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
       workspaceProfiles: profileRows,
       subBoards: subBoardRefs,
       cardLinkByCard,
+      baselines,
     };
   });
 });
