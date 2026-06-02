@@ -3,6 +3,7 @@ import { eq, inArray, asc, and, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import type { WorkspaceRole } from "@/lib/permissions/guest-guard";
 import type { CardUrlLink } from "@/lib/links/types";
+import { DEFAULT_LINK_COLOR } from "@/lib/links/colors";
 import {
   boards,
   cards,
@@ -391,7 +392,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
             id: r.id,
             cardId: r.cardId as string,
             url: r.url,
-            color: r.color ?? "#facc15",
+            color: r.color ?? DEFAULT_LINK_COLOR,
           },
         ]),
     );

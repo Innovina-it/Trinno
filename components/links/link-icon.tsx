@@ -1,6 +1,7 @@
 "use client";
 import { Link2, Cloud } from "lucide-react";
 import { useLongPress } from "@/lib/hooks/use-long-press";
+import { DEFAULT_LINK_COLOR } from "@/lib/links/colors";
 
 export type LinkIconVariant = "card" | "workspace";
 
@@ -49,7 +50,7 @@ export function LinkIcon({
   const label = !hasLink
     ? "Aggiungi link"
     : canEdit
-      ? "Apri link (tieni premuto per modificare)"
+      ? "Apri link (tieni premuto o premi F2 per modificare)"
       : "Apri link";
 
   return (
@@ -62,6 +63,9 @@ export function LinkIcon({
           e.preventDefault();
           if (hasLink) openUrl(url!);
           else onEdit();
+        } else if (e.key === "F2" && hasLink && canEdit) {
+          e.preventDefault();
+          onEdit();
         }
       }}
       {...press}
@@ -74,7 +78,7 @@ export function LinkIcon({
       ) : variant === "workspace" ? (
         <Cloud className="size-3.5" style={{ color: "var(--accent-cyan)" }} />
       ) : (
-        <Diamond color={color || "#facc15"} />
+        <Diamond color={color || DEFAULT_LINK_COLOR} />
       )}
     </button>
   );

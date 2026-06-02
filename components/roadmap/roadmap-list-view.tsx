@@ -380,6 +380,7 @@ export function RoadmapListView({
                   {card.title}
                 </button>
                 <RowLinkIcon cardId={card.id} />
+                {/* Diamond sits at the end of the title, before the type chip. */}
                 {/* Type chip — surfaces what kind of card this row is so
                     the depth indent reads unambiguously. */}
                 <span

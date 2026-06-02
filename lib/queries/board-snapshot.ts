@@ -22,6 +22,7 @@ import {
   cardVersions,
 } from "@/lib/db/schema";
 import type { CardUrlLink } from "@/lib/links/types";
+import { DEFAULT_LINK_COLOR } from "@/lib/links/colors";
 
 export type BoardRow = typeof boards.$inferSelect;
 export type ListRow = typeof lists.$inferSelect;
@@ -274,7 +275,7 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
             id: r.id,
             cardId: r.cardId as string,
             url: r.url,
-            color: r.color ?? "#facc15",
+            color: r.color ?? DEFAULT_LINK_COLOR,
           },
         ]),
     );
