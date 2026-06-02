@@ -118,17 +118,6 @@ test("guest sees read-only UI: banner, no add-card / add-list, no archive", asyn
     timeout: 15_000,
   });
 
-  // Post-accept redirect lands on the user's personal workspace
-  // (created by the handle_new_user trigger) — explicitly navigate to
-  // the invited workspace so the banner + role-gated UI render there.
-  await guestPage.goto(`/w/${wsId}`).catch(async (e) => {
-    if ((e as Error).message?.includes("ERR_ABORTED")) {
-      await guestPage.goto(`/w/${wsId}`);
-    } else {
-      throw e;
-    }
-  });
-
   // --- Banner visible ------------------------------------------------------
   await expect(
     guestPage.getByTestId("guest-readonly-banner"),

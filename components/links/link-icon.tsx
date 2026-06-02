@@ -6,7 +6,12 @@ import { DEFAULT_LINK_COLOR } from "@/lib/links/colors";
 export type LinkIconVariant = "card" | "workspace";
 
 function openUrl(url: string) {
-  window.open(url, "_blank", "noopener,noreferrer");
+  // The store may briefly hold the raw, un-normalized URL (optimistic
+  // upsert echo arrives a tick later). `window.open` resolves a bare
+  // host like "drive.google.com/x" as a path relative to the current
+  // origin, so prepend the scheme defensively when it's missing.
+  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(url);
+  window.open(hasScheme ? url : `https://${url}`, "_blank", "noopener,noreferrer");
 }
 
 // Diamond = rotated square.

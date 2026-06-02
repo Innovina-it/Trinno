@@ -5,6 +5,7 @@ import { cards, boards } from "@/lib/db/schema";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { assertUuidOrNotFound } from "@/lib/route-uuid";
 import { CardModal } from "@/components/board/card-modal";
+import { CommentsSection } from "@/components/board/card/comments-section";
 import { listSprintsForWorkspace } from "@/lib/queries/sprints";
 import { listMembers } from "@/lib/queries/workspaces";
 
@@ -57,6 +58,8 @@ export default async function CardPage({
       sprints={sprints.map((s) => ({ id: s.id, name: s.name, state: s.state }))}
       workspaceId={board?.workspaceId}
       canManageSprints={canManageSprints}
-    />
+    >
+      <CommentsSection cardId={c.id} />
+    </CardModal>
   );
 }
