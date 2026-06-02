@@ -2,6 +2,7 @@ import { cache } from "react";
 import { eq, inArray, asc, and, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import type { WorkspaceRole } from "@/lib/permissions/guest-guard";
+import type { CardUrlLink } from "@/lib/links/types";
 import {
   boards,
   cards,
@@ -12,6 +13,7 @@ import {
   cardComponents,
   cardVersions,
   cardLinks,
+  links,
   cardMembers,
   profiles,
   workspaceMembers,
@@ -124,6 +126,12 @@ export type WorkspaceSnapshot = {
   // (migration 0105). Consumed by the roadmap's `groupBySubBoard` to build
   // sub-board lanes whose header is the anchor card.
   subBoards: Array<{ id: string; title: string; parentCardId: string | null }>;
+  // Plan #links — URL links keyed by card id, scoped to this workspace
+  // (scope='card'). Seeds the per-card link diamond on first SSR paint so
+  // existing links are visible without an in-session write. Optional so
+  // legacy snapshot fixtures that construct this literal stay valid; the
+  // store defaults it to {}.
+  cardLinkByCard?: Record<string, CardUrlLink>;
 };
 
 export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
@@ -235,6 +243,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         cardMembers: [],
         workspaceProfiles: profileRows,
         subBoards: [],
+        cardLinkByCard: {},
       };
     }
 
@@ -251,6 +260,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
       cardLinkRows,
       cardMemberRows,
       memberRows,
+      urlLinkRows,
     ] = await Promise.all([
       tx
         .select({
@@ -359,7 +369,32 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         .select({ userId: workspaceMembers.userId })
         .from(workspaceMembers)
         .where(eq(workspaceMembers.workspaceId, workspaceId)),
+
+      tx
+        .select({
+          id: links.id,
+          cardId: links.cardId,
+          url: links.url,
+          color: links.color,
+        })
+        .from(links)
+        .where(and(eq(links.scope, "card"), eq(links.workspaceId, workspaceId))),
     ]);
+
+    // Shape card-scope URL links into a card-id-keyed map (see type doc).
+    const cardLinkByCard: Record<string, CardUrlLink> = Object.fromEntries(
+      urlLinkRows
+        .filter((r) => r.cardId)
+        .map((r) => [
+          r.cardId as string,
+          {
+            id: r.id,
+            cardId: r.cardId as string,
+            url: r.url,
+            color: r.color ?? "#facc15",
+          },
+        ]),
+    );
 
     const profileRows =
       memberRows.length === 0
@@ -412,6 +447,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
       cardMembers: cardMemberRows,
       workspaceProfiles: profileRows,
       subBoards: subBoardRefs,
+      cardLinkByCard,
     };
   });
 });

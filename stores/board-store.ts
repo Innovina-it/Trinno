@@ -688,6 +688,32 @@ export function BoardStoreProvider({
       });
     }
   }, [initial.boardProfiles, initial.boardMembers, initial.workspaceProfiles]);
+
+  // Plan #links — reconcile the per-card URL link map from the refreshed
+  // server snapshot. The ref-keyed store survives Next.js re-renders, so the
+  // createBoardStore seed only runs on first mount; when a peer's link add /
+  // remove fires LinksRealtime → router.refresh(), the fresh `initial` reaches
+  // this provider but never the live store without this effect, leaving the
+  // board's diamonds stale. Server snapshot is authoritative on refresh; a
+  // shallow id/color compare keeps the write cheap.
+  const initialCardLinkByCard = initial.cardLinkByCard;
+  useEffect(() => {
+    const s = ref.current?.store;
+    if (!s || !initialCardLinkByCard) return;
+    const cur = s.getState().cardLinkByCard;
+    const curKeys = Object.keys(cur);
+    const nextKeys = Object.keys(initialCardLinkByCard);
+    const changed =
+      curKeys.length !== nextKeys.length ||
+      nextKeys.some((k) => {
+        const a = cur[k];
+        const b = initialCardLinkByCard[k];
+        return !a || a.id !== b.id || a.url !== b.url || a.color !== b.color;
+      });
+    if (changed) {
+      s.setState({ cardLinkByCard: initialCardLinkByCard });
+    }
+  }, [initialCardLinkByCard]);
   return createElement(
     BoardStoreContext.Provider,
     { value: ref.current.store },

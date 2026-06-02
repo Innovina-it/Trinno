@@ -13,6 +13,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import type { WorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import type { WorkspaceRole } from "@/lib/permissions/guest-guard";
 import type { CardUrlLink } from "@/lib/links/types";
+import { LinksRealtime } from "@/components/links/links-realtime";
 
 // Plan #16b-β — per-workspace zustand store. Mirrors the BoardStoreProvider
 // context pattern but scopes to a workspace, so cross-board views (Roadmap,
@@ -354,6 +355,34 @@ export function WorkspaceStoreProvider({
     }
   }, [initial.workspaceProfiles]);
 
+  // Plan #links — reconcile the per-card URL link map from the refreshed
+  // server snapshot. The ref-keyed store survives Next.js re-renders (so
+  // createWorkspaceStore's seed only runs on first mount); without this
+  // effect, a peer's link add/remove that fires LinksRealtime → router.refresh
+  // would feed a fresh `initial` here but never reach the live store, leaving
+  // peers' diamonds stale. Server snapshot is authoritative on refresh; a
+  // shallow id/color compare keeps the write cheap and avoids clobbering an
+  // identical map every render.
+  const initialCardLinkByCard = (initial as WorkspaceSnapshotInit)
+    .cardLinkByCard;
+  useEffect(() => {
+    const s = ref.current?.store;
+    if (!s || !initialCardLinkByCard) return;
+    const cur = s.getState().cardLinkByCard;
+    const curKeys = Object.keys(cur);
+    const nextKeys = Object.keys(initialCardLinkByCard);
+    const changed =
+      curKeys.length !== nextKeys.length ||
+      nextKeys.some((k) => {
+        const a = cur[k];
+        const b = initialCardLinkByCard[k];
+        return !a || a.id !== b.id || a.url !== b.url || a.color !== b.color;
+      });
+    if (changed) {
+      s.setState({ cardLinkByCard: initialCardLinkByCard });
+    }
+  }, [initialCardLinkByCard]);
+
   // Subscribe to workspace_members CDC so any page hosting this provider
   // (roadmap, backlog, all-tasks, dashboards, board layout) picks up
   // invites/removals without waiting for a manual refresh. router.refresh
@@ -401,6 +430,7 @@ export function WorkspaceStoreProvider({
   return createElement(
     WorkspaceStoreContext.Provider,
     { value: ref.current.store },
+    createElement(LinksRealtime, { workspaceId: initial.workspaceId }),
     children,
   );
 }

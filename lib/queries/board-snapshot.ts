@@ -16,10 +16,12 @@ import {
   workspaceMembers,
   profiles,
   cardLinks,
+  links,
   components,
   cardComponents,
   cardVersions,
 } from "@/lib/db/schema";
+import type { CardUrlLink } from "@/lib/links/types";
 
 export type BoardRow = typeof boards.$inferSelect;
 export type ListRow = typeof lists.$inferSelect;
@@ -74,6 +76,10 @@ export type BoardSnapshot = {
   boardMembers: BoardMemberRole[];
   workspaceProfiles: BoardProfile[];
   cardSubboards: CardSubboardRow[];
+  // Plan #links — URL links keyed by card id, scoped to this board's
+  // workspace (scope='card'). Seeds the per-card link diamond on first
+  // SSR paint so existing links are visible without an in-session write.
+  cardLinkByCard: Record<string, CardUrlLink>;
 };
 
 async function listCommentsCompat(
@@ -170,6 +176,7 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
       cardVersionRows,
       workspaceMemberRows,
       subBoardRows,
+      linkRows,
     ] = await Promise.all([
       tx
         .select()
@@ -242,7 +249,35 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
             eq(boards.archived, false),
           ),
         ),
+      tx
+        .select({
+          id: links.id,
+          cardId: links.cardId,
+          url: links.url,
+          color: links.color,
+        })
+        .from(links)
+        .where(
+          and(eq(links.scope, "card"), eq(links.workspaceId, board.workspaceId)),
+        ),
     ]);
+
+    // Shape card-scope URL links into a card-id-keyed map. The DB color
+    // column is nullable; fall back to the default diamond color so the
+    // client always has a concrete value to render.
+    const cardLinkByCard: Record<string, CardUrlLink> = Object.fromEntries(
+      linkRows
+        .filter((r) => r.cardId)
+        .map((r) => [
+          r.cardId as string,
+          {
+            id: r.id,
+            cardId: r.cardId as string,
+            url: r.url,
+            color: r.color ?? "#facc15",
+          },
+        ]),
+    );
 
     const allMemberIds = Array.from(
       new Set<string>([
@@ -294,6 +329,7 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
           subBoardId: r.subBoardId,
           title: r.title,
         })),
+      cardLinkByCard,
     };
   });
 });
