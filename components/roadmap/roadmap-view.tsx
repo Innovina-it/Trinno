@@ -77,6 +77,7 @@ import {
 } from "./roadmap-header";
 import { RoadmapListView } from "./roadmap-list-view";
 import { BaselineMenu } from "./baselines/baseline-menu";
+import { BaselineVariancePanel } from "./baselines/baseline-variance-panel";
 import { useUserPreferences } from "@/lib/preferences/provider";
 import {
   getWorkspacePreferences,
@@ -595,6 +596,7 @@ export function RoadmapView({
   }, [showMilestones, useWsPrefs, workspaceId, setPreferences]);
   const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<MilestoneRow | null>(null);
+  const [showVariance, setShowVariance] = useState(false);
 
   useEffect(() => {
     listMilestones(workspaceId).then((rows) => {
@@ -1067,6 +1069,11 @@ export function RoadmapView({
     () => new Map((compareDetail?.entries ?? []).map((e) => [e.cardId, e])),
     [compareDetail],
   );
+  const varianceProfilesById = useMemo(() => {
+    const map: Record<string, { displayName?: string | null }> = {};
+    for (const p of storeProfiles) map[p.id] = { displayName: p.displayName };
+    return map;
+  }, [storeProfiles]);
   // === BASELINE COMPARE END ===
 
   const cardsRef = useRef(cards);
@@ -2106,13 +2113,32 @@ export function RoadmapView({
               </span>
               <button
                 type="button"
-                data-testid="baseline-stop-comparing"
-                onClick={() => setCompareBaselineId(null)}
+                data-testid="baseline-variance-toggle"
+                onClick={() => setShowVariance((v) => !v)}
                 className="ml-auto inline-flex items-center rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1 text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
+              >
+                Details
+              </button>
+              <button
+                type="button"
+                data-testid="baseline-stop-comparing"
+                onClick={() => {
+                  setCompareBaselineId(null);
+                  setShowVariance(false);
+                }}
+                className="inline-flex items-center rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1 text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
               >
                 Stop comparing
               </button>
             </div>
+          )}
+          {variance && showVariance && compareDetail && (
+            <BaselineVariancePanel
+              variance={variance}
+              baselineName={compareDetail.meta.name}
+              profilesById={varianceProfilesById}
+              onClose={() => setShowVariance(false)}
+            />
           )}
           {viewMode === "gantt" && cards.length > 0 && (
             <div className="hidden md:block">
