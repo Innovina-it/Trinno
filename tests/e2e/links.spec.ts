@@ -85,9 +85,13 @@ async function createBoardWithCard(
   await page.getByTestId("roadmap-new-card-submit").click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  // The board defaults its assignee filter to "Mine"; a dialog-created card is
-  // unassigned, so flip to "All" to make it visible.
-  await page.getByRole("radio", { name: "All" }).click();
+  // The board defaults its assignee filter to "Mine"; a dialog-created card
+  // is unassigned, so flip to "All" via URL so the filter state is
+  // deterministic. Clicking the chip in dev mode races with React 19's
+  // shallow window.history.replaceState dispatch and is flaky.
+  const url = new URL(page.url());
+  url.searchParams.set("assignee", "all");
+  await page.goto(url.toString());
   await expect(
     page.locator("[data-card-id]").filter({ hasText: cardTitle }),
   ).toBeVisible();
@@ -207,13 +211,22 @@ test.describe("card link", () => {
     await gotoWithRetry(owner, `/w/${wsId}/settings`);
     await owner.getByLabel("Email").fill(memberEmail);
     await owner.getByRole("button", { name: /^invite$/i }).click();
-    await expect(owner.getByText(memberLocal)).toBeVisible({ timeout: 15_000 });
+    // The member row shows both displayName + `· @handle`; either suffices,
+    // so use first() to avoid strict-mode collision on the duplicated text.
+    await expect(
+      owner.getByText(memberLocal).first(),
+    ).toBeVisible({ timeout: 15_000 });
 
     // Member opens the workspace-visible board + card.
     await member.goto(boardUrl);
     await expect(member.getByRole("heading", { name: "Member Board" })).toBeVisible();
     // The unassigned card is hidden by the default "Mine" filter for B too.
-    await member.getByRole("radio", { name: "All" }).click();
+    // Use URL to avoid the shallow-replaceState race seen in dev mode.
+    {
+      const url = new URL(member.url());
+      url.searchParams.set("assignee", "all");
+      await member.goto(url.toString());
+    }
     await openCardQuickView(member, "Shared card");
 
     const memberIcon = member.getByTestId("link-icon-card");
@@ -228,8 +241,10 @@ test.describe("card link", () => {
     await member.mouse.up();
     await expect(member.getByTestId("link-edit-dialog")).toHaveCount(0);
 
-    await ctxOwner.close();
-    await ctxMember.close();
+    // Best-effort close; Playwright sometimes hits an ENOENT flushing
+    // its own trace artifacts at the end of a multi-context run.
+    await ctxOwner.close().catch(() => {});
+    await ctxMember.close().catch(() => {});
   });
 });
 

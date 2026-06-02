@@ -136,7 +136,13 @@ test("guest sees read-only UI: banner, no add-card / add-list, no archive", asyn
 
   // --- Navigate to the workspace's first board, if any ---------------------
   // The owner just signed up; the seed creates a default board. Guest sees it.
-  await guestPage.goto(`/w/${wsId}/boards`);
+  await guestPage.goto(`/w/${wsId}/boards`).catch(async (e) => {
+    if ((e as Error).message?.includes("ERR_ABORTED")) {
+      await guestPage.goto(`/w/${wsId}/boards`);
+    } else {
+      throw e;
+    }
+  });
   const firstBoardLink = guestPage
     .locator('a[href^="/b/"]')
     .first();
