@@ -13,6 +13,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import type { WorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import type { WorkspaceRole } from "@/lib/permissions/guest-guard";
 import type { CardUrlLink } from "@/lib/links/types";
+import type { BaselineMeta, BaselineDetail } from "@/lib/baselines/types";
 import { LinksRealtime } from "@/components/links/links-realtime";
 
 // Plan #16b-β — per-workspace zustand store. Mirrors the BoardStoreProvider
@@ -43,6 +44,7 @@ type SubBoard = WorkspaceSnapshot["subBoards"][number];
 // construct a valid store) and kept live by optimistic writes + CDC echoes.
 type WorkspaceSnapshotInit = WorkspaceSnapshot & {
   cardLinkByCard?: Record<string, CardUrlLink>;
+  baselines?: BaselineMeta[];
 };
 
 export type WorkspaceState = {
@@ -68,6 +70,18 @@ export type WorkspaceState = {
   cardLinkByCard: Record<string, CardUrlLink>;
   setCardLink: (l: CardUrlLink) => void;
   removeCardLinkLocal: (cardId: string) => void;
+
+  // Plan #baselines — saved roadmap snapshots. `baselines` is the meta list
+  // seeded from the server snapshot; `baselineDetailById` is a lazy client-only
+  // cache of full baseline payloads (keyed by baseline id); `compareBaselineId`
+  // is pure client UI state selecting which baseline the roadmap diffs against
+  // (null = live).
+  baselines: BaselineMeta[];
+  baselineDetailById: Record<string, BaselineDetail>;
+  compareBaselineId: string | null;
+  setBaselines: (b: BaselineMeta[]) => void;
+  cacheBaselineDetail: (d: BaselineDetail) => void;
+  setCompareBaselineId: (id: string | null) => void;
 
   setSnapshot: (s: Omit<WorkspaceSnapshotInit, "workspaceId">) => void;
   // Like setSnapshot but skips collections that are already kept live by
@@ -132,6 +146,9 @@ export function createWorkspaceStore(initial: WorkspaceSnapshotInit) {
     workspaceProfiles: initial.workspaceProfiles,
     subBoards: initial.subBoards,
     cardLinkByCard: initial.cardLinkByCard ?? {},
+    baselines: initial.baselines ?? [],
+    baselineDetailById: {},
+    compareBaselineId: null,
 
     setCardLink: (l) =>
       set((state) => ({
@@ -144,8 +161,19 @@ export function createWorkspaceStore(initial: WorkspaceSnapshotInit) {
         return { cardLinkByCard: next };
       }),
 
+    setBaselines: (b) => set({ baselines: b }),
+    cacheBaselineDetail: (d) =>
+      set((s) => ({
+        baselineDetailById: { ...s.baselineDetailById, [d.meta.id]: d },
+      })),
+    setCompareBaselineId: (id) => set({ compareBaselineId: id }),
+
     setSnapshot: (s) =>
-      set({ ...s, cardLinkByCard: s.cardLinkByCard ?? {} }),
+      set({
+        ...s,
+        cardLinkByCard: s.cardLinkByCard ?? {},
+        baselines: s.baselines ?? [],
+      }),
     mergeSnapshotPreservingRealtime: (s) =>
       set((state) => ({
         autoAssignCreator: s.autoAssignCreator,
@@ -160,6 +188,9 @@ export function createWorkspaceStore(initial: WorkspaceSnapshotInit) {
         // preserve the current realtime-maintained map (matching how the
         // other CDC-backed per-card collections are left untouched here).
         cardLinkByCard: s.cardLinkByCard ?? state.cardLinkByCard,
+        // baselines is seeded from the snapshot; take the incoming list when
+        // present, otherwise keep the current one (mirrors cardLinkByCard).
+        baselines: s.baselines ?? state.baselines,
       })),
 
     upsertList: (l) =>
