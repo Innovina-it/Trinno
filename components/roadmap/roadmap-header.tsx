@@ -82,6 +82,7 @@ export function RoadmapHeader({
   hideCriticalPath = false,
   hideAutoCascade = false,
   hideLiveStatus = false,
+  baselineSlot,
 }: {
   zoom: Zoom;
   onSetZoom: (z: Zoom) => void;
@@ -99,7 +100,7 @@ export function RoadmapHeader({
   gutter: boolean;
   onToggleGutter: () => void;
   onJumpToDate: (d: Date) => void;
-  onOpenNewCard: () => void;
+  onOpenNewCard?: () => void;
   onChipDragStart?: (clientX: number, clientY: number) => void;
   queryDraft: string;
   onQueryDraftChange: (s: string) => void;
@@ -117,6 +118,10 @@ export function RoadmapHeader({
    *  still meaningful cross-WS, but it competes with the page header on
    *  /timeline so we suppress it there. */
   hideLiveStatus?: boolean;
+  /** Optional control rendered among the desktop left-zone controls
+   *  (zoom / lane / view). Used for the Baselines menu on /w/:ws/roadmap.
+   *  Additive: undefined on surfaces (e.g. /timeline) that don't pass it. */
+  baselineSlot?: React.ReactNode;
 }) {
   const viewOptionsCount =
     (hideCriticalPath ? 0 : showCriticalPath ? 1 : 0) +
@@ -496,6 +501,8 @@ export function RoadmapHeader({
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {baselineSlot}
       </div>
 
       {/* CENTER — search */}
@@ -550,7 +557,7 @@ export function RoadmapHeader({
         </div>
 
         {/* Primary action. */}
-        {!hideNewCard && (
+        {!hideNewCard && onOpenNewCard && (
           <button
             type="button"
             onPointerDown={

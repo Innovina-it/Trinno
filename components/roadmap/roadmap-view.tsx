@@ -41,6 +41,7 @@ import { holidaysInRange } from "@/lib/holidays/merge";
 import { getCardStatusKind, type StatusKind } from "@/lib/status";
 import { criticalPath, type Link as CritLink } from "@/lib/roadmap/critical-path";
 import { useWorkspaceStore } from "@/stores/workspace-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { RoadmapBar, type RoadmapBarAssignee } from "./roadmap-bar";
 import { PriorityGutter } from "./priority-gutter";
@@ -72,6 +73,7 @@ import {
   type ViewMode,
 } from "./roadmap-header";
 import { RoadmapListView } from "./roadmap-list-view";
+import { BaselineMenu } from "./baselines/baseline-menu";
 import { useUserPreferences } from "@/lib/preferences/provider";
 import {
   getWorkspacePreferences,
@@ -241,6 +243,7 @@ export function RoadmapView({
   // instances). Absent on /w/:ws/roadmap — falls back to per-band cards-derived
   // range and per-band scroll.
   const sharedAxis = useSharedAxis();
+  const isGuest = useIsGuest();
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -611,6 +614,7 @@ export function RoadmapView({
   const storeComponents = useWorkspaceStore((s) => s.components);
   const storeSubBoards = useWorkspaceStore((s) => s.subBoards);
   const patchCardInStore = useWorkspaceStore((s) => s.patchCard);
+  const setCompareBaselineId = useWorkspaceStore((s) => s.setCompareBaselineId);
   const setWorkspaceSnapshot = useWorkspaceStore(
     (s) => s.mergeSnapshotPreservingRealtime,
   );
@@ -1903,7 +1907,7 @@ export function RoadmapView({
             gutter={gutterOn}
             onToggleGutter={toggleGutter}
             onJumpToDate={jumpToDate}
-            onOpenNewCard={() => setNewCardOpen(true)}
+            onOpenNewCard={isGuest ? undefined : () => setNewCardOpen(true)}
             onChipDragStart={drag.onChipDragStart}
             queryDraft={queryDraft}
             onQueryDraftChange={setQueryDraft}
@@ -1911,6 +1915,12 @@ export function RoadmapView({
             onOpenShortcuts={() => setShortcutsOpen(true)}
             gridStart={gridStart}
             gridEnd={gridEnd}
+            baselineSlot={
+              <BaselineMenu
+                workspaceId={workspaceId}
+                onCompare={(id) => setCompareBaselineId(id)}
+              />
+            }
           />
           {/* === MILESTONE MARKERS START (toolbar) === */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -1934,17 +1944,19 @@ export function RoadmapView({
             >
               {showMilestones ? "Hide milestones" : "Show milestones"}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setEditingMilestone(null);
-                setMilestoneDialogOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
-              data-testid="roadmap-add-milestone"
-            >
-              + Add milestone
-            </button>
+            {!isGuest && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingMilestone(null);
+                  setMilestoneDialogOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
+                data-testid="roadmap-add-milestone"
+              >
+                + Add milestone
+              </button>
+            )}
           </div>
           {/* === MILESTONE MARKERS END (toolbar) === */}
           {viewMode === "gantt" && cards.length > 0 && (
