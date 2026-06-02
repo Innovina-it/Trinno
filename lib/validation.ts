@@ -634,3 +634,17 @@ export const DeleteWorkspaceHolidayInput = z.object({
   workspaceId: Uuid,
   isoDate: IsoDate,
 });
+
+// Roadmap Baselines (Gantt baselines feature).
+export const CreateRoadmapBaselineInput = z.object({
+  workspaceId: Uuid,
+  name: z.string().trim().min(1).max(120),
+  note: z.string().trim().max(2000).optional().nullable(),
+});
+export const UpdateRoadmapBaselineInput = z.object({
+  id: Uuid,
+  name: z.string().trim().min(1).max(120).optional(),
+  note: z.string().trim().max(2000).nullable().optional(),
+});
+export const DeleteRoadmapBaselineInput = z.object({ id: Uuid });
+export const GetRoadmapBaselineDetailInput = z.object({ id: Uuid });
