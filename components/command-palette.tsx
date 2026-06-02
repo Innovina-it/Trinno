@@ -31,6 +31,12 @@ import { search } from "@/actions/search";
 import { logout } from "@/actions/auth";
 import { useCommandPalette } from "@/lib/use-command-palette";
 import { useUserPreferences } from "@/lib/preferences/provider";
+import { shouldSuppressQuickAddShortcut } from "@/lib/command-palette/shortcut-guard";
+export {
+  isEditableShortcutTarget,
+  isBoardRoute,
+  shouldSuppressQuickAddShortcut,
+} from "@/lib/command-palette/shortcut-guard";
 
 export type PaletteFavorite = {
   boardId: string;
@@ -51,26 +57,6 @@ type PaletteItem = {
 };
 
 type CardResult = Awaited<ReturnType<typeof search>>[number];
-
-export function isEditableShortcutTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  if (target.isContentEditable) return true;
-  const tag = target.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-}
-
-export function isBoardRoute(pathname: string | null | undefined): boolean {
-  return /^\/(?:b|board)\//.test(pathname ?? "");
-}
-
-export function shouldSuppressQuickAddShortcut(
-  event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "target">,
-  pathname: string | null | undefined,
-): boolean {
-  if (event.metaKey || event.ctrlKey || event.altKey) return false;
-  if (event.key !== "c" && event.key !== "C") return false;
-  return !isBoardRoute(pathname) || isEditableShortcutTarget(event.target);
-}
 
 /**
  * Plan #16b-γ-D (#5) — global command palette.
