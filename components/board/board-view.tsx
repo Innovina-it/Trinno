@@ -20,6 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { Layers3 } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import {
   useBoards,
@@ -94,6 +95,7 @@ export function BoardView({
   const sp = useSearchParams();
   const { preferences, setPreferences } = useUserPreferences();
   const boardPreferences = getBoardPreferences(preferences, board.id);
+  const isGuest = useIsGuest();
   const lists = useBoardStore((s) => s.lists);
   const cards = useBoardStore((s) => s.cards);
   const cardLabels = useBoardStore((s) => s.cardLabels);
@@ -565,7 +567,7 @@ export function BoardView({
                   Add a list to start organizing cards.
                 </p>
                 <div className="mt-6 flex justify-center">
-                  <AddListForm boardId={board.id} />
+                  {!isGuest && <AddListForm boardId={board.id} />}
                 </div>
               </div>
             ) : laneMode === "none" ? (
@@ -589,7 +591,7 @@ export function BoardView({
                     />
                   ))}
                 </SortableContext>
-                <AddListForm boardId={board.id} />
+                {!isGuest && <AddListForm boardId={board.id} />}
               </div>
             ) : (
               <div className="flex flex-col gap-4">
@@ -621,7 +623,7 @@ export function BoardView({
                   );
                 })}
                 <div className="px-2">
-                  <AddListForm boardId={board.id} />
+                  {!isGuest && <AddListForm boardId={board.id} />}
                 </div>
               </div>
             )}

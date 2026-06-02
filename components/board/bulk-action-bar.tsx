@@ -29,6 +29,7 @@ import {
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { positionBetween } from "@/lib/ordering";
 import {
   bulkArchiveCards,
@@ -70,6 +71,7 @@ export function BulkActionBar({
   sprints: SprintLite[];
 }) {
   const router = useRouter();
+  const isGuest = useIsGuest();
   // Select the Set reference (stable per mutation) and derive the array
   // in useMemo so we don't trigger React 19's "selector returned a new
   // value each render" guard.
@@ -124,6 +126,9 @@ export function BulkActionBar({
   }, [canBulk, cardMembers]);
 
   if (count === 0) return null;
+  // #0111 — guests have no bulk actions; selection handles are hidden
+  // on the tile, but defense-in-depth: bail here too.
+  if (isGuest) return null;
 
   function pushError(msg: string) {
     toast.error(msg);

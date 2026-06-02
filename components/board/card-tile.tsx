@@ -8,6 +8,7 @@ import { FolderKanban, CalendarRange, Check, CircleDot, CornerLeftUp, Layers3 } 
 import { toast } from "sonner";
 import type { CardRow, BoardProfile } from "@/lib/queries/board-snapshot";
 import { useBoardStore, BoardStoreContext } from "@/stores/board-store";
+import { useIsGuest, useGuestCanMoveCard } from "@/lib/permissions/use-is-guest";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { getCardStatusKind, STATUS_LABEL } from "@/lib/status";
 import { LabelStripes } from "./card/label-stripes";
@@ -76,6 +77,10 @@ export function CardTile({
     getCardStatusKind({ listId: card.listId }, s.lists),
   );
   const isSelected = useBoardStore((s) => s.selectedCardIds.has(card.id));
+  // #0111 — guests are read-only across the tile. They can still drag
+  // cards assigned to them to change status (handled by `useGuestCanMoveCard`).
+  const isGuest = useIsGuest();
+  const guestCanMove = useGuestCanMoveCard(card.id);
   const link = useBoardStore((s) => s.cardLinkByCard[card.id]);
   const anySelected = useBoardStore((s) => s.selectedCardIds.size > 0);
   const toggleSelected = useBoardStore((s) => s.toggleSelected);
@@ -364,10 +369,16 @@ export function CardTile({
     saveEdit();
   }, [saveEdit]);
 
+  // #0111 — guests can only drag cards assigned to them (the only
+  // status-change path the server accepts). Disable the sortable entirely
+  // on unassigned cards so the cursor stays `default` and no
+  // optimistic-then-rejected move ever happens.
+  const dragDisabled = isGuest && !guestCanMove;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
       id: sortableId,
       data: { type: "card", cardId: card.id, listId: card.listId },
+      disabled: dragDisabled,
     });
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),
@@ -506,7 +517,8 @@ export function CardTile({
       data-dragging={isDragging ? "true" : undefined}
       data-selected={isSelected ? "true" : undefined}
       data-priority={cardPriority ?? "none"}
-      className="group/card relative block rounded-xl bg-[color:var(--surface-strong)] backdrop-blur-md border border-[color:var(--hairline)] text-fg cursor-grab transition-all duration-200 ease-out shadow-[0_1px_0_0_rgb(255_255_255/0.06)_inset,0_8px_20px_-12px_rgb(0_0_0_/_0.5)] hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[color:var(--surface-hi)] hover:shadow-[0_1px_0_0_rgb(255_255_255/0.10)_inset,0_12px_28px_-12px_rgb(0_0_0/0.6)] active:cursor-grabbing data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02] data-[dragging=true]:cursor-grabbing data-[selected=true]:ring-2 data-[selected=true]:ring-[color:var(--accent-cyan)] data-[selected=true]:bg-[color:var(--surface-hi)]"
+      data-drag-disabled={dragDisabled ? "true" : undefined}
+      className={`group/card relative block rounded-xl bg-[color:var(--surface-strong)] backdrop-blur-md border border-[color:var(--hairline)] text-fg transition-all duration-200 ease-out shadow-[0_1px_0_0_rgb(255_255_255/0.06)_inset,0_8px_20px_-12px_rgb(0_0_0_/_0.5)] hover:-translate-y-0.5 hover:border-[color:var(--hairline-hi)] hover:bg-[color:var(--surface-hi)] hover:shadow-[0_1px_0_0_rgb(255_255_255/0.10)_inset,0_12px_28px_-12px_rgb(0_0_0/0.6)] data-[dragging=true]:rotate-[2deg] data-[dragging=true]:scale-[1.02] data-[dragging=true]:cursor-grabbing data-[selected=true]:ring-2 data-[selected=true]:ring-[color:var(--accent-cyan)] data-[selected=true]:bg-[color:var(--surface-hi)] ${dragDisabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"}`}
     >
       <CardCover
         coverKind={(card.coverKind ?? "none") as "none" | "color" | "image"}
@@ -543,42 +555,57 @@ export function CardTile({
           {/* Bulk-select handle (top-right).  Square — distinct from the
               round complete dot.  Hover-visible at rest; persists when
               selection mode is active.  Cyan accent when selected so it
-              never collides with the neutral white complete fill. */}
-          <button
-            type="button"
-            onClick={handleSelectClick}
-            data-testid="tile-select-handle"
-            aria-label={isSelected ? "Deselect card" : "Select card"}
-            aria-pressed={isSelected}
-            className={`size-5 rounded-[4px] border-[1.5px] flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
-              isSelected
-                ? "bg-[color:var(--accent-cyan)] border-[color:var(--accent-cyan)] text-[color:var(--bg-deep)]"
-                : anySelected
-                  ? "border-hairline-hi text-fg-muted hover:border-fg/60"
-                  : "border-hairline text-transparent opacity-0 group-hover/card:opacity-100 hover:border-hairline-hi"
-            }`}
-          >
-            {isSelected && <Check className="size-3.5" strokeWidth={3} />}
-          </button>
+              never collides with the neutral white complete fill. Hidden
+              for guests — every bulk action mutates server state. */}
+          {!isGuest && (
+            <button
+              type="button"
+              onClick={handleSelectClick}
+              data-testid="tile-select-handle"
+              aria-label={isSelected ? "Deselect card" : "Select card"}
+              aria-pressed={isSelected}
+              className={`size-5 rounded-[4px] border-[1.5px] flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
+                isSelected
+                  ? "bg-[color:var(--accent-cyan)] border-[color:var(--accent-cyan)] text-[color:var(--bg-deep)]"
+                  : anySelected
+                    ? "border-hairline-hi text-fg-muted hover:border-fg/60"
+                    : "border-hairline text-transparent opacity-0 group-hover/card:opacity-100 hover:border-hairline-hi"
+              }`}
+            >
+              {isSelected && <Check className="size-3.5" strokeWidth={3} />}
+            </button>
+          )}
         </div>
       </div>
 
       {/* Title row. The round completion control lives beside the title;
           the square bulk-select handle stays up top so their meanings
-          remain visually distinct. */}
+          remain visually distinct. Guests see only the completion
+          indicator (server rejects toggling the `completed` flag). */}
       <div className="flex items-start gap-2 px-3 pb-1 pt-1.5">
-        <CompleteToggle
-          cardId={card.id}
-          completed={completed}
-          size="sm"
-          className="mt-0.5"
-          onLocalChange={(next) =>
-            updateCardLocal(card.id, {
-              completedAt: next ? new Date() : null,
-              dueComplete: next,
-            })
-          }
-        />
+        {isGuest ? (
+          completed ? (
+            <span
+              aria-hidden
+              className="mt-0.5 shrink-0 size-4 rounded-full border flex items-center justify-center bg-[color:var(--accent-lime)] border-[color:var(--accent-lime)] text-bg-deep"
+            >
+              <Check className="size-2.5 stroke-[3]" />
+            </span>
+          ) : null
+        ) : (
+          <CompleteToggle
+            cardId={card.id}
+            completed={completed}
+            size="sm"
+            className="mt-0.5"
+            onLocalChange={(next) =>
+              updateCardLocal(card.id, {
+                completedAt: next ? new Date() : null,
+                dueComplete: next,
+              })
+            }
+          />
+        )}
         <span
           data-testid="tile-title"
           data-completed={completed ? "true" : "false"}
@@ -607,7 +634,7 @@ export function CardTile({
             <>
               <span
                 className="hover-underline-signal group-hover/card:hover-underline-signal-active inline break-words [overflow-wrap:anywhere]"
-                onDoubleClick={enterEdit}
+                onDoubleClick={isGuest ? undefined : enterEdit}
               >
                 {card.title}
               </span>
@@ -681,9 +708,11 @@ export function CardTile({
         boardId={boardId}
         open={quickViewOpen}
         onOpenChange={setQuickViewOpen}
-        onPatch={onQuickPatch}
-        onToggleMember={onQuickToggleMember}
-        onCreateSubtask={onQuickCreateSubtask}
+        // #0111 — undefined write callbacks switch the quick view to a
+        // read-only render (see comment in card-quick-view.tsx).
+        onPatch={isGuest ? undefined : onQuickPatch}
+        onToggleMember={isGuest ? undefined : onQuickToggleMember}
+        onCreateSubtask={isGuest ? undefined : onQuickCreateSubtask}
       />
     )}
     <CardContextMenu
@@ -692,14 +721,22 @@ export function CardTile({
       isCompleted={completed}
       priority={cardPriority}
       testIdPrefix="card-tile-menu"
-      actions={{
-        onOpen: menuOpenCard,
-        onEditDates: menuOpenCard,
-        onToggleComplete: menuToggleComplete,
-        onSetPriority: menuSetPriority,
-        onArchive: menuArchive,
-        onOpenInNewView: menuOpenInNewView,
-      }}
+      actions={
+        isGuest
+          ? {
+              // Guests get read-only navigation entries only.
+              onOpen: menuOpenCard,
+              onOpenInNewView: menuOpenInNewView,
+            }
+          : {
+              onOpen: menuOpenCard,
+              onEditDates: menuOpenCard,
+              onToggleComplete: menuToggleComplete,
+              onSetPriority: menuSetPriority,
+              onArchive: menuArchive,
+              onOpenInNewView: menuOpenInNewView,
+            }
+      }
     />
     </>
   );

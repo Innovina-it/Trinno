@@ -2,6 +2,7 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import {
   registerAttachment,
   deleteAttachment,
@@ -25,6 +26,7 @@ export function AttachmentsSection({ cardId }: { cardId: string }) {
   );
   const addAttachment = useBoardStore((s) => s.addAttachment);
   const removeAttachment = useBoardStore((s) => s.removeAttachment);
+  const isGuest = useIsGuest();
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
   const [uploading, setUploading] = useState(false);
@@ -154,27 +156,34 @@ export function AttachmentsSection({ cardId }: { cardId: string }) {
             >
               <Download className="size-3" />
             </Button>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              disabled={pending}
-              onClick={() => remove(a.id)}
-            >
-              <X className="size-3" />
-            </Button>
+            {!isGuest && (
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                disabled={pending}
+                onClick={() => remove(a.id)}
+              >
+                <X className="size-3" />
+              </Button>
+            )}
           </li>
         ))}
       </ul>
-      <input ref={inputRef} type="file" hidden onChange={onFile} />
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={uploading}
-        onClick={() => inputRef.current?.click()}
-      >
-        <Paperclip className="mr-1 size-3.5" />{" "}
-        {uploading ? "Uploading…" : "Add attachment"}
-      </Button>
+      {!isGuest && (
+        <>
+          <input ref={inputRef} type="file" hidden onChange={onFile} />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={uploading}
+            onClick={() => inputRef.current?.click()}
+          >
+            <Paperclip className="mr-1 size-3.5" />{" "}
+            {uploading ? "Uploading…" : "Add attachment"}
+          </Button>
+        </>
+      )}
+      {isGuest && attachments.length === 0 ? null : null}
     </section>
   );
 }

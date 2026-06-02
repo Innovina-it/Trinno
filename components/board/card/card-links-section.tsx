@@ -16,6 +16,7 @@ import {
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { createCardLink, deleteCardLink } from "@/actions/card-links";
 import { errorBus } from "@/lib/errors/error-bus";
 import { searchCardsForLinkAction } from "@/actions/search";
@@ -111,6 +112,7 @@ export function CardLinksSection({
     return g;
   }, [links]);
 
+  const isGuest = useIsGuest();
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<KindId>("blocks");
   const [q, setQ] = useState("");
@@ -237,15 +239,17 @@ export function CardLinksSection({
     <div className="space-y-3" data-testid="card-links-section">
       <div className="flex items-center justify-between">
         <h3 className="mono-meta text-fg">Linked issues</h3>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          onClick={() => setOpen(true)}
-          disabled={pending}
-        >
-          <Plus className="size-3.5 mr-0.5" /> LINK
-        </Button>
+        {!isGuest && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={() => setOpen(true)}
+            disabled={pending}
+          >
+            <Plus className="size-3.5 mr-0.5" /> LINK
+          </Button>
+        )}
       </div>
 
       {Object.keys(grouped).length === 0 && (
@@ -302,16 +306,18 @@ export function CardLinksSection({
                         Loading…
                       </span>
                     )}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => remove(l.id)}
-                      disabled={pending}
-                      aria-label="Remove link"
-                    >
-                      <X className="size-3" />
-                    </Button>
+                    {!isGuest && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => remove(l.id)}
+                        disabled={pending}
+                        aria-label="Remove link"
+                      >
+                        <X className="size-3" />
+                      </Button>
+                    )}
                   </li>
                 );
               })}

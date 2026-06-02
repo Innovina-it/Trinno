@@ -6,6 +6,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { updateCard } from "@/actions/cards";
 import { TypeIcon } from "./type-picker";
 import { Link2, X, Search } from "lucide-react";
@@ -18,6 +19,7 @@ export function ParentPicker({
 }: { cardId: string; parentCardId: string | null; boardId: string }) {
   const cards = useBoardStore((s) => s.cards);
   const updateCardLocal = useBoardStore((s) => s.updateCard);
+  const isGuest = useIsGuest();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [pending, start] = useTransition();
@@ -100,17 +102,21 @@ export function ParentPicker({
           <TypeIcon type={(parent as { type?: string }).type ?? "task"} />
           <span className="truncate">{parent.title}</span>
         </Link>
-        <Button
-          type="button" variant="ghost" size="xs"
-          onClick={() => setParent(null)}
-          disabled={pending}
-          aria-label="Clear parent"
-        >
-          <X className="size-3" />
-        </Button>
+        {!isGuest && (
+          <Button
+            type="button" variant="ghost" size="xs"
+            onClick={() => setParent(null)}
+            disabled={pending}
+            aria-label="Clear parent"
+          >
+            <X className="size-3" />
+          </Button>
+        )}
       </div>
     );
   }
+
+  if (isGuest) return null;
 
   return (
     <>

@@ -3,6 +3,7 @@ import { useTransition } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { toggleCardMember } from "@/actions/card-members";
 import { toast } from "sonner";
 import { undoBus } from "@/lib/undo-bus";
@@ -14,6 +15,7 @@ export function MembersSection({ cardId }: { cardId: string }) {
   const addCardMember = useBoardStore((s) => s.addCardMember);
   const removeCardMember = useBoardStore((s) => s.removeCardMember);
   const upsertBoardMember = useBoardStore((s) => s.upsertBoardMember);
+  const isGuest = useIsGuest();
   const [pending, start] = useTransition();
 
   const boardMemberIds = new Set(boardProfiles.map((p) => p.id));
@@ -72,6 +74,37 @@ export function MembersSection({ cardId }: { cardId: string }) {
   }
 
   if (all.length === 0) return null;
+
+  if (isGuest) {
+    // Read-only: show only the assigned members as static chips.
+    const assignedProfiles = all.filter((p) => assigned.has(p.id));
+    if (assignedProfiles.length === 0) return null;
+    return (
+      <section className="space-y-3" data-testid="members-section">
+        <div className="flex items-baseline justify-between border-b border-hairline pb-1">
+          <h3 className="mono-meta text-fg-muted">Members</h3>
+        </div>
+        <ul className="flex flex-wrap gap-1.5">
+          {assignedProfiles.map((p) => (
+            <li
+              key={p.id}
+              data-user-id={p.id}
+              data-assigned="true"
+              className="inline-flex items-center gap-1.5 rounded border border-hairline px-2 py-1 text-xs text-fg"
+            >
+              <Avatar size="sm" className="rounded-none border border-current">
+                <AvatarFallback className="rounded-none bg-transparent text-current text-[10px] tracking-widest">
+                  {p.displayName.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <span>{p.displayName}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-3" data-testid="members-section">
       <div className="flex items-baseline justify-between border-b border-hairline pb-1">

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { updateCard } from "@/actions/cards";
 import { toast } from "sonner";
 import { Hash } from "lucide-react";
@@ -16,9 +17,24 @@ export function StoryPointsPicker({
   storyPoints: number | null;
 }) {
   const updateCardLocal = useBoardStore((s) => s.updateCard);
+  const isGuest = useIsGuest();
   const [pending, start] = useTransition();
   const [showCustom, setShowCustom] = useState(false);
   const [custom, setCustom] = useState<string>("");
+
+  if (isGuest) {
+    if (storyPoints == null) return null;
+    return (
+      <div className="space-y-2" data-testid="story-points-picker">
+        <div className="mono-meta text-fg flex items-center gap-1">
+          <Hash className="size-3" /> Story points
+        </div>
+        <span className="chip bg-fg/10 text-fg ring-1 ring-fg/40 min-w-9 justify-center inline-flex">
+          {storyPoints}
+        </span>
+      </div>
+    );
+  }
 
   function set(next: number | null) {
     if (next === storyPoints) return;

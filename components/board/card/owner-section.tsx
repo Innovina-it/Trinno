@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { updateCard } from "@/actions/cards";
 import type { CardRow } from "@/lib/queries/board-snapshot";
 import { undoBus } from "@/lib/undo-bus";
@@ -20,6 +21,7 @@ export function OwnerSection({ cardId }: { cardId: string }) {
     s.cards.find((c) => c.id === cardId),
   ) as CardRow | undefined;
   const updateCardLocal = useBoardStore((s) => s.updateCard);
+  const isGuest = useIsGuest();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -42,6 +44,7 @@ export function OwnerSection({ cardId }: { cardId: string }) {
   const isWritableMember = currentRole === "admin" || currentRole === "member";
   const isCurrentOwner = currentUserId !== null && ownerId === currentUserId;
   const canChangeOwner =
+    !isGuest &&
     currentUserId !== null &&
     (isAdmin || isCurrentOwner || (ownerId === null && isWritableMember));
   const canClearOwner = isAdmin || isCurrentOwner;

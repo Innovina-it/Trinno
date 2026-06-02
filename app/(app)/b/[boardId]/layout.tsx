@@ -10,6 +10,7 @@ import { SubtaskParentSyncPrompt } from "@/components/board/card/subtask-parent-
 import { BoardSyncMount } from "@/components/board/board-sync-mount";
 import { BoardVisitMarker } from "@/components/board/board-visit-marker";
 import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
+import { GuestReadonlyBanner } from "@/components/workspace/guest-readonly-banner";
 import {
   HydrationBoundary,
   type DehydratedWorkspaceCache,
@@ -79,6 +80,7 @@ export default async function BoardLayout({
 
   const body = (
     <WorkspaceStoreProvider initial={workspaceSnapshot}>
+      <GuestReadonlyBanner />
       <BoardVisitMarker
         workspaceId={snap.board.workspaceId}
         boardId={boardId}

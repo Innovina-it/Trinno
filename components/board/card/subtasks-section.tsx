@@ -3,6 +3,7 @@ import { useState, useTransition, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { createCard, updateCard, archiveCard } from "@/actions/cards";
 import { TypeIcon } from "./type-picker";
 import { Plus, X, Trash2 } from "lucide-react";
@@ -26,6 +27,7 @@ export function SubtasksSection({
   const addCardLocal = useBoardStore((s) => s.addCard);
   const updateCardLocal = useBoardStore((s) => s.updateCard);
   const removeCardLocal = useBoardStore((s) => s.removeCard);
+  const isGuest = useIsGuest();
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
   const [pending, start] = useTransition();
@@ -151,17 +153,31 @@ export function SubtasksSection({
               key={c.id}
               className="flex items-center gap-2 text-sm border border-hairline rounded-lg p-2"
             >
-              <CompleteToggle
-                cardId={c.id}
-                completed={isDone}
-                size="sm"
-                onLocalChange={(next) =>
-                  updateCardLocal(c.id, {
-                    completedAt: next ? new Date() : null,
-                    dueComplete: next,
-                  } as Partial<typeof c>)
-                }
-              />
+              {isGuest ? (
+                isDone ? (
+                  <span
+                    aria-hidden
+                    className="shrink-0 size-4 rounded-full border bg-[color:var(--accent-lime)] border-[color:var(--accent-lime)]"
+                  />
+                ) : (
+                  <span
+                    aria-hidden
+                    className="shrink-0 size-4 rounded-full border border-hairline-hi"
+                  />
+                )
+              ) : (
+                <CompleteToggle
+                  cardId={c.id}
+                  completed={isDone}
+                  size="sm"
+                  onLocalChange={(next) =>
+                    updateCardLocal(c.id, {
+                      completedAt: next ? new Date() : null,
+                      dueComplete: next,
+                    } as Partial<typeof c>)
+                  }
+                />
+              )}
               <TypeIcon type={(c as { type?: string }).type ?? "task"} />
               <Link
                 href={`/b/${boardId}/c/${c.id}`}
@@ -169,19 +185,21 @@ export function SubtasksSection({
               >
                 {c.title}
               </Link>
-              <Button
-                type="button" variant="ghost" size="xs"
-                onClick={() => toggleArchive(c)}
-                disabled={pending}
-                title="Archive (remove from list)"
-              >
-                <Trash2 className="size-3" />
-              </Button>
+              {!isGuest && (
+                <Button
+                  type="button" variant="ghost" size="xs"
+                  onClick={() => toggleArchive(c)}
+                  disabled={pending}
+                  title="Archive (remove from list)"
+                >
+                  <Trash2 className="size-3" />
+                </Button>
+              )}
             </li>
           );
         })}
       </ul>
-      {!adding ? (
+      {isGuest ? null : !adding ? (
         <Button
           type="button" variant="outline" size="sm"
           onClick={() => setAdding(true)}

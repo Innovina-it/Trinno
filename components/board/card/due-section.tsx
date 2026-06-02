@@ -2,6 +2,7 @@
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { updateCard } from "@/actions/cards";
 import { DatePicker } from "@/components/ui/date-picker";
 import type { CardRow } from "@/lib/queries/board-snapshot";
@@ -19,6 +20,7 @@ export function DueSection({ cardId }: { cardId: string }) {
     s.cards.find((c) => c.id === cardId),
   ) as CardRow | undefined;
   const updateCardLocal = useBoardStore((s) => s.updateCard);
+  const isGuest = useIsGuest();
   const [pending, start] = useTransition();
 
   if (!card) return null;
@@ -105,6 +107,22 @@ export function DueSection({ cardId }: { cardId: string }) {
         toast.error((err as Error).message);
       }
     });
+  }
+
+  if (isGuest) {
+    // Guests are read-only — render only the saved date, no controls.
+    if (!value) return null;
+    return (
+      <section className="space-y-2" data-testid="due-section">
+        <div className="flex items-baseline justify-between border-b border-hairline pb-1">
+          <h3 className="mono-meta text-fg-muted">Due date</h3>
+        </div>
+        <p className="text-sm text-fg">
+          {value.toLocaleDateString()}
+          {currentCard.dueComplete ? " · complete" : ""}
+        </p>
+      </section>
+    );
   }
 
   return (

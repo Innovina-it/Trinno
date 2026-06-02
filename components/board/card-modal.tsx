@@ -12,6 +12,7 @@ import { useStore } from "zustand";
 import { toast } from "sonner";
 import { errorBus } from "@/lib/errors/error-bus";
 import { BoardStoreContext } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import {
   Dialog,
   DialogContent,
@@ -507,6 +508,9 @@ export function CardModal({
   children?: React.ReactNode;
 }) {
   const router = useRouter();
+  // #0111 — guests are read-only across the modal. Server rejects every
+  // write anyway, but hiding the affordances avoids toast-spam UX.
+  const isGuest = useIsGuest();
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description ?? "");
   const [pending, start] = useTransition();
@@ -863,27 +867,41 @@ export function CardModal({
               flips `completed_at` (DB trigger keeps `dueComplete` in
               sync). The header position keeps it adjacent to the title
               so the action reads as "mark this card done". */}
-          <button
-            type="button"
-            onClick={handleToggleComplete}
-            disabled={pending}
-            aria-label={isCompleted ? "Mark not complete" : "Mark complete"}
-            aria-pressed={isCompleted}
-            data-testid="card-modal-complete-toggle"
-            data-completed={isCompleted ? "true" : "false"}
-            className={`mt-1 size-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
-              isCompleted
-                ? "bg-[color:var(--accent-lime)] border-[color:var(--accent-lime)] text-bg-deep"
-                : "border-hairline-hi text-transparent hover:border-fg/60 hover:text-fg/40"
-            }`}
-          >
-            <Check className="size-4" strokeWidth={3} />
-          </button>
+          {isGuest ? (
+            <span
+              aria-hidden
+              className={`mt-1 size-6 shrink-0 rounded-full border-2 flex items-center justify-center ${
+                isCompleted
+                  ? "bg-[color:var(--accent-lime)] border-[color:var(--accent-lime)] text-bg-deep"
+                  : "border-hairline-hi text-transparent"
+              }`}
+            >
+              <Check className="size-4" strokeWidth={3} />
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={handleToggleComplete}
+              disabled={pending}
+              aria-label={isCompleted ? "Mark not complete" : "Mark complete"}
+              aria-pressed={isCompleted}
+              data-testid="card-modal-complete-toggle"
+              data-completed={isCompleted ? "true" : "false"}
+              className={`mt-1 size-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 ${
+                isCompleted
+                  ? "bg-[color:var(--accent-lime)] border-[color:var(--accent-lime)] text-bg-deep"
+                  : "border-hairline-hi text-transparent hover:border-fg/60 hover:text-fg/40"
+              }`}
+            >
+              <Check className="size-4" strokeWidth={3} />
+            </button>
+          )}
           <input
             id="card-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={persistTitle}
+            readOnly={isGuest}
             required
             minLength={1}
             maxLength={120}
@@ -891,7 +909,7 @@ export function CardModal({
             data-completed={isCompleted ? "true" : "false"}
             className={`flex-1 min-w-0 bg-transparent font-sans text-2xl md:text-3xl font-bold tracking-tight text-fg leading-tight outline-none focus-visible:ring-1 focus-visible:ring-fg/40 rounded-md px-1 -mx-1 py-0.5 ${
               isCompleted ? "line-through text-fg-muted" : ""
-            }`}
+            } ${isGuest ? "cursor-default" : ""}`}
           />
           <div className="flex items-center gap-2 shrink-0 pt-2">
             {saveIndicator && (
@@ -902,42 +920,44 @@ export function CardModal({
                 {saveIndicator}
               </span>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                aria-label="More card actions"
-                className="size-7 inline-flex items-center justify-center rounded-full border border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
-              >
-                <MoreHorizontal className="size-3.5" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>Card</DropdownMenuLabel>
-                  {card.boardId && (
+            {!isGuest && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label="More card actions"
+                  className="size-7 inline-flex items-center justify-center rounded-full border border-hairline bg-[color:var(--surface)] text-fg-muted hover:text-fg hover:bg-[color:var(--surface-strong)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+                >
+                  <MoreHorizontal className="size-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Card</DropdownMenuLabel>
+                    {card.boardId && (
+                      <DropdownMenuItem
+                        onSelect={() => setMoveOpen(true)}
+                        data-testid="card-modal-move-to-board"
+                      >
+                        <Move className="size-3.5" aria-hidden />
+                        Move to board…
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onSelect={() => setMoveOpen(true)}
-                      data-testid="card-modal-move-to-board"
+                      onSelect={onArchive}
+                      disabled={pending}
+                      data-testid="card-modal-archive"
+                      className="text-fg-muted"
                     >
-                      <Move className="size-3.5" aria-hidden />
-                      Move to board…
+                      <Archive className="size-3.5" aria-hidden />
+                      Archive
                     </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onSelect={onArchive}
-                    disabled={pending}
-                    data-testid="card-modal-archive"
-                    className="text-fg-muted"
-                  >
-                    <Archive className="size-3.5" aria-hidden />
-                    Archive
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
 
-        {/* Meta row: attribute group + state group + nav group. */}
+        {/* Meta row: each picker self-renders read-only for guests. */}
         <div className="flex flex-wrap items-center gap-1.5">
           {(card.type !== undefined || card.boardId) && (
             <>
@@ -961,24 +981,28 @@ export function CardModal({
                 cardId={card.id}
                 sprintId={card.sprintId ?? null}
                 sprints={sprints}
-                readOnly={!canManageSprints}
+                readOnly={!canManageSprints || isGuest}
               />
-              <span aria-hidden className="mx-1 h-4 w-px bg-hairline" />
-              <WatchToggle cardId={card.id} />
+              {!isGuest && (
+                <>
+                  <span aria-hidden className="mx-1 h-4 w-px bg-hairline" />
+                  <WatchToggle cardId={card.id} />
+                </>
+              )}
               {showRoadmapLink && (
                 <span aria-hidden className="mx-1 h-4 w-px bg-hairline" />
               )}
-              {showRoadmapLink && (
-                <Link
-                  href={`/w/${workspaceId}/roadmap?focus=${card.id}`}
-                  data-testid="card-modal-roadmap-link"
-                  className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
-                >
-                  <CalendarRange className="size-3" aria-hidden />
-                  Roadmap →
-                </Link>
-              )}
             </>
+          )}
+          {showRoadmapLink && (
+            <Link
+              href={`/w/${workspaceId}/roadmap?focus=${card.id}`}
+              data-testid="card-modal-roadmap-link"
+              className="chip mono-meta-sm inline-flex items-center gap-1 hover:bg-[rgb(255_255_255/0.08)] text-fg-muted hover:text-fg"
+            >
+              <CalendarRange className="size-3" aria-hidden />
+              Roadmap →
+            </Link>
           )}
         </div>
         {isLegacySubboardType && (
@@ -1007,7 +1031,7 @@ export function CardModal({
             </Link>
           </div>
         ) : (
-          subboardsEnabled && (
+          subboardsEnabled && !isGuest && (
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -1032,16 +1056,30 @@ export function CardModal({
       {/* Task 5 — quick-edit strip. Surfaces the three minimum-set fields
           (title is in the hero above; assignee + due date go here) so the
           operator can flip the dials parity-matched with AddCardForm
-          without scrolling into the Planning/Work accordions. */}
-      <QuickEditStrip
-        cardId={card.id}
-        currentDueDate={card.dueDate ?? null}
-      />
+          without scrolling into the Planning/Work accordions. Hidden
+          for guests (read-only). */}
+      {!isGuest && (
+        <QuickEditStrip
+          cardId={card.id}
+          currentDueDate={card.dueDate ?? null}
+        />
+      )}
 
       {/* Notes — markdown render in view mode, click to edit. Cmd/Ctrl+Enter
-          or blur saves. Empty state invites a click. */}
+          or blur saves. Empty state invites a click. Guests see a
+          read-only render of the existing notes (no click-to-edit, no
+          empty-state CTA). */}
       <section className="space-y-2" data-testid="card-modal-notes">
-        {editingNotes ? (
+        {isGuest ? (
+          description.trim() ? (
+            <div
+              data-testid="card-modal-notes-view"
+              className="w-full rounded-xl border border-hairline bg-[color:var(--surface)] p-3"
+            >
+              <MarkdownView body={description} />
+            </div>
+          ) : null
+        ) : editingNotes ? (
           <textarea
             id="card-description"
             autoFocus
@@ -1084,7 +1122,10 @@ export function CardModal({
         )}
       </section>
 
-      {/* Planning */}
+      {/* Planning — each section auto-renders a read-only view for
+          guests (DueSection / RoadmapDatesSection / StoryPointsPicker /
+          TimeSection). VersionCardSection still writes; show only when
+          values exist would be future polish. */}
       <AccordionGroup id="planning" title="Planning">
         <DueSection cardId={card.id} />
         <RoadmapDatesSection cardId={card.id} />
@@ -1097,15 +1138,17 @@ export function CardModal({
           estimateMin={card.estimateMin ?? null}
           spentMin={card.spentMin ?? 0}
         />
-        {workspaceId && (
+        {workspaceId && !isGuest && (
           <VersionCardSection cardId={card.id} workspaceId={workspaceId} />
         )}
       </AccordionGroup>
 
-      {/* Work */}
+      {/* Work — sections internally hide their composers + write
+          buttons for guests; assignees / owner / labels / checklists /
+          subtasks remain visible as read views. */}
       <AccordionGroup id="work" title="Work">
         <LabelsSection cardId={card.id} />
-        <ComponentCardSection cardId={card.id} />
+        {!isGuest && <ComponentCardSection cardId={card.id} />}
         <OwnerSection cardId={card.id} />
         <MembersSection cardId={card.id} />
         <ChecklistsSection cardId={card.id} />
@@ -1118,7 +1161,9 @@ export function CardModal({
         )}
       </AccordionGroup>
 
-      {/* Refs */}
+      {/* Refs — CoverPicker self-hides for guest; CardLinksSection +
+          AttachmentsSection render lists read-only. LinkSection already
+          gates internally on viewer role. */}
       <AccordionGroup id="refs" title="References">
         <CoverPicker
           cardId={card.id}

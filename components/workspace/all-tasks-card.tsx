@@ -8,6 +8,8 @@ import {
   type CardPriority,
 } from "@/components/board/card/priority-picker";
 import { CompleteToggle } from "@/components/board/card/complete-toggle";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
+import { Check } from "lucide-react";
 import { formatDate } from "@/lib/format-date";
 
 // No `useWorkspaceStore` import — board title and sprint name are passed
@@ -43,6 +45,7 @@ export function AllTasksCard({
   completedAt?: Date | string | null;
 }) {
   const completed = completedAt != null;
+  const isGuest = useIsGuest();
   const router = useRouter();
   void sprintId;
   const due = formatDate(dueDate) || null;
@@ -76,7 +79,23 @@ export function AllTasksCard({
       className="block rounded-md border border-hairline bg-[color:var(--surface)] hover:bg-[rgb(255_255_255/0.04)] transition-colors p-2.5 space-y-2 select-none"
     >
       <div className="flex items-start gap-2">
-        <CompleteToggle cardId={cardId} completed={completed} size="sm" />
+        {isGuest ? (
+          completed ? (
+            <span
+              aria-hidden
+              className="shrink-0 size-4 rounded-full border flex items-center justify-center bg-[color:var(--accent-lime)] border-[color:var(--accent-lime)] text-bg-deep"
+            >
+              <Check className="size-2.5 stroke-[3]" />
+            </span>
+          ) : (
+            <span
+              aria-hidden
+              className="shrink-0 size-4 rounded-full border border-hairline-hi"
+            />
+          )
+        ) : (
+          <CompleteToggle cardId={cardId} completed={completed} size="sm" />
+        )}
         <div
           className={`flex-1 min-w-0 text-sm leading-snug ${
             completed ? "line-through text-fg-muted" : "text-fg"

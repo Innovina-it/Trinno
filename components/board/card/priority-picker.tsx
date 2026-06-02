@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { updateCard } from "@/actions/cards";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { toast } from "sonner";
 import { ChevronDown, Flag } from "lucide-react";
 import { undoBus } from "@/lib/undo-bus";
@@ -103,6 +104,7 @@ export function PriorityPicker({
   priority: CardPriority | null;
 }) {
   const updateCardLocal = useBoardStore((s) => s.updateCard);
+  const isGuest = useIsGuest();
   const [pending, start] = useTransition();
 
   function set(next: CardPriority | null) {
@@ -137,6 +139,20 @@ export function PriorityPicker({
   const triggerTint = priority
     ? PRIORITY_TINT[priority].chip
     : "hover:bg-[rgb(255_255_255/0.08)]";
+
+  if (isGuest) {
+    if (!priority) return null;
+    return (
+      <span
+        data-testid="card-priority-picker"
+        data-priority={priority}
+        className={`chip inline-flex items-center gap-1.5 ${triggerTint}`}
+      >
+        <Flag className="size-3" />
+        <span>{triggerLabel}</span>
+      </span>
+    );
+  }
 
   return (
     <DropdownMenu>

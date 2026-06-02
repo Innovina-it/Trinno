@@ -4,6 +4,7 @@ import { Image as ImageIcon, Palette, X } from "lucide-react";
 import { toast } from "sonner";
 import { updateCard } from "@/actions/cards";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { undoBus } from "@/lib/undo-bus";
 
@@ -111,10 +112,15 @@ export function CoverPicker({
   coverValue: string | null;
 }) {
   const updateCardLocal = useBoardStore((s) => s.updateCard);
+  const isGuest = useIsGuest();
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
   const [uploading, setUploading] = useState(false);
   const [open, setOpen] = useState(false);
+
+  // #0111 — cover preview is already rendered by CardCover on the tile.
+  // The CoverPicker section is purely an editor → hide for guests.
+  if (isGuest) return null;
 
   function setCover(nextKind: CoverKind, nextValue: string | null) {
     const prev = { coverKind, coverValue };

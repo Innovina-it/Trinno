@@ -6,6 +6,7 @@ import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import { hasFlag } from "@/lib/feature-flags/has-flag";
 import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
 import { WorkspaceVisitMarker } from "@/components/workspace/workspace-visit-marker";
+import { GuestReadonlyBanner } from "@/components/workspace/guest-readonly-banner";
 import {
   HydrationBoundary,
   type DehydratedWorkspaceCache,
@@ -34,10 +35,18 @@ export default async function WorkspaceLayout({
     "shared_workspace_cache_v2",
   );
   if (!sharedWorkspaceCacheEnabled) {
+    // Still mount a minimal WorkspaceStoreProvider here so the guest
+    // banner (and any other client component that reads viewerRole) can
+    // render. The shared-cache branch below already wraps in a richer
+    // provider via the HydrationBoundary path.
+    const minimalSnapshot = await getWorkspaceSnapshot(token, workspaceId);
     return (
       <>
         <WorkspaceVisitMarker workspaceId={workspaceId} />
-        {children}
+        <WorkspaceStoreProvider initial={minimalSnapshot}>
+          <GuestReadonlyBanner />
+          {children}
+        </WorkspaceStoreProvider>
       </>
     );
   }
@@ -70,7 +79,10 @@ export default async function WorkspaceLayout({
   return (
     <HydrationBoundary state={state}>
       <WorkspaceVisitMarker workspaceId={workspaceId} />
-      <WorkspaceStoreProvider initial={snapshot}>{children}</WorkspaceStoreProvider>
+      <WorkspaceStoreProvider initial={snapshot}>
+        <GuestReadonlyBanner />
+        {children}
+      </WorkspaceStoreProvider>
     </HydrationBoundary>
   );
 }

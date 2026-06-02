@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { createLabel, toggleCardLabel } from "@/actions/labels";
 import { undoBus } from "@/lib/undo-bus";
 
@@ -26,6 +27,7 @@ export function LabelsSection({ cardId }: { cardId: string }) {
   const addCardLabel = useBoardStore((s) => s.addCardLabel);
   const removeCardLabel = useBoardStore((s) => s.removeCardLabel);
 
+  const isGuest = useIsGuest();
   const [name, setName] = useState("");
   const [color, setColor] = useState(PALETTE[0]);
   const [pending, start] = useTransition();
@@ -90,6 +92,31 @@ export function LabelsSection({ cardId }: { cardId: string }) {
         toast.error((err as Error).message);
       }
     });
+  }
+
+  if (isGuest) {
+    const attached = labels.filter((l) => attachedIds.has(l.id));
+    if (attached.length === 0) return null;
+    return (
+      <section className="space-y-3" data-testid="labels-section">
+        <div className="flex items-baseline justify-between border-b border-hairline pb-1">
+          <h3 className="mono-meta text-fg-muted">Labels</h3>
+        </div>
+        <ul className="flex flex-wrap gap-1.5">
+          {attached.map((l) => (
+            <li
+              key={l.id}
+              data-label-id={l.id}
+              data-attached="true"
+              className="mono-meta-sm flex items-center gap-1.5 border px-2 py-1 text-paper"
+              style={{ backgroundColor: l.color, borderColor: l.color }}
+            >
+              <span className="tracking-wider">{l.name || l.color}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
   }
 
   return (

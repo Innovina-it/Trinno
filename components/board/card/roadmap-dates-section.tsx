@@ -3,6 +3,7 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { CalendarRange } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { updateCard } from "@/actions/cards";
 import { DateRangePopover, type DateRange } from "@/components/ui/date-range-popover";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ export function RoadmapDatesSection({ cardId }: { cardId: string }) {
       : null,
   ) as CardRow | undefined | null;
   const updateCardLocal = useBoardStore((s) => s.updateCard);
+  const isGuest = useIsGuest();
   const [pending, start] = useTransition();
 
   if (!card) return null;
@@ -98,6 +100,23 @@ export function RoadmapDatesSection({ cardId }: { cardId: string }) {
     today.setUTCHours(0, 0, 0, 0);
     const week = new Date(today.getTime() + 7 * 86_400_000);
     persist({ start: today, target: week });
+  }
+
+  if (isGuest) {
+    if (!value.start && !value.target) return null;
+    const fmt = (d: Date | null) =>
+      d ? d.toLocaleDateString(undefined, { dateStyle: "medium" }) : "—";
+    return (
+      <section className="space-y-2" data-testid="roadmap-dates-section">
+        <div className="flex items-baseline justify-between border-b border-hairline pb-1">
+          <h3 className="mono-meta text-fg-muted">Dates</h3>
+          <span className="mono-meta-sm text-fg-faint">UTC</span>
+        </div>
+        <p className="text-sm text-fg">
+          {fmt(value.start)} → {fmt(value.target)}
+        </p>
+      </section>
+    );
   }
 
   return (

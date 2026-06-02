@@ -3,6 +3,7 @@ import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import {
   createChecklist,
   deleteChecklist,
@@ -28,6 +29,7 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
   const removeItem = useBoardStore((s) => s.removeChecklistItem);
   const updateItem = useBoardStore((s) => s.updateChecklistItem);
 
+  const isGuest = useIsGuest();
   const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [pending, start] = useTransition();
@@ -78,6 +80,7 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
               <span className="mono-meta-sm text-fg-muted tabular-nums">
                 {done} / {items.length}
               </span>
+              {!isGuest && (
               <Button
                 size="icon-sm"
                 variant="ghost"
@@ -128,6 +131,7 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
               >
                 <X className="size-3.5" />
               </Button>
+              )}
             </div>
             <ul className="space-y-1.5">
               {items.map((it) => (
@@ -139,7 +143,9 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
                   <input
                     type="checkbox"
                     checked={it.completed}
+                    disabled={isGuest}
                     onChange={(e) => {
+                      if (isGuest) return;
                       const newCompleted = e.target.checked;
                       const prevCompleted = it.completed;
                       updateItem(it.id, { completed: newCompleted });
@@ -185,6 +191,7 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
                   >
                     {it.text}
                   </span>
+                  {!isGuest && (
                   <Button
                     size="sm"
                     variant="ghost"
@@ -229,15 +236,16 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
                   >
                     <X className="size-3" />
                   </Button>
+                  )}
                 </li>
               ))}
             </ul>
-            <AddItem checklistId={cl.id} onAdd={addItem} />
+            {!isGuest && <AddItem checklistId={cl.id} onAdd={addItem} />}
           </div>
         );
       })}
 
-      {adding ? (
+      {isGuest ? null : adding ? (
         <form onSubmit={add} className="space-y-1">
           <Input
             autoFocus

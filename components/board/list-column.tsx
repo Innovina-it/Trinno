@@ -12,6 +12,7 @@ import { Archive, Trash2, MoreVertical, Check, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { ListRow } from "@/lib/queries/board-snapshot";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { archiveList, deleteList, setListColor } from "@/actions/lists";
 import {
   DropdownMenu,
@@ -80,6 +81,7 @@ export function ListColumn({
   // and every column on the board re-rendered. `useShallow` makes the
   // hook compare item refs so re-renders only fire when *this* list's
   // cards actually change.
+  const isGuest = useIsGuest();
   const listCards = useBoardStore(
     useShallow((s) => s.cards.filter((c) => c.listId === list.id)),
   );
@@ -272,6 +274,7 @@ export function ListColumn({
             )}
           </div>
         </div>
+        {!isGuest && (
         <DropdownMenu>
           <DropdownMenuTrigger
             className="absolute right-2 top-2 rounded p-1.5 text-fg-muted hover:bg-[rgb(255_255_255/0.06)] hover:text-fg transition-colors"
@@ -337,6 +340,7 @@ export function ListColumn({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
       </div>
 
       {virtualizedBoardEnabled ? (
@@ -411,17 +415,19 @@ export function ListColumn({
           )}
         </div>
       )}
-      <div className="border-t border-hairline px-2.5 py-2">
-        <button
-          type="button"
-          onClick={() => setAddCardOpen(true)}
-          data-testid="list-add-card"
-          className="w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-hairline bg-transparent px-2 py-1.5 mono-meta-sm text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)]"
-        >
-          <Plus className="size-3.5" aria-hidden />
-          Add card
-        </button>
-      </div>
+      {!isGuest && (
+        <div className="border-t border-hairline px-2.5 py-2">
+          <button
+            type="button"
+            onClick={() => setAddCardOpen(true)}
+            data-testid="list-add-card"
+            className="w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-hairline bg-transparent px-2 py-1.5 mono-meta-sm text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.06)]"
+          >
+            <Plus className="size-3.5" aria-hidden />
+            Add card
+          </button>
+        </div>
+      )}
       <NewCardDialog
         open={addCardOpen}
         onOpenChange={setAddCardOpen}

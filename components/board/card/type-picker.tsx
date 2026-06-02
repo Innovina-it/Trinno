@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { updateCard } from "@/actions/cards";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { BoardStoreContext } from "@/stores/board-store";
 
 // User-selectable types after the 2026-05-18 retire pass:
@@ -54,7 +55,8 @@ export function TypePicker({
   type: string;
   parentCardId?: string | null;
 }) {
-  const editable = !!cardId;
+  const isGuest = useIsGuest();
+  const editable = !!cardId && !isGuest;
   const cur =
     TYPES.find((x) => x.id === type) ??
     (LEGACY_TYPES[type]

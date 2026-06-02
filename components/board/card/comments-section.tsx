@@ -4,6 +4,7 @@ import { useShallow } from "zustand/shallow";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import {
   createComment,
   editComment,
@@ -29,6 +30,7 @@ export function CommentsSection({ cardId }: { cardId: string }) {
   const updateComment = useBoardStore((s) => s.updateComment);
   const removeComment = useBoardStore((s) => s.removeComment);
 
+  const isGuest = useIsGuest();
   const [body, setBody] = useState("");
   const [pending, start] = useTransition();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -391,7 +393,7 @@ export function CommentsSection({ cardId }: { cardId: string }) {
               {formatDateTime(c.createdAt)}
               {c.editedAt && <span className="ml-1 text-fg-faint">· edited</span>}
             </time>
-            {!isEditing && (
+            {!isEditing && !isGuest && (
               <div className="flex items-center gap-0.5 opacity-0 group-hover/comment:opacity-100 focus-within:opacity-100 transition-opacity">
                 <button
                   type="button"
@@ -487,6 +489,7 @@ export function CommentsSection({ cardId }: { cardId: string }) {
         )}
         {topLevelComments.map((c) => renderComment(c))}
       </ul>
+      {!isGuest && (
       <form onSubmit={onSubmit} className="space-y-2">
         {replyToId && (
           <div className="flex items-center justify-between rounded-lg border border-hairline bg-[color:var(--surface)] px-2 py-1 text-xs text-fg-muted">
@@ -550,6 +553,7 @@ export function CommentsSection({ cardId }: { cardId: string }) {
           </Button>
         </div>
       </form>
+      )}
     </section>
   );
 }

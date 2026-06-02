@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBoardStore } from "@/stores/board-store";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { logWork, deleteWorklog } from "@/actions/worklogs";
 import { updateCard } from "@/actions/cards";
 import { Hourglass, Trash2, Plus } from "lucide-react";
@@ -29,6 +30,7 @@ export function TimeSection({
   spentMin: number;
 }) {
   const updateCardLocal = useBoardStore((s) => s.updateCard);
+  const isGuest = useIsGuest();
   const [estimate, setEstimate] = useState<string>(
     estimateMin?.toString() ?? "",
   );
@@ -112,6 +114,20 @@ export function TimeSection({
         toast.error((err as Error).message);
       }
     });
+  }
+
+  if (isGuest) {
+    if (estimateMin == null && spentMin === 0) return null;
+    return (
+      <div className="space-y-2" data-testid="time-section">
+        <h3 className="mono-meta text-fg flex items-center gap-1">
+          <Hourglass className="size-3" /> Time
+        </h3>
+        <p className="text-sm text-fg tabular-nums">
+          {spentMin}m / {estimateMin == null ? "—" : `${estimateMin}m`}
+        </p>
+      </div>
+    );
   }
 
   return (

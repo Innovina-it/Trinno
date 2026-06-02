@@ -244,6 +244,10 @@ export function RoadmapBar({
   const setCardLink = useWorkspaceStore((s) => s.setCardLink);
   const removeCardLinkLocal = useWorkspaceStore((s) => s.removeCardLinkLocal);
   const viewerRole = useWorkspaceStore((s) => s.viewerRole);
+  // #0111 — guests cannot drag bars in the roadmap: the drag rewrites
+  // `startDate`/`targetDate`, not `listId`, and the server rejects it.
+  // Status moves happen on the board, not here.
+  const dragDisabled = viewerRole === "guest";
   const canEditLink = viewerRole === "owner" || viewerRole === "admin";
   const [linkOpen, setLinkOpen] = useState(false);
   const dot = TYPE_DOT[card.type] ?? "bg-fg/40";
@@ -502,7 +506,8 @@ export function RoadmapBar({
           ...(isOverdue ? { borderColor: "var(--status-blocked)" } : {}),
         }}
         className={`absolute h-7 rounded-md border border-fg/30 backdrop-blur-sm
-                   hover:border-fg/60 transition-colors cursor-grab active:cursor-grabbing
+                   hover:border-fg/60 transition-colors
+                   ${dragDisabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"}
                    flex items-center px-2 select-none group/bar pointer-events-auto
                    ${fill.className}
                    ${focused ? "ring-2 ring-fg/50" : ""}
@@ -510,6 +515,7 @@ export function RoadmapBar({
                    ${isCompleted ? "opacity-55 saturate-50" : ""}`}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
+          if (dragDisabled) return;
           cancelTooltip();
           e.preventDefault();
           onMoveStart(e, card.id);
@@ -538,6 +544,7 @@ export function RoadmapBar({
           />
         )}
         {/* Wider hit-zone (12px) for the left edge resize handle, with a hover-only chevron. */}
+        {!dragDisabled && (
         <span
           className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize opacity-0 group-hover/bar:opacity-100 rounded-l-md flex items-center justify-center"
           onPointerDown={(e) => {
@@ -551,6 +558,8 @@ export function RoadmapBar({
           <span className="absolute inset-y-0 left-0 w-1.5 bg-fg/40 rounded-l-md" />
           <ChevronLeft className="size-3 text-fg/80 relative" />
         </span>
+        )}
+        {!dragDisabled && (
         <span
           className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize opacity-0 group-hover/bar:opacity-100 rounded-r-md flex items-center justify-center"
           onPointerDown={(e) => {
@@ -564,6 +573,7 @@ export function RoadmapBar({
           <span className="absolute inset-y-0 right-0 w-1.5 bg-fg/40 rounded-r-md" />
           <ChevronRight className="size-3 text-fg/80 relative" />
         </span>
+        )}
         {compact ? (
           <span
             aria-hidden
