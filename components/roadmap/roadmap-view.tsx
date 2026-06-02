@@ -44,6 +44,9 @@ import { useWorkspaceStore } from "@/stores/workspace-store";
 import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { RoadmapBar, type RoadmapBarAssignee } from "./roadmap-bar";
+import { getRoadmapBaselineDetail } from "@/actions/roadmap-baselines";
+import { compareToBaseline } from "@/lib/baselines/compare";
+import type { LiveEntry, LiveMilestone } from "@/lib/baselines/types";
 import { PriorityGutter } from "./priority-gutter";
 import { DependencyArrows, type BarBox } from "./dependency-arrows";
 import { CriticalPathOverlay } from "./critical-path-overlay";
@@ -615,6 +618,9 @@ export function RoadmapView({
   const storeSubBoards = useWorkspaceStore((s) => s.subBoards);
   const patchCardInStore = useWorkspaceStore((s) => s.patchCard);
   const setCompareBaselineId = useWorkspaceStore((s) => s.setCompareBaselineId);
+  const compareBaselineId = useWorkspaceStore((s) => s.compareBaselineId);
+  const baselineDetailById = useWorkspaceStore((s) => s.baselineDetailById);
+  const cacheBaselineDetail = useWorkspaceStore((s) => s.cacheBaselineDetail);
   const setWorkspaceSnapshot = useWorkspaceStore(
     (s) => s.mergeSnapshotPreservingRealtime,
   );
@@ -942,6 +948,126 @@ export function RoadmapView({
     }
     return min === null ? null : new Date(min);
   }, [storeCards]);
+
+  // === BASELINE COMPARE START ===
+  // Lazily fetch the compared baseline's full detail when the user enters
+  // compare mode and we don't already have it cached. The raw action rows
+  // carry Date objects / nullable columns; we normalise them into the
+  // store's BaselineDetail shape (ISO-string dates, assignees grouped by
+  // card) before caching so the pure compare fn can run unchanged.
+  useEffect(() => {
+    if (!compareBaselineId || baselineDetailById[compareBaselineId]) return;
+    let cancelled = false;
+    (async () => {
+      const res = await getRoadmapBaselineDetail({ id: compareBaselineId });
+      if (cancelled || !res.ok) {
+        if (!res.ok) toast.error(res.error.message);
+        return;
+      }
+      const d = res.data;
+      const asgByCard = new Map<string, string[]>();
+      for (const a of d.assignees) {
+        const k = a.cardId as string;
+        const arr = asgByCard.get(k);
+        if (arr) arr.push(a.userId);
+        else asgByCard.set(k, [a.userId]);
+      }
+      const iso = (v: unknown) =>
+        v == null ? null : v instanceof Date ? v.toISOString() : String(v);
+      const detail = {
+        meta: {
+          id: d.meta.id,
+          workspaceId: d.meta.workspaceId,
+          name: d.meta.name,
+          note: d.meta.note ?? null,
+          createdBy: d.meta.createdBy,
+          createdAt: iso(d.meta.createdAt)!,
+        },
+        entries: d.entries.map((e) => ({
+          cardId: e.cardId,
+          title: e.title,
+          startDate: iso(e.startDate),
+          targetDate: iso(e.targetDate),
+          completedAt: iso(e.completedAt),
+          roadmapOrder: e.roadmapOrder ?? null,
+          sprintId: e.sprintId ?? null,
+          parentCardId: e.parentCardId ?? null,
+          assignees: asgByCard.get(e.cardId) ?? [],
+        })),
+        milestones: d.milestones.map((m) => ({
+          milestoneId: m.milestoneId,
+          name: m.name,
+          date: iso(m.date),
+        })),
+      };
+      cacheBaselineDetail(detail);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [compareBaselineId, baselineDetailById, cacheBaselineDetail]);
+
+  // LIVE comparable set, built from the same store slices the bars render
+  // from. We compare against the FULL non-archived card set (not the
+  // filter-narrowed `cards`) so an active filter doesn't make untouched
+  // cards register as "removed". Dates are converted Date→ISO to match the
+  // baseline detail's string shape.
+  const liveEntries = useMemo<LiveEntry[]>(() => {
+    if (!compareBaselineId) return [];
+    const asgByCard = new Map<string, string[]>();
+    for (const cm of storeCardMembers) {
+      const arr = asgByCard.get(cm.cardId);
+      if (arr) arr.push(cm.userId);
+      else asgByCard.set(cm.cardId, [cm.userId]);
+    }
+    const iso = (v: Date | string | null | undefined) =>
+      v == null ? null : v instanceof Date ? v.toISOString() : String(v);
+    return storeCards
+      .filter((c) => !c.archived)
+      .map((c) => ({
+        cardId: c.id,
+        title: c.title,
+        startDate: iso(c.startDate),
+        targetDate: iso(c.targetDate),
+        completedAt: iso(c.completedAt),
+        roadmapOrder: c.roadmapOrder ?? null,
+        sprintId: c.sprintId ?? null,
+        parentCardId: c.parentCardId ?? null,
+        assignees: asgByCard.get(c.id) ?? [],
+      }));
+  }, [compareBaselineId, storeCards, storeCardMembers]);
+
+  const liveMilestones = useMemo<LiveMilestone[]>(() => {
+    if (!compareBaselineId) return [];
+    return storedMilestones.map((m) => ({
+      milestoneId: m.id,
+      name: m.name,
+      date: m.date == null ? null : m.date instanceof Date ? m.date.toISOString() : String(m.date),
+    }));
+  }, [compareBaselineId, storedMilestones]);
+
+  const compareDetail = compareBaselineId
+    ? baselineDetailById[compareBaselineId] ?? null
+    : null;
+  const variance = useMemo(
+    () =>
+      compareDetail
+        ? compareToBaseline(
+            { entries: liveEntries, milestones: liveMilestones },
+            compareDetail,
+          )
+        : null,
+    [compareDetail, liveEntries, liveMilestones],
+  );
+  const varianceByCard = useMemo(
+    () => new Map((variance?.cards ?? []).map((c) => [c.cardId, c])),
+    [variance],
+  );
+  const baselineEntryByCard = useMemo(
+    () => new Map((compareDetail?.entries ?? []).map((e) => [e.cardId, e])),
+    [compareDetail],
+  );
+  // === BASELINE COMPARE END ===
 
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
@@ -1959,6 +2085,35 @@ export function RoadmapView({
             )}
           </div>
           {/* === MILESTONE MARKERS END (toolbar) === */}
+          {compareBaselineId && compareDetail && variance && (
+            <div
+              data-testid="baseline-compare-banner"
+              className="flex items-center gap-3 flex-wrap rounded-full border border-fg/30 bg-fg/10 px-3 py-1.5 text-xs text-fg"
+            >
+              <span className="mono-meta-sm text-fg-faint tracking-[0.14em]">
+                COMPARING
+              </span>
+              <span className="font-medium truncate max-w-[16rem]">
+                {compareDetail.meta.name}
+              </span>
+              <span className="text-fg-muted tabular-nums">
+                {variance.rollup.slipped} slipped · {variance.rollup.added} added
+                {" · "}
+                {variance.rollup.removed} removed
+                {variance.rollup.worstSlipDays > 0
+                  ? ` · worst +${variance.rollup.worstSlipDays}d`
+                  : ""}
+              </span>
+              <button
+                type="button"
+                data-testid="baseline-stop-comparing"
+                onClick={() => setCompareBaselineId(null)}
+                className="ml-auto inline-flex items-center rounded-full border border-hairline bg-[color:var(--surface)] px-2.5 py-1 text-fg-muted hover:text-fg hover:bg-[rgb(255_255_255/0.08)]"
+              >
+                Stop comparing
+              </button>
+            </div>
+          )}
           {viewMode === "gantt" && cards.length > 0 && (
             <div className="hidden md:block">
               <RoadmapMiniMap
@@ -2566,6 +2721,8 @@ export function RoadmapView({
                               sprintName={cardSprintNameById.get(sc.id) ?? null}
                               assignees={cardAssigneesById.get(sc.id) ?? []}
                               availableSpaceRight={nextLeft - (sx + sw)}
+                              variance={varianceByCard.get(sc.id) ?? null}
+                              baselineEntry={baselineEntryByCard.get(sc.id) ?? null}
                               onMoveStart={handleMoveStart}
                               onResizeLeftStart={handleResizeLeftStart}
                               onResizeRightStart={handleResizeRightStart}
@@ -2640,6 +2797,8 @@ export function RoadmapView({
                         sprintName={cardSprintNameById.get(c.id) ?? null}
                         assignees={cardAssigneesById.get(c.id) ?? []}
                         availableSpaceRight={nextLeft - (x + w)}
+                        variance={varianceByCard.get(c.id) ?? null}
+                        baselineEntry={baselineEntryByCard.get(c.id) ?? null}
                         onMoveStart={handleMoveStart}
                         onResizeLeftStart={handleResizeLeftStart}
                         onResizeRightStart={handleResizeRightStart}

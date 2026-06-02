@@ -17,6 +17,8 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { RoadmapCard } from "@/lib/queries/roadmap";
+import type { CardVariance } from "@/lib/baselines/types";
+import { dayDiff, startOfDay } from "@/lib/roadmap/dates";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { STATUS_LABEL, type StatusKind } from "@/lib/status";
 import { archiveCard, setRoadmapCompletion, updateCard } from "@/actions/cards";
@@ -201,6 +203,8 @@ export function RoadmapBar({
   sprintName = null,
   assignees = [],
   availableSpaceRight = Number.POSITIVE_INFINITY,
+  baselineEntry = null,
+  variance = null,
   onMoveStart,
   onResizeLeftStart,
   onResizeRightStart,
@@ -216,6 +220,12 @@ export function RoadmapBar({
   storyPoints?: number | null;
   sprintName?: string | null;
   assignees?: RoadmapBarAssignee[];
+  // Baseline compare (Task 9). When set + both dates present, a dimmed
+  // ghost bar is rendered behind the live bar at the baseline's geometry,
+  // and a delta chip surfaces the target slip/pull-in. Both null = no
+  // compare → bar renders exactly as before.
+  baselineEntry?: { startDate: string | null; targetDate: string | null } | null;
+  variance?: CardVariance | null;
   // Pixels of empty space between this bar's right edge and the next bar
   // (or canvas edge) in the same row. Used to suppress the assignee
   // overflow stack when it would collide with the next bar.
@@ -428,14 +438,62 @@ export function RoadmapBar({
   // and right-click menu.
   const compact = width < 60;
 
+  // Baseline ghost geometry. The live bar's x/width already encode the
+  // grid's linear date→pixel scale: x = dayDiff(gridStart, liveStart)·ppd
+  // and width = (dayDiff(liveStart, liveTarget) + 1)·ppd. We recover ppd
+  // from the live bar's own span (no second scale), then project the
+  // baseline's start/target through the SAME mapping anchored at the live
+  // bar's left edge. Skipped unless both baseline dates exist.
+  const liveStartDay = startOfDay(card.startDate);
+  const liveTargetDay = startOfDay(card.targetDate);
+  const liveSpanDays = dayDiff(liveStartDay, liveTargetDay) + 1; // ≥ 1
+  const ppd = liveSpanDays > 0 ? width / liveSpanDays : 0;
+  const baseStartISO = baselineEntry?.startDate ?? null;
+  const baseTargetISO = baselineEntry?.targetDate ?? null;
+  let ghost: { left: number; width: number } | null = null;
+  if (baseStartISO && baseTargetISO && ppd > 0) {
+    const baseStartDay = startOfDay(new Date(baseStartISO));
+    const baseTargetDay = startOfDay(new Date(baseTargetISO));
+    const ghostLeft = x + dayDiff(liveStartDay, baseStartDay) * ppd;
+    const ghostWidth = (dayDiff(baseStartDay, baseTargetDay) + 1) * ppd;
+    if (Number.isFinite(ghostLeft) && ghostWidth > 0) {
+      ghost = { left: ghostLeft, width: ghostWidth };
+    }
+  }
+  // Target-date delta chip. Positive = slipped later (red), negative =
+  // pulled in earlier (green). Only when comparing + non-zero.
+  const targetDelta = variance?.targetDeltaDays ?? null;
+  const showDeltaChip =
+    variance != null &&
+    variance.status !== "removed" &&
+    targetDelta != null &&
+    targetDelta !== 0;
+
   return (
     <>
+      {ghost && (
+        <div
+          data-testid={`baseline-ghost-${card.id}`}
+          aria-hidden
+          className="absolute h-7 rounded border border-dashed border-fg/40 bg-transparent opacity-50 pointer-events-none"
+          style={{
+            left: ghost.left,
+            width: Math.max(ghost.width, 4),
+            top: row * 36 + 4,
+            zIndex: 0,
+          }}
+        />
+      )}
       <div
         ref={barRef}
         style={{
           left: x,
           width: Math.max(width, 12),
           top: row * 36 + 4,
+          // Keep the live bar above its baseline ghost (zIndex 0). The
+          // tooltip/menu `z-30` class still wins when active (no inline
+          // zIndex set in that case, so the class applies).
+          ...(ghost && !(tooltipOpen || menu) ? { zIndex: 1 } : {}),
           ...fill.style,
           // Red outline for overdue+open bars. Applied after fill.style so
           // it wins; uses the same --status-blocked token the due pill uses
@@ -636,6 +694,25 @@ export function RoadmapBar({
               +{assignees.length - 2}
             </span>
           )}
+        </span>
+      )}
+      {showDeltaChip && targetDelta != null && (
+        <span
+          data-testid={`baseline-delta-${card.id}`}
+          data-delta-days={targetDelta}
+          aria-label={
+            targetDelta > 0
+              ? `Slipped ${targetDelta} days from baseline`
+              : `Pulled in ${-targetDelta} days from baseline`
+          }
+          className={`absolute z-20 pointer-events-none rounded px-1 mono-meta-sm leading-none tabular-nums ${
+            targetDelta > 0
+              ? "bg-[color:var(--status-blocked)]/20 text-[color:var(--status-blocked)]"
+              : "bg-emerald-500/20 text-emerald-300"
+          }`}
+          style={{ left: barRight + 4 + linkOffset, top: row * 36 + 2 }}
+        >
+          {targetDelta > 0 ? `+${targetDelta}d` : `−${-targetDelta}d`}
         </span>
       )}
       {tooltipOpen && !menu && tooltipPos && typeof document !== "undefined" &&
