@@ -30,6 +30,10 @@ export function BaselineVariancePanel({
   const removed = byStatus("removed");
   const reordered = byStatus("reordered");
 
+  const assigneeOnly = variance.cards.filter(
+    (c) => c.assigneesAdded.length > 0 || c.assigneesRemoved.length > 0
+  );
+
   const milestones = variance.milestones.filter((m) => m.status !== "unchanged");
 
   const resolveName = (id: string) => profilesById?.[id]?.displayName ?? id;
@@ -184,6 +188,22 @@ export function BaselineVariancePanel({
           title="Reordered"
           rows={reordered}
           render={(c) => <CardRow key={c.cardId} card={c} />}
+        />
+        <Section
+          title="Assignee changes"
+          rows={assigneeOnly}
+          render={(c) => (
+            <li
+              key={c.cardId}
+              data-testid={`variance-row-${c.cardId}`}
+              className="flex items-start justify-between gap-3 border-b border-hairline py-1.5 last:border-b-0"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-fg">{c.title}</span>
+                {assigneeChanges(c)}
+              </span>
+            </li>
+          )}
         />
 
         {milestones.length > 0 && (
