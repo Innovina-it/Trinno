@@ -174,24 +174,29 @@ export function CardContextMenu({
       {actions.onSetPriority && (
         <>
           <div className="my-1 border-t border-hairline" />
-          {PRIORITIES.map((p) => (
-            <button
-              key={p}
-              type="button"
-              role="menuitem"
-              onClick={run(() => actions.onSetPriority?.(p))}
-              className={`w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[rgb(255_255_255/0.06)] ${PRIORITY_TINT[p].text}`}
-              data-testid={`${testIdPrefix}-set-priority`}
-              data-priority={p}
-            >
-              <span
-                aria-hidden
-                className={`size-2 rounded-full ${PRIORITY_TINT[p].dot}`}
-              />
-              <Flag className="size-3" />
-              Set {PRIORITY_LABELS[p]}
-            </button>
-          ))}
+          {PRIORITIES.map((p) => {
+            const selected = p === priority;
+            return (
+              <button
+                key={p}
+                type="button"
+                role="menuitem"
+                aria-current={selected ? "true" : undefined}
+                onClick={run(() => actions.onSetPriority?.(p))}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[rgb(255_255_255/0.06)] ${PRIORITY_TINT[p].text} ${selected ? "bg-[rgb(255_255_255/0.06)]" : ""}`}
+                data-testid={`${testIdPrefix}-set-priority`}
+                data-priority={p}
+                data-selected={selected ? "true" : undefined}
+              >
+                <span
+                  aria-hidden
+                  className={`size-2 rounded-full ${PRIORITY_TINT[p].dot}`}
+                />
+                <Flag className={`size-3 ${selected ? "fill-current" : ""}`} />
+                Set {PRIORITY_LABELS[p]}
+              </button>
+            );
+          })}
           {priority !== null && (
             <button
               type="button"

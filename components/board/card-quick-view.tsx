@@ -36,7 +36,6 @@ import {
 import { formatDate } from "@/lib/format-date";
 import { BoardStoreContext } from "@/stores/board-store";
 import { WorkspaceStoreContext } from "@/stores/workspace-store";
-import type { CardUrlLink } from "@/lib/links/types";
 import type { WorkspaceRole } from "@/lib/permissions/guest-guard";
 import {
   promoteCardToSubboard,
@@ -47,6 +46,7 @@ import { errorBus } from "@/lib/errors/error-bus";
 import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
 import { LinkIcon } from "@/components/links/link-icon";
 import { LinkEditDialog } from "@/components/links/link-edit-dialog";
+import { useQuickViewCardLink } from "@/components/board/use-quick-view-card-link";
 import { upsertCardLink, removeCardLink } from "@/actions/links";
 import { DEFAULT_LINK_COLOR } from "@/lib/links/colors";
 
@@ -1476,39 +1476,6 @@ function QuickViewSubboardSection({ cardId }: { cardId: string }) {
       </Link>
     </div>
   );
-}
-
-/**
- * Card-scoped URL link from the board store. Subscribes via
- * useSyncExternalStore (same idiom as useQuickViewSubboardContext) so the
- * chain/diamond reflects optimistic + server-confirmed link state. Returns
- * null setters when rendered outside a BoardStoreProvider (roadmap), so the
- * icon still renders read-only there.
- */
-function useQuickViewCardLink(cardId: string): {
-  link: CardUrlLink | undefined;
-  setCardLink: (l: CardUrlLink) => void;
-  removeCardLinkLocal: (cardId: string) => void;
-} {
-  const boardStore = useContext(BoardStoreContext);
-  const subscribe = useCallback(
-    (cb: () => void) => boardStore?.subscribe(cb) ?? (() => {}),
-    [boardStore],
-  );
-  const getLink = useCallback(
-    () => boardStore?.getState().cardLinkByCard[cardId],
-    [boardStore, cardId],
-  );
-  const link = useSyncExternalStore(subscribe, getLink, getLink);
-  const setCardLink = useCallback(
-    (l: CardUrlLink) => boardStore?.getState().setCardLink(l),
-    [boardStore],
-  );
-  const removeCardLinkLocal = useCallback(
-    (id: string) => boardStore?.getState().removeCardLinkLocal(id),
-    [boardStore],
-  );
-  return { link, setCardLink, removeCardLinkLocal };
 }
 
 /** Viewer's workspace role from WorkspaceStoreContext (same subscribe idiom
