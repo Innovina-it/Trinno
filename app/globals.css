@@ -299,6 +299,51 @@
     100% { background-position: -200% 0; }
   }
 
+  /* Login invite-hero: per-character entrance, then a soft title wave.
+     Drives `InviteHero` (components/auth/invite-hero.tsx). Each char carries
+     its cascade position in `--i`. */
+  @keyframes ih-reveal {
+    from { opacity: 0; transform: translateY(0.55em); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .ih-char {
+    display: inline-block;
+    animation: ih-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation-delay: calc(var(--i) * 42ms);
+  }
+  /* Title chars stay static after the reveal but react to the pointer: the
+     hovered glyph lifts, its two immediate neighbours ease up a touch (`:has`
+     reaches the left neighbour, `+` the right). Transform-only so it composes
+     cleanly once the reveal animation has released the transform. */
+  .ih-char--hover {
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .ih-char--hover:hover {
+    transform: translateY(-0.18em) scale(1.08);
+  }
+  .ih-char--hover:hover + .ih-char--hover,
+  .ih-char--hover:has(+ .ih-char--hover:hover) {
+    transform: translateY(-0.08em);
+  }
+  /* Reduced motion: the global block below zeroes duration/iterations, but
+     NOT animation-delay — without this the backwards-filled chars would stay
+     invisible for the full stagger window. Force them static, and drop the
+     hover lift so motion stays feedback-only. */
+  @media (prefers-reduced-motion: reduce) {
+    .ih-char,
+    .ih-char--hover {
+      animation: none !important;
+      animation-delay: 0ms !important;
+      opacity: 1;
+      transform: none;
+    }
+    .ih-char--hover:hover,
+    .ih-char--hover:hover + .ih-char--hover,
+    .ih-char--hover:has(+ .ih-char--hover:hover) {
+      transform: none;
+    }
+  }
+
   /* Smooth focus transitions */
   :focus-visible {
     transition:

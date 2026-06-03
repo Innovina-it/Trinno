@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { LoginForm } from "@/components/auth/login-form";
+import { InviteHero } from "@/components/auth/invite-hero";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 export default async function LoginPage() {
@@ -29,7 +30,9 @@ export default async function LoginPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center px-6 py-16">
+      <div className="flex-1 flex flex-col items-center justify-center gap-12 px-6 py-16">
+        <InviteHero />
+
         <section className="w-full max-w-sm space-y-6">
           <div className="space-y-2">
             <h1 className="font-sans text-2xl font-bold tracking-tight text-fg">
