@@ -61,7 +61,13 @@ export async function processPendingEmails(opts: {
     // that intend to send email must set the key.
     return { sent: 0, skipped: 0, errors: 0 };
   }
-  const fromAddr = process.env.RESEND_FROM ?? "Trinno <notifications@trinno.local>";
+  // Force the Resend sandbox sender outside production. Without a verified domain,
+  // Resend only delivers to the account owner — so dev/preview cannot accidentally
+  // email real users even if RESEND_API_KEY is the prod key.
+  const fromAddr =
+    process.env.NODE_ENV === "production"
+      ? (process.env.RESEND_FROM ?? "Trinno <notifications@trinno.app>")
+      : "Trinno <onboarding@resend.dev>";
 
   const sb = getServiceSupabase();
 

@@ -49,7 +49,13 @@ export async function sendInviteEmail(
 
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) return; // dev soft-fail: link generated, delivery skipped
-  const fromAddr = process.env.RESEND_FROM ?? "Trinno <notifications@trinno.local>";
+  // Force the Resend sandbox sender outside production. Without a verified domain,
+  // Resend only delivers to the account owner — so dev/preview cannot accidentally
+  // email real users even if RESEND_API_KEY is the prod key.
+  const fromAddr =
+    process.env.NODE_ENV === "production"
+      ? (process.env.RESEND_FROM ?? "Trinno <notifications@trinno.app>")
+      : "Trinno <onboarding@resend.dev>";
   const safeName = escapeHtml(workspaceName);
 
   const html = `
