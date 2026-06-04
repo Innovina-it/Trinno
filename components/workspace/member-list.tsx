@@ -39,10 +39,14 @@ export function MemberList({
               {m.displayName.slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          <span className="flex-1">{m.displayName}</span>
-          <Badge variant="outline">{m.role}</Badge>
+          <span className="min-w-0 flex-1 truncate" title={m.displayName}>
+            {m.displayName}
+          </span>
+          <Badge variant="outline" className="shrink-0">
+            {m.role}
+          </Badge>
           {m.pending && (
-            <Badge variant="outline" className="text-fg-faint">
+            <Badge variant="outline" className="shrink-0 text-fg-faint">
               Pending · invite sent
             </Badge>
           )}
@@ -50,6 +54,7 @@ export function MemberList({
             <Button
               size="sm"
               variant="outline"
+              className="shrink-0"
               disabled={pending}
               onClick={() =>
                 start(async () => {
@@ -97,11 +102,12 @@ export function MemberList({
                 : []),
             ]}
             size="sm"
-            className="w-28"
+            className="w-28 shrink-0"
           />
           <Button
             size="sm"
             variant="destructive"
+            className="shrink-0"
             disabled={m.role === "owner" || pending}
             onClick={() =>
               start(async () => {

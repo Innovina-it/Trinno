@@ -74,14 +74,14 @@ export function LinkIcon({
         }
       }}
       {...press}
-      className="inline-flex items-center justify-center size-5 rounded hover:bg-fg/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
+      className="inline-flex items-center justify-center size-6 rounded hover:bg-fg/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
       data-testid={`link-icon-${variant}`}
       data-haslink={hasLink ? "1" : "0"}
     >
       {!hasLink ? (
         <Link2 className="size-3.5 text-fg-faint" />
       ) : variant === "workspace" ? (
-        <Cloud className="size-3.5" style={{ color: "var(--accent-cyan)" }} />
+        <Cloud className="size-5" style={{ color: "var(--accent-cyan)" }} />
       ) : (
         <Diamond color={color || DEFAULT_LINK_COLOR} />
       )}
