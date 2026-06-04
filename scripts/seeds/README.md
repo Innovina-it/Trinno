@@ -33,6 +33,7 @@ Bare names (`aiwepi`, `testbed-500-cards`, …) resolve to `scripts/seeds/<name>
 | Name | What it seeds | Default owner | Uses new-format features |
 |---|---|---|---|
 | `aiwepi` | AIWEPI Switch project plan — sub-boards, milestones, status-mixed cards | `team@innovina.it` | sub-boards (parent_board_id), `workspaces.feature_flags`, `milestones` table, status_kind on INSERT |
+| `swich-mars` | Swich / M.A.R.S. Firefighter plan — 5 OR sub-boards, 25 WP tasks, 22 deliverable subtasks (+ Google Doc per deliverable), 8 milestones (16 Jan 2026 → 16 Jul 2028) | `team@innovina.it` | sub-boards (parent_board_id + parent_card_id), `workspaces.feature_flags`, `milestones` table w/ description, calendar-month dating |
 | `testbed-500-cards` | Board "TB-Big" with 500 cards in Backlog | `testbed@local` | `feature_flags.virtualized_board=true` |
 | `testbed-100-sprint` | "TB-Sprint" board + "TB-Sprint-100" sprint w/ 100 cards | `testbed@local` | bulk-archive / sprint-shift fixtures |
 | `testbed-5k-notif` | 5000 unread notifications for testbed user | `testbed@local` | partial index fixture (mig 0101) |
@@ -129,6 +130,62 @@ Workspace "AIWEPI Switch"  (feature_flags: subboards_enabled + shared_workspace_
 **Owner**: every card has `owner_id` set on INSERT (avoiding the 0081 trigger). Default user is `team@innovina.it`.
 
 Override anything via env: `SEED_EMAIL`, `SEED_WORKSPACE`, `SEED_CURRENT_MONTH`.
+
+---
+
+## `swich-mars` — what it builds
+
+Distinct project from `aiwepi`. Source: "Swich — WP e Piano di Progetto" (firefighting-UAV programme, M.A.R.S. Firefighter). Same machinery as `aiwepi`, different content.
+
+```
+Workspace "Swich — M.A.R.S. Firefighter"  (feature_flags: subboards_enabled + shared_workspace_cache_v2)
+├── Parent board "Swich · Piano di Progetto"
+│   ├── Lists: Todo / In Progress / Done
+│   ├── 5 OR anchor cards (task, dates = full OR range)   ← one per Obiettivo Realizzativo
+│   └── 8 Milestones (M1.1, M1.2, M2.1, M2.2, M3.1, M3.2, M4.1, M5.1) pinned to the parent board, with descriptions
+└── 5 sub-boards (parent_board_id = parent, parent_card_id = OR anchor)
+    └── ORn sub-board (each)
+        ├── Lists: Todo / In Progress / Done
+        ├── WPx.y task cards       (task, dates = WP text range; desc leads with RI/SS · partner · months · consulting)
+        └── Dx.y.z deliverable cards (subtask, parent = most-related WP, dated at their reporting milestone)
+            └── + a yellow URL link (card-scope `links` row). When GOOGLE_SA_KEYFILE is set,
+                the link points at a real Google Doc the seed creates/reuses in the Drive
+                folder; otherwise it falls back to a placeholder URL.
+```
+
+### Google Drive docs per deliverable (optional)
+
+When `GOOGLE_SA_KEYFILE` points at a service-account JSON key, the seed creates (or reuses)
+one empty Google Doc per deliverable and links each deliverable card to that doc's
+`webViewLink`. Drive layout:
+
+```
+<SWICH_DRIVE_FOLDER_ID>/
+├── OR1 — …/   └── Deliverables/   ├── D1.1.1 — …   ├── D1.1.2 — …   …
+├── OR2 — …/   └── Deliverables/   └── D2.1.1 — …
+└── …                              (one OR folder each, all find-or-created)
+```
+
+- **Service account** must be a member of the (Shared Drive) folder with create rights. A
+  Shared Drive is required in practice — a service account has no storage quota, so creating
+  in a personal *My Drive* folder fails with `storageQuotaExceeded`.
+- **Idempotent**: find-or-create by name (folders cached per run). The SA can create but not
+  delete in the Shared Drive, so re-seeding reuses the same folders/docs (stable URLs) rather
+  than duplicating them.
+- Docs are named after the deliverable title (e.g. `D1.1.1 — Report Requisiti tecnici …`),
+  nested under a folder per OR and a `Deliverables` folder inside each OR.
+- Env: `GOOGLE_SA_KEYFILE` (path to SA JSON), `SWICH_DRIVE_FOLDER_ID` (default
+  `1iysVHSw6qtnpsCNLswV-mB_sq9hS3eZK`), `SWICH_DELIVERABLE_SUBFOLDER` (default `Deliverables`).
+- `scripts/seeds/seed-swich-prod.sh` auto-passes `GOOGLE_SA_KEYFILE=/tmp/sa.json` when that
+  file exists. Requires `googleapis` (devDependency).
+
+- **Span**: calendar months, M1 = 16 Jan 2026 → 16 Jul 2028 (30 months). A WP "Mx–My" spans `monthStart(x)`→`monthStart(y+1)`.
+- **Counts**: 5 OR · 25 WP · 22 deliverables (each with a yellow link → its Google Doc, or a placeholder) · 8 milestones.
+- **Deliverable parenting**: deliverables map to milestones in the source, not 1:1 to WPs, so each is parented to the most topically-related WP and dated at its milestone (the producing WP may finish earlier — faithful to R&D reporting gates).
+- **All cards land in Todo, `owner_id = null`** (unowned template: "Mine" empty, team self-assigns). SEED_EMAIL is workspace owner + board admin.
+- **OR5 date note**: the OR table gives OR5 as M24–M30 but its WPs state M16–M30; the anchor uses M24–M30 and WPs use M16–M30 — the source is internally inconsistent and we encode it faithfully.
+
+Override via env: `SEED_EMAIL`, `SEED_WORKSPACE`, `SEED_RESET`, `GOOGLE_SA_KEYFILE`, `SWICH_DRIVE_FOLDER_ID`, `SWICH_DELIVERABLE_SUBFOLDER`.
 
 ---
 
