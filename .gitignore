@@ -54,9 +54,17 @@ supabase/.temp
 .env.local
 .env*.local
 
+# Secrets — plaintext prod env, never commit
+scripts/set-prod-env.sh
+
 # DB backups + local artifacts
 backup-*.sql
 error.log
 *.pdf
+
+# Stray root screenshots / scratch images
+/image.png
+/image copy*.png
+/image*.png
 docs/ai-agent-user-preferences-workflow.html
 .gstack/
