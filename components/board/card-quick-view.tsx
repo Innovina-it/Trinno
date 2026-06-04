@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { AssigneePicker } from "./assignee-picker";
 import { DatePicker } from "@/components/ui/date-picker";
+import { adjustTargetForStart } from "@/lib/dates/range-adjust";
 import {
   Dialog,
   DialogContent,
@@ -689,17 +690,15 @@ function CardQuickViewBody({
   }, []);
   const setStartDate = useCallback(
     (v: Date | null) => {
-      // Preserve the existing span: if both dates were set and the start
-      // moves, slide the target by the same delta so the duration is kept.
-      const oldStart = toDateValue(startDraft);
+      // Keep the target put when the start moves — only push it forward if the
+      // new start would land after it (which would invert the range). Editing
+      // start no longer drags the target along. See adjustTargetForStart.
       const tgt = toDateValue(targetDraft);
-      if (v && oldStart && tgt) {
-        const delta = v.getTime() - oldStart.getTime();
-        if (delta !== 0) setTargetDraft(new Date(tgt.getTime() + delta));
-      }
+      const nextTgt = adjustTargetForStart(v, tgt);
+      if (nextTgt !== tgt) setTargetDraft(nextTgt);
       setStartDraft(v);
     },
-    [startDraft, targetDraft],
+    [targetDraft],
   );
   const setTargetDate = useCallback((v: Date | null) => {
     setTargetDraft(v);
