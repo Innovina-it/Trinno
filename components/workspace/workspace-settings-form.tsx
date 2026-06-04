@@ -27,9 +27,13 @@ import { toast } from "sonner";
 export function WorkspaceSettingsForm({
   workspace,
   workspaceLink,
+  canDelete = false,
 }: {
   workspace: { id: string; name: string; autoAssignCreator: boolean };
   workspaceLink?: { url: string } | null;
+  // Only owner/admin may delete. Members/guests get a Forbidden from the
+  // server action anyway, so hide the entry point for them entirely.
+  canDelete?: boolean;
 }) {
   const router = useRouter();
   const [name, setName] = useState(workspace.name);
@@ -173,6 +177,7 @@ export function WorkspaceSettingsForm({
         />
       </section>
 
+      {canDelete && (
       <AlertDialog>
         <AlertDialogTrigger
           render={
@@ -195,6 +200,7 @@ export function WorkspaceSettingsForm({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      )}
     </div>
   );
 }

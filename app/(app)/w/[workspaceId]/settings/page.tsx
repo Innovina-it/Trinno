@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser, getSessionToken } from "@/lib/auth";
-import { getWorkspace, listMembers } from "@/lib/queries/workspaces";
+import {
+  getWorkspace,
+  getWorkspaceRole,
+  listMembers,
+} from "@/lib/queries/workspaces";
 import { WorkspaceSettingsForm } from "@/components/workspace/workspace-settings-form";
 import { MemberList } from "@/components/workspace/member-list";
 import { InviteMemberForm } from "@/components/workspace/invite-member-form";
@@ -18,11 +22,11 @@ export default async function WorkspaceSettingsPage({
   params: Promise<{ workspaceId: string }>;
 }) {
   const { workspaceId } = await params;
-  await requireUser();
+  const user = await requireUser();
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
-  const [members, calendarRows, workspaceLink] = await Promise.all([
+  const [members, calendarRows, workspaceLink, role] = await Promise.all([
     listMembers(token, workspaceId),
     listWorkspaceCalendar(token, workspaceId),
     dbAsUser(token, async (tx) => {
@@ -35,7 +39,9 @@ export default async function WorkspaceSettingsPage({
         .limit(1);
       return row ?? null;
     }).catch(() => null),
+    getWorkspaceRole(token, workspaceId, user.id),
   ]);
+  const canDelete = role === "owner" || role === "admin";
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-3 sm:px-4 md:px-6 py-6 md:py-8">
@@ -62,6 +68,7 @@ export default async function WorkspaceSettingsPage({
               autoAssignCreator: ws.autoAssignCreator,
             }}
             workspaceLink={workspaceLink}
+            canDelete={canDelete}
           />
         </div>
       </section>
