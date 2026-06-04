@@ -41,12 +41,27 @@ if(j.role!=="service_role"){console.error("role is "+(j.role||"?")+", need servi
 if(j.ref!=="xndddfopnlrzkydtnjxo"){console.error("wrong project ref: "+j.ref);process.exit(4);}
 '
 
+# Service-account key for Drive doc creation (optional). Defaults to /tmp/sa.json;
+# if present, deliverable links become real Google Docs, else placeholder. Only
+# the file PATH is recorded (not a secret).
+SA_KEYFILE="${GOOGLE_SA_KEYFILE:-/tmp/sa.json}"
+if [ -f "$SA_KEYFILE" ]; then
+  echo "Drive: SA key $SA_KEYFILE → deliverable links will be real Google Docs" >&2
+else
+  SA_KEYFILE=""
+  echo "Drive: no SA key (looked at /tmp/sa.json) → deliverable links use placeholder" >&2
+fi
+
 ENV_FILE="$(mktemp /tmp/.swich-env.XXXXXX)"
 cleanup(){ shred -u "$ENV_FILE" 2>/dev/null || rm -f "$ENV_FILE"; }
 trap cleanup EXIT INT TERM
+# All seed config flows through the env file the seed parses directly (bypasses
+# rtk/dotenv interference and avoids bash assignment-prefix pitfalls).
 {
   printf 'NEXT_PUBLIC_SUPABASE_URL=%s\n' "$URL"
   printf 'SUPABASE_SERVICE_ROLE_KEY=%s\n' "$KEY"
+  [ -n "$SA_KEYFILE" ] && printf 'GOOGLE_SA_KEYFILE=%s\n' "$SA_KEYFILE"
+  [ -n "$RESET" ] && printf 'SEED_RESET=true\n'
 } > "$ENV_FILE"
 
 # Read-only probe: auth works? owner exists? duplicate workspace?
@@ -71,16 +86,5 @@ const{data:dup}=await admin.from("workspaces").select("id,name").ilike("name","%
 console.error("  existing Swich workspaces:",JSON.stringify(dup||[]));
 '
 
-# Service-account key for Drive doc creation (optional). Defaults to /tmp/sa.json;
-# if present, deliverable links become real Google Docs. If absent, the seed
-# falls back to the placeholder URL. Only the file PATH is passed (no secret).
-SA_KEYFILE="${GOOGLE_SA_KEYFILE:-/tmp/sa.json}"
-if [ -f "$SA_KEYFILE" ]; then
-  echo "Drive: SA key $SA_KEYFILE → deliverable links will be real Google Docs" >&2
-else
-  SA_KEYFILE=""
-  echo "Drive: no SA key (looked at /tmp/sa.json) → deliverable links use placeholder" >&2
-fi
-
 echo "Probe OK. Seeding prod…" >&2
-SEED_ENV_FILE="$ENV_FILE" ${RESET:+SEED_RESET=true} ${SA_KEYFILE:+GOOGLE_SA_KEYFILE="$SA_KEYFILE"} node "$DIR/swich-mars.mjs"
+SEED_ENV_FILE="$ENV_FILE" node "$DIR/swich-mars.mjs"
