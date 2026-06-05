@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { sql, and, eq, isNull } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { workspaceMembers, workspaceInvitations, workspaces } from "@/lib/db/schema";
+import { workspaceMembers, workspaceInvitations, workspaces, profiles } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
   InviteMemberInput, ChangeMemberRoleInput, RemoveMemberInput, ResendInvitationInput,
@@ -88,7 +88,7 @@ export async function inviteMemberImpl(
     const unconfirmed = !!existing?.user && !existing.user.email_confirmed_at;
 
     if (unconfirmed) {
-      const workspaceName = await dbAsUser(token, async (tx) => {
+      const { workspaceName, inviterName } = await dbAsUser(token, async (tx) => {
         await tx
           .insert(workspaceInvitations)
           .values({
@@ -109,9 +109,14 @@ export async function inviteMemberImpl(
           .from(workspaces)
           .where(eq(workspaces.id, parsed.workspaceId))
           .limit(1);
-        return ws?.name ?? "your workspace";
+        const [actor] = await tx
+          .select({ name: profiles.displayName })
+          .from(profiles)
+          .where(eq(profiles.id, actorId))
+          .limit(1);
+        return { workspaceName: ws?.name ?? "your workspace", inviterName: actor?.name };
       });
-      await sendInviteEmail(email, workspaceName);
+      await sendInviteEmail(email, workspaceName, inviterName);
       return { kind: "invited", userId: existingUserId };
     }
 
@@ -124,9 +129,10 @@ export async function inviteMemberImpl(
     return { kind: "added", userId: existingUserId };
   }
 
-  // 2b. New email → create the pending invitation BEFORE inviting
-  // (the before-user-created hook reads it).
-  await dbAsUser(token, async (tx) => {
+  // 2b. New email → create the pending invitation BEFORE inviting (the
+  // before-user-created hook reads it for the domain carve-out), and capture
+  // the workspace + inviter names to personalize the invite email template.
+  const { workspaceName, inviterName } = await dbAsUser(token, async (tx) => {
     await tx.insert(workspaceInvitations).values({
       workspaceId: parsed.workspaceId,
       email,
@@ -134,13 +140,33 @@ export async function inviteMemberImpl(
       invitedBy: actorId,
       status: "pending",
     });
+    const [ws] = await tx
+      .select({ name: workspaces.name })
+      .from(workspaces)
+      .where(eq(workspaces.id, parsed.workspaceId))
+      .limit(1);
+    const [actor] = await tx
+      .select({ name: profiles.displayName })
+      .from(profiles)
+      .where(eq(profiles.id, actorId))
+      .limit(1);
+    return { workspaceName: ws?.name ?? "your workspace", inviterName: actor?.name };
   });
 
-  // 3. Native Supabase invite (creates the unconfirmed user + emails the link).
+  // 3. Native Supabase invite: creates the unconfirmed user AND emails the link
+  //    via the customized invite template (supabase/templates/invite.html).
+  //    inviter_name / workspace_name flow into the template as {{ .Data.* }} so
+  //    the email names the inviter + workspace and showcases the product. The
+  //    re-invite/resend paths (2a, resendInvitationImpl) deliver the same
+  //    content via Resend (lib/invite-email.ts) since inviteUserByEmail can't
+  //    re-send to an already-created unconfirmed user.
   const sb = getServiceSupabase();
   const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/accept-invite`;
   try {
-    const { data, error } = await sb.auth.admin.inviteUserByEmail(email, { redirectTo });
+    const { data, error } = await sb.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+      data: { inviter_name: inviterName ?? "", workspace_name: workspaceName },
+    });
 
     if (error || !data?.user) {
       // Race: the email got registered between step 1 and now → fall back to direct add.
@@ -219,7 +245,7 @@ export async function resendInvitationImpl(
   const email = parsed.email.toLowerCase();
   const actorId = decodeSub(token);
 
-  const workspaceName = await dbAsUser(token, async (tx) => {
+  const { workspaceName, inviterName } = await dbAsUser(token, async (tx) => {
     await assertCanManageWorkspaceMembers(tx, parsed.workspaceId, actorId);
     const [inv] = await tx
       .select({ id: workspaceInvitations.id })
@@ -238,10 +264,15 @@ export async function resendInvitationImpl(
       .from(workspaces)
       .where(eq(workspaces.id, parsed.workspaceId))
       .limit(1);
-    return ws?.name ?? "your workspace";
+    const [actor] = await tx
+      .select({ name: profiles.displayName })
+      .from(profiles)
+      .where(eq(profiles.id, actorId))
+      .limit(1);
+    return { workspaceName: ws?.name ?? "your workspace", inviterName: actor?.name };
   });
 
-  await sendInviteEmail(email, workspaceName);
+  await sendInviteEmail(email, workspaceName, inviterName);
 }
 
 export async function resendInvitation(input: Parameters<typeof resendInvitationImpl>[1]): Promise<void> {

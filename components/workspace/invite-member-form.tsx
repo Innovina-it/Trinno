@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { inviteMember } from "@/actions/workspace-members";
 import { lookupProfileByEmail } from "@/actions/profile-lookup";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { toast } from "sonner";
 
 type Preview =
@@ -26,6 +27,7 @@ export function InviteMemberForm({ workspaceId }: { workspaceId: string }) {
   const [role, setRole] = useState<"admin" | "member" | "guest">("member");
   const [pending, start] = useTransition();
   const [preview, setPreview] = useState<Preview>({ state: "idle" });
+  const isGuest = useIsGuest();
 
   // Debounce the lookup so we don't fire on every keystroke.
   useEffect(() => {
@@ -74,6 +76,8 @@ export function InviteMemberForm({ workspaceId }: { workspaceId: string }) {
       }
     });
   }
+
+  if (isGuest) return null;
 
   return (
     <form onSubmit={submit} className="flex items-end gap-2">

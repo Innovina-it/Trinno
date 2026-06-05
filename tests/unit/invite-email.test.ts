@@ -49,4 +49,35 @@ describe("sendInviteEmail (#K4)", () => {
     generateLink.mockResolvedValue({ data: null, error: { message: "boom" } });
     await expect(sendInviteEmail("a@b.com", "Acme")).rejects.toThrow();
   });
+
+  it("names the inviter in the subject and headline when provided", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    const f = vi.fn().mockResolvedValue({ ok: true, text: async () => "" });
+    global.fetch = f as unknown as typeof fetch;
+    await sendInviteEmail("a@b.com", "Acme", "Alice");
+    const body = JSON.parse((f.mock.calls[0][1] as { body: string }).body);
+    expect(body.subject).toBe("Alice invited you to Acme on Trinno");
+    expect(body.html).toContain("Alice invited you to join");
+    expect(body.text).toContain("Alice invited you to join Acme");
+  });
+
+  it("falls back to impersonal wording without an inviter name", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    const f = vi.fn().mockResolvedValue({ ok: true, text: async () => "" });
+    global.fetch = f as unknown as typeof fetch;
+    await sendInviteEmail("a@b.com", "Acme");
+    const body = JSON.parse((f.mock.calls[0][1] as { body: string }).body);
+    expect(body.subject).toBe("You've been invited to Acme on Trinno");
+    expect(body.html).toContain("You've been invited to join");
+  });
+
+  it("HTML-escapes the inviter name", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    const f = vi.fn().mockResolvedValue({ ok: true, text: async () => "" });
+    global.fetch = f as unknown as typeof fetch;
+    await sendInviteEmail("a@b.com", "Acme", "<script>Eve</script>");
+    const body = JSON.parse((f.mock.calls[0][1] as { body: string }).body);
+    expect(body.html).toContain("&lt;script&gt;");
+    expect(body.html).not.toContain("<script>Eve");
+  });
 });
