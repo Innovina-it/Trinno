@@ -800,7 +800,6 @@ export function CardModal({
       .catch((err) => {
         const m = (err as Error).message;
         toast.error(m);
-        errorBus.push({ message: `Sub-board create failed: ${m}` });
       })
       .finally(() => setPromotingSubboard(false));
   };

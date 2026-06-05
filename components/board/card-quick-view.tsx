@@ -1395,7 +1395,6 @@ function useQuickViewSubboardContext(
       .catch((err) => {
         const m = (err as Error).message;
         toast.error(m);
-        errorBus.push({ message: `Sub-board create failed: ${m}` });
       })
       .finally(() => setBusy(false));
   }, [boardStore, wsStore, attached, busy, cardId]);
@@ -1417,7 +1416,6 @@ function useQuickViewSubboardContext(
           } catch (err) {
             const m = (err as Error).message;
             toast.error("Detached, but delete failed: " + m);
-            errorBus.push({ message: `Sub-board delete failed: ${m}` });
             // Leave orphan record in ws store with parent_card_id=null.
             wsStore?.getState().upsertSubBoard({
               id: subBoardId,
@@ -1436,7 +1434,6 @@ function useQuickViewSubboardContext(
       } catch (err) {
         const m = (err as Error).message;
         toast.error(m);
-        errorBus.push({ message: `Sub-board detach failed: ${m}` });
       } finally {
         setBusy(false);
       }
