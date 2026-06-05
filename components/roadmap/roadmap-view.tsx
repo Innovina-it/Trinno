@@ -75,7 +75,11 @@ import {
   type LaneMode,
   type ViewMode,
 } from "./roadmap-header";
-import { RoadmapListView } from "./roadmap-list-view";
+import {
+  RoadmapListView,
+  RoadmapDeliverableView,
+  RoadmapMilestoneView,
+} from "./roadmap-list-view";
 import { BaselineMenu } from "./baselines/baseline-menu";
 import { BaselineVariancePanel } from "./baselines/baseline-variance-panel";
 import { useUserPreferences } from "@/lib/preferences/provider";
@@ -2166,6 +2170,26 @@ export function RoadmapView({
           workspaceId={workspaceId}
           filteredCardIds={listFilteredCardIds}
         />
+      ) : viewMode === "deliverable" ? (
+        // Deliverable table — link-bearing cards in the same CardTable the
+        // List view uses. Name click opens the in-place quick-edit popup.
+        <RoadmapDeliverableView
+          workspaceId={workspaceId}
+          filteredCardIds={listFilteredCardIds}
+          onOpenCard={onOpenCard}
+        />
+      ) : viewMode === "milestone" ? (
+        // Milestone table — every project milestone (name / date / colour) in
+        // the same CardTable the List view uses. Name click opens the existing
+        // milestone edit dialog.
+        <RoadmapMilestoneView
+          workspaceId={workspaceId}
+          milestones={storedMilestones}
+          onEdit={(m) => {
+            setEditingMilestone(m);
+            setMilestoneDialogOpen(true);
+          }}
+        />
       ) : cards.length === 0 ? (
         // Plan #16b-γ-C (#7) — explicit empty-state with editorial
         // CTA copy. We layer it inside the same data-testid="roadmap-view"
@@ -2297,7 +2321,10 @@ export function RoadmapView({
             </div>
             {laneLayout.map((ll) => {
               const laneHeaderCard = ll.lane.headerCard;
-              const draggable = laneMode === "sub_board" && laneHeaderCard !== null;
+              const draggable =
+                laneMode === "sub_board" &&
+                laneHeaderCard !== null &&
+                !isGuest;
               const isDragging =
                 drag.rowDragGhost !== null &&
                 laneHeaderCard?.id === drag.rowDragGhost.cardId;
@@ -2412,7 +2439,7 @@ export function RoadmapView({
                   : { width, height: totalHeight }
               }
               data-testid="roadmap-canvas"
-              onPointerDown={drag.onCanvasEmptyPointerDown}
+              onPointerDown={isGuest ? undefined : drag.onCanvasEmptyPointerDown}
             >
               {/* Vertical grid lines + header strip labels */}
               <div

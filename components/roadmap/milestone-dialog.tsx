@@ -34,6 +34,12 @@ import {
   createMilestone,
   updateMilestone,
 } from "@/actions/milestones";
+import { LINK_COLORS } from "@/lib/links/colors";
+
+// Preset milestone swatches reuse the shared deliverable/link palette, but
+// milestones default to Blue (the link picker itself defaults to Yellow).
+const DEFAULT_MILESTONE_COLOR =
+  LINK_COLORS.find((c) => c.key === "blu")?.hex ?? "#3b82f6";
 
 // Re-exported so milestone-markers.tsx can import without a circular dep.
 export type MilestoneRow = {
@@ -91,7 +97,7 @@ export function MilestoneDialog({
       name: "",
       date: "",
       description: "",
-      color: "#6366f1",
+      color: DEFAULT_MILESTONE_COLOR,
       icon: "",
     },
   });
@@ -105,7 +111,7 @@ export function MilestoneDialog({
           ? new Date(milestone.date).toISOString().slice(0, 10)
           : "",
         description: milestone?.description ?? "",
-        color: milestone?.color ?? "#6366f1",
+        color: milestone?.color ?? DEFAULT_MILESTONE_COLOR,
         icon: milestone?.icon ?? "",
       });
       setConfirming(false);
@@ -129,7 +135,7 @@ export function MilestoneDialog({
               name: values.name,
               date: values.date,
               description: values.description || null,
-              color: values.color || "#6366f1",
+              color: values.color || DEFAULT_MILESTONE_COLOR,
               icon: values.icon || null,
             })) as MilestoneRow;
           } else {
@@ -139,7 +145,7 @@ export function MilestoneDialog({
               name: values.name,
               date: values.date,
               description: values.description || null,
-              color: values.color || "#6366f1",
+              color: values.color || DEFAULT_MILESTONE_COLOR,
               icon: values.icon || null,
             })) as MilestoneRow;
           }
@@ -148,8 +154,11 @@ export function MilestoneDialog({
           setConfirming(false);
           onOpenChange(false);
           toast.success(isEdit ? "Milestone updated" : "Milestone created");
-        } catch {
-          toast.error("Failed to save milestone");
+        } catch (e) {
+          // Surface the real cause (RLS denial, validation, etc.) instead of a
+          // blanket message — the generic toast hid actionable errors.
+          const msg = e instanceof Error ? e.message : String(e);
+          toast.error(`Failed to save milestone: ${msg}`);
         }
       });
     },
@@ -229,25 +238,53 @@ export function MilestoneDialog({
             />
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="space-y-1 flex-1">
-              <Label htmlFor="m-color">Color</Label>
-              <Input
-                id="m-color"
-                type="color"
-                className="h-9 w-full cursor-pointer p-1"
-                {...register("color")}
-              />
-            </div>
-            <div className="space-y-1 flex-1">
-              <Label htmlFor="m-icon">Icon (emoji, optional)</Label>
-              <Input
-                id="m-icon"
-                placeholder="🏁"
-                maxLength={10}
-                {...register("icon")}
-              />
-            </div>
+          <div className="space-y-1">
+            <Label>Color</Label>
+            <Controller
+              control={control}
+              name="color"
+              render={({ field }) => (
+                <div
+                  className="flex items-center gap-2"
+                  data-testid="milestone-color-swatches"
+                >
+                  {LINK_COLORS.map((c) => (
+                    <button
+                      key={c.key}
+                      type="button"
+                      aria-label={c.label}
+                      title={c.label}
+                      onClick={() => field.onChange(c.hex)}
+                      data-testid={`milestone-color-${c.key}`}
+                      style={{ background: c.hex }}
+                      className={`size-6 rotate-45 rounded-[2px] ${
+                        field.value === c.hex
+                          ? "ring-2 ring-fg ring-offset-1 ring-offset-[color:var(--surface)]"
+                          : ""
+                      }`}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    aria-label="Custom color"
+                    value={field.value || DEFAULT_MILESTONE_COLOR}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    data-testid="milestone-color-custom"
+                    className="size-6 cursor-pointer rounded border border-[color:var(--hairline)] bg-transparent p-0"
+                  />
+                </div>
+              )}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="m-icon">Icon (emoji, optional)</Label>
+            <Input
+              id="m-icon"
+              placeholder="🏁"
+              maxLength={10}
+              {...register("icon")}
+            />
           </div>
 
           <DialogFooter

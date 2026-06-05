@@ -41,11 +41,18 @@ export const LANE_MODE_LABEL: Record<LaneMode, string> = {
 // timeline; "list" is the new flat hierarchical view ordered by
 // startDate ASC. URL parameter `?view=list` activates it; default stays
 // absent from the URL so existing deep-links keep working.
-export type ViewMode = "gantt" | "list";
-export const VIEW_MODES: ViewMode[] = ["gantt", "list"];
+export type ViewMode = "gantt" | "list" | "deliverable" | "milestone";
+export const VIEW_MODES: ViewMode[] = [
+  "gantt",
+  "list",
+  "deliverable",
+  "milestone",
+];
 export const VIEW_MODE_LABEL: Record<ViewMode, string> = {
   gantt: "Gantt",
   list: "List",
+  deliverable: "Deliverable",
+  milestone: "Milestone",
 };
 const ZOOM_LABEL: Record<Zoom, string> = {
   fit: "Fit",

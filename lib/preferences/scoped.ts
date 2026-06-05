@@ -12,7 +12,7 @@ import {
 } from "@/lib/preferences/types";
 
 const WORKSPACE_TABS = ["board", "roadmap"] as const;
-const ROADMAP_VIEW_MODES = ["gantt", "list"] as const;
+const ROADMAP_VIEW_MODES = ["gantt", "list", "deliverable", "milestone"] as const;
 const ROADMAP_ZOOMS = ["fit", "week", "month", "quarter"] as const;
 const ROADMAP_LANE_MODES = ["sub_board", "assignee", "component"] as const;
 

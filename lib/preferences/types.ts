@@ -2,7 +2,11 @@ import { type AssigneeMode, type Filters } from "@/lib/board-filters";
 import { type Zoom } from "@/lib/roadmap/dates";
 
 export type WorkspacePreferenceTab = "board" | "roadmap";
-export type RoadmapViewModePreference = "gantt" | "list";
+export type RoadmapViewModePreference =
+  | "gantt"
+  | "list"
+  | "deliverable"
+  | "milestone";
 
 export type RoadmapLaneModePreference = "sub_board" | "assignee" | "component";
 
