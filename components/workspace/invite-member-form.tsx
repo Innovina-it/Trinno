@@ -80,9 +80,9 @@ export function InviteMemberForm({ workspaceId }: { workspaceId: string }) {
   if (isGuest) return null;
 
   return (
-    <form onSubmit={submit} className="flex items-end gap-2">
-      <div className="space-y-1.5 flex-1">
-        <Label htmlFor="invite-email">Email</Label>
+    <form onSubmit={submit} className="space-y-1.5">
+      <Label htmlFor="invite-email">Email</Label>
+      <div className="flex items-center gap-2">
         <Input
           id="invite-email"
           type="email"
@@ -90,54 +90,55 @@ export function InviteMemberForm({ workspaceId }: { workspaceId: string }) {
           onChange={(e) => setEmail(e.target.value)}
           required
           aria-describedby="invite-preview"
+          className="flex-1"
         />
-        <div
-          id="invite-preview"
-          className="mono-meta-sm text-fg-faint min-h-4"
-          aria-live="polite"
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button type="button" variant="outline">
+                Role: {role}
+              </Button>
+            }
+          />
+          <DropdownMenuContent>
+            <DropdownMenuRadioGroup
+              value={role}
+              onValueChange={(v) => setRole(v as "admin" | "member" | "guest")}
+            >
+              <DropdownMenuRadioItem value="member">Member</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="admin">Admin</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="guest">Guest (read-only)</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button
+          type="submit"
+          disabled={pending || !email}
         >
-          {preview.state === "checking" && "CHECKING…"}
-          {preview.state === "found" && (
-            <>
-              <span className="text-fg">{preview.displayName}</span>
-              {preview.handle && (
-                <span className="text-fg-muted"> · @{preview.handle}</span>
-              )}
-            </>
-          )}
-          {preview.state === "exists" && "USER EXISTS"}
-          {preview.state === "missing" && (
-            <span className="text-fg-muted">
-              NEW PERSON — WE&apos;LL EMAIL AN INVITE TO SET A PASSWORD
-            </span>
-          )}
-        </div>
+          Invite
+        </Button>
       </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button type="button" variant="outline">
-              Role: {role}
-            </Button>
-          }
-        />
-        <DropdownMenuContent>
-          <DropdownMenuRadioGroup
-            value={role}
-            onValueChange={(v) => setRole(v as "admin" | "member" | "guest")}
-          >
-            <DropdownMenuRadioItem value="member">Member</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="admin">Admin</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="guest">Guest (read-only)</DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Button
-        type="submit"
-        disabled={pending || !email}
+      <div
+        id="invite-preview"
+        className="mono-meta-sm text-fg-faint min-h-4"
+        aria-live="polite"
       >
-        Invite
-      </Button>
+        {preview.state === "checking" && "CHECKING…"}
+        {preview.state === "found" && (
+          <>
+            <span className="text-fg">{preview.displayName}</span>
+            {preview.handle && (
+              <span className="text-fg-muted"> · @{preview.handle}</span>
+            )}
+          </>
+        )}
+        {preview.state === "exists" && "USER EXISTS"}
+        {preview.state === "missing" && (
+          <span className="text-fg-muted">
+            NEW PERSON — WE&apos;LL EMAIL AN INVITE TO SET A PASSWORD
+          </span>
+        )}
+      </div>
     </form>
   );
 }
