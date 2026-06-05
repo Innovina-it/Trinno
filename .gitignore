@@ -57,6 +57,9 @@ supabase/.temp
 # Secrets — plaintext prod env, never commit
 scripts/set-prod-env.sh
 
+# Prod seed/delete ops scripts — may carry prod keys, keep local only
+scripts/seeds/*-prod.sh
+
 # Seed planning docs carry inline prod keys — keep local only, never push
 docs/features/collabora-innova-seed/
 docs/features/filse-spazio-wildfire-seed/

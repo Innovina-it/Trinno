@@ -154,6 +154,10 @@ const DRIVE_FOLDER_ID =
 const DELIVERABLE_SUBFOLDER =
   process.env.SWICH_DELIVERABLE_SUBFOLDER || "Deliverables";
 const SA_KEYFILE = process.env.GOOGLE_SA_KEYFILE;
+// Per-deliverable docs are COPIES of this template Google Doc (not empty docs);
+// same template as the ARISE seed by default. The SA must have read access to it.
+const TEMPLATE_DOC_ID =
+  process.env.SWICH_TEMPLATE_DOC_ID || "1oSPGtJMTHBBOpZRd8L02njO9mbJDn5KL";
 
 async function setupDrive() {
   if (!SA_KEYFILE) return null;
@@ -196,6 +200,15 @@ async function setupDrive() {
     let res;
     if (hit) {
       res = { ...hit, created: false };
+    } else if (mimeType === DOC_MIME && TEMPLATE_DOC_ID) {
+      // Docs are copied from the template (folders still created normally).
+      const r = await drive.files.copy({
+        fileId: TEMPLATE_DOC_ID,
+        requestBody: { name, parents: [parentId] },
+        supportsAllDrives: true,
+        fields: "id,name,webViewLink",
+      });
+      res = { ...r.data, created: true };
     } else {
       const r = await drive.files.create({
         requestBody: { name, mimeType, parents: [parentId] },
