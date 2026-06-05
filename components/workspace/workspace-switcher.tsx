@@ -30,13 +30,16 @@ const SEARCH_THRESHOLD = 5;
 // workspace-scoped IDs (sprints/{sprintId}, versions/{versionId})
 // are deliberately excluded — the ID wouldn't exist in the target
 // workspace, so we drop to the section root or the workspace root.
+// `settings` is also deliberately excluded: switching workspaces from
+// the Manage-workspace page should drop INTO the chosen workspace's
+// content (its roadmap by default via `/w/{id}`), not pin you to the
+// new workspace's settings.
 const PRESERVED_SUBSECTIONS = new Set([
   "backlog",
   "all-tasks",
   "archive",
   "boards",
   "roadmap",
-  "settings",
   "sprints",
   "versions",
 ]);
