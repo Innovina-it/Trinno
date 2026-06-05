@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { HeroAnimation } from "@/components/auth/hero-animation";
 
 /**
  * Login-page hero: three centered lines with a per-character entrance.
@@ -22,6 +23,8 @@ type Line = {
   ink?: boolean;
   // Wrap the line in the chromatic gradient-border chip (brand-pill).
   pill?: boolean;
+  // Hovering this line reveals the animation overlay layer (`.hero-overlay`).
+  trigger?: boolean;
 };
 
 const LINES: Line[] = [
@@ -41,14 +44,24 @@ const LINES: Line[] = [
     text: "A service of Innovina.it",
     className: "mono-meta-sm text-fg-muted",
     pill: true,
+    trigger: true,
   },
 ];
 
-export function InviteHero() {
+export function InviteHero({
+  animationVariant,
+}: {
+  // Which of the four hero animations the overlay shows. Picked per request
+  // on the login page; omit to skip the overlay entirely.
+  animationVariant?: number;
+}) {
   // Single running index so the reveal cascades line-to-line, not per-line.
   let charIndex = 0;
   return (
-    <div className="text-center space-y-3.5">
+    // `display: contents` wrapper — keeps the centered lines as the flex child
+    // they already were, while giving the fixed overlay a `:has(:hover)` host.
+    <div className="invite-hero">
+      <div className="text-center space-y-3.5">
       {LINES.map((line, li) => {
         const chars = (
           <span aria-hidden="true">
@@ -73,12 +86,31 @@ export function InviteHero() {
           </span>
         );
         return (
-          <p key={li} className={line.className}>
+          <p
+            key={li}
+            className={
+              line.trigger ? `${line.className} brand-trigger` : line.className
+            }
+          >
             <span className="sr-only">{line.text}</span>
             {line.pill ? <span className="brand-pill">{chars}</span> : chars}
           </p>
         );
       })}
+      </div>
+
+      {/* Animation lives on its own fixed layer above the page. Hidden until
+          the "A service of Innovina.it" line is hovered (`.brand-trigger`),
+          revealed via `:has()` in globals.css — no client JS. Decorative, so
+          pointer-events are off and the layer is aria-hidden. */}
+      {typeof animationVariant === "number" && (
+        <div className="hero-overlay" aria-hidden="true">
+          <HeroAnimation
+            variant={animationVariant}
+            frameClassName="w-[min(680px,78vw)] max-w-none"
+          />
+        </div>
+      )}
     </div>
   );
 }

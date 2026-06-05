@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { LoginForm } from "@/components/auth/login-form";
 import { InviteHero } from "@/components/auth/invite-hero";
+import { HERO_VARIANT_COUNT } from "@/components/auth/hero-animation";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 export default async function LoginPage() {
@@ -15,6 +16,12 @@ export default async function LoginPage() {
     data: { user },
   } = await supa.auth.getUser();
   if (user) redirect("/");
+
+  // Pick one of the four hero animations per request. The page is already
+  // dynamic (it reads auth cookies above), so this re-rolls on every load; the
+  // chosen variant arrives in the markup, so there is no hydration mismatch.
+  // The overlay only shows while "A service of Innovina.it" is hovered.
+  const heroVariant = Math.floor(Math.random() * HERO_VARIANT_COUNT);
 
   return (
     <main className="relative min-h-dvh flex flex-col">
@@ -31,7 +38,7 @@ export default async function LoginPage() {
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center gap-12 px-6 py-16">
-        <InviteHero />
+        <InviteHero animationVariant={heroVariant} />
 
         <section className="w-full max-w-sm space-y-6">
           <div className="space-y-2">
