@@ -11,6 +11,7 @@ import {
   removeBoardMember,
 } from "@/actions/board-members";
 import { useBoardMembershipSync } from "@/hooks/use-board-membership-sync";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import {
   PeoplePicker,
   type PickerSelected,
@@ -39,6 +40,7 @@ export function BoardMembersPanel({
 }) {
   const [selected, setSelected] = useState<PickerSelected<Role>[]>([]);
   const [pending, start] = useTransition();
+  const isGuest = useIsGuest();
   // Live updates so a concurrent admin's role change / removal in
   // another tab is reflected here without a hard reload.
   useBoardMembershipSync(boardId);
@@ -70,6 +72,7 @@ export function BoardMembersPanel({
 
   return (
     <div className="space-y-4">
+      {!isGuest && (
       <div className="space-y-3">
         <PeoplePicker<Role>
           selected={selected}
@@ -95,6 +98,7 @@ export function BoardMembersPanel({
           </Button>
         </div>
       </div>
+      )}
 
       <ul className="divide-y divide-hairline rounded-xl border border-hairline">
         {members.map((m) => (
@@ -111,6 +115,8 @@ export function BoardMembersPanel({
             </Avatar>
             <span className="flex-1">{m.displayName}</span>
             <Badge variant="outline">{m.role}</Badge>
+            {!isGuest && (
+            <>
             <Select
               value={m.role}
               disabled={pending}
@@ -161,6 +167,8 @@ export function BoardMembersPanel({
             >
               Remove
             </Button>
+            </>
+            )}
           </li>
         ))}
       </ul>

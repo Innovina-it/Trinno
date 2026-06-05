@@ -137,7 +137,12 @@ export function TopNav({
               >
                 tn<span className="text-fg-faint">.</span>
               </span>
-              <span className="hidden sm:inline font-sans text-sm font-semibold tracking-tight text-fg">
+              {/* Resend-style wordmark: editorial serif (Instrument Serif,
+                  already loaded as --font-instrument) with a white→grey
+                  top-to-bottom gradient via bg-clip-text. Intentionally
+                  overrides DESIGN.md's no-gradient-text rule for the brand
+                  mark only, per product request. */}
+              <span className="hidden sm:inline font-[family-name:var(--font-instrument)] text-lg leading-none tracking-tight bg-[linear-gradient(180deg,#ffffff_0%,#8f8f8f_100%)] bg-clip-text text-transparent">
                 Trinno
               </span>
             </Link>

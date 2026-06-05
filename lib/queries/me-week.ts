@@ -1,8 +1,9 @@
 import { and, asc, eq, gte, isNotNull, lte, notInArray } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { boards, cards, cardMembers, workspaces } from "@/lib/db/schema";
+import { boards, cards, cardMembers, lists, workspaces } from "@/lib/db/schema";
 import { meId } from "@/lib/queries/me";
 import { listMyGuestWorkspaceIds } from "@/lib/queries/me-guard";
+import type { StatusKind } from "@/lib/status";
 
 export type MyWeekCard = {
   id: string;
@@ -13,6 +14,7 @@ export type MyWeekCard = {
   estimateMin: number | null;
   storyPoints: number | null;
   priority: "p0" | "p1" | "p2" | "p3" | "p4" | null;
+  statusKind: StatusKind | null;
   completedAt: Date | null;
   boardId: string;
   boardTitle: string;
@@ -52,6 +54,7 @@ export async function listMyWeekCards(
       estimateMin: cards.estimateMin,
       storyPoints: cards.storyPoints,
       priority: cards.priority,
+      statusKind: lists.statusKind,
       completedAt: cards.completedAt,
       boardId: cards.boardId,
       boardTitle: boards.title,
@@ -73,6 +76,7 @@ export async function listMyWeekCards(
     const ownerRows = await tx
       .select({ ...baseSelect })
       .from(cards)
+      .innerJoin(lists, eq(lists.id, cards.listId))
       .innerJoin(boards, eq(boards.id, cards.boardId))
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
       .where(
@@ -93,6 +97,7 @@ export async function listMyWeekCards(
       .select({ ...baseSelect })
       .from(cardMembers)
       .innerJoin(cards, eq(cards.id, cardMembers.cardId))
+      .innerJoin(lists, eq(lists.id, cards.listId))
       .innerJoin(boards, eq(boards.id, cards.boardId))
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
       .where(
@@ -117,6 +122,7 @@ export async function listMyWeekCards(
       estimateMin: r.estimateMin ?? null,
       storyPoints: r.storyPoints ?? null,
       priority: (r.priority ?? null) as MyWeekCard["priority"],
+      statusKind: (r.statusKind ?? null) as MyWeekCard["statusKind"],
       completedAt: (r.completedAt ?? null) as Date | null,
       boardId: r.boardId,
       boardTitle: r.boardTitle,

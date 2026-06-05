@@ -26,9 +26,17 @@ export function LinkEditDialog({
   const [url, setUrl] = useState(initialUrl);
   const [color, setColor] = useState(initialColor || DEFAULT_LINK_COLOR);
   const [busy, setBusy] = useState(false);
+  // Two-step confirm for the destructive Remove action. Inline (not a nested
+  // AlertDialog) to mirror the repo's in-dialog confirm convention and dodge
+  // modal-in-modal focus-trap issues.
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
 
   useEffect(() => {
-    if (open) { setUrl(initialUrl); setColor(initialColor || DEFAULT_LINK_COLOR); }
+    if (open) {
+      setUrl(initialUrl);
+      setColor(initialColor || DEFAULT_LINK_COLOR);
+      setConfirmingRemove(false);
+    }
   }, [open, initialUrl, initialColor]);
 
   const dirty = useMemo(
@@ -53,7 +61,7 @@ export function LinkEditDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md" data-testid="link-edit-dialog">
         <DialogHeader>
-          <DialogTitle>{hadLink ? "Modifica link" : "Aggiungi link"}</DialogTitle>
+          <DialogTitle>{hadLink ? "Edit link" : "Add link"}</DialogTitle>
         </DialogHeader>
 
         <label className="block text-xs text-fg-faint mb-1">URL</label>
@@ -69,7 +77,7 @@ export function LinkEditDialog({
 
         {scope === "card" && (
           <div className="mt-3">
-            <div className="text-xs text-fg-faint mb-1">Colore</div>
+            <div className="text-xs text-fg-faint mb-1">Color</div>
             <div className="flex items-center gap-2">
               {LINK_COLORS.map((c) => (
                 <button
@@ -85,7 +93,7 @@ export function LinkEditDialog({
               ))}
               <input
                 type="color"
-                aria-label="Colore personalizzato"
+                aria-label="Custom color"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
                 data-testid="link-color-custom"
@@ -96,19 +104,52 @@ export function LinkEditDialog({
         )}
 
         <DialogFooter className="mt-4 flex items-center justify-between gap-2">
-          {hadLink && onRemove ? (
-            <Button variant="ghost" onClick={remove} disabled={busy}
-              data-testid="link-remove" className="text-red-400 hover:text-red-300">
-              Rimuovi
-            </Button>
-          ) : <span />}
-          <Button
-            onClick={() => (dirty ? save() : onOpenChange(false))}
-            disabled={busy || (dirty && url.trim().length === 0)}
-            data-testid="link-save"
-          >
-            {dirty ? "Save" : "Close"}
-          </Button>
+          {confirmingRemove ? (
+            <>
+              <span
+                className="mono-meta-sm text-fg-muted"
+                data-testid="link-remove-confirm-prompt"
+              >
+                Remove this link?
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setConfirmingRemove(false)}
+                  disabled={busy}
+                  data-testid="link-remove-cancel"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={remove}
+                  disabled={busy}
+                  data-testid="link-remove-confirm"
+                  className="text-red-400 hover:text-red-300"
+                >
+                  Remove
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              {hadLink && onRemove ? (
+                <Button variant="ghost" onClick={() => setConfirmingRemove(true)} disabled={busy}
+                  data-testid="link-remove" className="text-red-400 hover:text-red-300">
+                  Remove
+                </Button>
+              ) : <span />}
+              <Button
+                onClick={() => (dirty ? save() : onOpenChange(false))}
+                disabled={busy || (dirty && url.trim().length === 0)}
+                data-testid="link-save"
+              >
+                {dirty ? "Save" : "Close"}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

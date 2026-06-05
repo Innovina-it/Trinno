@@ -479,14 +479,16 @@ export function BoardView({
               <Layers3 className="size-3.5" />
               <span>Sprints</span>
             </button>
-            <Button
-              render={<Link href={`/b/${board.id}/settings`} />}
-              nativeButton={false}
-              variant="ghost"
-              size="sm"
-            >
-              Settings
-            </Button>
+            {!isGuest && (
+              <Button
+                render={<Link href={`/b/${board.id}/settings`} />}
+                nativeButton={false}
+                variant="ghost"
+                size="sm"
+              >
+                Settings
+              </Button>
+            )}
           </div>
         </div>
         <div className="mt-3 flex items-center gap-2 flex-wrap">

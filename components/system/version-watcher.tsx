@@ -51,15 +51,15 @@ export function VersionWatcher() {
       const liveId = await fetchLiveId(ac.signal);
       if (cancelled || !isClientStale(OWN_ID, liveId)) return;
       notified.current = true;
-      toast("Nuova versione disponibile", {
+      toast("New version available", {
         id: TOAST_ID,
-        description: "Ricarica per aggiornare all'ultima versione.",
+        description: "Reload to update to the latest version.",
         duration: Infinity,
         action: {
-          label: "Ricarica",
+          label: "Reload",
           onClick: () => window.location.reload(),
         },
-        cancel: { label: "Dopo", onClick: () => {} },
+        cancel: { label: "Later", onClick: () => {} },
       });
     }
 

@@ -86,6 +86,13 @@ export function WorkspaceSwitcher({
     );
 
   function targetFor(newId: string): string {
+    // From the cross-workspace Home (/me) or the All Workspace Timeline,
+    // picking a specific workspace should LEAVE that personal view and drop
+    // INTO the chosen workspace's content (its roadmap by default) — not stay
+    // pinned like the other workspace-agnostic personal routes.
+    if (pathname === "/timeline" || pathname === "/me") {
+      return `/w/${newId}`;
+    }
     if (onPersonalRoute) {
       return pathname;
     }
@@ -124,7 +131,7 @@ export function WorkspaceSwitcher({
           className="inline-flex items-center gap-1.5 h-8 px-2 max-w-[220px] rounded-md text-sm font-semibold tracking-tight text-fg hover:bg-[rgb(255_255_255/0.06)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
         >
           <span className="truncate">
-            {active?.name ?? (pathname === "/timeline" ? "All Workspaces" : "Workspaces")}
+            {active?.name ?? (pathname === "/timeline" ? "All Workspace Timelines" : "Workspaces")}
           </span>
           <ChevronDown className="size-3 text-fg-faint shrink-0" />
         </DropdownMenuTrigger>
@@ -201,7 +208,7 @@ export function WorkspaceSwitcher({
             data-testid="workspace-switcher-timeline"
           >
             <CalendarRange className="size-3.5" />
-            <span className="text-sm">Workspace timeline</span>
+            <span className="text-sm">All Workspace Timelines</span>
           </DropdownMenuItem>
           {active && (
             <DropdownMenuItem

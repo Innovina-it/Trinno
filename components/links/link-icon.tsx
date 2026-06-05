@@ -53,10 +53,10 @@ export function LinkIcon({
   if (!hasLink && !canEdit) return null;
 
   const label = !hasLink
-    ? "Aggiungi link"
+    ? "Add link"
     : canEdit
-      ? "Apri link (tieni premuto o premi F2 per modificare)"
-      : "Apri link";
+      ? "Open link (hold or press F2 to edit)"
+      : "Open link";
 
   return (
     <button

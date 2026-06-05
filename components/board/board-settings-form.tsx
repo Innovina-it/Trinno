@@ -18,6 +18,7 @@ import {
 import { renameBoard, setBoardArchived, deleteBoard } from "@/actions/boards";
 import { toast } from "sonner";
 import { FavoriteToggle } from "@/components/workspace/favorite-toggle";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 
 export function BoardSettingsForm({
   board,
@@ -34,6 +35,7 @@ export function BoardSettingsForm({
   const [title, setTitle] = useState(board.title);
   const [pending, start] = useTransition();
   const router = useRouter();
+  const isGuest = useIsGuest();
 
   function rename(e: React.FormEvent) {
     e.preventDefault();
@@ -73,6 +75,8 @@ export function BoardSettingsForm({
         <span className="mono-meta-sm text-fg-faint">BOARD ACTIONS</span>
         <FavoriteToggle boardId={board.id} initial={favorited} />
       </div>
+      {!isGuest && (
+      <>
       <form onSubmit={rename} className="space-y-2">
         <Label htmlFor="board-rename">Title</Label>
         <div className="flex gap-2">
@@ -114,6 +118,8 @@ export function BoardSettingsForm({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </>
+      )}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { listEffectiveWorkspaceHolidays } from "@/lib/queries/workspace-holidays
 import { MeTimelineWorkspaceFilter } from "@/components/me/me-timeline-workspace-filter";
 import { TimelineBands, type TimelineBand } from "@/components/timeline/timeline-bands";
 
-export const metadata = { title: "Workspace timelines" };
+export const metadata = { title: "All Workspace Timelines" };
 
 // Workspace timelines: one band per workspace the caller can see. The
 // server hands TimelineBands a raw list with full snapshots; the client
@@ -93,7 +93,7 @@ export default async function CommonTimelinePage({
             COMMON / ROADMAP
           </span>
           <h1 className="serif-display text-3xl md:text-4xl leading-none">
-            Workspace timelines
+            All Workspace Timelines
           </h1>
         </div>
         <Link

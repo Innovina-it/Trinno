@@ -308,6 +308,10 @@
   }
   .ih-char {
     display: inline-block;
+    /* Each char (including a lone " ") lives in its own inline-block box;
+       without `pre` a space-only box collapses to zero width and the words
+       run together. `pre` preserves the single space. */
+    white-space: pre;
     animation: ih-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
     animation-delay: calc(var(--i) * 42ms);
   }
@@ -580,6 +584,46 @@
   letter-spacing: -0.035em;
   line-height: 1;
   color: var(--fg);
+}
+
+/* ─── Auth-hero exceptions ───────────────────────────────────────────────
+   The two utilities below intentionally break the monochrome / no-gradient
+   discipline documented in DESIGN.md. They exist ONLY for the login hero
+   (components/auth/invite-hero.tsx) at explicit product request, modelled on
+   resend.com. Do not reuse elsewhere without revisiting that decision. */
+
+/* Resend-style ink: bright white at the cap line fading to grey at the
+   baseline, clipped to the glyphs. Applied per-character so it survives the
+   `.ih-char` reveal/hover transforms. */
+@utility hero-ink {
+  background-image: linear-gradient(180deg, #ffffff 0%, #d6d6d6 40%, #595959 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Colored gradient-border chip (the "Announcing …" pill on resend.com).
+   Double-background trick: solid fill clipped to the padding box, the
+   chromatic gradient clipped to the border box; a soft outer glow lights
+   the edge. Chromatic by intent — a sanctioned exception to the palette.
+   Kept as a plain class (not @utility): the layered background shorthand
+   tripped Lightning CSS and the utility silently emitted nothing. */
+.brand-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  border-radius: 9999px;
+  padding: 0.34rem 0.9rem;
+  border: 1px solid transparent;
+  background-image:
+    linear-gradient(var(--bg-1), var(--bg-1)),
+    linear-gradient(110deg, #2ee6d6 0%, #3b82f6 48%, #a855f7 100%);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  box-shadow:
+    0 0 16px -6px rgb(46 230 214 / 0.55),
+    0 0 24px -10px rgb(168 85 247 / 0.45);
 }
 
 /* Drag preview emphasis: card lifts with white halo. */

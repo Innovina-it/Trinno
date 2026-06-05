@@ -3,10 +3,50 @@
 import Link from "next/link";
 import type { MyWeekCard } from "@/lib/queries/me-week";
 import { formatDate } from "@/lib/format-date";
+import { STATUS_LABEL, statusBarFill, type StatusKind } from "@/lib/status";
 import {
   PRIORITY_TINT,
   type CardPriority,
 } from "@/components/board/card/priority-picker";
+
+// Workflow order for the legend. `done` carries completed cards too.
+const STATUS_ORDER: StatusKind[] = [
+  "todo",
+  "in_progress",
+  "review",
+  "done",
+  "blocked",
+];
+
+// Compact, muted status key. Status is the only sanctioned chroma (DESIGN.md),
+// and bars show the card title not its state, so the legend is what makes the
+// colours decodable — paired with the per-status texture it satisfies "status
+// never by colour alone". Swatches render static (no pulse) to keep idle UI
+// quiet.
+function StatusLegend() {
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pb-3"
+      data-testid="me-week-legend"
+    >
+      {STATUS_ORDER.map((s) => {
+        const f = statusBarFill(s, { motion: false });
+        return (
+          <span key={s} className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className={`inline-block h-3 w-5 rounded-[2px] border border-fg/10 ${f.className}`}
+              style={f.style}
+            />
+            <span className="mono-meta-sm uppercase tracking-[0.1em] text-fg-faint">
+              {STATUS_LABEL[s]}
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 const DAY_PX = 56;
 const MIN_BAR_PX = 28;
@@ -48,17 +88,6 @@ function diffDays(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / 86_400_000);
 }
 
-// ── priority bar colour ───────────────────────────────────────────────────
-function barClassName(priority: MyWeekCard["priority"]): string {
-  if (priority && priority in PRIORITY_TINT) {
-    // extract the bg portion of the chip class (first token)
-    const chipClass = PRIORITY_TINT[priority as CardPriority].chip;
-    const bg = chipClass.split(" ").find((c) => c.startsWith("bg-")) ?? "";
-    return bg;
-  }
-  return "";
-}
-
 // ── component ─────────────────────────────────────────────────────────────
 export function MeWeekGantt({ cards }: { cards: MyWeekCard[] }) {
   const now = new Date();
@@ -94,7 +123,9 @@ export function MeWeekGantt({ cards }: { cards: MyWeekCard[] }) {
   }
 
   return (
-    <div data-testid="me-week-gantt" className="overflow-x-auto">
+    <div data-testid="me-week-gantt">
+      <StatusLegend />
+      <div className="overflow-x-auto">
       <div style={{ minWidth: totalWidth }} className="relative">
 
         {/* ── capacity strip ──────────────────────────────────────────── */}
@@ -168,13 +199,31 @@ export function MeWeekGantt({ cards }: { cards: MyWeekCard[] }) {
             const widthPx = Math.max(MIN_BAR_PX, spanDays * DAY_PX - 2);
 
             const isDone = card.completedAt !== null;
-            const bgCls = barClassName(card.priority);
+            // Completed cards read as the "done" hatch even if their list
+            // isn't mapped to done — completion is the strongest signal.
+            // Otherwise the bar takes its list's status fill.
+            const fill = statusBarFill(isDone ? "done" : card.statusKind);
+            // Priority rides as a 3px left-edge stripe (DESIGN.md: priority is
+            // a stripe/dot, never a fill) — same grammar as the roadmap bar, so
+            // status (fill) and priority (stripe) read on one bar.
+            const priorityDot = card.priority
+              ? PRIORITY_TINT[card.priority as CardPriority].dot
+              : null;
+            const statusLabel = isDone
+              ? "done"
+              : card.statusKind
+                ? STATUS_LABEL[card.statusKind]
+                : null;
 
             const tooltip = [
               card.title,
+              statusLabel ? `[${statusLabel}]` : null,
+              card.priority ? card.priority.toUpperCase() : null,
               `${card.workspaceName} / ${card.boardTitle}`,
               `${formatDate(card.startDate)}→${formatDate(card.targetDate)}`,
-            ].join(" · ");
+            ]
+              .filter(Boolean)
+              .join(" · ");
 
             return (
               <div
@@ -188,10 +237,11 @@ export function MeWeekGantt({ cards }: { cards: MyWeekCard[] }) {
                   data-testid="me-week-bar"
                   data-card-id={card.id}
                   className={[
-                    "absolute flex items-center px-2 rounded text-[11px] font-medium overflow-hidden whitespace-nowrap cursor-pointer transition-opacity",
-                    bgCls || "bg-[var(--surface-hi,oklch(0.25_0_0))]",
-                    isDone ? "line-through opacity-50" : "opacity-90 hover:opacity-100",
-                    "text-fg",
+                    "absolute flex items-center px-2 rounded text-[11px] font-medium overflow-hidden whitespace-nowrap cursor-pointer transition-opacity border border-fg/10 text-fg",
+                    fill.className,
+                    isDone
+                      ? "line-through opacity-60"
+                      : "opacity-95 hover:opacity-100",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -200,14 +250,24 @@ export function MeWeekGantt({ cards }: { cards: MyWeekCard[] }) {
                     width: widthPx,
                     height: 28,
                     zIndex: 1,
+                    ...fill.style,
                   }}
                 >
+                  {priorityDot && (
+                    <span
+                      aria-hidden
+                      data-testid="me-week-bar-priority-stripe"
+                      data-priority={card.priority}
+                      className={`absolute left-0 top-0 bottom-0 w-[3px] rounded-l pointer-events-none ${priorityDot}`}
+                    />
+                  )}
                   <span className="truncate">{card.title}</span>
                 </Link>
               </div>
             );
           })}
         </div>
+      </div>
       </div>
     </div>
   );

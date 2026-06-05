@@ -23,6 +23,7 @@ import {
   setWorkspaceAutoAssignCreator,
 } from "@/actions/workspaces";
 import { toast } from "sonner";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 
 export function WorkspaceSettingsForm({
   workspace,
@@ -40,6 +41,7 @@ export function WorkspaceSettingsForm({
   const [autoAssign, setAutoAssign] = useState(workspace.autoAssignCreator);
   const [pending, start] = useTransition();
   const [linkOpen, setLinkOpen] = useState(false);
+  const isGuest = useIsGuest();
 
   function rename(e: React.FormEvent) {
     e.preventDefault();
@@ -91,6 +93,8 @@ export function WorkspaceSettingsForm({
 
   return (
     <div className="space-y-4">
+      {!isGuest && (
+      <>
       <form onSubmit={rename} className="space-y-2">
         <Label htmlFor="ws-rename">Name</Label>
         <div className="flex gap-2">
@@ -128,27 +132,31 @@ export function WorkspaceSettingsForm({
           </span>
         </span>
       </label>
+      </>
+      )}
 
       <section id="link" className="space-y-2 scroll-mt-20">
-        <Label htmlFor="ws-link">Cartella condivisa (link)</Label>
+        <Label htmlFor="ws-link">Shared folder (link)</Label>
         <p className="text-xs text-fg-faint">
-          Mostrato come icona cloud accanto al nome del workspace. Visibile a
-          tutti i membri; modificabile solo da owner/admin.
+          Shown as a cloud icon next to the workspace name. Visible to all
+          members; editable only by owners/admins.
         </p>
         <div className="flex items-center gap-2">
           <Input
             id="ws-link"
             readOnly
-            value={workspaceLink?.url ?? "Nessun link"}
+            value={workspaceLink?.url ?? "No link"}
             className="max-w-xs"
           />
-          <Button
-            type="button"
-            onClick={() => setLinkOpen(true)}
-            data-testid="ws-link-manage"
-          >
-            Modifica
-          </Button>
+          {!isGuest && (
+            <Button
+              type="button"
+              onClick={() => setLinkOpen(true)}
+              data-testid="ws-link-manage"
+            >
+              Edit
+            </Button>
+          )}
         </div>
         <LinkEditDialog
           open={linkOpen}

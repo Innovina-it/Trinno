@@ -2461,11 +2461,11 @@ export function RoadmapView({
                   <div
                     aria-hidden
                     data-testid="roadmap-today-marker"
-                    className="absolute top-0 w-px bg-fg/30 pointer-events-none"
+                    className="absolute top-0 w-px bg-emerald-500/40 pointer-events-none"
                     style={{ left: todayX, height: totalHeight }}
                   >
                     <span
-                      className="absolute -translate-x-1/2 mono-meta-sm text-fg-faint bg-[color:var(--popover)] px-1.5 py-0.5 rounded-md border border-hairline-hi"
+                      className="absolute -translate-x-1/2 mono-meta-sm text-emerald-600 dark:text-emerald-400 bg-[color:var(--popover)] px-1.5 py-0.5 rounded-md border border-emerald-500/40"
                       style={{ top: 4, left: 0 }}
                     >
                       TODAY
@@ -2583,7 +2583,7 @@ export function RoadmapView({
                   <div
                     data-testid="roadmap-today-line"
                     aria-hidden
-                    className="absolute pointer-events-none border-l border-fg/50"
+                    className="absolute pointer-events-none border-l border-emerald-500"
                     style={{
                       left: todayX,
                       top: HEADER_STRIP_HEIGHT,

@@ -4,7 +4,6 @@ import {
   useRef,
   useState,
   useTransition,
-  type CSSProperties,
 } from "react";
 import { createPortal } from "react-dom";
 import type React from "react";
@@ -20,7 +19,7 @@ import type { RoadmapCard } from "@/lib/queries/roadmap";
 import type { CardVariance } from "@/lib/baselines/types";
 import { dayDiff, startOfDay } from "@/lib/roadmap/dates";
 import { useWorkspaceStore } from "@/stores/workspace-store";
-import { STATUS_LABEL, type StatusKind } from "@/lib/status";
+import { STATUS_LABEL, statusBarFill, type StatusKind } from "@/lib/status";
 import { archiveCard, setRoadmapCompletion, updateCard } from "@/actions/cards";
 import { formatDate } from "@/lib/format-date";
 import {
@@ -117,60 +116,8 @@ const TYPE_DOT: Record<string, string> = {
   bug: "bg-fg/70",
 };
 
-function statusFill(status: StatusKind | null, isHeader: boolean): {
-  className: string;
-  style: CSSProperties;
-} {
-  if (!status) {
-    return {
-      className: isHeader ? "bg-fg/15" : "bg-fg/8",
-      style: {},
-    };
-  }
-  switch (status) {
-    case "todo":
-      return {
-        className: "",
-        style: { background: "color-mix(in oklab, var(--status-todo) 22%, transparent)" },
-      };
-    case "in_progress":
-      return {
-        className: "ring-1 ring-inset animate-pulse",
-        style: {
-          background: "color-mix(in oklab, var(--status-in-progress) 38%, transparent)",
-          boxShadow: "inset 0 0 0 1px color-mix(in oklab, var(--status-in-progress) 55%, transparent)",
-        },
-      };
-    case "review":
-      return {
-        className: "",
-        style: {
-          background: "color-mix(in oklab, var(--status-review) 22%, transparent)",
-          backgroundImage:
-            "repeating-linear-gradient(45deg, color-mix(in oklab, var(--status-review) 45%, transparent) 0 4px, transparent 4px 8px)",
-        },
-      };
-    case "done":
-      return {
-        className: "",
-        style: {
-          background: "color-mix(in oklab, var(--status-done) 22%, transparent)",
-          backgroundImage:
-            "repeating-linear-gradient(0deg, color-mix(in oklab, var(--status-done) 50%, transparent) 0 2px, transparent 2px 6px)",
-        },
-      };
-    case "blocked":
-      return {
-        className: "ring-2 ring-inset",
-        style: {
-          background: isHeader
-            ? "color-mix(in oklab, var(--status-blocked) 18%, transparent)"
-            : "color-mix(in oklab, var(--status-blocked) 12%, transparent)",
-          boxShadow: "inset 0 0 0 2px color-mix(in oklab, var(--status-blocked) 60%, transparent)",
-        },
-      };
-  }
-}
+// Status fills moved to lib/status.ts `statusBarFill` so the Home mini-gantt
+// shares the exact same pattern grammar (one system, two surfaces).
 
 function isoForInput(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -395,7 +342,7 @@ export function RoadmapBar({
     });
   }
 
-  const fill = statusFill(status, isHeader);
+  const fill = statusBarFill(status, { isHeader });
   const statusLabel = status ? STATUS_LABEL[status] : null;
   // Plan #16b-γ-G G4 — bars are always tinted by priority (regardless of
   // whether the gutter is visible). 3px stripe at the bar's left edge.

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { changeMemberRole, removeMember, resendInvitation } from "@/actions/workspace-members";
 import { useWorkspaceMembersSync } from "@/hooks/use-workspace-members-sync";
+import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { toast } from "sonner";
 
 type Member = {
@@ -25,6 +26,7 @@ export function MemberList({
   members: Member[];
 }) {
   const [pending, start] = useTransition();
+  const isGuest = useIsGuest();
   // Live updates so a concurrent admin's invite / role change / removal
   // in another tab is reflected here without a manual reload.
   useWorkspaceMembersSync(workspaceId);
@@ -50,7 +52,7 @@ export function MemberList({
               Pending · invite sent
             </Badge>
           )}
-          {m.pending && m.email && (
+          {!isGuest && m.pending && m.email && (
             <Button
               size="sm"
               variant="outline"
@@ -70,6 +72,8 @@ export function MemberList({
               Resend
             </Button>
           )}
+          {!isGuest && (
+          <>
           <Select
             value={m.role}
             disabled={m.role === "owner" || pending}
@@ -128,6 +132,8 @@ export function MemberList({
           >
             Remove
           </Button>
+          </>
+          )}
         </li>
       ))}
     </ul>
