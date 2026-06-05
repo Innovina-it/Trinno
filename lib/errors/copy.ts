@@ -38,6 +38,11 @@ const COPY: Record<string, ErrorCopy> = {
   VALIDATION_ERROR: {
     title: "Invalid action",
   },
+  RATE_LIMITED: {
+    title: "Too many invite emails",
+    description:
+      "The hourly invite-email limit was reached. Try again in a little while.",
+  },
   CONFLICT: {
     title: "Action blocked by current state",
   },

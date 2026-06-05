@@ -116,7 +116,7 @@ export async function inviteMemberImpl(
           .limit(1);
         return { workspaceName: ws?.name ?? "your workspace", inviterName: actor?.name };
       });
-      await sendInviteEmail(email, workspaceName, inviterName);
+      await sendInviteEmail(email, workspaceName, inviterName, parsed.workspaceId);
       return { kind: "invited", userId: existingUserId };
     }
 
@@ -206,7 +206,9 @@ export async function inviteMemberImpl(
     await dbAsUser(token, async (tx) => {
       await tx
         .update(workspaceInvitations)
-        .set({ userId: newUserId })
+        // Stamp the initial invite-email send time. This path delivers via
+        // Supabase SMTP (not Resend), so it is logged but NOT rate-limited.
+        .set({ userId: newUserId, inviteEmailSentAt: new Date() })
         .where(and(
           eq(workspaceInvitations.workspaceId, parsed.workspaceId),
           eq(workspaceInvitations.email, email),
@@ -272,7 +274,7 @@ export async function resendInvitationImpl(
     return { workspaceName: ws?.name ?? "your workspace", inviterName: actor?.name };
   });
 
-  await sendInviteEmail(email, workspaceName, inviterName);
+  await sendInviteEmail(email, workspaceName, inviterName, parsed.workspaceId);
 }
 
 export async function resendInvitation(input: Parameters<typeof resendInvitationImpl>[1]): Promise<void> {

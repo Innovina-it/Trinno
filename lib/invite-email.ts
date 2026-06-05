@@ -1,4 +1,5 @@
 import { getServiceSupabase } from "@/lib/supabase/service-role";
+import { StructuredError } from "@/lib/errors";
 
 // Mirror lib/notify-email.ts: escape user-controlled strings before they land
 // in the email HTML. Workspace names are admin-set but still untrusted input;
@@ -35,6 +36,7 @@ export async function sendInviteEmail(
   email: string,
   workspaceName: string,
   inviterName?: string,
+  workspaceId?: string,
 ): Promise<void> {
   const sb = getServiceSupabase();
   const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/accept-invite`;
@@ -55,6 +57,29 @@ export async function sendInviteEmail(
 
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) return; // dev soft-fail: link generated, delivery skipped
+
+  // Resend free-tier guard: cap reminder/re-invite emails — the Resend path —
+  // at INVITE_REMINDER_HOURLY_CAP (default 4) per rolling hour. Brand-new invites
+  // go through Supabase SMTP (inviteUserByEmail) and are intentionally uncounted.
+  // The count is global across workspaces because the Resend quota is per-account.
+  const rawCap = Number(process.env.INVITE_REMINDER_HOURLY_CAP);
+  const hourlyCap = Number.isInteger(rawCap) && rawCap > 0 ? rawCap : 4;
+  const oneHourAgoIso = new Date(Date.now() - 60 * 60_000).toISOString();
+  const { count, error: countError } = await sb
+    .from("workspace_invitations")
+    .select("id", { count: "exact", head: true })
+    .gt("reminder_sent_at", oneHourAgoIso);
+  if (countError) {
+    // Fail open: a transient count failure must not block legitimate invites.
+    // Worst case we briefly exceed the soft cap; we never hard-stop the feature.
+    console.error("[invite-email] rate-limit count failed", countError);
+  } else if ((count ?? 0) >= hourlyCap) {
+    throw new StructuredError(
+      "RATE_LIMITED",
+      "The hourly invite-email limit was reached. Try again in a little while.",
+    );
+  }
+
   // Force the Resend sandbox sender outside production. Without a verified domain,
   // Resend only delivers to the account owner — so dev/preview cannot accidentally
   // email real users even if RESEND_API_KEY is the prod key.
@@ -141,5 +166,20 @@ If you weren't expecting this, you can safely ignore this email.`;
   });
   if (!r.ok) {
     console.error("[invite-email] resend error", r.status, await r.text());
+    return;
+  }
+  // Stamp the send time: logs the reminder AND feeds the rolling-hour cap above.
+  // Scoped to the pending invite for this (workspace, email); skipped when no
+  // workspaceId is supplied (e.g. unit tests exercising the email body only).
+  if (workspaceId) {
+    const { error: stampError } = await sb
+      .from("workspace_invitations")
+      .update({ reminder_sent_at: new Date().toISOString() })
+      .eq("workspace_id", workspaceId)
+      .eq("email", email)
+      .eq("status", "pending");
+    if (stampError) {
+      console.error("[invite-email] reminder_sent_at stamp failed", stampError);
+    }
   }
 }

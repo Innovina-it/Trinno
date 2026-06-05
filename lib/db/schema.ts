@@ -78,6 +78,11 @@ export const workspaceInvitations = pgTable("workspace_invitations", {
     .notNull()
     .defaultNow(),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  // Invite-email send times (migration 0123). reminder_sent_at is also the
+  // source for the 4-per-rolling-hour Resend cap; invite_email_sent_at is
+  // logging only (the initial invite delivers via Supabase SMTP, uncapped).
+  inviteEmailSentAt: timestamp("invite_email_sent_at", { withTimezone: true }),
+  reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
 });
 
 export const boards = pgTable(
