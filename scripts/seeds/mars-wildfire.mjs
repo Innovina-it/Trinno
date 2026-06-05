@@ -44,7 +44,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { readFileSync } from "fs";
+import { createReadStream, readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -98,6 +98,13 @@ const monthStart = (m) => {
   return d;
 };
 const monthDateStr = (m) => monthStart(m).toISOString().slice(0, 10);
+// monthStart(m) + `days`. Roadmap query orders rows by start_date ASC, so
+// staggering task starts by index gives a stable T*.1, T*.2 … order within a WP.
+const dayOffsetStr = (m, days) => {
+  const d = monthStart(m);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
 
 const WORKSPACE_FEATURE_FLAGS = {
   subboards_enabled: true,
@@ -115,6 +122,14 @@ const DEFAULT_LISTS = [
 const kindLabel = (k) =>
   k === "RI" ? "Industrial Research (RI)" : "Experimental Development (SS)";
 
+// Short responsible-org tag appended to each task title — the WP's consultant
+// (external) when present, else the lead (Inspire). E.g. " - Rafla", " - Invenio".
+const ownerTag = (o) =>
+  (o || "")
+    .replace(/\s*Consulting/g, "")
+    .replace(/\s*S\.r\.l\.?/g, "")
+    .trim();
+
 const PLACEHOLDER_LINK_COLOR = "#facc15"; // yellow diamond
 const PLACEHOLDER_LINK_URL = "https://www.corriere.it";
 
@@ -126,10 +141,11 @@ const DRIVE_FOLDER_ID =
 const DELIVERABLE_SUBFOLDER =
   process.env.WILDFIRE_DELIVERABLE_SUBFOLDER || "Deliverables";
 const SA_KEYFILE = process.env.GOOGLE_SA_KEYFILE;
-// Per-deliverable docs are COPIES of this template Google Doc (not empty docs);
-// same template as the ARISE seed by default. The SA must have read access to it.
-const TEMPLATE_DOC_ID =
-  process.env.WILDFIRE_TEMPLATE_DOC_ID || "1oSPGtJMTHBBOpZRd8L02njO9mbJDn5KL";
+// Each deliverable doc is a copy of the project .docx template (same skeleton as
+// the ARISE template, with Wildfire's header) — uploaded via Drive; no Docs API.
+const DOCX_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const TEMPLATE_DOCX = join(__dirname, "templates", "wildfire.docx");
 
 async function setupDrive() {
   if (!SA_KEYFILE) return null;
@@ -151,7 +167,7 @@ async function setupDrive() {
   const DOC_MIME = "application/vnd.google-apps.document";
 
   const cache = new Map();
-  async function findOrCreate(name, mimeType, parentId) {
+  async function findOrCreate(name, mimeType, parentId, tplDocx) {
     const key = `${parentId} ${name}`;
     if (cache.has(key)) return cache.get(key);
     const q = `name='${esc(name)}' and '${parentId}' in parents and trashed=false`;
@@ -167,21 +183,17 @@ async function setupDrive() {
     let res;
     if (hit) {
       res = { ...hit, created: false };
-    } else if (mimeType === DOC_MIME && TEMPLATE_DOC_ID) {
-      // Docs are copied from the template (folders still created normally).
-      const r = await drive.files.copy({
-        fileId: TEMPLATE_DOC_ID,
-        requestBody: { name, parents: [parentId] },
-        supportsAllDrives: true,
-        fields: "id,name,webViewLink",
-      });
-      res = { ...r.data, created: true };
     } else {
-      const r = await drive.files.create({
+      const args = {
         requestBody: { name, mimeType, parents: [parentId] },
         supportsAllDrives: true,
         fields: "id,name,webViewLink",
-      });
+      };
+      // Deliverable docs are a copy of the project .docx template — Drive API only.
+      if (tplDocx) {
+        args.media = { mimeType: DOCX_MIME, body: createReadStream(tplDocx) };
+      }
+      const r = await drive.files.create(args);
       res = { ...r.data, created: true };
     }
     cache.set(key, res);
@@ -190,7 +202,8 @@ async function setupDrive() {
 
   return {
     folderName: folder.data.name,
-    // <folder>/<WP title>/<Deliverables>/<doc>
+    // <folder>/<WP title>/<Deliverables>/<doc>  — each doc is a copy of the
+    // project template (scripts/seeds/templates/wildfire.docx).
     async docUrlFor(wpName, docName) {
       const wpFolder = await findOrCreate(wpName, FOLDER_MIME, DRIVE_FOLDER_ID);
       const delFolder = await findOrCreate(
@@ -198,7 +211,7 @@ async function setupDrive() {
         FOLDER_MIME,
         wpFolder.id,
       );
-      const doc = await findOrCreate(docName, DOC_MIME, delFolder.id);
+      const doc = await findOrCreate(docName, DOCX_MIME, delFolder.id, TEMPLATE_DOCX);
       return { url: doc.webViewLink, created: doc.created };
     },
   };
@@ -632,6 +645,8 @@ function nextPos() {
   positionCounter += 1;
   return `a${String(positionCounter).padStart(6, "0")}`;
 }
+let roadmapCounter = 0;
+const nextRoadmap = () => (roadmapCounter += 1);
 
 // ---------------------------------------------------------------------------
 
@@ -713,6 +728,7 @@ async function seed() {
   let docReused = 0;
 
   positionCounter = 0;
+  roadmapCounter = 0;
   for (const wp of OBJECTIVES) {
     const ext = wp.external ? ` · Subcontractor: ${wp.external}` : "";
 
@@ -722,6 +738,7 @@ async function seed() {
       board_id: parentBoard.id,
       title: wp.title,
       position: nextPos(),
+      roadmap_order: nextRoadmap(),
       type: "task",
       owner_id: null,
       description:
@@ -758,31 +775,37 @@ async function seed() {
     const subTodoList = subLists.todo;
 
     // 3. Task cards in the sub-board (dated within the WP window).
-    for (const t of wp.tasks) {
-      await call("cards", {
+    const taskRows = [];
+    for (const [ti, t] of wp.tasks.entries()) {
+      const [taskCard] = await call("cards", {
         list_id: subTodoList,
         board_id: subBoard.id,
-        title: t.title,
+        title: `${t.title} - ${ownerTag(wp.external || wp.lead)}`,
         position: nextPos(),
+        roadmap_order: nextRoadmap(),
         type: "task",
         owner_id: null,
         description: `**Task** · ${wp.code} · ${wp.lead}\n\n${t.description}`,
-        start_date: monthDateStr(wp.startMonth),
+        start_date: dayOffsetStr(wp.startMonth, ti),
         target_date: monthDateStr(wp.endMonth + 1),
       });
+      taskRows.push(taskCard);
       taskCount += 1;
     }
 
-    // 4. Deliverable cards in the sub-board (dated at WP completion), each with
-    //    a yellow link → its Google Doc (or the placeholder).
-    for (const d of wp.deliverables) {
+    // 4. Deliverable SUBTASKS, parented to a task in the same WP (by index,
+    //    clamped to the last task), each with a yellow link → its Google Doc.
+    for (const [di, d] of wp.deliverables.entries()) {
+      const parentTask = taskRows[Math.min(di, taskRows.length - 1)];
       const [delCard] = await call("cards", {
         list_id: subTodoList,
         board_id: subBoard.id,
         title: d.title,
         position: nextPos(),
-        type: "task",
+        roadmap_order: nextRoadmap(),
+        type: "subtask",
         owner_id: null,
+        parent_card_id: parentTask.id,
         description: `**Deliverable** · ${wp.code} · ${wp.lead}\n\n${d.description}`,
         start_date: monthDateStr(wp.endMonth),
         target_date: monthDateStr(wp.endMonth + 1),
@@ -791,7 +814,10 @@ async function seed() {
 
       let linkUrl = PLACEHOLDER_LINK_URL;
       if (drive) {
-        const doc = await drive.docUrlFor(wp.title, d.title);
+        const doc = await drive.docUrlFor(wp.title, d.title, {
+          lead: wp.lead,
+          external: wp.external,
+        });
         linkUrl = doc.url;
         if (doc.created) docCreated += 1;
         else docReused += 1;

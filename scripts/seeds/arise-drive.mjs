@@ -16,11 +16,10 @@
 //               at their due month. Each carries a yellow link → its Google Doc.
 //
 // Google Drive: <DRIVE_FOLDER_ID>/<WP title>/Deliverables/<deliverable doc>.
-// Each deliverable doc is a COPY of a template Google Doc (ARISE_TEMPLATE_DOC_ID)
-// — NOT an empty doc — so every deliverable starts from the standard template.
+// Each deliverable doc is a copy of the project .docx template
+// (scripts/seeds/templates/arise.docx), uploaded via the Drive API — no Docs API.
 // Find-or-create / idempotent (the SA cannot delete in a Shared Drive): re-seeding
-// reuses the same folders/docs. The SA must have read access to the template and
-// create rights on the base folder.
+// reuses the same folders/docs. The SA needs create rights on the base folder.
 //
 // Dates: calendar months. M1 = 21 May 2026; monthStart(25) = 21 May 2028 (24 mo).
 //
@@ -30,13 +29,12 @@
 //   SEED_WORKSPACE          workspace name; default "ARISE — Project Plan"
 //   SEED_RESET              "true" wipes the (same-named) workspace before re-seeding
 //   SEED_ENV_FILE           one-off env file (used by the prod runner)
-//   GOOGLE_SA_KEYFILE       service-account JSON key → real Google Docs from template
+//   GOOGLE_SA_KEYFILE       service-account JSON key → real Drive docs from template
 //   ARISE_DRIVE_FOLDER_ID   base Drive folder; default below
-//   ARISE_TEMPLATE_DOC_ID   template Google Doc to copy per deliverable; default below
 
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { readFileSync } from "fs";
+import { createReadStream, readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -106,13 +104,28 @@ const DEFAULT_LISTS = [
 const PLACEHOLDER_LINK_COLOR = "#facc15"; // yellow diamond
 const PLACEHOLDER_LINK_URL = "https://www.corriere.it";
 
+// Responsible-org tag for task titles, matching the M.A.R.S. seeds' " - <org>"
+// style. ARISE bakes the collaborator inline as "… (with Invenio)"; pull it out
+// into the suffix. Tasks with no collaborator are Innovina-led → " - Innovina".
+const ARISE_LEAD = "Innovina";
+const orgTitle = (title) => {
+  const m = title.match(/\s*\(with ([^)]+)\)\s*$/);
+  return m
+    ? `${title.slice(0, m.index)} - ${m[1]}`
+    : `${title} - ${ARISE_LEAD}`;
+};
+
 // --- Google Drive (optional) -----------------------------------------------
 const DRIVE_FOLDER_ID =
   process.env.ARISE_DRIVE_FOLDER_ID || "1X506gyhUdjO4rOc5q3_EKOzib-ES65tN";
 const DELIVERABLE_SUBFOLDER =
   process.env.ARISE_DELIVERABLE_SUBFOLDER || "Deliverables";
-const TEMPLATE_DOC_ID =
-  process.env.ARISE_TEMPLATE_DOC_ID || "1oSPGtJMTHBBOpZRd8L02njO9mbJDn5KL";
+// Each deliverable doc is a copy of the project .docx template (the ARISE
+// skeleton with the "[Document short name]" placeholder stripped), uploaded via
+// the Drive API — no Docs API. Built by scripts/seeds/build-templates.py.
+const DOCX_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const TEMPLATE_DOCX = join(__dirname, "templates", "arise.docx");
 const SA_KEYFILE = process.env.GOOGLE_SA_KEYFILE;
 
 async function setupDrive() {
@@ -162,8 +175,9 @@ async function setupDrive() {
     return res;
   }
 
-  // Find a doc by name in parent; else COPY the template into it.
-  async function findOrCopyDoc(name, parentId) {
+  // Find a doc by name in parent; else upload the project .docx template into it
+  // (Drive API only, no Docs API). Each deliverable doc is a fresh copy.
+  async function findOrCreateDoc(name, parentId) {
     const key = `D ${parentId} ${name}`;
     if (cache.has(key)) return cache.get(key);
     const q = `name='${esc(name)}' and '${parentId}' in parents and trashed=false`;
@@ -179,21 +193,10 @@ async function setupDrive() {
     let res;
     if (hit) {
       res = { ...hit, created: false };
-    } else if (TEMPLATE_DOC_ID) {
-      const r = await drive.files.copy({
-        fileId: TEMPLATE_DOC_ID,
-        requestBody: { name, parents: [parentId] },
-        supportsAllDrives: true,
-        fields: "id,name,webViewLink",
-      });
-      res = { ...r.data, created: true };
     } else {
       const r = await drive.files.create({
-        requestBody: {
-          name,
-          mimeType: "application/vnd.google-apps.document",
-          parents: [parentId],
-        },
+        requestBody: { name, mimeType: DOCX_MIME, parents: [parentId] },
+        media: { mimeType: DOCX_MIME, body: createReadStream(TEMPLATE_DOCX) },
         supportsAllDrives: true,
         fields: "id,name,webViewLink",
       });
@@ -205,12 +208,12 @@ async function setupDrive() {
 
   return {
     folderName: folder.data.name,
-    fromTemplate: !!TEMPLATE_DOC_ID,
-    // <folder>/<WP title>/<Deliverables>/<doc>  (doc = copy of the template)
+    fromTemplate: true,
+    // <folder>/<WP title>/<Deliverables>/<doc>  (doc = copy of templates/arise.docx)
     async docUrlFor(wpName, docName) {
       const wpFolder = await findFolder(wpName, DRIVE_FOLDER_ID);
       const delFolder = await findFolder(DELIVERABLE_SUBFOLDER, wpFolder.id);
-      const doc = await findOrCopyDoc(docName, delFolder.id);
+      const doc = await findOrCreateDoc(docName, delFolder.id);
       return { url: doc.webViewLink, created: doc.created };
     },
   };
@@ -644,7 +647,7 @@ async function seed() {
   if (drive) {
     console.log(
       `Drive: docs in "${drive.folderName}"/<WP>/${DELIVERABLE_SUBFOLDER}/ — ${
-        drive.fromTemplate ? `copies of template ${TEMPLATE_DOC_ID}` : "empty docs"
+        drive.fromTemplate ? "copies of templates/arise.docx" : "empty docs"
       }`,
     );
   } else {
@@ -741,7 +744,7 @@ async function seed() {
       const [row] = await call("cards", {
         list_id: subTodoList,
         board_id: subBoard.id,
-        title: t.title,
+        title: orgTitle(t.title),
         position: nextPos(),
         type: "task",
         owner_id: null,
@@ -800,7 +803,9 @@ async function seed() {
       workspace_id: ws.id,
       board_id: parentBoard.id,
       name: m.name,
-      date: monthStart(m.month).toISOString(),
+      // +1 so the milestone marker lands on the task closures (tasks end at
+      // target = monthStart(endMonth+1), i.e. the start of the next month).
+      date: monthStart(m.month + 1).toISOString(),
       created_by: userId,
     });
   }

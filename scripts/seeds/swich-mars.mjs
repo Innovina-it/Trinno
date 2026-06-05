@@ -64,7 +64,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { readFileSync } from "fs";
+import { createReadStream, readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -133,6 +133,9 @@ const DEFAULT_LISTS = [
 const kindLabel = (k) =>
   k === "RI" ? "Industrial Research (RI)" : "Experimental Development (SS)";
 
+// Short responsible-org tag appended to each WP task title (e.g. " - BE-ST").
+const ownerTag = (o) => (o || "").replace(/\s*S\.r\.l\.?/g, "").trim();
+
 // Per-deliverable URL link (card-scope `links` row, migration 0121). Rendered as
 // a coloured diamond on the card. Yellow = "Giallo" = LINK_COLORS[0] in
 // lib/links/colors.ts (also the default). One link per deliverable card (DB
@@ -154,10 +157,11 @@ const DRIVE_FOLDER_ID =
 const DELIVERABLE_SUBFOLDER =
   process.env.SWICH_DELIVERABLE_SUBFOLDER || "Deliverables";
 const SA_KEYFILE = process.env.GOOGLE_SA_KEYFILE;
-// Per-deliverable docs are COPIES of this template Google Doc (not empty docs);
-// same template as the ARISE seed by default. The SA must have read access to it.
-const TEMPLATE_DOC_ID =
-  process.env.SWICH_TEMPLATE_DOC_ID || "1oSPGtJMTHBBOpZRd8L02njO9mbJDn5KL";
+// Each deliverable doc is a copy of the project .docx template (same skeleton as
+// the ARISE template, with Swich's header) — uploaded via Drive; no Docs API.
+const DOCX_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const TEMPLATE_DOCX = join(__dirname, "templates", "swich.docx");
 
 async function setupDrive() {
   if (!SA_KEYFILE) return null;
@@ -184,7 +188,7 @@ async function setupDrive() {
   // Deliverables folders are resolved once and reused across deliverables in
   // the same OR (one create, not one per doc).
   const cache = new Map();
-  async function findOrCreate(name, mimeType, parentId) {
+  async function findOrCreate(name, mimeType, parentId, tplDocx) {
     const key = `${parentId} ${name}`;
     if (cache.has(key)) return cache.get(key);
     const q = `name='${esc(name)}' and '${parentId}' in parents and trashed=false`;
@@ -200,21 +204,17 @@ async function setupDrive() {
     let res;
     if (hit) {
       res = { ...hit, created: false };
-    } else if (mimeType === DOC_MIME && TEMPLATE_DOC_ID) {
-      // Docs are copied from the template (folders still created normally).
-      const r = await drive.files.copy({
-        fileId: TEMPLATE_DOC_ID,
-        requestBody: { name, parents: [parentId] },
-        supportsAllDrives: true,
-        fields: "id,name,webViewLink",
-      });
-      res = { ...r.data, created: true };
     } else {
-      const r = await drive.files.create({
+      const args = {
         requestBody: { name, mimeType, parents: [parentId] },
         supportsAllDrives: true,
         fields: "id,name,webViewLink",
-      });
+      };
+      // Deliverable docs are a copy of the project .docx template — Drive API only.
+      if (tplDocx) {
+        args.media = { mimeType: DOCX_MIME, body: createReadStream(tplDocx) };
+      }
+      const r = await drive.files.create(args);
       res = { ...r.data, created: true };
     }
     cache.set(key, res);
@@ -223,7 +223,8 @@ async function setupDrive() {
 
   return {
     folderName: folder.data.name,
-    // <folder>/<OR title>/<Deliverables>/<doc>
+    // <folder>/<OR title>/<Deliverables>/<doc>  — each doc is a copy of the
+    // project template (scripts/seeds/templates/swich.docx).
     async docUrlFor(orName, docName) {
       const orFolder = await findOrCreate(orName, FOLDER_MIME, DRIVE_FOLDER_ID);
       const delFolder = await findOrCreate(
@@ -231,7 +232,7 @@ async function setupDrive() {
         FOLDER_MIME,
         orFolder.id,
       );
-      const doc = await findOrCreate(docName, DOC_MIME, delFolder.id);
+      const doc = await findOrCreate(docName, DOCX_MIME, delFolder.id, TEMPLATE_DOCX);
       return { url: doc.webViewLink, created: doc.created };
     },
   };
@@ -1070,7 +1071,7 @@ async function seed() {
       const [wpCard] = await call("cards", {
         list_id: subTodoList,
         board_id: subBoard.id,
-        title: wp.title,
+        title: `${wp.title} - ${ownerTag(wp.partner)}`,
         position: nextPos(),
         type: "task",
         owner_id: null,
@@ -1102,7 +1103,10 @@ async function seed() {
         // is named after the deliverable title (e.g. "D1.1.1 — …").
         let linkUrl = PLACEHOLDER_LINK_URL;
         if (drive) {
-          const doc = await drive.docUrlFor(or.title, d.title);
+          const doc = await drive.docUrlFor(or.title, d.title, {
+            lead: wp.partner,
+            milestone: d.milestone,
+          });
           linkUrl = doc.url;
           if (doc.created) docCreated += 1;
           else docReused += 1;
