@@ -2,10 +2,9 @@ import { describe, it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { eq } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { cards } from "@/lib/db/schema";
+import { cards, lists } from "@/lib/db/schema";
 import { createWorkspaceImpl } from "@/actions/workspaces";
 import { createBoardImpl } from "@/actions/boards";
-import { createListImpl, setListStatusKindImpl } from "@/actions/lists";
 import { createCardImpl, setRoadmapCompletionImpl } from "@/actions/cards";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -47,10 +46,19 @@ describe("setRoadmapCompletionImpl revert", () => {
       workspaceId: ws.id, title: "B",
       backgroundKind: "color", backgroundValue: "#fafafa",
     });
-    const lTodo = await createListImpl(u.jwt, { boardId: b.id, title: "Todo" });
-    await setListStatusKindImpl(u.jwt, { id: lTodo.id, statusKind: "todo" });
-    const lDone = await createListImpl(u.jwt, { boardId: b.id, title: "Done" });
-    await setListStatusKindImpl(u.jwt, { id: lDone.id, statusKind: "done" });
+    // createBoardImpl seeds default status lists (todo / in_progress / done);
+    // use those rather than creating duplicates (which would collide on the
+    // (board_id, status_kind) unique constraint).
+    const seeded = await dbAsUser(u.jwt, async (tx) =>
+      tx
+        .select({ id: lists.id, statusKind: lists.statusKind })
+        .from(lists)
+        .where(eq(lists.boardId, b.id)),
+    );
+    const lTodo = seeded.find((l) => l.statusKind === "todo")!;
+    const lDone = seeded.find((l) => l.statusKind === "done")!;
+    expect(lTodo).toBeTruthy();
+    expect(lDone).toBeTruthy();
 
     const c = await createCardImpl(u.jwt, { listId: lTodo.id, title: "Deliverable" });
 
