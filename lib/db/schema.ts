@@ -40,6 +40,10 @@ export const profiles = pgTable("profiles", {
   // the toggle in /settings/notifications. The digest cron reads only
   // rows where this is TRUE.
   emailDigestOptin: boolean("email_digest_optin").notNull().default(false),
+  // Migration 0126 — "Notify me on every event" master toggle. Default OFF;
+  // gates per-event delivery on EXTERNAL channels (email + telegram). The
+  // server guard refuses enabling it until a channel can actually deliver.
+  notifyPerEvent: boolean("notify_per_event").notNull().default(false),
 });
 
 export const workspaces = pgTable("workspaces", {
@@ -461,6 +465,41 @@ export const userNotificationPrefs = pgTable(
     enabled: boolean("enabled").notNull().default(true),
   },
   (t) => ({ pk: primaryKey({ columns: [t.userId, t.kind, t.channel] }) }),
+);
+
+// Migration 0124 — per-user external channel identity (e.g. Telegram chat id),
+// channel-generic. Linked via a token handshake: pending -> linked -> revoked.
+export const userChannelLinks = pgTable(
+  "user_channel_links",
+  {
+    userId: uuid("user_id").notNull(),
+    channel: text("channel").notNull(),
+    externalId: text("external_id"),
+    // Migration 0127 — the linked account's Telegram @username (no '@'), set
+    // by the webhook on /start completion. Nullable: undefined on the inbound
+    // update => null here; used only for display ("@handle · Connected").
+    handle: text("handle"),
+    linkTokenHash: text("link_token_hash"),
+    linkTokenExp: timestamp("link_token_exp", { withTimezone: true }),
+    status: text("status").notNull().default("pending"),
+    linkedAt: timestamp("linked_at", { withTimezone: true }),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.userId, t.channel] }) }),
+);
+
+// Migration 0124 — channel-neutral send ledger, one row per
+// (notification, channel) attempt. Service-role only (RLS, no policies).
+export const notificationDeliveries = pgTable(
+  "notification_deliveries",
+  {
+    notificationId: uuid("notification_id").notNull(),
+    channel: text("channel").notNull(),
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    error: text("error"),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.notificationId, t.channel] }) }),
 );
 
 export const worklogs = pgTable("worklogs", {

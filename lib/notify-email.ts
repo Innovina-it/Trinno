@@ -1,10 +1,12 @@
-import { EMAIL_KIND_LABELS, type NotificationKind } from "@/lib/notifications/email-labels";
+import { emailChannel } from "@/lib/notifications/channels/email";
+import type { NotificationRow } from "@/lib/notifications/channels/types";
 import { getServiceSupabase } from "@/lib/supabase/service-role";
 
 // Email pipeline.  Fetches notifications with email_sent_at IS NULL,
 // gates each by user_notification_prefs(channel='email', enabled=true),
-// resolves recipient email + actor display name + card/board copy, and
-// dispatches via the Resend HTTP API.  Marks email_sent_at on success.
+// then hands the row to the email channel which resolves recipient +
+// actor/card/board copy, renders, and dispatches via the Resend HTTP API.
+// Marks email_sent_at on success.
 //
 // Default policy: email is OPT-IN — a user must flip the toggle in
 // /settings/notifications (kind, channel='email') for any kind they
@@ -13,40 +15,12 @@ import { getServiceSupabase } from "@/lib/supabase/service-role";
 // All work is done with the service-role client because the worker
 // needs to look up auth.users.email + write email_sent_at across
 // users.  Never expose this code to the browser.
+//
+// U2: the per-event render + Resend send moved into the email channel
+// (lib/notifications/channels/email).  The opt-in pref gate stays here.
+// Email output is byte-identical to before.
 
-type Notif = {
-  id: string;
-  recipient_user_id: string;
-  kind: string;
-  related_card_id: string | null;
-  related_board_id: string | null;
-  actor_user_id: string | null;
-  payload: Record<string, unknown> | null;
-  created_at: string;
-};
-
-function kindLabel(kind: string): string {
-  return EMAIL_KIND_LABELS[kind as NotificationKind]?.subject ?? kind;
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (ch) => {
-    switch (ch) {
-      case "&":
-        return "&amp;";
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
-      case '"':
-        return "&quot;";
-      case "'":
-        return "&#39;";
-      default:
-        return ch;
-    }
-  });
-}
+type Notif = NotificationRow;
 
 export async function processPendingEmails(opts: {
   limit?: number;
@@ -61,13 +35,6 @@ export async function processPendingEmails(opts: {
     // that intend to send email must set the key.
     return { sent: 0, skipped: 0, errors: 0 };
   }
-  // Force the Resend sandbox sender outside production. Without a verified domain,
-  // Resend only delivers to the account owner — so dev/preview cannot accidentally
-  // email real users even if RESEND_API_KEY is the prod key.
-  const fromAddr =
-    process.env.NODE_ENV === "production"
-      ? (process.env.RESEND_FROM ?? "Trinno <notifications@trinno.app>")
-      : "Trinno <onboarding@resend.dev>";
 
   const sb = getServiceSupabase();
 
@@ -108,87 +75,17 @@ export async function processPendingEmails(opts: {
         continue;
       }
 
-      // Resolve recipient email via auth admin API.
-      const { data: u } = await sb.auth.admin.getUserById(n.recipient_user_id);
-      const toEmail = u.user?.email;
-      if (!toEmail) {
+      // Resolve recipient + render + send via the email channel.
+      const result = await emailChannel.sendEvent(n.recipient_user_id, {
+        notification: n,
+      });
+      if (result.status === "skipped") {
+        // No usable recipient email — do not stamp, matching prior behavior.
         skipped++;
         continue;
       }
-
-      // Resolve actor name + minimal card/board copy.
-      let actorName = "Someone";
-      if (n.actor_user_id) {
-        const { data: ap } = await sb
-          .from("profiles")
-          .select("display_name")
-          .eq("id", n.actor_user_id)
-          .maybeSingle();
-        if (ap?.display_name) actorName = ap.display_name;
-      }
-      let cardTitle = "";
-      if (n.related_card_id) {
-        const { data: c } = await sb
-          .from("cards")
-          .select("title")
-          .eq("id", n.related_card_id)
-          .maybeSingle();
-        if (c?.title) cardTitle = c.title;
-      }
-      let boardTitle = "";
-      if (n.related_board_id) {
-        const { data: b } = await sb
-          .from("boards")
-          .select("title")
-          .eq("id", n.related_board_id)
-          .maybeSingle();
-        if (b?.title) boardTitle = b.title;
-      }
-
-      const verb = kindLabel(n.kind);
-      const subject = `${actorName} ${verb}${cardTitle ? `: ${cardTitle}` : ""}`;
-      const linkPath = n.related_card_id
-        ? `/c/${n.related_card_id}`
-        : n.related_board_id
-          ? `/b/${n.related_board_id}`
-          : "/inbox";
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-      const link = `${baseUrl}${linkPath}`;
-      const actorNameHtml = escapeHtml(actorName);
-      const verbHtml = escapeHtml(verb);
-      const cardTitleHtml = escapeHtml(cardTitle);
-      const boardTitleHtml = escapeHtml(boardTitle);
-      const linkHtml = escapeHtml(link);
-      const html = `
-        <div style="font-family: -apple-system, system-ui, sans-serif; color: #fafafa; background: #0a0a0a; padding: 24px;">
-          <p style="margin: 0 0 12px 0; font-size: 14px; color: #fafafa99;">Trinno</p>
-          <p style="margin: 0 0 8px 0; font-size: 16px;"><strong>${actorNameHtml}</strong> ${verbHtml}${cardTitle ? ` <strong>${cardTitleHtml}</strong>` : ""}.</p>
-          ${boardTitle ? `<p style="margin: 0 0 16px 0; font-size: 13px; color: #fafafa99;">Board · ${boardTitleHtml}</p>` : ""}
-          <p style="margin: 0 0 24px 0;"><a href="${linkHtml}" style="color: #38bdf8;">Open in Trinno</a></p>
-          <p style="margin: 24px 0 0 0; font-size: 12px; color: #fafafa59;">
-            You're receiving this because you opted in to email for this kind in /settings/notifications.
-          </p>
-        </div>
-      `;
-      const text = `${actorName} ${verb}${cardTitle ? `: ${cardTitle}` : ""}\n${boardTitle ? `Board: ${boardTitle}\n` : ""}\n${link}`;
-
-      const r = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: fromAddr,
-          to: [toEmail],
-          subject,
-          html,
-          text,
-        }),
-      });
-      if (!r.ok) {
-        const body = await r.text();
-        console.error("[notify-email] resend error", r.status, body);
+      if (result.status === "failed") {
+        console.error("[notify-email] resend error", result.error);
         errors++;
         continue;
       }

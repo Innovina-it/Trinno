@@ -3,6 +3,10 @@ import {
   EMAIL_KIND_LABELS,
   type NotificationKind,
 } from "@/lib/notifications/email-labels";
+import type {
+  DigestModel,
+  NotificationRow,
+} from "@/lib/notifications/channels/types";
 import { getServiceSupabase } from "@/lib/supabase/service-role";
 
 // Daily digest builder.  Companion to lib/notify-email.ts (per-event sender)
@@ -12,17 +16,15 @@ import { getServiceSupabase } from "@/lib/supabase/service-role";
 // Usage: invoked by /api/notifications/digest (cron) once per day.  Returns
 // `null` when the user has nothing pending so the route can record a skip
 // without sending an empty email.
+//
+// Split (U2): buildDigestModel() does the channel-neutral data assembly
+// (grouping + label/link resolution) and returns a DigestModel.  The HTML/
+// subject/text rendering lives in renderDigestEmail() and is also driven by
+// the email channel (lib/notifications/channels/email).  buildDigestForUser()
+// remains a thin wrapper (assemble -> render) so existing callers and parity
+// checks keep working with byte-identical output.
 
-type Notif = {
-  id: string;
-  recipient_user_id: string;
-  kind: string;
-  related_card_id: string | null;
-  related_board_id: string | null;
-  actor_user_id: string | null;
-  payload: Record<string, unknown> | null;
-  created_at: string;
-};
+type Notif = NotificationRow;
 
 function labelFor(kind: string, count: number): string {
   const entry = EMAIL_KIND_LABELS[kind as NotificationKind];
@@ -46,10 +48,13 @@ export type DigestResult = {
   notificationIds: string[];
 };
 
-export async function buildDigestForUser(
+// Channel-neutral assembly: groups the user's last-24h unsent notifications
+// by kind, then by card/board, resolving display labels + links in bulk.
+// Returns the structured data only (no HTML).  `null` when nothing pending.
+export async function buildDigestModel(
   userId: string,
   opts: { now?: Date; sb?: SupabaseClient } = {},
-): Promise<DigestResult | null> {
+): Promise<DigestModel | null> {
   const sb = opts.sb ?? getServiceSupabase();
   const now = opts.now ?? new Date();
   const since = new Date(now.getTime() - 24 * 60 * 60_000).toISOString();
@@ -106,10 +111,10 @@ export async function buildDigestForUser(
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const dateStr = now.toISOString().slice(0, 10);
 
-  // Build sections.  One <section> per kind; each lists the affected
-  // cards (or board names for memberships).
-  const sectionsHtml: string[] = [];
-  const sectionsText: string[] = [];
+  // Build sections.  One section per kind; each lists the affected cards
+  // (or board names for memberships).  Labels/hrefs are stored RAW here —
+  // HTML escaping happens at render time so the wire bytes are unchanged.
+  const sections: DigestModel["sections"] = [];
   for (const [kind, group] of byKind) {
     const heading = labelFor(kind, group.length);
 
@@ -122,8 +127,7 @@ export async function buildDigestForUser(
       byCard.set(key, list);
     }
 
-    const liHtml: string[] = [];
-    const liText: string[] = [];
+    const sectionItems: DigestModel["sections"][number]["items"] = [];
     for (const [key, ns] of byCard) {
       const first = ns[0];
       let label: string;
@@ -141,6 +145,42 @@ export async function buildDigestForUser(
         href = `${baseUrl}/inbox`;
       }
       void key;
+      sectionItems.push({ label, href });
+    }
+
+    sections.push({ heading, items: sectionItems });
+  }
+
+  return {
+    userId,
+    dateStr,
+    total: items.length,
+    sections,
+    baseUrl,
+    notificationIds: items.map((n) => n.id),
+  };
+}
+
+// Render the digest wire format (subject/html/text) from an assembled
+// DigestModel.  This is the digest render path moved VERBATIM out of the
+// old buildDigestForUser — same templates, same escaping, same joins — so
+// output is byte-identical.  Shared by buildDigestForUser and emailChannel.
+export function renderDigestEmail(model: DigestModel): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const { baseUrl, dateStr, total } = model;
+
+  const sectionsHtml: string[] = [];
+  const sectionsText: string[] = [];
+  for (const section of model.sections) {
+    const heading = section.heading;
+
+    const liHtml: string[] = [];
+    const liText: string[] = [];
+    for (const item of section.items) {
+      const { label, href } = item;
       liHtml.push(
         `<li style="margin: 4px 0;"><a href="${escapeHtml(href)}" style="color: #38bdf8; text-decoration: none;">${escapeHtml(label)}</a></li>`,
       );
@@ -160,7 +200,6 @@ export async function buildDigestForUser(
     sectionsText.push(`${heading}\n${liText.join("\n")}\n`);
   }
 
-  const total = items.length;
   const subject =
     total === 1
       ? `1 update in Trinno today · ${dateStr}`
@@ -183,10 +222,22 @@ export async function buildDigestForUser(
   const text =
     `${subject}\n\n` + sectionsText.join("\n") + `\n${baseUrl}/inbox\n`;
 
+  return { subject, html, text };
+}
+
+// Thin wrapper: assemble -> render.  Kept for parity and any callers that
+// still want the fully-rendered digest in one call.
+export async function buildDigestForUser(
+  userId: string,
+  opts: { now?: Date; sb?: SupabaseClient } = {},
+): Promise<DigestResult | null> {
+  const model = await buildDigestModel(userId, opts);
+  if (!model) return null;
+  const { subject, html, text } = renderDigestEmail(model);
   return {
     subject,
     html,
     text,
-    notificationIds: items.map((n) => n.id),
+    notificationIds: model.notificationIds,
   };
 }

@@ -146,6 +146,16 @@ User                    App (Next.js)                 Telegram               Bot
 - **Webhook** uses `getServiceSupabase()` (no user session) and may only mutate the single matching `pending` row. Idempotent by Telegram `update_id`.
 - **Unlink:** `unlinkTelegram()` sets `status='revoked'`, clears `external_id`.
 
+### 5.1 QR code entry (UI affordance, no backend change)
+
+The same deep-link `startTelegramLink()` returns can be rendered as a **QR code**. Connecting to the bot and authorizing trinno to send are the *same action* — a Telegram bot cannot DM a user first, so the user pressing **Start** (reached via the link) is itself the consent + linking step. One scan → opens the bot → tap Start → `/start <token>` → webhook links `chat_id`. No change to the webhook, token, or tables; the QR is pure UI over the existing §5 flow.
+
+- **Render** client-side from the URL the server action already returns (e.g. `qrcode` → SVG/dataURL). Belongs in **U6** (Settings UI), not U4.
+- **Mobile vs desktop:** a user can't scan their own screen. Show **both** — a "Open in Telegram" button (tap, same URL) for mobile, and the QR for desktop (scan from a phone).
+- **Expiry:** the link token has a 15-min TTL (§9), so the QR expires too → show a countdown and a "regenerate" affordance.
+
+> ⚠️ **`start` payload constraint (affects U4 token format):** Telegram's `start` deep-link parameter is **max 64 chars, charset `[A-Za-z0-9_-]` only**. A 32-byte token hex-encoded = 64 chars (exactly at the limit, fragile); **base64url-encode it instead = 43 chars** (safe). `startTelegramLink()` (U4) should emit the token base64url, not hex. Coordinate with the U4 linking owner.
+
 ---
 
 ## 6. Delivery flows
@@ -164,6 +174,10 @@ DB triggers insert `notifications` rows (unchanged). A dispatcher cron processes
 Telegram send → `POST https://api.telegram.org/bot<token>/sendMessage` with `chat_id`, HTML text, and an inline button deep-linking to the card.
 
 **Latency callout:** per-event email runs on a **daily** cron today, i.e. email "activities" are not actually near-real-time. Telegram activities should feel prompt → needs a **frequent dispatcher cron** (every 1–5 min). Trade-off: cron frequency vs. invocation cost. (Alternative: send at emit-time — rejected; DB triggers can't cleanly call external HTTP, and it couples sending into the request path.)
+
+> ⚠️ **Throttle is in-process / single-worker — U5 must enforce serial dispatch.** The U3 send client (`lib/notifications/channels/telegram/client.ts`) paces sends correctly *within one process* (chained `sendChain` promise + module-level `lastGlobalSendAt` / per-chat `lastChatSendAt` map → ≤30 msg/s global, ≤1 msg/s per chat). **These counters do not survive across Fluid Compute instances.** If U5's dispatcher runs on multiple concurrent function instances (or two cron invocations overlap), each instance keeps its own counters and the *combined* rate can exceed 30/s → HTTP 429 from Telegram. **U5 requirements:** (a) guarantee a single in-flight dispatcher (e.g. a DB advisory lock / "dispatch in progress" flag so overlapping cron ticks no-op), and (b) process sends sequentially through the existing client so the in-process throttle is the real ceiling. A distributed token-bucket (Redis/DB) is only needed if we later parallelize dispatch — avoid that until volume demands it.
+>
+> **Fan-out math (correct the "1/s ⇒ slow" intuition):** the 1 msg/s limit is **per chat**, not global. N *distinct* users get 1 message each → bound by the **30 msg/s global** ceiling, so N=100 ≈ ~3.3 s, not 100 s. The per-chat limit only bites when sending many messages to the *same* chat.
 
 ### 6.2 Daily digest
 `buildDigestModel(userId)` → each opted-in, linked user gets one rendered message. Register a digest cron in `vercel.json` (currently absent — note this also means email digest may not run today). Throttle to respect Telegram limits.
@@ -224,6 +238,7 @@ Adding a channel touches **only**:
 | Token expired before tap | Webhook finds no valid pending row → reply "link expired, generate a new one" |
 | Webhook downtime | Telegram retries; idempotency dedupes; one success suffices to link |
 | Telegram API outage | Deliveries `failed`; retried next cron with `attempts++` and a cap |
+| **Rate limit (HTTP 429)** | Means throttle was exceeded — almost always from **parallel dispatcher instances** (see §6.1 ⚠️). Respect `retry_after`, back off, and ensure single-worker dispatch in U5. The U3 client does not currently special-case 429 (it returns generic `status:"failed"`) → U5/U3 should honor `retry_after`. |
 | chat_id collision | `UNIQUE(channel, external_id)` rejects; surface clear error |
 | Digest > 4096 chars | Truncate + "view in app" |
 
@@ -257,7 +272,7 @@ Adding a channel touches **only**:
 | **U3** Telegram transport | send client + HTML renderers (event+digest) + throttle | U2 | with U4 |
 | **U4** Linking | `startTelegramLink`/`unlinkTelegram` + `/api/telegram/webhook` + setWebhook script | U1 | with U3 |
 | **U5** Dispatcher cron | `/api/cron/send-notifications` looping channels + ledger; register digest cron | U2,U3 | — |
-| **U6** Settings UI | Connect/Disconnect + digest toggle + TELEGRAM per-kind column; feature flag | U2,U4 | — |
+| **U6** Settings UI | Connect/Disconnect + digest toggle + TELEGRAM per-kind column; feature flag; **"Notify me on every event" master toggle → see [`U6-MASTER-TOGGLE-CONTRACT.md`](./U6-MASTER-TOGGLE-CONTRACT.md)** (adds `profiles.notify_per_event`, gating predicate, replaces dead `email-instant` toggle) | U2,U4 | — |
 | **U7** Verification | tripwires (email still sends: invite + digest), webhook idempotency, link expiry, blocked-bot | all | — |
 
 **WIP limit: ≤2 unverified units in flight.** Each unit = its own commit, no smuggled refactors.

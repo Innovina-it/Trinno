@@ -4,11 +4,15 @@ import { eq, and } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import { profiles, userNotificationPrefs } from "@/lib/db/schema";
+import { StructuredError } from "@/lib/errors";
+import { hasExternalDeliveryChannel } from "@/lib/notifications/channels/availability";
 import { z } from "zod";
 
 const SetPrefInput = z.object({
+  // kind is intentionally free-form (max 64); reserved kinds like
+  // "digest.daily" pass through unchanged.
   kind: z.string().min(1).max(64),
-  channel: z.enum(["in_app", "email", "push"]),
+  channel: z.enum(["in_app", "email", "push", "telegram"]),
   enabled: z.boolean(),
 });
 
@@ -89,6 +93,50 @@ export async function setEmailDigestPref(enabled: boolean) {
     await tx
       .update(profiles)
       .set({ emailDigestOptin: enabled })
+      .where(eq(profiles.id, userId));
+  });
+  revalidatePath("/settings/notifications");
+}
+
+/**
+ * "Notify me on every event" master toggle.  Stored on
+ * profiles.notify_per_event (migration 0126) — a global flag that gates
+ * per-event delivery on EXTERNAL channels (email + telegram). The in-app
+ * bell/inbox is always-on and unaffected; the daily digest is separate
+ * (profiles.email_digest_optin). See
+ * docs/features/telegram-channel/U6-MASTER-TOGGLE-CONTRACT.md.
+ */
+export async function getNotifyPerEvent(): Promise<boolean> {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const userId = decodeSub(t);
+  return dbAsUser(t, async (tx) => {
+    const [row] = await tx
+      .select({ value: profiles.notifyPerEvent })
+      .from(profiles)
+      .where(eq(profiles.id, userId));
+    return row?.value ?? false;
+  });
+}
+
+export async function setNotifyPerEvent(enabled: boolean): Promise<void> {
+  z.boolean().parse(enabled);
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const userId = decodeSub(t);
+  // Server-side guard is the real enforcement — the client disabled-state is
+  // UX only. Refuse enabling the master toggle while no external channel can
+  // actually deliver to this user.
+  if (enabled && !(await hasExternalDeliveryChannel(userId))) {
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      "No delivery channel connected",
+    );
+  }
+  await dbAsUser(t, async (tx) => {
+    await tx
+      .update(profiles)
+      .set({ notifyPerEvent: enabled })
       .where(eq(profiles.id, userId));
   });
   revalidatePath("/settings/notifications");

@@ -1,6 +1,8 @@
 {
   "regions": ["dub1"],
   "crons": [
-    { "path": "/api/cron/send-emails", "schedule": "0 8 * * *" }
+    { "path": "/api/cron/send-emails", "schedule": "0 8 * * *" },
+    { "path": "/api/cron/send-notifications", "schedule": "0 8 * * *" },
+    { "path": "/api/notifications/digest", "schedule": "0 9 * * *" }
   ]
 }

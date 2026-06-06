@@ -22,6 +22,10 @@ const PUBLIC_PATH_PREFIX = ["/auth/", "/_next/"];
 export const CRON_API_PATHS_EXACT = new Set<string>([
   "/api/notifications/digest",
   "/api/sla/scan",
+  // Telegram bot webhook: self-authenticates via the
+  // x-telegram-bot-api-secret-token header against TELEGRAM_WEBHOOK_SECRET
+  // inside the handler (no user session — Telegram has none).
+  "/api/telegram/webhook",
 ]);
 
 function isPublicPath(pathname: string): boolean {
