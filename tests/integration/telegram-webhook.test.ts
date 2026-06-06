@@ -282,4 +282,62 @@ describe("telegram webhook + linker", () => {
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
+
+  it("/stop revokes the linked chat and clears external_id", async () => {
+    const userId = await makeUser("tg-stop");
+    const chatId = `73${Date.now()}`;
+    const { error } = await service.from("user_channel_links").upsert(
+      {
+        user_id: userId,
+        channel: "telegram",
+        external_id: chatId,
+        status: "linked",
+        linked_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,channel" },
+    );
+    expect(error).toBeNull();
+
+    const res = await POST(
+      webhookReq({ message: { text: "/stop", chat: { id: chatId } } }, SECRET),
+    );
+    expect(res.status).toBe(200);
+
+    const row = await readLink(userId);
+    expect(row?.status).toBe("revoked");
+    expect(row?.external_id).toBeNull();
+  });
+
+  it("my_chat_member 'kicked' (bot blocked) revokes the linked chat", async () => {
+    const userId = await makeUser("tg-block");
+    const chatId = `84${Date.now()}`;
+    const { error } = await service.from("user_channel_links").upsert(
+      {
+        user_id: userId,
+        channel: "telegram",
+        external_id: chatId,
+        status: "linked",
+        linked_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,channel" },
+    );
+    expect(error).toBeNull();
+
+    const res = await POST(
+      webhookReq(
+        {
+          my_chat_member: {
+            chat: { id: chatId },
+            new_chat_member: { status: "kicked" },
+          },
+        },
+        SECRET,
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    const row = await readLink(userId);
+    expect(row?.status).toBe("revoked");
+    expect(row?.external_id).toBeNull();
+  });
 });

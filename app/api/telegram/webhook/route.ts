@@ -11,7 +11,13 @@ import { sendMessage } from "@/lib/notifications/channels/telegram/client";
 // ONLY response path that is not 200 — every other branch returns 200 so
 // Telegram does not enter a retry storm replaying a poison update.
 //
-// Flow: a user taps the t.me/<bot>?start=<token> deep-link minted by
+// Handles three inbound kinds:
+//   (A) my_chat_member "kicked"/"left" — user blocked/removed the bot →
+//       revoke the link instantly (no waiting for the next send to 403).
+//   (B) "/stop" message — explicit unsubscribe from inside Telegram → revoke.
+//   (C) "/start <token>" — completes the account-link handshake.
+//
+// Link flow: a user taps the t.me/<bot>?start=<token> deep-link minted by
 // startTelegramLink; Telegram delivers a message whose text is
 // "/start <token>". We sha256-hash the token, find the matching pending row,
 // flip it to linked, and best-effort confirm in-chat.
@@ -37,12 +43,36 @@ type TelegramUpdate = {
     // undefined; we persist it as null in that case.
     from?: { username?: string };
   };
+  // Sent when the bot's chat-membership changes. In a private chat the user
+  // blocking the bot arrives as new_chat_member.status === "kicked"; "left"
+  // covers removal from a group. We use it to revoke the link instantly.
+  my_chat_member?: {
+    chat?: { id?: number | string };
+    new_chat_member?: { status?: string };
+  };
 };
 
 // Fresh response each call — a shared NextResponse singleton's body can only be
 // read once (callers/tests that .json() it would hit "Body already read").
 function ok(): NextResponse {
   return NextResponse.json({ ok: true });
+}
+
+// Revoke a telegram link by its chat id (external_id). Shared by the /stop
+// command and the my_chat_member block handler. Idempotent: clears external_id
+// so a repeat event is a no-op and a future /start re-links from a clean row.
+// Returns true when a previously-linked row was actually revoked.
+async function revokeByChatId(
+  sb: ReturnType<typeof getServiceSupabase>,
+  chatIdStr: string,
+): Promise<boolean> {
+  const { data } = await sb
+    .from("user_channel_links")
+    .update({ status: "revoked", external_id: null })
+    .eq("channel", "telegram")
+    .eq("external_id", chatIdStr)
+    .select("user_id");
+  return Array.isArray(data) && data.length > 0;
 }
 
 export async function POST(req: Request) {
@@ -60,13 +90,50 @@ export async function POST(req: Request) {
     return ok();
   }
 
+  const sb = getServiceSupabase();
+
+  // (A) Bot blocked / removed: Telegram delivers my_chat_member with a terminal
+  // status ("kicked" when a user blocks the bot, "left" when removed from a
+  // group). Revoke that chat's link immediately so delivery stops without
+  // waiting for the next send to 403. Any non-terminal status is ignored.
+  const memberStatus = update.my_chat_member?.new_chat_member?.status;
+  const memberChatId = update.my_chat_member?.chat?.id;
+  if (memberStatus !== undefined) {
+    if (
+      (memberStatus === "kicked" ||
+        memberStatus === "left" ||
+        memberStatus === "banned") &&
+      memberChatId !== undefined &&
+      memberChatId !== null
+    ) {
+      await revokeByChatId(sb, String(memberChatId));
+    }
+    return ok();
+  }
+
   const text = update.message?.text;
   const chatId = update.message?.chat?.id;
   // Telegram @handle of the sender (no '@'); undefined when the user has none.
   const handle = update.message?.from?.username ?? null;
 
-  // Only /start <token> messages drive a link. Everything else (other update
-  // types, plain messages, my_chat_member, etc.) is acknowledged and ignored.
+  // (B) /stop: explicit unsubscribe from inside Telegram. Revoke + confirm.
+  if (
+    typeof text === "string" &&
+    /^\/stop\b/.test(text) &&
+    chatId !== undefined &&
+    chatId !== null
+  ) {
+    const revoked = await revokeByChatId(sb, String(chatId));
+    await sendMessage({
+      chatId: String(chatId),
+      html: revoked
+        ? "🔕 <b>Unsubscribed.</b> You won't receive Trinno notifications here. Reconnect anytime from Trinno → Settings → Notifications."
+        : "You're not currently connected to Trinno. Connect from Settings → Notifications.",
+    }).catch(() => {});
+    return ok();
+  }
+
+  // (C) /start <token> drives a link. Any other update/message is ack'd + ignored.
   const match = typeof text === "string" ? text.match(/^\/start\s+(\S+)/) : null;
   if (!match || chatId === undefined || chatId === null) {
     return ok();
@@ -75,7 +142,6 @@ export async function POST(req: Request) {
   const token = match[1];
   const hash = sha256hex(token);
   const chatIdStr = String(chatId);
-  const sb = getServiceSupabase();
 
   // Find the single pending, non-expired link row this token unlocks.
   const nowIso = new Date().toISOString();
