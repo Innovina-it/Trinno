@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import { LogOut, XIcon } from "lucide-react";
+import { LogOut, Settings, XIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { logout } from "@/actions/auth";
@@ -176,6 +176,23 @@ export function MobileNavDrawer({
                 </p>
               </div>
             )}
+            <DialogPrimitive.Close
+              nativeButton={false}
+              render={
+                <Link
+                  href="/settings"
+                  data-testid="mobile-nav-settings"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 rounded-xl min-h-11 text-sm",
+                    "text-fg-muted hover:bg-[color:var(--surface-strong)] hover:text-fg transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40",
+                  )}
+                />
+              }
+            >
+              <Settings className="size-4 shrink-0" aria-hidden />
+              <span className="flex-1 text-left">Settings</span>
+            </DialogPrimitive.Close>
             <form
               onSubmit={async (e) => {
                 // See account-menu.tsx — drain pending pref writes before

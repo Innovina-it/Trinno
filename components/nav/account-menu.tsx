@@ -66,6 +66,7 @@ export function AccountMenu({
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
+          nativeButton={false}
           render={
             <Link href="/settings" data-testid="account-menu-settings" />
           }
