@@ -303,10 +303,15 @@ export const cardLinks = pgTable("card_links", {
 });
 
 export const linkScope = pgEnum("link_scope", ["workspace", "card"]);
+export const linkPurpose = pgEnum("link_purpose", ["source", "reports"]);
 
 export const links = pgTable("links", {
   id: uuid("id").primaryKey().defaultRandom(),
   scope: linkScope("scope").notNull(),
+  // Discriminates the two workspace-scoped links (Shared folder vs Reports
+  // folder). Card-scope rows keep the default 'source'. Defaults to 'source'
+  // for backward compatibility.
+  purpose: linkPurpose("purpose").notNull().default("source"),
   workspaceId: uuid("workspace_id").notNull(),
   cardId: uuid("card_id"),
   url: text("url").notNull(),

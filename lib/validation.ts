@@ -292,12 +292,19 @@ export const UpsertCardLinkInput = z.object({
   url: z.string().trim().min(1).max(2048),
   color: LinkColor,
 });
+export const LinkPurpose = z.enum(["source", "reports"]);
 export const UpsertWorkspaceLinkInput = z.object({
   workspaceId: Uuid,
   url: z.string().trim().min(1).max(2048),
+  // Discriminates the two workspace-scoped links. Defaults to 'source' so
+  // existing callers (and the cloud-icon Shared folder) are unaffected.
+  purpose: LinkPurpose.default("source"),
 });
 export const RemoveCardLinkInput = z.object({ cardId: Uuid });
-export const RemoveWorkspaceLinkInput = z.object({ workspaceId: Uuid });
+export const RemoveWorkspaceLinkInput = z.object({
+  workspaceId: Uuid,
+  purpose: LinkPurpose.default("source"),
+});
 
 export const SprintStateZ = z.enum(["planned", "active", "completed"]);
 export const CreateSprintInput = z.object({

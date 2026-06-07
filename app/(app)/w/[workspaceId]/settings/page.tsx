@@ -26,21 +26,23 @@ export default async function WorkspaceSettingsPage({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
-  const [members, calendarRows, workspaceLink, role] = await Promise.all([
+  const [members, calendarRows, workspaceLinkRows, role] = await Promise.all([
     listMembers(token, workspaceId),
     listWorkspaceCalendar(token, workspaceId),
     dbAsUser(token, async (tx) => {
-      const [row] = await tx
-        .select({ url: links.url })
+      return tx
+        .select({ url: links.url, purpose: links.purpose })
         .from(links)
         .where(
           and(eq(links.workspaceId, workspaceId), eq(links.scope, "workspace")),
-        )
-        .limit(1);
-      return row ?? null;
-    }).catch(() => null),
+        );
+    }).catch(() => [] as { url: string; purpose: "source" | "reports" }[]),
     getWorkspaceRole(token, workspaceId, user.id),
   ]);
+  const workspaceLink =
+    workspaceLinkRows.find((r) => r.purpose === "source") ?? null;
+  const reportsLink =
+    workspaceLinkRows.find((r) => r.purpose === "reports") ?? null;
   const canDelete = role === "owner" || role === "admin";
 
   return (
@@ -68,6 +70,7 @@ export default async function WorkspaceSettingsPage({
               autoAssignCreator: ws.autoAssignCreator,
             }}
             workspaceLink={workspaceLink}
+            reportsLink={reportsLink}
             canDelete={canDelete}
           />
         </div>

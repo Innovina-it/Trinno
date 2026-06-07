@@ -89,7 +89,7 @@ export async function removeCardLinkImpl(
 
 export async function upsertWorkspaceLinkImpl(
   token: string,
-  input: { workspaceId: string; url: string },
+  input: { workspaceId: string; url: string; purpose?: "source" | "reports" },
 ) {
   const parsed = UpsertWorkspaceLinkInput.parse(input);
   const url = normalizeUrl(parsed.url);
@@ -102,12 +102,16 @@ export async function upsertWorkspaceLinkImpl(
       .insert(links)
       .values({
         scope: "workspace",
+        purpose: parsed.purpose,
         workspaceId: parsed.workspaceId,
         url,
         createdBy,
       })
+      // Composite conflict target matches the per-purpose unique index
+      // (links_ws_ux on (workspace_id, purpose) where scope='workspace'), so
+      // each purpose upserts independently (source vs reports).
       .onConflictDoUpdate({
-        target: links.workspaceId,
+        target: [links.workspaceId, links.purpose],
         targetWhere: sql`scope = 'workspace'`,
         set: { url },
       })
@@ -119,7 +123,7 @@ export async function upsertWorkspaceLinkImpl(
 
 export async function removeWorkspaceLinkImpl(
   token: string,
-  input: { workspaceId: string },
+  input: { workspaceId: string; purpose?: "source" | "reports" },
 ) {
   const parsed = RemoveWorkspaceLinkInput.parse(input);
   const actor = decodeSub(token);
@@ -133,6 +137,7 @@ export async function removeWorkspaceLinkImpl(
         and(
           eq(links.workspaceId, parsed.workspaceId),
           eq(links.scope, "workspace"),
+          eq(links.purpose, parsed.purpose),
         ),
       )
       .returning({ id: links.id });
@@ -170,6 +175,7 @@ export async function removeCardLink(input: { cardId: string }) {
 export async function upsertWorkspaceLink(input: {
   workspaceId: string;
   url: string;
+  purpose?: "source" | "reports";
 }) {
   return actionResult(async () => {
     await requireUser();
@@ -180,7 +186,10 @@ export async function upsertWorkspaceLink(input: {
   });
 }
 
-export async function removeWorkspaceLink(input: { workspaceId: string }) {
+export async function removeWorkspaceLink(input: {
+  workspaceId: string;
+  purpose?: "source" | "reports";
+}) {
   return actionResult(async () => {
     await requireUser();
     const t = (await getSessionToken())!;
