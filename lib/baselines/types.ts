@@ -1,4 +1,4 @@
-export type BaselineMeta = { id: string; workspaceId: string; name: string; note: string | null; createdBy: string; createdAt: string };
+export type BaselineMeta = { id: string; workspaceId: string; name: string; note: string | null; createdBy: string; createdAt: string; isApproved: boolean };
 export type BaselineEntry = {
   cardId: string; title: string;
   startDate: string | null; targetDate: string | null; completedAt: string | null;

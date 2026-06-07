@@ -55,6 +55,7 @@ export function BaselineSaveDialog({
             res.data.createdAt instanceof Date
               ? res.data.createdAt.toISOString()
               : String(res.data.createdAt),
+          isApproved: res.data.isApproved ?? false,
         });
         onOpenChange(false);
       } else {

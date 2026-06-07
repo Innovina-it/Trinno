@@ -648,3 +648,4 @@ export const UpdateRoadmapBaselineInput = z.object({
 });
 export const DeleteRoadmapBaselineInput = z.object({ id: Uuid });
 export const GetRoadmapBaselineDetailInput = z.object({ id: Uuid });
+export const SetApprovedBaselineInput = z.object({ id: Uuid });

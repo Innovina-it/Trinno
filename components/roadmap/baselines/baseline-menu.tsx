@@ -1,6 +1,15 @@
 "use client";
 import { useState } from "react";
-import { GitCompare, History, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+  Check,
+  CircleCheck,
+  GitCompare,
+  History,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -10,7 +19,10 @@ import {
   DropdownMenuGroup,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { deleteRoadmapBaseline } from "@/actions/roadmap-baselines";
+import {
+  deleteRoadmapBaseline,
+  setApprovedBaseline,
+} from "@/actions/roadmap-baselines";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { formatDate } from "@/lib/format-date";
 import { toast } from "sonner";
@@ -45,6 +57,19 @@ export function BaselineMenu({
     if (res.ok) {
       setBaselines(baselines.filter((x) => x.id !== id));
       if (compareBaselineId === id) setCompareBaselineId(null);
+    } else {
+      toast.error(res.error.message);
+    }
+  }
+
+  async function handleApprove(id: string) {
+    const res = await setApprovedBaseline({ id });
+    if (res.ok) {
+      // Exactly one approved per workspace: flip locally to mirror the
+      // unset-then-set the server performed.
+      setBaselines(
+        baselines.map((x) => ({ ...x, isApproved: x.id === id })),
+      );
     } else {
       toast.error(res.error.message);
     }
@@ -98,13 +123,39 @@ export function BaselineMenu({
                   >
                     <GitCompare className="size-3.5 text-fg-faint" />
                     <span className="flex-1 min-w-0">
-                      <span className="block truncate text-sm">{b.name}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-sm">{b.name}</span>
+                        {b.isApproved && (
+                          <span
+                            data-testid={`baseline-approved-badge-${b.id}`}
+                            className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[color:var(--surface-hi)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--accent-emerald)]"
+                          >
+                            <CircleCheck className="size-2.5" aria-hidden />
+                            Approved
+                          </span>
+                        )}
+                      </span>
                       <span className="block mono-meta-sm text-fg-faint">
                         {formatDate(new Date(b.createdAt))}
                       </span>
                     </span>
                     {canManage && (
                       <span className="flex items-center gap-1">
+                        {!b.isApproved && (
+                          <button
+                            type="button"
+                            aria-label="Mark as approved"
+                            data-testid={`baseline-approve-${b.id}`}
+                            className="rounded p-1 text-fg-faint hover:text-[color:var(--accent-emerald)] hover:bg-[rgb(255_255_255/0.08)]"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void handleApprove(b.id);
+                            }}
+                          >
+                            <Check className="size-3.5" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           aria-label="Rename baseline"

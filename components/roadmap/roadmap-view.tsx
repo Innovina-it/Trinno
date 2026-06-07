@@ -988,6 +988,7 @@ export function RoadmapView({
           note: d.meta.note ?? null,
           createdBy: d.meta.createdBy,
           createdAt: iso(d.meta.createdAt)!,
+          isApproved: d.meta.isApproved ?? false,
         },
         entries: d.entries.map((e) => ({
           cardId: e.cardId,

@@ -16,6 +16,7 @@ const meta: BaselineMeta = {
   note: null,
   createdBy: "u1",
   createdAt: "2026-05-01T00:00:00Z",
+  isApproved: false,
 };
 
 function entry(p: Partial<BaselineEntry> & { cardId: string }): BaselineEntry {

@@ -325,6 +325,7 @@ export const roadmapBaselines = pgTable("roadmap_baselines", {
   note: text("note"),
   createdBy: uuid("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  isApproved: boolean("is_approved").notNull().default(false),
 });
 
 export const roadmapBaselineEntries = pgTable("roadmap_baseline_entries", {

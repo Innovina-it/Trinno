@@ -244,6 +244,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
         note: b.note,
         createdBy: b.createdBy,
         createdAt: b.createdAt.toISOString(),
+        isApproved: b.isApproved,
       }));
       return {
         workspaceId,
@@ -456,6 +457,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
       note: b.note,
       createdBy: b.createdBy,
       createdAt: b.createdAt.toISOString(),
+      isApproved: b.isApproved,
     }));
 
     return {

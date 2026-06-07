@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import {
   roadmapBaselines,
@@ -14,6 +14,7 @@ import {
   UpdateRoadmapBaselineInput,
   DeleteRoadmapBaselineInput,
   GetRoadmapBaselineDetailInput,
+  SetApprovedBaselineInput,
 } from "@/lib/validation";
 import { StructuredError, actionResult } from "@/lib/errors";
 import { assertWorkspaceWriter } from "@/lib/permissions/workspace-writer";
@@ -145,6 +146,56 @@ export async function getRoadmapBaselineDetailImpl(
   });
 }
 
+// Mark exactly ONE baseline per workspace as the approved plan-of-record.
+// Runs in a single transaction (dbAsUser opens one) that first clears
+// is_approved for every baseline in the workspace, THEN sets it on the target,
+// so the partial-unique index (one approved per workspace) never trips during
+// the swap. Owner/admin gated to match the rest of this file (and the
+// roadmap_baselines admin-write RLS policy).
+export async function setApprovedBaselineImpl(
+  token: string,
+  input: { id: string },
+) {
+  const p = SetApprovedBaselineInput.parse(input);
+  const actor = decodeSub(token);
+  return dbAsUser(token, async (tx) => {
+    const [row] = await tx
+      .select({ workspaceId: roadmapBaselines.workspaceId })
+      .from(roadmapBaselines)
+      .where(eq(roadmapBaselines.id, p.id))
+      .limit(1);
+    if (!row) throw new StructuredError("NOT_FOUND", "No baseline");
+    assertWorkspaceWriter(await getWorkspaceRole(tx, row.workspaceId, actor));
+    // Unset-then-set: clear all in the workspace, then approve the target.
+    await tx
+      .update(roadmapBaselines)
+      .set({ isApproved: false })
+      .where(eq(roadmapBaselines.workspaceId, row.workspaceId));
+    await tx
+      .update(roadmapBaselines)
+      .set({ isApproved: true })
+      .where(eq(roadmapBaselines.id, p.id));
+    return { id: p.id, workspaceId: row.workspaceId };
+  });
+}
+
+// Returns the workspace's approved baseline row, or null if none is approved.
+export async function getApprovedBaseline(token: string, workspaceId: string) {
+  return dbAsUser(token, async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(roadmapBaselines)
+      .where(
+        and(
+          eq(roadmapBaselines.workspaceId, workspaceId),
+          eq(roadmapBaselines.isApproved, true),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  });
+}
+
 export async function createRoadmapBaseline(input: {
   workspaceId: string;
   name: string;
@@ -188,5 +239,15 @@ export async function getRoadmapBaselineDetail(input: { id: string }) {
     await requireUser();
     const t = (await getSessionToken())!;
     return getRoadmapBaselineDetailImpl(t, input);
+  });
+}
+
+export async function setApprovedBaseline(input: { id: string }) {
+  return actionResult(async () => {
+    await requireUser();
+    const t = (await getSessionToken())!;
+    const r = await setApprovedBaselineImpl(t, input);
+    revalidatePath(`/w/${r.workspaceId}/roadmap`);
+    return r;
   });
 }
