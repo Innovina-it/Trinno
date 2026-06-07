@@ -731,3 +731,52 @@ export const milestones = pgTable("milestones", {
     .defaultNow(),
   createdBy: uuid("created_by").notNull(),
 });
+
+// ── PMA (Project Management Assistant) — Postgres data layer (migration 0128) ──
+// Registry + run-history index ONLY (DESIGN §4.3, §4.4). KEYS / KIND / POINTERS
+// — NO bulk content: recap and report TEXT live in the Drive OUTPUT folder (the
+// system of record); these tables are a rebuildable projection of Drive. RLS is
+// workspace-scoped on both (SELECT for members; writes are service-role only).
+// `kind`/`state` are text + CHECK in SQL (the repo convention), so no pgEnum.
+
+export const pmaFileRegistry = pgTable("pma_file_registry", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull(),
+  // Drive fileId in the SOURCE folder; unique per workspace.
+  sourceFileId: text("source_file_id").notNull(),
+  name: text("name"),
+  parentFolderId: text("parent_folder_id"),
+  mimeType: text("mime_type"),
+  // 'editable' | 'non_mod' (computed each run; CHECK-enforced in SQL).
+  kind: text("kind"),
+  isDeliverable: boolean("is_deliverable").notNull().default(false),
+  cardLinkId: uuid("card_link_id"),
+  // headRevisionId — the version-gate checkpoint.
+  lastVersion: text("last_version"),
+  lastAnalyzedAt: timestamp("last_analyzed_at", { withTimezone: true }),
+  // 'active' | 'removed' | 'error' (CHECK-enforced in SQL).
+  state: text("state").notNull().default("active"),
+  // Drive fileId of the latest recap in the OUTPUT folder.
+  recapFileId: text("recap_file_id"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type PmaFileRegistryRow = typeof pmaFileRegistry.$inferSelect;
+
+export const pmaAnalysisRuns = pgTable("pma_analysis_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull(),
+  runAt: timestamp("run_at", { withTimezone: true }).notNull().defaultNow(),
+  triggeredBy: uuid("triggered_by"),
+  status: text("status"),
+  // { changed, missed, removed } — counts only, no content.
+  counts: jsonb("counts").$type<Record<string, number>>(),
+  // Drive fileId of the report Google Doc.
+  reportFileId: text("report_file_id"),
+  // webViewLink the Analysis tab surfaces.
+  reportWebViewLink: text("report_web_view_link"),
+});
+
+export type PmaAnalysisRunRow = typeof pmaAnalysisRuns.$inferSelect;
