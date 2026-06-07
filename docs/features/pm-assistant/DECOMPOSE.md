@@ -63,3 +63,9 @@ existing workspace link unchanged · write-only-to-Output (never writes Source) 
 - **Source** (project content): folder id `1RI4P1hLK622dhlqD2IcUiMcSbnr_W4xa`
 - **Output** (Gemini outcome): folder id `1XhMBEasXnniAvO66n6Wxr_iAc7QgUESW`
 - SA: `959497083111-compute@developer.gserviceaccount.com` · creds at `.secrets/pma-sa.json` (gitignored)
+
+## Build progress (2026-06-07)
+- ✅ U1a Drive client (64de07d) · ✅ U4b output helpers (cf37dd7) · ✅ U4a registry+runs (9cf9e96)
+- Migrations: 0128 = pma registry (U4a). Next: 0129 = U3 baseline-approved, 0130 = U2 link purpose.
+- Local Supabase reset once (was empty/bare) → now full chain 0001→0128. Remaining migrations apply incrementally (`supabase migration up --local`, no reset).
+- Next: U3 → U2 → U5 → (U1b+U6 Gemini) → U7 → U8 → U9 → U10 → U11.
