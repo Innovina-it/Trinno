@@ -56,6 +56,9 @@ supabase/.temp
 
 # Secrets — plaintext prod env, never commit
 scripts/set-prod-env.sh
+.secrets/
+*-service-account*.json
+*gserviceaccount*.json
 
 # Prod seed/delete ops scripts — may carry prod keys, keep local only
 scripts/seeds/*-prod.sh
