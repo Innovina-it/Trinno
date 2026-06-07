@@ -65,7 +65,14 @@ existing workspace link unchanged · write-only-to-Output (never writes Source) 
 - SA: `959497083111-compute@developer.gserviceaccount.com` · creds at `.secrets/pma-sa.json` (gitignored)
 
 ## Build progress (2026-06-07)
+FOUNDATION COMPLETE (verified + committed, no push):
 - ✅ U1a Drive client (64de07d) · ✅ U4b output helpers (cf37dd7) · ✅ U4a registry+runs (9cf9e96)
-- Migrations: 0128 = pma registry (U4a). Next: 0129 = U3 baseline-approved, 0130 = U2 link purpose.
-- Local Supabase reset once (was empty/bare) → now full chain 0001→0128. Remaining migrations apply incrementally (`supabase migration up --local`, no reset).
-- Next: U3 → U2 → U5 → (U1b+U6 Gemini) → U7 → U8 → U9 → U10 → U11.
+- ✅ U3 baseline is_approved (4651047) · ✅ U2 link purpose source|reports (d9f6635)
+- Migrations applied: 0128 registry · 0129 baseline approved · 0130 link purpose.
+- Local Supabase: reset ONCE when empty → full chain 0001→0130. Incremental only since (`supabase migration up --local`, NEVER reset — see [[dev-db-no-reset]]).
+
+REMAINING (resume here):
+- U5 detect (Changes API over source folder + categorize + deliverable cross-ref) — verify READY: a Google Doc is now in the Source folder 1RI4P1….
+- U1b + U6 Gemini analyze — needs real GEMINI_API_KEY (AIza…) in .env.local; SDK @google/generative-ai.
+- U7 synth report (Gemini Pro → report Doc in output folder) · U8 reconcile · U9 run route (owner/admin) · U10 Analysis tab UI · U11 tripwires.
+- Resume protocol: read DESIGN.md + this file; continue at U5; per-unit Gate 3 handoff → build → Gate 4 verify (local incremental) → commit.
