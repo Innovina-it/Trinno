@@ -255,15 +255,12 @@ export async function seedDemoWorkspaceImpl(
     size: "2x1",
   });
 
-  // The seeded workspace is fully populated, so the first-run tour has
-  // nothing to teach.  Mark onboarding complete so the overlay never
-  // shows for users who came in via the demo seed (this also unblocks
-  // e2e tests, which always seed).
-  try {
-    await markOnboardingCompletedImpl(token);
-  } catch {
-    // Non-fatal — the tour will still hide on Skip / Finish.
-  }
+  // Onboarding is intentionally left incomplete here so the first-run tour
+  // still shows for self-signup users — it teaches the top-nav (workspace
+  // switcher, Boards, Roadmap, Search), not the seeded content, so it's
+  // relevant even though the demo workspace is populated. Completion is
+  // recorded when the user hits Skip / Finish on the tour. (e2e specs that
+  // want a tour-free fixture seed with mode "minimal", which still marks it.)
 
   return seedResult(ws.id, failures);
 }
@@ -894,11 +891,8 @@ async function seedRichDemoImpl(
     size: "2x2",
   });
 
-  try {
-    await markOnboardingCompletedImpl(token);
-  } catch {
-    /* non-fatal */
-  }
+  // Left incomplete on purpose so the first-run tour shows (see the demo-mode
+  // path above). Recorded on Skip / Finish.
 
   return seedResult(ws.id, failures);
 }
