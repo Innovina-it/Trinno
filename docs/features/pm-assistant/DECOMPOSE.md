@@ -64,15 +64,18 @@ existing workspace link unchanged · write-only-to-Output (never writes Source) 
 - **Output** (Gemini outcome): folder id `1XhMBEasXnniAvO66n6Wxr_iAc7QgUESW`
 - SA: `959497083111-compute@developer.gserviceaccount.com` · creds at `.secrets/pma-sa.json` (gitignored)
 
-## Build progress (2026-06-07)
+## Build progress (2026-06-08)
 FOUNDATION COMPLETE (verified + committed, no push):
 - ✅ U1a Drive client (64de07d) · ✅ U4b output helpers (cf37dd7) · ✅ U4a registry+runs (9cf9e96)
 - ✅ U3 baseline is_approved (4651047) · ✅ U2 link purpose source|reports (d9f6635)
 - Migrations applied: 0128 registry · 0129 baseline approved · 0130 link purpose.
 - Local Supabase: reset ONCE when empty → full chain 0001→0130. Incremental only since (`supabase migration up --local`, NEVER reset — see [[dev-db-no-reset]]).
 
-REMAINING (resume here):
-- U5 detect (Changes API over source folder + categorize + deliverable cross-ref) — verify READY: a Google Doc is now in the Source folder 1RI4P1….
-- U1b + U6 Gemini analyze — needs real GEMINI_API_KEY (AIza…) in .env.local; SDK @google/generative-ai.
+CORE IN PROGRESS (verified + committed, no push):
+- ✅ U5 detect (a614e4b) — `lib/pma/detect.ts`. Stateless: bootstrap (getStartPageToken + full list) then incremental changes.list; `listFolder(source)` is the scope oracle (drive-wide feed has no parents → excludes Output churn). Returns `newPageToken` for U9 to persist. 11 unit tests (drive mocked). Live-Drive + removed-scoping deferred to U11/U8.
+- ✅ U1b Gemini client (553d3a6) — `lib/pma/clients/gemini.ts`. `generateStructured()` over **`@google/genai`** (DEVIATION: locked design said deprecated `@google/generative-ai`; approved swap). Flash+Pro tiers. 7 unit tests + live smoke (real key OK). Contract: schemas must use genai `Type` enum.
+
+REMAINING (resume here → U6):
+- **U6 analyze** (`lib/pma/analyze.ts`) — version gate (C: headRevisionId > registry.last_version) + per-editable-file Flash recap (D) → write `recaps/{fileId}__{version}.json` to Output; idempotent on (fileId,version); failure → state=error. Deps U1b,U4,U5 all ✅ → UNBLOCKED.
 - U7 synth report (Gemini Pro → report Doc in output folder) · U8 reconcile · U9 run route (owner/admin) · U10 Analysis tab UI · U11 tripwires.
-- Resume protocol: read DESIGN.md + this file; continue at U5; per-unit Gate 3 handoff → build → Gate 4 verify (local incremental) → commit.
+- Resume protocol: read DESIGN.md + this file; continue at U6; per-unit Gate 3 handoff → build → Gate 4 verify (local incremental) → commit. GEMINI_API_KEY (AIza…) is set in .env.local.
