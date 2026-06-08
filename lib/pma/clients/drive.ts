@@ -14,9 +14,12 @@ import type { drive_v3 } from "googleapis";
 //
 // SECRETS ARE SERVER-ONLY. The `import "server-only"` guard above makes this
 // module throw if it is ever pulled into a client bundle. The service-account
-// JSON is read LAZILY from the path in GOOGLE_APPLICATION_CREDENTIALS the first
-// time a client is built — importing this module never touches the filesystem
-// or env, so type-check/build/tests pass with no credentials configured.
+// JSON is loaded LAZILY the first time a client is built — importing this module
+// never touches the filesystem or env, so type-check/build/tests pass with no
+// credentials configured. Two sources, inline-wins: GOOGLE_SERVICE_ACCOUNT_JSON
+// (the raw JSON, for prod/Vercel where there is no secret file on disk) or
+// GOOGLE_APPLICATION_CREDENTIALS (a path to the JSON file, for local dev, e.g.
+// .secrets/pma-sa.json).
 //
 // INVARIANT: trinno only WRITES to the Output folder, never the Source folder.
 // Read methods (listFolder/getFile/getStartPageToken/listChanges) are safe
@@ -96,40 +99,71 @@ function toDriveFile(f: drive_v3.Schema$File): DriveFile {
 // module is side-effect-free (no env read, no file read).
 let cachedDrive: drive_v3.Drive | null = null;
 
-async function loadCredentials(): Promise<{
+export type ServiceAccountCredentials = {
   client_email: string;
   private_key: string;
-}> {
-  const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (!keyPath) {
-    throw new Error(
-      "GOOGLE_APPLICATION_CREDENTIALS is not set — point it at the service-account JSON (e.g. .secrets/pma-sa.json).",
-    );
-  }
-  let raw: string;
-  try {
-    raw = await readFile(keyPath, "utf8");
-  } catch (err) {
-    throw new Error(
-      `Failed to read service-account key at ${keyPath}: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
-  }
+};
+
+// Where the service-account JSON comes from. Inline JSON (prod / Vercel, where
+// there is no secret file on disk) takes precedence over a file path (local
+// dev). Pure + env-injected so it is unit-testable.
+export function pickCredentialSource(env: {
+  GOOGLE_SERVICE_ACCOUNT_JSON?: string;
+  GOOGLE_APPLICATION_CREDENTIALS?: string;
+}): { kind: "inline"; raw: string } | { kind: "file"; path: string } | null {
+  const inline = env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
+  if (inline) return { kind: "inline", raw: inline };
+  const path = env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
+  if (path) return { kind: "file", path };
+  return null;
+}
+
+// Parse + validate a service-account JSON blob. `source` names where it came
+// from so errors point at the right env var / file. Pure + testable.
+export function parseServiceAccount(
+  raw: string,
+  source: string,
+): ServiceAccountCredentials {
   let parsed: { client_email?: string; private_key?: string };
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error(
-      `Service-account key at ${keyPath} is not valid JSON.`,
-    );
+    throw new Error(`Service-account JSON from ${source} is not valid JSON.`);
   }
   if (!parsed.client_email || !parsed.private_key) {
     throw new Error(
-      `Service-account key at ${keyPath} is missing client_email or private_key.`,
+      `Service-account JSON from ${source} is missing client_email or private_key.`,
     );
   }
   return { client_email: parsed.client_email, private_key: parsed.private_key };
+}
+
+async function loadCredentials(): Promise<ServiceAccountCredentials> {
+  const src = pickCredentialSource({
+    GOOGLE_SERVICE_ACCOUNT_JSON: process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
+    GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+  });
+  if (!src) {
+    throw new Error(
+      "No service-account credentials configured — set GOOGLE_SERVICE_ACCOUNT_JSON " +
+        "(inline JSON, for prod/Vercel) or GOOGLE_APPLICATION_CREDENTIALS " +
+        "(path to the JSON file, e.g. .secrets/pma-sa.json for local dev).",
+    );
+  }
+  if (src.kind === "inline") {
+    return parseServiceAccount(src.raw, "GOOGLE_SERVICE_ACCOUNT_JSON");
+  }
+  let raw: string;
+  try {
+    raw = await readFile(src.path, "utf8");
+  } catch (err) {
+    throw new Error(
+      `Failed to read service-account key at ${src.path}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+  return parseServiceAccount(raw, src.path);
 }
 
 // Build (or return the cached) authenticated Drive v3 client. Auth uses the
