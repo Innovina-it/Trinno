@@ -26,6 +26,7 @@ import {
   ChevronDown,
   Columns,
   Home,
+  LineChart,
   Map,
   Menu,
   MoreHorizontal,
@@ -99,6 +100,7 @@ export function TopNav({
     ? [
         { href: `/workload`, label: "Workload", Icon: Users, testId: "nav-workload" },
         { href: `/w/${wsForLinks}/versions`, label: "Versions", Icon: Calendar, testId: "nav-versions" },
+        { href: `/w/${wsForLinks}/analysis`, label: "Analysis", Icon: LineChart, testId: "nav-analysis" },
         { href: `/w/${wsForLinks}/archive`, label: "Archive", Icon: Archive, testId: "nav-archive" },
       ]
     : [];
