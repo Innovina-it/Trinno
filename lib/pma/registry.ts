@@ -18,6 +18,49 @@ import type {
 // `import "server-only"` guard makes this module throw if pulled into a client
 // bundle. Never expose to the browser.
 
+// ── snake_case → camelCase row mappers ───────────────────────────────────────
+// supabase-js returns RAW database columns (snake_case), but the drizzle
+// $inferSelect row types are camelCase. The original code cast straight through
+// (`as unknown as PmaFileRegistryRow`), which left the runtime object in
+// snake_case while the type claimed camelCase — the casing lie U6 flagged. These
+// pure mappers make the returned objects actually match their types, so callers
+// (analyze's version gate, reconcile's removed-id intersection, U9/U10) can read
+// `row.sourceFileId` / `row.lastVersion` and get a value. (Timestamps remain
+// ISO strings at runtime — a pre-existing repo-wide supabase-js quirk, out of
+// scope here; the final cast preserves the inferred type.)
+
+export function mapRegistryRow(raw: Record<string, unknown>): PmaFileRegistryRow {
+  return {
+    id: raw.id,
+    workspaceId: raw.workspace_id,
+    sourceFileId: raw.source_file_id,
+    name: raw.name ?? null,
+    parentFolderId: raw.parent_folder_id ?? null,
+    mimeType: raw.mime_type ?? null,
+    kind: raw.kind ?? null,
+    isDeliverable: raw.is_deliverable ?? false,
+    cardLinkId: raw.card_link_id ?? null,
+    lastVersion: raw.last_version ?? null,
+    lastAnalyzedAt: raw.last_analyzed_at ?? null,
+    state: raw.state,
+    recapFileId: raw.recap_file_id ?? null,
+    updatedAt: raw.updated_at,
+  } as unknown as PmaFileRegistryRow;
+}
+
+export function mapRunRow(raw: Record<string, unknown>): PmaAnalysisRunRow {
+  return {
+    id: raw.id,
+    workspaceId: raw.workspace_id,
+    runAt: raw.run_at,
+    triggeredBy: raw.triggered_by ?? null,
+    status: raw.status ?? null,
+    counts: raw.counts ?? null,
+    reportFileId: raw.report_file_id ?? null,
+    reportWebViewLink: raw.report_web_view_link ?? null,
+  } as unknown as PmaAnalysisRunRow;
+}
+
 // ── pma_file_registry ────────────────────────────────────────────────────────
 
 export type RegistryKind = "editable" | "non_mod";
@@ -76,7 +119,7 @@ export async function upsertRegistryEntry(
     .select("*")
     .single();
   if (error) throw error;
-  return data as unknown as PmaFileRegistryRow;
+  return mapRegistryRow(data as Record<string, unknown>);
 }
 
 // Fetch one registry row by its natural key, or null if not yet seeded. The
@@ -93,7 +136,7 @@ export async function getRegistryEntry(
     .eq("source_file_id", sourceFileId)
     .maybeSingle();
   if (error) throw error;
-  return (data as unknown as PmaFileRegistryRow) ?? null;
+  return data ? mapRegistryRow(data as Record<string, unknown>) : null;
 }
 
 // List every registry row for a workspace (the full Drive projection) — for
@@ -109,7 +152,7 @@ export async function listRegistry(
     .eq("workspace_id", workspaceId)
     .order("source_file_id", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as unknown as PmaFileRegistryRow[];
+  return ((data ?? []) as Record<string, unknown>[]).map(mapRegistryRow);
 }
 
 // ── pma_analysis_runs ────────────────────────────────────────────────────────
@@ -148,7 +191,7 @@ export async function recordRun(run: RunRecord): Promise<PmaAnalysisRunRow> {
     .select("*")
     .single();
   if (error) throw error;
-  return data as unknown as PmaAnalysisRunRow;
+  return mapRunRow(data as Record<string, unknown>);
 }
 
 // List a workspace's analysis runs, newest first (the Analysis-tab history feed,
@@ -163,5 +206,5 @@ export async function listRuns(
     .eq("workspace_id", workspaceId)
     .order("run_at", { ascending: false });
   if (error) throw error;
-  return (data ?? []) as unknown as PmaAnalysisRunRow[];
+  return ((data ?? []) as Record<string, unknown>[]).map(mapRunRow);
 }
