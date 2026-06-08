@@ -94,13 +94,22 @@ export async function reconcile(input: ReconcileInput): Promise<ReconcileResult>
     }
 
     if (outcome?.status === "analyzed") {
-      await upsertRegistryEntry({
-        ...base,
-        state: "active",
-        lastVersion: outcome.version ?? file.version,
-        lastAnalyzedAt: input.now,
-        recapFileId: outcome.recapFileId,
-      });
+      // Advance the gate ONLY when the run as a whole succeeded. If synthesis
+      // failed, leave last_version untouched (like an error) so this file is
+      // re-detected AND re-analyzed on the retry — otherwise the gate would
+      // skip it next run and the retry's report would omit it (its recap is
+      // not in memory). The registry only ever reflects a successful report.
+      await upsertRegistryEntry(
+        input.runStatus === "success"
+          ? {
+              ...base,
+              state: "active",
+              lastVersion: outcome.version ?? file.version,
+              lastAnalyzedAt: input.now,
+              recapFileId: outcome.recapFileId,
+            }
+          : { ...base, state: "active" },
+      );
     } else {
       // skipped (unchanged editable) or non_mod (metadata only): record the
       // current version as the gate checkpoint, no recap change.

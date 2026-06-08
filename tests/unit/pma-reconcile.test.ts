@@ -95,6 +95,23 @@ describe("reconcile — registry state rules", () => {
     });
   });
 
+  it("on a FAILED run, an analyzed file does NOT advance last_version (re-analyzes on retry)", async () => {
+    await reconcile({
+      workspaceId: WS,
+      triggeredBy: "u1",
+      detected: [editable("A", "v9")],
+      analysis: [outcome("A", "analyzed", { version: "v9", recapFileId: "recap-A" })],
+      removed: [],
+      report: null,
+      runStatus: "error",
+      now: NOW,
+    });
+    const p = payloadFor("A");
+    expect(p.state).toBe("active");
+    expect("lastVersion" in p).toBe(false); // gate NOT advanced on a failed run
+    expect("recapFileId" in p).toBe(false);
+  });
+
   it("error → state=error and last_version is LEFT UNTOUCHED (retries next run)", async () => {
     await reconcile({
       workspaceId: WS,
