@@ -147,6 +147,22 @@ describe("runAnalysis — happy path wiring", () => {
   });
 });
 
+describe("runAnalysis — tripwire: write-only-to-Output (DESIGN §52)", () => {
+  it("routes the SOURCE folder only to detect (read); writers only ever get the OUTPUT folder", async () => {
+    await run();
+
+    // detect READS the source folder.
+    expect(detect.mock.calls[0][0].sourceFolderId).toBe("src-folder");
+
+    // every write-side unit is handed the OUTPUT folder, never the source.
+    const analyzeFolder = analyze.mock.calls[0][0].outputFolderId;
+    const synthFolder = synthesize.mock.calls[0][0].outputFolderId;
+    expect(analyzeFolder).toBe("out-folder");
+    expect(synthFolder).toBe("out-folder");
+    expect([analyzeFolder, synthFolder]).not.toContain("src-folder");
+  });
+});
+
 describe("runAnalysis — synthesis is terminal", () => {
   it("on synthesize failure: status=error, reconcile gets report=null, token NOT advanced, run still recorded", async () => {
     synthesize.mockRejectedValue(new Error("Gemini returned an empty response."));

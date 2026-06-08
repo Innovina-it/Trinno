@@ -94,6 +94,18 @@ CORE IN PROGRESS (verified + committed, no push):
 
 - ✅ **LIVE FULL-ROUTE VERIFIED (2026-06-08)** — first real run through the UI on a real workspace ("Luca.De.Crescenzo's"): More ▸ Analysis ▸ Run analysis → row `08/06/2026 11:59 · 1 changed · 0 missed · 0 removed` + working Open-report link. Confirms the whole chain live: auth/owner-admin gate → getRunInputs → detect (bootstrap) → analyze (Flash) → synthesize (Pro → Doc) → reconcile (run recorded) → list refresh + UI render. Closes the U9/U10 live-smoke gap. **Required a missing local-dev env var:** `GOOGLE_APPLICATION_CREDENTIALS=<abs path>/.secrets/pma-sa.json` added to `.env.local` (the dev server, unlike the smoke scripts, didn't have it; DESIGN §2 prescribed it — was never added). Restart dev server after editing .env.local.
 
-REMAINING (resume here → U11):
-- U11 verification/tripwires — (a) ~~live full-route smoke~~ ✅ done above; (b) the **checkpoint-retry gap** (synthesize read-back of gate-skipped recaps so a post-failure retry's report is complete); (c) removed-scoping finalize; (d) automated tests on the 2 test folders per original plan; (e) **PROD credential path** — `GOOGLE_APPLICATION_CREDENTIALS` as a file path won't work on Vercel; needs the SA JSON delivered via an env var (inline JSON) + a loader branch. Deploy blocker, not local.
-- Resume protocol: read DESIGN.md + this file; continue at U11; per-unit Gate 3 handoff → build → Gate 4 verify (local incremental) → commit. GEMINI_API_KEY + GOOGLE_APPLICATION_CREDENTIALS in .env.local; live Drive test folders in DECOMPOSE "Test fixtures".
+- ✅ **U11 verification/tripwires (DONE 2026-06-08):**
+  - (a) live full-route smoke ✅ — the real run above.
+  - (b) checkpoint-retry gap ✅ — `0548e88`: reconcile advances the version gate ONLY on `runStatus==="success"`; a failed run leaves analyzed files at their old gate value so the retry re-analyzes → complete report. (Chosen over synthesize read-back: simpler, and keeps the registry reflecting only successful reports.)
+  - (c) removed-scoping ✅ — already finalized in U8 reconcile (intersect removed ids vs `listRegistry`; phantoms dropped).
+  - (e) prod credential path ✅ — `a98e462`: `drive.loadCredentials` resolves `GOOGLE_SERVICE_ACCOUNT_JSON` (inline, prod/Vercel) over `GOOGLE_APPLICATION_CREDENTIALS` (file, local). Pure `pickCredentialSource`/`parseServiceAccount` + 7 tests. Documented in `.env.local.example`.
+  - §52 tripwire coverage: **version-gate-skips-unchanged** ✅ (pma-analyze test); **write-only-to-Output / never Source** ✅ (pma-run tripwire test: source→detect only, output→writers only, never crossed); **owner/admin-only run** ✅ enforced in route (`assertWorkspaceWriter`) + UI gate (`getAnalysisGate`); **idempotent (fileId,version)** — recap naming + registry upsert `onConflict(workspace_id,source_file_id)`; **registry rebuildable / existing-link-unchanged** — architectural/migration-level (U2/U4).
+  - Final state: **60 unit tests** across 9 PMA files, all green; tsc + eslint clean.
+
+ACCEPTED DEFERRALS (post-milestone, not blocking):
+- (d) automated *live* integration tests on the 2 test folders — covered in practice by the smoke scripts (`scripts/pma/*-smoke.ts`) + the verified live run; a creds-bound CI test was not added (needs SA + Gemini keys, not CI-friendly).
+- Recap dedup: `writeRecap` doesn't dedup by name, so a failed-run retry re-writes a same-named `{fileId}__{version}.json` (Drive keeps both). Harmless; the registry points at the latest. Tidy later if it matters.
+- `roadmap_baselines` has no `updated_at` → baseline `createdAt` only (fine for the report).
+
+## FEATURE COMPLETE (U1→U11) — 2026-06-08
+All units built, unit-tested (60), and the full pipeline live-verified through the UI. Nothing pushed (local `preview` branch). Pre-deploy checklist: set `GOOGLE_SERVICE_ACCOUNT_JSON` + `GEMINI_API_KEY` in `vercel env`; rotate the exposed keys (DESIGN §9 / Provisioning "Rotate leaked keys ⬜").
