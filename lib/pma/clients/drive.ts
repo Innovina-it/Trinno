@@ -44,7 +44,11 @@ export type DriveFile = {
   name: string;
   mimeType: string;
   modifiedTime: string;
+  // headRevisionId is populated only for BINARY files — it is null for
+  // Google-native editable docs. `version` (monotonic, all files incl. Google
+  // docs) is the actual change-gate key the PMA pipeline uses.
   headRevisionId: string | null;
+  version: string | null;
 };
 
 // Result of listChanges: the changed/removed files since a page token plus the
@@ -75,7 +79,7 @@ export type CreateDocInput = {
 };
 
 // Fields requested for every file lookup so DriveFile is always fully hydrated.
-const FILE_FIELDS = "id, name, mimeType, modifiedTime, headRevisionId";
+const FILE_FIELDS = "id, name, mimeType, modifiedTime, headRevisionId, version";
 
 function toDriveFile(f: drive_v3.Schema$File): DriveFile {
   return {
@@ -84,6 +88,7 @@ function toDriveFile(f: drive_v3.Schema$File): DriveFile {
     mimeType: f.mimeType ?? "",
     modifiedTime: f.modifiedTime ?? "",
     headRevisionId: f.headRevisionId ?? null,
+    version: f.version ?? null,
   };
 }
 
@@ -213,6 +218,38 @@ export async function listChanges(pageToken: string): Promise<DriveChanges> {
     nextPageToken: res.data.nextPageToken ?? null,
     newStartPageToken: res.data.newStartPageToken ?? null,
   };
+}
+
+// The export mimeType used to pull plain text out of each Google-native
+// editable type (the only types PMA deep-analyses). Non-editable files never
+// reach here.
+const EXPORT_MIME: Record<string, string> = {
+  "application/vnd.google-apps.document": "text/plain",
+  "application/vnd.google-apps.spreadsheet": "text/csv",
+  "application/vnd.google-apps.presentation": "text/plain",
+};
+
+// Export a Google-native editable document's content as plain text (Docs/Slides
+// → text/plain, Sheets → text/csv) via files.export. Read-only and safe against
+// any folder; PMA only ever points it at Source files. Throws for a
+// non-exportable mimeType so callers never silently feed binary to the model.
+export async function exportText(
+  fileId: string,
+  sourceMimeType: string,
+): Promise<string> {
+  const exportMimeType = EXPORT_MIME[sourceMimeType];
+  if (!exportMimeType) {
+    throw new Error(
+      `exportText: ${sourceMimeType} is not a Google-native editable type — nothing to export.`,
+    );
+  }
+  const drive = await getDriveClient();
+  const res = await drive.files.export(
+    { fileId, mimeType: exportMimeType },
+    { responseType: "text" },
+  );
+  // files.export returns the raw exported content as the response body.
+  return typeof res.data === "string" ? res.data : String(res.data ?? "");
 }
 
 // ---------------------------------------------------------------------------

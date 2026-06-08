@@ -36,6 +36,9 @@ export type DetectedFile = {
   mimeType: string | null;
   modifiedTime: string | null;
   headRevisionId: string | null;
+  // The version-gate key (Drive `version`, monotonic, populated for Google docs
+  // where headRevisionId is null). null only for removed files.
+  version: string | null;
   // null only for removed files (no mimeType to classify).
   kind: FileKind | null;
   isDeliverable: boolean;
@@ -115,6 +118,7 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
     mimeType: file.mimeType || null,
     modifiedTime: file.modifiedTime || null,
     headRevisionId: file.headRevisionId,
+    version: file.version,
     kind: categorize(file.mimeType),
     isDeliverable: deliverableByFileId.has(file.id),
     cardLinkId: deliverableByFileId.get(file.id) ?? null,
@@ -176,6 +180,7 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
       mimeType: null,
       modifiedTime: null,
       headRevisionId: null,
+      version: null,
       kind: null,
       isDeliverable: deliverableByFileId.has(id),
       cardLinkId: deliverableByFileId.get(id) ?? null,

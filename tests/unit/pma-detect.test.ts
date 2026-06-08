@@ -33,6 +33,7 @@ type DriveFile = {
   mimeType: string;
   modifiedTime: string;
   headRevisionId: string | null;
+  version: string | null;
 };
 
 const doc = (id: string, name = id): DriveFile => ({
@@ -40,7 +41,8 @@ const doc = (id: string, name = id): DriveFile => ({
   name,
   mimeType: "application/vnd.google-apps.document",
   modifiedTime: "2026-06-07T10:00:00Z",
-  headRevisionId: "rev1",
+  headRevisionId: null, // Google docs have no headRevisionId …
+  version: "v1", // … the monotonic `version` is the gate key
 });
 const pdf = (id: string, name = id): DriveFile => ({
   id,
@@ -48,6 +50,7 @@ const pdf = (id: string, name = id): DriveFile => ({
   mimeType: "application/pdf",
   modifiedTime: "2026-06-07T10:00:00Z",
   headRevisionId: "rev1",
+  version: "v1",
 });
 
 const SOURCE = "SRC_FOLDER";
@@ -108,7 +111,7 @@ describe("detect — bootstrap (no page token)", () => {
     const b = res.files.find((f) => f.fileId === "B")!;
     expect(a.kind).toBe("editable");
     expect(a.changeType).toBe("added_or_edited");
-    expect(a.headRevisionId).toBe("rev1");
+    expect(a.version).toBe("v1");
     expect(b.kind).toBe("non_mod");
   });
 });
@@ -141,16 +144,16 @@ describe("detect — incremental", () => {
   });
 
   it("emits the current source version, not the (stale) feed version", async () => {
-    const current = { ...doc("A"), headRevisionId: "rev9" };
+    const current = { ...doc("A"), version: "v9" };
     listFolder.mockResolvedValue([current]);
     listChanges.mockResolvedValue({
-      changes: [{ fileId: "A", removed: false, file: { ...doc("A"), headRevisionId: "rev2" } }],
+      changes: [{ fileId: "A", removed: false, file: { ...doc("A"), version: "v2" } }],
       nextPageToken: null,
       newStartPageToken: "T1",
     });
 
     const res = await detect({ sourceFolderId: SOURCE, pageToken: "T0", deliverableLinks: [] });
-    expect(res.files[0].headRevisionId).toBe("rev9");
+    expect(res.files[0].version).toBe("v9");
   });
 
   it("flags removed source files (removed in feed, absent from listing)", async () => {

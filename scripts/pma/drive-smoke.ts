@@ -94,6 +94,20 @@ async function main(): Promise<void> {
   const startToken = await drive.getStartPageToken();
   console.log(`[READ] changes.getStartPageToken → ${startToken}`);
 
+  // (a2) EXPORT a Google-native editable doc to text (U6 dependency). Read-only.
+  const firstDoc = files.find(
+    (f) => f.mimeType === "application/vnd.google-apps.document",
+  );
+  if (firstDoc) {
+    const text = await drive.exportText(firstDoc.id, firstDoc.mimeType);
+    const preview = text.replace(/\s+/g, " ").slice(0, 120);
+    console.log(
+      `[READ] exportText ${firstDoc.id} (${firstDoc.name}) → ${text.length} chars: "${preview}…"`,
+    );
+  } else {
+    console.log("[READ] exportText skipped — no Google Doc in the Source folder");
+  }
+
   // (b) WRITE to the Output folder ONLY — create then trash a temp Doc.
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const name = `pma-smoke-${stamp}`;
