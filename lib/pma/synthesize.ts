@@ -1,0 +1,264 @@
+import "server-only";
+
+import { Type } from "@google/genai";
+import type { Schema } from "@google/genai";
+
+import { compareToBaseline } from "@/lib/baselines/compare";
+import type {
+  BaselineDetail,
+  LiveEntry,
+  LiveMilestone,
+  VarianceResult,
+} from "@/lib/baselines/types";
+import { generateStructured } from "./clients/gemini";
+import { createReport } from "./output";
+import type { AnalyzeFileResult } from "./analyze";
+import type { DetectedFile } from "./detect";
+
+// PMA U7 — AGGREGATE + DEVIATION + REPORT (DESIGN §3 step E, §5.2).
+//
+// Takes the per-file recaps from analyze() (U6), the removed/missed lists, and
+// the Approved roadmap baseline vs the LIVE roadmap, then asks Gemini Pro to
+// synthesise a single workspace report and writes it as a native Google Doc in
+// the OUTPUT folder's analyses/ sub-folder.
+//
+// GROUNDED DEVIATION (DESIGN §5.2). The date/scope/order variance is computed by
+// the existing, deterministic compareToBaseline() — NOT by the model. Gemini
+// receives the already-computed deltas and only narrates them, so it can never
+// invent a slip or a date.
+//
+// SCOPE BOUNDARIES (mirror analyze, DESIGN §1):
+//  - WRITES only the OUTPUT tree (via output.createReport). Never the Source.
+//  - Does NOT touch the Postgres registry or pma_analysis_runs — recording the
+//    run (step G) belongs to U8 reconcile / U9 orchestration. This unit returns
+//    the report + Doc pointer + counts; the orchestrator persists them.
+//  - A Gemini failure THROWS: unlike a single per-file recap, the synthesis is
+//    the whole-run deliverable, so its failure is terminal for the run (U9
+//    catches it and records a failed run).
+
+// One grounded deviation line for the report (DESIGN §5.2).
+export type Deviation = {
+  item: string;
+  baseline_value: string;
+  current_value: string;
+  type: "delay" | "scope" | "reorder";
+  severity: "low" | "medium" | "high";
+};
+
+// Structured workspace synthesis (DESIGN §5.2).
+export type SynthesisReport = {
+  executive_summary: string;
+  // Dedicated paragraph on deliverable files (DESIGN §1, §6).
+  deliverables_focus: string;
+  notable_changes: string[];
+  new_or_changed_files: string[];
+  missed_updates: string[];
+  deviations: Deviation[];
+  progress_notes: string[];
+  difficulties: string[];
+};
+
+export type SynthesizeInput = {
+  workspaceId: string;
+  outputFolderId: string;
+  // Display label (UTC+1) for the Doc title/header. Passed in by the
+  // orchestrator so this unit stays deterministic (no clock read here).
+  runLabel: string;
+  // Per-file recaps from analyze() (DESIGN §5.2 — in-memory).
+  fileResults: AnalyzeFileResult[];
+  // Files detected as removed this run (DESIGN §5.2 removed list).
+  removed: DetectedFile[];
+  // The Approved baseline (null if the workspace has none) + the LIVE roadmap.
+  baseline: BaselineDetail | null;
+  live: { entries: LiveEntry[]; milestones: LiveMilestone[] };
+};
+
+export type SynthesizeResult = {
+  report: SynthesisReport;
+  reportFileId: string;
+  reportWebViewLink: string;
+  // Small summary persisted on the run row by U9 (DESIGN §4.4 counts).
+  counts: { changed: number; missed: number; removed: number };
+};
+
+const DEVIATION_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    item: { type: Type.STRING },
+    baseline_value: { type: Type.STRING },
+    current_value: { type: Type.STRING },
+    type: { type: Type.STRING, enum: ["delay", "scope", "reorder"] },
+    severity: { type: Type.STRING, enum: ["low", "medium", "high"] },
+  },
+  required: ["item", "baseline_value", "current_value", "type", "severity"],
+};
+
+const REPORT_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    executive_summary: { type: Type.STRING },
+    deliverables_focus: { type: Type.STRING },
+    notable_changes: { type: Type.ARRAY, items: { type: Type.STRING } },
+    new_or_changed_files: { type: Type.ARRAY, items: { type: Type.STRING } },
+    missed_updates: { type: Type.ARRAY, items: { type: Type.STRING } },
+    deviations: { type: Type.ARRAY, items: DEVIATION_SCHEMA },
+    progress_notes: { type: Type.ARRAY, items: { type: Type.STRING } },
+    difficulties: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: [
+    "executive_summary",
+    "deliverables_focus",
+    "notable_changes",
+    "new_or_changed_files",
+    "missed_updates",
+    "deviations",
+    "progress_notes",
+    "difficulties",
+  ],
+};
+
+const SYNTHESIS_SYSTEM =
+  "You are a project-management analyst writing a workspace progress report. " +
+  "You are given: per-file recaps of what changed in the project's documents, a " +
+  "list of files that failed to analyse (missed updates), removed files, and a " +
+  "GROUNDED comparison of the Approved roadmap baseline against the live roadmap " +
+  "(date/scope/order deltas already computed for you). Synthesise a factual " +
+  "report. Give deliverable files a dedicated focus paragraph. For deviations, " +
+  "use ONLY the supplied baseline-vs-live deltas — never invent dates or slips. " +
+  "Be specific and terse; do not invent content. Respond only as JSON matching " +
+  "the provided schema.";
+
+// The compact, model-facing payload. Kept small and structured: only the signal
+// (one-line summaries, importance, risk flags, non-trivial variance) is sent —
+// not the full recap bodies (those already live in the Output folder).
+function buildPayload(input: SynthesizeInput, variance: VarianceResult | null) {
+  const analyzed = input.fileResults.filter((r) => r.status === "analyzed" && r.recap);
+  const missed = input.fileResults.filter((r) => r.status === "error");
+
+  return {
+    run: input.runLabel,
+    changed_files: analyzed.map((r) => ({
+      file: r.fileId,
+      summary: r.recap!.one_line_summary,
+      importance: r.recap!.importance,
+      is_deliverable: r.recap!.is_deliverable,
+      additions: r.recap!.additions,
+      edits: r.recap!.edits,
+      structural_changes: r.recap!.structural_changes,
+      risk_flags: r.recap!.risk_flags,
+    })),
+    missed_files: missed.map((r) => ({ file: r.fileId, error: r.error })),
+    removed_files: input.removed.map((f) => ({
+      file: f.fileId,
+      name: f.name,
+      is_deliverable: f.isDeliverable,
+    })),
+    baseline: input.baseline
+      ? { name: input.baseline.meta.name, approved: input.baseline.meta.isApproved }
+      : null,
+    // Grounded deviation — only the cards/milestones that actually changed, plus
+    // the rollup. Gemini narrates these; it does not recompute them.
+    roadmap_variance: variance
+      ? {
+          rollup: variance.rollup,
+          changed_cards: variance.cards.filter((c) => c.status !== "unchanged"),
+          changed_milestones: variance.milestones.filter(
+            (m) => m.status !== "unchanged",
+          ),
+        }
+      : null,
+  };
+}
+
+function buildPrompt(input: SynthesizeInput, variance: VarianceResult | null): string {
+  const payload = buildPayload(input, variance);
+  return (
+    `Workspace analysis run: ${input.runLabel}\n` +
+    (variance
+      ? "An Approved baseline exists — compare against the grounded variance below.\n"
+      : "No Approved roadmap baseline is set for this workspace — omit deviations.\n") +
+    `--- DATA START ---\n${JSON.stringify(payload, null, 2)}\n--- DATA END ---`
+  );
+}
+
+// Render the structured report into a plain-text body. createDoc() converts
+// text/plain into a native Google Doc, so this produces clean, readable
+// sections (uppercase headers + bullet lists) rather than markup.
+export function renderReportDoc(report: SynthesisReport, runLabel: string): string {
+  const lines: string[] = [];
+  const section = (title: string) => {
+    lines.push("", title.toUpperCase(), "");
+  };
+  const bullets = (items: string[]) => {
+    if (items.length === 0) lines.push("  (none)");
+    else for (const it of items) lines.push(`  • ${it}`);
+  };
+
+  lines.push(`PROJECT ANALYSIS — ${runLabel}`);
+
+  section("Executive summary");
+  lines.push(report.executive_summary || "(none)");
+
+  section("Deliverables");
+  lines.push(report.deliverables_focus || "(none)");
+
+  section("Notable changes");
+  bullets(report.notable_changes);
+
+  section("New or changed files");
+  bullets(report.new_or_changed_files);
+
+  section("Missed updates");
+  bullets(report.missed_updates);
+
+  section("Deviations from the approved baseline");
+  if (report.deviations.length === 0) {
+    lines.push("  (none)");
+  } else {
+    for (const d of report.deviations) {
+      lines.push(
+        `  • [${d.type}/${d.severity}] ${d.item}: ${d.baseline_value} → ${d.current_value}`,
+      );
+    }
+  }
+
+  section("Progress notes");
+  bullets(report.progress_notes);
+
+  section("Difficulties");
+  bullets(report.difficulties);
+
+  return lines.join("\n");
+}
+
+export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResult> {
+  // Grounded deviation — deterministic, computed from data, fed to the model.
+  const variance: VarianceResult | null = input.baseline
+    ? compareToBaseline(input.live, input.baseline)
+    : null;
+
+  const report = await generateStructured<SynthesisReport>({
+    model: "gemini-2.5-pro",
+    systemInstruction: SYNTHESIS_SYSTEM,
+    prompt: buildPrompt(input, variance),
+    responseSchema: REPORT_SCHEMA,
+    temperature: 0,
+  });
+
+  const content = renderReportDoc(report, input.runLabel);
+  const { id, webViewLink } = await createReport(input.outputFolderId, {
+    name: `Analysis — ${input.runLabel}`,
+    content,
+  });
+
+  return {
+    report,
+    reportFileId: id,
+    reportWebViewLink: webViewLink,
+    counts: {
+      changed: input.fileResults.filter((r) => r.status === "analyzed").length,
+      missed: input.fileResults.filter((r) => r.status === "error").length,
+      removed: input.removed.length,
+    },
+  };
+}
