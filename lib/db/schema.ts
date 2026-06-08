@@ -786,3 +786,16 @@ export const pmaAnalysisRuns = pgTable("pma_analysis_runs", {
 });
 
 export type PmaAnalysisRunRow = typeof pmaAnalysisRuns.$inferSelect;
+
+// Per-workspace PMA operational state (DESIGN §4.5). Currently the Drive Changes
+// API checkpoint that makes a run incremental; one row per workspace. RLS:
+// member SELECT, service-role writes (mirrors the registry/runs tables).
+export const pmaWorkspaceState = pgTable("pma_workspace_state", {
+  workspaceId: uuid("workspace_id").primaryKey(),
+  changesPageToken: text("changes_page_token"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type PmaWorkspaceStateRow = typeof pmaWorkspaceState.$inferSelect;

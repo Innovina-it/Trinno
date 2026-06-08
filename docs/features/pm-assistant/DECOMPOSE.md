@@ -68,7 +68,7 @@ existing workspace link unchanged · write-only-to-Output (never writes Source) 
 FOUNDATION COMPLETE (verified + committed, no push):
 - ✅ U1a Drive client (64de07d) · ✅ U4b output helpers (cf37dd7) · ✅ U4a registry+runs (9cf9e96)
 - ✅ U3 baseline is_approved (4651047) · ✅ U2 link purpose source|reports (d9f6635)
-- Migrations applied: 0128 registry · 0129 baseline approved · 0130 link purpose.
+- Migrations applied: 0128 registry · 0129 baseline approved · 0130 link purpose · **0131 pma_workspace_state** (U9 infra — additive table for `changes_page_token`; applied local, RLS member-read verified).
 - Local Supabase: reset ONCE when empty → full chain 0001→0130. Incremental only since (`supabase migration up --local`, NEVER reset — see [[dev-db-no-reset]]).
 
 CORE IN PROGRESS (verified + committed, no push):
@@ -84,7 +84,8 @@ CORE IN PROGRESS (verified + committed, no push):
 - ✅ U8 reconcile (THIS COMMIT) — `lib/pma/reconcile.ts` + registry casing fix. Step G: upserts the registry projection from detect+analyze+removed, then `recordRun`. State rules: analyzed→active+ADVANCE last_version+recap pointer+last_analyzed_at; skipped→active, version unchanged; non_mod→active metadata only; **error→state=error, last_version LEFT UNTOUCHED so it retries next run**; removed→state=removed **only for ids already in the registry** (intersect via `listRegistry` — drops the drive-wide/Output-churn phantoms detect() deferred here). `now` + `triggeredBy` injected (deterministic). Returns `{registered,errored,removedApplied,run}`.
   - **CASING FIX (U6's flag, landed here):** `registry.ts` now maps supabase snake_case rows → camelCase via pure `mapRegistryRow`/`mapRunRow` applied at all 5 read/write return sites — so `row.sourceFileId`/`row.lastVersion` actually have values (reconcile's removed-intersection depends on it). analyze's defensive `last_version ?? lastVersion` read still works, left as-is. Timestamps stay ISO strings at runtime (pre-existing repo-wide supabase quirk, out of scope). 11 unit tests (9 reconcile + 2 mapper). Full PMA suite 44/44 green.
 
-REMAINING (resume here → U9):
-- U9 run route (`app/api/pma/run/route.ts`) — owner/admin gate, precondition (both folders configured/shared), wires A→G: detect→analyze→**synthesize**→**reconcile**, persists `changes_page_token`, calls `getApprovedBaseline`+detail + live roadmap to feed synthesize, catches synthesize throw → `runStatus="error"` + `report=null` into reconcile (still records a failed run). Pass a single `now` ISO + `triggeredBy` (the acting user) through synthesize.runLabel + reconcile.now.
+IN PROGRESS — U9 (resume here):
+- ✅ U9 infra (THIS COMMIT) — migration `0131_pma_workspace_state` (additive table, applied local + RLS verified) + `registry.getWorkspacePageToken`/`setWorkspacePageToken` + `schema.pmaWorkspaceState`. Token storage decision: **dedicated pma_workspace_state table** (user pick — lowest DB risk, service-role write / member read, room for future cron state).
+- ⬜ U9 route (`app/api/pma/run/route.ts`) — owner/admin gate, precondition (both folders configured/shared), wires A→G: load token → detect→analyze→**synthesize**→**reconcile**, persists `changes_page_token` via `setWorkspacePageToken`, calls `getApprovedBaseline`+detail + **live roadmap builder (NEW — no existing LiveEntry[] producer; build from current cards)** to feed synthesize, catches synthesize throw → `runStatus="error"` + `report=null` into reconcile (still records a failed run). Pass a single `now` ISO + `triggeredBy` (acting user) through synthesize.runLabel + reconcile.now. Source/output folder ids: read `links` by `purpose` (source|reports) → `extractDriveFileId(url)`.
 - U10 Analysis tab UI · U11 tripwires.
 - Resume protocol: read DESIGN.md + this file; continue at U9; per-unit Gate 3 handoff → build → Gate 4 verify (local incremental) → commit. GEMINI_API_KEY (AIza…) is set in .env.local; live Drive test folders in DECOMPOSE "Test fixtures".

@@ -208,3 +208,40 @@ export async function listRuns(
   if (error) throw error;
   return ((data ?? []) as Record<string, unknown>[]).map(mapRunRow);
 }
+
+// ── pma_workspace_state ──────────────────────────────────────────────────────
+// The Drive Changes API checkpoint (DESIGN §4.5). Read at the start of a run to
+// fetch changes incrementally; written at run end as the "since previous
+// analysis" checkpoint. null on the first run → detect() bootstraps.
+
+export async function getWorkspacePageToken(
+  workspaceId: string,
+): Promise<string | null> {
+  const sb = getServiceSupabase();
+  const { data, error } = await sb
+    .from("pma_workspace_state")
+    .select("changes_page_token")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (error) throw error;
+  const tok = (data as Record<string, unknown> | null)?.changes_page_token;
+  return typeof tok === "string" ? tok : null;
+}
+
+// Idempotent upsert of the checkpoint. Called once at the end of a successful
+// run with detect()'s newPageToken.
+export async function setWorkspacePageToken(
+  workspaceId: string,
+  token: string,
+): Promise<void> {
+  const sb = getServiceSupabase();
+  const { error } = await sb.from("pma_workspace_state").upsert(
+    {
+      workspace_id: workspaceId,
+      changes_page_token: token,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "workspace_id" },
+  );
+  if (error) throw error;
+}
