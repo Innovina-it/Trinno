@@ -53,7 +53,10 @@ export type ReconcileInput = {
     reportWebViewLink: string;
     counts: { changed: number; missed: number; removed: number };
   } | null;
-  runStatus: "success" | "error";
+  // U12.5 — "no_changes": recorded for an empty-window run (no report Doc). The
+  // version-advance branch keys off `=== "success"`, so no_changes never
+  // advances last_version (and an empty run has no analyzed files anyway).
+  runStatus: "success" | "error" | "no_changes";
   // ISO timestamp for last_analyzed_at / run_at. Passed in for determinism
   // (mirrors synthesize.runLabel) — the orchestrator stamps the run clock.
   now: string;

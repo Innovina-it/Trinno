@@ -33,10 +33,13 @@ function formatRunTime(value: string | Date | null): string {
 
 function RunRow({ run }: { run: PmaAnalysisRunRow }) {
   const ok = run.status === "success";
+  const noChanges = run.status === "no_changes";
   const counts = run.counts ?? {};
-  const summary = ok
-    ? `${counts.changed ?? 0} changed · ${counts.missed ?? 0} missed · ${counts.removed ?? 0} removed`
-    : "Run failed — no report produced";
+  const summary = noChanges
+    ? "Nessuna nuova modifica nel periodo selezionato"
+    : ok
+      ? `${counts.changed ?? 0} changed · ${counts.missed ?? 0} missed · ${counts.removed ?? 0} removed`
+      : "Run failed — no report produced";
 
   return (
     <li className="flex items-baseline justify-between gap-4 border-b border-hairline py-4">
@@ -57,7 +60,7 @@ function RunRow({ run }: { run: PmaAnalysisRunRow }) {
         </a>
       ) : (
         <span className="mono-meta-sm shrink-0 text-fg-faint">
-          {ok ? "—" : "failed"}
+          {ok || noChanges ? "—" : "failed"}
         </span>
       )}
     </li>

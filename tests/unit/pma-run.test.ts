@@ -152,6 +152,31 @@ describe("runAnalysis — tripwire: write-only-to-Output (DESIGN §52)", () => {
   });
 });
 
+describe("runAnalysis — no changes (U12.5)", () => {
+  it("skips synthesize and records a no_changes run when nothing changed in-window", async () => {
+    // detect finds a file, but the version gate skips it (unchanged) → nothing
+    // reportable: no analyzed, no error, no removed.
+    detect.mockResolvedValue({
+      files: [addedFile("A")],
+      newPageToken: null,
+      bootstrapped: false,
+    });
+    analyze.mockResolvedValue([
+      { fileId: "A", version: "v1", status: "skipped", recapFileId: null, recap: null, error: null },
+    ]);
+
+    const res = await run();
+
+    expect(synthesize).not.toHaveBeenCalled();
+    const recArg = reconcile.mock.calls[0][0];
+    expect(recArg.runStatus).toBe("no_changes");
+    expect(recArg.report).toBeNull();
+    expect(res.status).toBe("no_changes");
+    expect(res.reportWebViewLink).toBeNull();
+    expect(res.counts).toBeNull();
+  });
+});
+
 describe("runAnalysis — synthesis is terminal", () => {
   it("on synthesize failure: status=error, reconcile gets report=null, run still recorded", async () => {
     synthesize.mockRejectedValue(new Error("Gemini returned an empty response."));

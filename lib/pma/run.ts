@@ -37,7 +37,8 @@ export type RunAnalysisInput = {
 
 export type RunAnalysisResult = {
   runId: string;
-  status: "success" | "error";
+  // U12.5 — "no_changes": nothing reportable in the window → no report Doc.
+  status: "success" | "error" | "no_changes";
   reportFileId: string | null;
   reportWebViewLink: string | null;
   counts: { changed: number; missed: number; removed: number } | null;
@@ -78,6 +79,38 @@ export async function runAnalysis(
 
   // 4. Analyze the editable changes (version gate + Flash recap inside).
   const analysis = await analyze({ workspaceId, outputFolderId, files: added });
+
+  // 4b. No-change short-circuit (U12.5). Nothing reportable in the window —
+  //     every editable file was gated out as unchanged (skipped) and there are
+  //     no missed updates or removals — so DON'T synthesise a report Doc.
+  //     Record a "no_changes" run (still refreshes the registry projection so
+  //     skipped files keep their current version) and return early.
+  const reportable =
+    analysis.some((r) => r.status === "analyzed" || r.status === "error") ||
+    removed.length > 0;
+  if (!reportable) {
+    const rec = await reconcile({
+      workspaceId,
+      triggeredBy: actorId,
+      detected: added,
+      analysis,
+      removed,
+      report: null,
+      runStatus: "no_changes",
+      now,
+    });
+    return {
+      runId: rec.run.id,
+      status: "no_changes",
+      reportFileId: null,
+      reportWebViewLink: null,
+      counts: null,
+      registered: rec.registered,
+      errored: rec.errored,
+      removedApplied: rec.removedApplied,
+      bootstrapped: detected.bootstrapped,
+    };
+  }
 
   // 5. Synthesize — terminal on failure (the report is the whole-run product).
   let report: Awaited<ReturnType<typeof synthesize>> | null = null;

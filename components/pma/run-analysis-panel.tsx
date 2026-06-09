@@ -25,6 +25,7 @@ export function RunAnalysisPanel({
   const [refreshing, startRefresh] = useTransition();
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const disabledReason = !isOwnerAdmin
     ? "Owner or admin only"
@@ -36,6 +37,7 @@ export function RunAnalysisPanel({
 
   async function run() {
     setError(null);
+    setNotice(null);
     setRunning(true);
     try {
       const res = await fetch("/api/pma/run", {
@@ -44,11 +46,16 @@ export function RunAnalysisPanel({
         body: JSON.stringify({ workspaceId }),
       });
       const json = (await res.json().catch(() => null)) as
-        | { error?: { message?: string } }
+        | { result?: { status?: string }; error?: { message?: string } }
         | null;
       if (!res.ok) {
         setError(json?.error?.message ?? "The analysis could not be completed.");
         return;
+      }
+      // U12.5 — an empty-window run produces no report; tell the user inline
+      // (the run still appears in history with the same notice).
+      if (json?.result?.status === "no_changes") {
+        setNotice("Nessuna nuova modifica nel periodo selezionato.");
       }
       startRefresh(() => router.refresh());
     } catch {
@@ -75,6 +82,11 @@ export function RunAnalysisPanel({
       {error && (
         <span className="mono-meta-sm text-red-400" role="alert">
           {error}
+        </span>
+      )}
+      {notice && !error && (
+        <span className="mono-meta-sm text-fg-faint" role="status">
+          {notice}
         </span>
       )}
     </div>
