@@ -59,6 +59,9 @@ export function mapRunRow(raw: Record<string, unknown>): PmaAnalysisRunRow {
     counts: raw.counts ?? null,
     reportFileId: raw.report_file_id ?? null,
     reportWebViewLink: raw.report_web_view_link ?? null,
+    windowStart: raw.window_start ?? null,
+    windowEnd: raw.window_end ?? null,
+    fingerprint: raw.fingerprint ?? null,
   } as unknown as PmaAnalysisRunRow;
 }
 
@@ -172,6 +175,10 @@ export type RunRecord = {
   reportFileId?: string | null;
   reportWebViewLink?: string | null;
   runAt?: string | null; // ISO timestamp; omit to use DB default now()
+  // U12.12 — the run's date window (null = whole-document) + content fingerprint.
+  windowStart?: string | null;
+  windowEnd?: string | null;
+  fingerprint?: Record<string, string> | null;
 };
 
 // Insert one analysis-run history row and return it. Each call appends a new
@@ -188,6 +195,9 @@ export async function recordRun(run: RunRecord): Promise<PmaAnalysisRunRow> {
   if (run.reportWebViewLink !== undefined)
     row.report_web_view_link = run.reportWebViewLink;
   if (run.runAt !== undefined && run.runAt !== null) row.run_at = run.runAt;
+  if (run.windowStart !== undefined) row.window_start = run.windowStart;
+  if (run.windowEnd !== undefined) row.window_end = run.windowEnd;
+  if (run.fingerprint !== undefined) row.fingerprint = run.fingerprint;
 
   const { data, error } = await sb
     .from("pma_analysis_runs")
@@ -196,6 +206,30 @@ export async function recordRun(run: RunRecord): Promise<PmaAnalysisRunRow> {
     .single();
   if (error) throw error;
   return mapRunRow(data as Record<string, unknown>);
+}
+
+// U12.12 — the most recent SUCCESS run for an exact window (null/null =
+// whole-document), or null if none. Used to dedup a re-run of the same range:
+// same window + same fingerprint ⇒ nothing changed, point at the existing report.
+export async function findRunByWindow(
+  workspaceId: string,
+  windowStart: string | null,
+  windowEnd: string | null,
+): Promise<PmaAnalysisRunRow | null> {
+  const sb = getServiceSupabase();
+  let q = sb
+    .from("pma_analysis_runs")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .eq("status", "success");
+  q = windowStart === null ? q.is("window_start", null) : q.eq("window_start", windowStart);
+  q = windowEnd === null ? q.is("window_end", null) : q.eq("window_end", windowEnd);
+  const { data, error } = await q
+    .order("run_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? mapRunRow(data as Record<string, unknown>) : null;
 }
 
 // List a workspace's analysis runs, newest first (the Analysis-tab history feed,

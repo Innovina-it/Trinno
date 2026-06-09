@@ -31,15 +31,37 @@ function formatRunTime(value: string | Date | null): string {
     .replace(",", "");
 }
 
+// U12.13 — the run's REQUESTED period, dd/mm/yyyy (UTC, no time). Null bounds
+// (a whole-document run) render as "whole document".
+function formatPeriod(
+  start: string | Date | null,
+  end: string | Date | null,
+): string {
+  const day = (v: string | Date | null): string | null => {
+    if (v == null) return null;
+    const d = typeof v === "string" ? new Date(v) : v;
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString("en-GB", {
+      timeZone: "UTC",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+  const s = day(start);
+  const e = day(end);
+  return s && e ? `${s} – ${e}` : "whole document";
+}
+
 function RunRow({ run }: { run: PmaAnalysisRunRow }) {
   const ok = run.status === "success";
   const noChanges = run.status === "no_changes";
   const emptyPeriod = run.status === "empty_period";
   const counts = run.counts ?? {};
   const summary = emptyPeriod
-    ? "Nessun documento per il periodo selezionato"
+    ? "No documents in the selected period"
     : noChanges
-      ? "Nessuna nuova modifica nel periodo selezionato"
+      ? "No new changes in the selected period"
       : ok
         ? `${counts.changed ?? 0} changed · ${counts.missed ?? 0} missed · ${counts.removed ?? 0} removed`
         : "Run failed — no report produced";
@@ -48,7 +70,7 @@ function RunRow({ run }: { run: PmaAnalysisRunRow }) {
     <li className="flex items-baseline justify-between gap-4 border-b border-hairline py-4">
       <div className="space-y-1">
         <div className="mono-meta-sm tabular-nums text-fg">
-          {formatRunTime(run.runAt)}
+          {formatRunTime(run.runAt)} · {formatPeriod(run.windowStart, run.windowEnd)}
         </div>
         <div className="mono-meta-sm text-fg-faint">{summary}</div>
       </div>

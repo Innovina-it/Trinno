@@ -73,6 +73,9 @@ describe("mapRunRow", () => {
       counts: { changed: 2, missed: 1, removed: 0 },
       report_file_id: "doc-1",
       report_web_view_link: "https://docs/doc-1",
+      window_start: "2026-06-07T00:00:00Z",
+      window_end: "2026-06-08T23:59:59Z",
+      fingerprint: { A: "v9" },
     };
     expect(mapRunRow(raw)).toEqual({
       id: "run-1",
@@ -83,6 +86,9 @@ describe("mapRunRow", () => {
       counts: { changed: 2, missed: 1, removed: 0 },
       reportFileId: "doc-1",
       reportWebViewLink: "https://docs/doc-1",
+      windowStart: "2026-06-07T00:00:00Z",
+      windowEnd: "2026-06-08T23:59:59Z",
+      fingerprint: { A: "v9" },
     });
   });
 });

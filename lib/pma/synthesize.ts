@@ -67,6 +67,8 @@ export type SynthesizeInput = {
   // U12.2 — the reporting window (ISO, inclusive). When present, the report is
   // titled + scoped to this period and the model is told to cover only it.
   window?: { start: string; end: string };
+  // U12.12 — files changed since the previous report of this same window (names).
+  changedSince?: string[];
   // Per-file recaps from analyze() (DESIGN §5.2 — in-memory).
   fileResults: AnalyzeFileResult[];
   // Files detected as removed this run (DESIGN §5.2 removed list).
@@ -158,6 +160,7 @@ function buildPayload(
   return {
     run: input.runLabel,
     reporting_period: period,
+    changed_since_last_report: input.changedSince ?? [],
     changed_files: analyzed.map((r) => ({
       // U12.8 — reference the file by its human name, not the raw Drive fileId.
       file: r.name ?? r.fileId,
@@ -205,6 +208,9 @@ function buildPrompt(
     `Workspace analysis run: ${input.runLabel}\n` +
     (period
       ? `Reporting period: ${period}. Cover ONLY work within this period.\n`
+      : "") +
+    (input.changedSince && input.changedSince.length
+      ? `This is a re-run of the same period; files changed since the previous report: ${input.changedSince.join(", ")}.\n`
       : "") +
     (variance
       ? "An Approved baseline exists — compare against the grounded variance below.\n"

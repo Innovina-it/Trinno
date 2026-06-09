@@ -71,6 +71,10 @@ export type DetectInput = {
   // from; and a file edited in the window but last-modified later is missed here
   // (U12.4 refines window membership via the revisions API).
   window?: DetectWindow;
+  // U12.10 — when true (and no window), ALL-FILES mode: every current Source file
+  // is included, no date filter. Used for the "whole document" report when the
+  // user picks no date.
+  allFiles?: boolean;
 };
 
 export type DetectResult = {
@@ -79,6 +83,10 @@ export type DetectResult = {
   // (no page token is produced or advanced there).
   newPageToken: string | null;
   bootstrapped: boolean;
+  // U12.10 — the documents' available date range (oldest createdTime → newest
+  // modifiedTime across the Source folder), computed in WINDOW mode so the caller
+  // can tell the user where to look when a chosen window matched nothing.
+  corpusRange?: { first: string | null; last: string | null };
 };
 
 // Google-native editable document types — the only files step D deep-analyses.
@@ -92,6 +100,18 @@ const EDITABLE_MIME_TYPES = new Set<string>([
 // editable type is `non_mod` (pdf, images, Office files, folders, …).
 export function categorize(mimeType: string): FileKind {
   return EDITABLE_MIME_TYPES.has(mimeType) ? "editable" : "non_mod";
+}
+
+// U12.11 — label for a revision whose author Drive does not expose (an
+// "anonymous" edit, shown as "Tutti gli utenti anonimi" in Drive's history). We
+// surface it explicitly instead of dropping it, so the report says an anonymous
+// person made the change rather than silently omitting it.
+const ANON_AUTHOR = "anonymous user";
+
+// Distinct attribution labels for a set of revisions: each named author once,
+// plus "anonymous user" if any revision had no exposed author.
+function authorsFromRevisions(revs: DriveRevision[]): string[] {
+  return Array.from(new Set(revs.map((r) => r.authorName ?? ANON_AUTHOR)));
 }
 
 // Pull the Drive fileId out of a Drive/Docs URL. Handles the shapes deliverable
@@ -112,6 +132,29 @@ export function extractDriveFileId(url: string): string | null {
   const idParam = parsed.searchParams.get("id");
   if (idParam) return idParam;
   return null;
+}
+
+// U12.10 — the documents' activity envelope: oldest createdTime → newest
+// modifiedTime across the Source listing. Surfaced when a chosen window matched
+// no file, so the user knows the valid range.
+function corpusRangeOf(files: DriveFile[]): { first: string | null; last: string | null } {
+  let firstMs = Infinity;
+  let lastMs = -Infinity;
+  let first: string | null = null;
+  let last: string | null = null;
+  for (const f of files) {
+    const c = f.createdTime ? Date.parse(f.createdTime) : NaN;
+    const m = f.modifiedTime ? Date.parse(f.modifiedTime) : NaN;
+    if (!Number.isNaN(c) && c < firstMs) {
+      firstMs = c;
+      first = f.createdTime;
+    }
+    if (!Number.isNaN(m) && m > lastMs) {
+      lastMs = m;
+      last = f.modifiedTime;
+    }
+  }
+  return { first, last };
 }
 
 export async function detect(input: DetectInput): Promise<DetectResult> {
@@ -177,16 +220,37 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
       const member =
         revs.length > 0 ? windowRevs.length > 0 : inWin(f.modifiedTime);
       if (!member) continue;
-      const windowAuthors = Array.from(
-        new Set(
-          windowRevs
-            .map((r) => r.authorName)
-            .filter((n): n is string => !!n),
-        ),
-      );
-      files.push({ ...tag(f), windowAuthors });
+      files.push({ ...tag(f), windowAuthors: authorsFromRevisions(windowRevs) });
     }
-    return { files, newPageToken: null, bootstrapped: false };
+    return {
+      files,
+      newPageToken: null,
+      bootstrapped: false,
+      corpusRange: corpusRangeOf(currentList),
+    };
+  }
+
+  // ── All-files mode (U12.10/U12.11): the whole document — every current Source
+  //    file, no date filter. Attribution = ALL named revision authors (so every
+  //    contributor is credited, not just the last modifier). Anonymous edits
+  //    (Drive exposes no displayName) are dropped → "non noto" only if NONE named.
+  if (input.allFiles) {
+    const files: DetectedFile[] = [];
+    for (const f of currentList) {
+      let revs: DriveRevision[] = [];
+      try {
+        revs = await listRevisions(f.id);
+      } catch {
+        revs = [];
+      }
+      files.push({ ...tag(f), windowAuthors: authorsFromRevisions(revs) });
+    }
+    return {
+      files,
+      newPageToken: null,
+      bootstrapped: false,
+      corpusRange: corpusRangeOf(currentList),
+    };
   }
 
   // ── Bootstrap (first run): seed every current source file; the start token

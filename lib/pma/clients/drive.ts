@@ -55,6 +55,9 @@ export type DriveFile = {
   // U12.4 — displayName of the file's last modifier (Drive lastModifyingUser),
   // or null when Drive does not expose it. Surfaced in the report as attribution.
   lastModifiedBy: string | null;
+  // U12.10 — when the file was created / last modified (ISO). Used to report the
+  // documents' available date range when a chosen window matches nothing.
+  createdTime: string | null;
 };
 
 // Result of listChanges: the changed/removed files since a page token plus the
@@ -86,7 +89,7 @@ export type CreateDocInput = {
 
 // Fields requested for every file lookup so DriveFile is always fully hydrated.
 const FILE_FIELDS =
-  "id, name, mimeType, modifiedTime, headRevisionId, version, lastModifyingUser(displayName)";
+  "id, name, mimeType, modifiedTime, createdTime, headRevisionId, version, lastModifyingUser(displayName)";
 
 function toDriveFile(f: drive_v3.Schema$File): DriveFile {
   return {
@@ -96,7 +99,10 @@ function toDriveFile(f: drive_v3.Schema$File): DriveFile {
     modifiedTime: f.modifiedTime ?? "",
     headRevisionId: f.headRevisionId ?? null,
     version: f.version ?? null,
-    lastModifiedBy: f.lastModifyingUser?.displayName ?? null,
+    // `|| null` (not `?? null`) so an empty/blank displayName — Drive's shape for
+    // an anonymous editor — collapses to null, not "".
+    lastModifiedBy: f.lastModifyingUser?.displayName?.trim() || null,
+    createdTime: f.createdTime ?? null,
   };
 }
 
@@ -250,7 +256,9 @@ export async function listRevisions(fileId: string): Promise<DriveRevision[]> {
       out.push({
         id: r.id ?? "",
         modifiedTime: r.modifiedTime ?? null,
-        authorName: r.lastModifyingUser?.displayName ?? null,
+        // `|| null` (not `?? null`): an anonymous edit comes back with an empty
+        // displayName "", which must become null so it's labelled "anonymous user".
+        authorName: r.lastModifyingUser?.displayName?.trim() || null,
       });
     }
     pageToken = res.data.nextPageToken ?? undefined;

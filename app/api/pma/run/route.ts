@@ -57,36 +57,38 @@ export async function POST(req: Request) {
     );
   }
 
-  // U12.2 — resolve the reporting window. Default: end = today, start = 7 days
-  // before. Dates are clamped to UTC day boundaries (the picker uses UTC).
-  const endRaw = endDate ? new Date(endDate) : new Date();
-  const startRaw = startDate
-    ? new Date(startDate)
-    : new Date(endRaw.getTime() - 7 * 86_400_000);
-  if (Number.isNaN(startRaw.getTime()) || Number.isNaN(endRaw.getTime())) {
-    return NextResponse.json(
-      { error: { code: "BAD_REQUEST", message: "Invalid start or end date." } },
-      { status: 400 },
-    );
-  }
-  const window = {
-    start: new Date(
-      Date.UTC(startRaw.getUTCFullYear(), startRaw.getUTCMonth(), startRaw.getUTCDate(), 0, 0, 0, 0),
-    ).toISOString(),
-    end: new Date(
-      Date.UTC(endRaw.getUTCFullYear(), endRaw.getUTCMonth(), endRaw.getUTCDate(), 23, 59, 59, 999),
-    ).toISOString(),
-  };
-  if (Date.parse(window.start) > Date.parse(window.end)) {
-    return NextResponse.json(
-      {
-        error: {
-          code: "BAD_REQUEST",
-          message: "The start date must be on or before the end date.",
+  // U12.10 — the window is OPTIONAL. Only when BOTH dates are given do we scope
+  // to a period; otherwise the whole document is analysed. Dates are clamped to
+  // UTC day boundaries (the picker uses UTC).
+  let window: { start: string; end: string } | undefined;
+  if (startDate && endDate) {
+    const startRaw = new Date(startDate);
+    const endRaw = new Date(endDate);
+    if (Number.isNaN(startRaw.getTime()) || Number.isNaN(endRaw.getTime())) {
+      return NextResponse.json(
+        { error: { code: "BAD_REQUEST", message: "Invalid start or end date." } },
+        { status: 400 },
+      );
+    }
+    window = {
+      start: new Date(
+        Date.UTC(startRaw.getUTCFullYear(), startRaw.getUTCMonth(), startRaw.getUTCDate(), 0, 0, 0, 0),
+      ).toISOString(),
+      end: new Date(
+        Date.UTC(endRaw.getUTCFullYear(), endRaw.getUTCMonth(), endRaw.getUTCDate(), 23, 59, 59, 999),
+      ).toISOString(),
+    };
+    if (Date.parse(window.start) > Date.parse(window.end)) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "BAD_REQUEST",
+            message: "The start date must be on or before the end date.",
+          },
         },
-      },
-      { status: 400 },
-    );
+        { status: 400 },
+      );
+    }
   }
 
   try {

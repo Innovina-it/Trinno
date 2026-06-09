@@ -61,6 +61,11 @@ export type ReconcileInput = {
   // ISO timestamp for last_analyzed_at / run_at. Passed in for determinism
   // (mirrors synthesize.runLabel) — the orchestrator stamps the run clock.
   now: string;
+  // U12.12 — the run's date window (null = whole-document) + content fingerprint,
+  // recorded on the run row for same-range dedup.
+  windowStart?: string | null;
+  windowEnd?: string | null;
+  fingerprint?: Record<string, string> | null;
 };
 
 export type ReconcileResult = {
@@ -154,6 +159,9 @@ export async function reconcile(input: ReconcileInput): Promise<ReconcileResult>
     reportFileId: input.report?.reportFileId ?? null,
     reportWebViewLink: input.report?.reportWebViewLink ?? null,
     runAt: input.now,
+    windowStart: input.windowStart ?? null,
+    windowEnd: input.windowEnd ?? null,
+    fingerprint: input.fingerprint ?? null,
   });
 
   return { registered, errored, removedApplied, run };

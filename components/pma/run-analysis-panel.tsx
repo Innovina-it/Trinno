@@ -15,13 +15,18 @@ import {
 // tens of seconds — the button reports progress and refreshes the server list
 // on success.
 //
-// U12.3 — a DateRangePopover (the shared calendar) scopes the run to a period;
-// defaults to the last 7 days (today−7d → today, UTC). The window is posted as
-// {startDate,endDate}; the route (U12.2) clamps + validates it.
+// U12.3/U12.10 — a DateRangePopover (the shared calendar) optionally scopes the
+// run to a period. It starts EMPTY: no date → whole-document report. When a range
+// is picked it's posted as {startDate,endDate}; the route clamps + validates it.
 
-const MS_DAY = 86_400_000;
-function startOfDayUTC(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+// dd/mm/yyyy (UTC, no time) — for the "available range" hint on an empty period.
+function fmtDay(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    timeZone: "UTC",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 export function RunAnalysisPanel({
   workspaceId,
@@ -39,11 +44,8 @@ export function RunAnalysisPanel({
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // Default window: the last 7 days (today−7d → today), in UTC day terms.
-  const [range, setRange] = useState<DateRange>(() => {
-    const today = startOfDayUTC(new Date());
-    return { start: new Date(today.getTime() - 7 * MS_DAY), target: today };
-  });
+  // U12.10 — empty by default: no date = whole-document report.
+  const [range, setRange] = useState<DateRange>({ start: null, target: null });
 
   const disabledReason = !isOwnerAdmin
     ? "Owner or admin only"
@@ -69,18 +71,49 @@ export function RunAnalysisPanel({
         }),
       });
       const json = (await res.json().catch(() => null)) as
-        | { result?: { status?: string }; error?: { message?: string } }
+        | {
+            result?: {
+              status?: string;
+              availableRange?: { first: string | null; last: string | null } | null;
+              changedSince?: string[];
+            };
+            error?: { message?: string };
+          }
         | null;
       if (!res.ok) {
         setError(json?.error?.message ?? "The analysis could not be completed.");
         return;
       }
-      // U12.5/U12.7 — a run that produces no report tells the user inline (the
-      // run also appears in history with the same notice).
-      if (json?.result?.status === "empty_period") {
-        setNotice("Nessun documento per il periodo selezionato.");
-      } else if (json?.result?.status === "no_changes") {
-        setNotice("Nessuna nuova modifica nel periodo selezionato.");
+      // Inline feedback by status (the run also appears in history). Phrase by
+      // whether a PERIOD was chosen: with no date it's a whole-document run, so
+      // "selected period" wording would be wrong.
+      const status = json?.result?.status;
+      const changedSince = json?.result?.changedSince;
+      if (status === "already_reported") {
+        // U12.12 — same period, nothing changed → no duplicate; the existing
+        // report is already in the list below.
+        setNotice(
+          "A report for this period already exists — nothing changed since (see below).",
+        );
+      } else if (status === "empty_period" || status === "no_changes") {
+        const hasPeriod = !!(range.start && range.target);
+        const r = json?.result?.availableRange;
+        const hint =
+          r?.first && r?.last
+            ? ` Documents range from ${fmtDay(r.first)} to ${fmtDay(r.last)}.`
+            : "";
+        if (!hasPeriod) {
+          setNotice(`No documents to analyze in the Source folder.${hint}`);
+        } else if (status === "empty_period") {
+          setNotice(`No documents in the selected period.${hint}`);
+        } else {
+          setNotice("No new changes in the selected period.");
+        }
+      } else if (status === "success" && changedSince && changedSince.length > 0) {
+        // U12.12 — re-run of the same period that DID change: say what changed.
+        setNotice(
+          `Report updated. Changed since the last report for this period: ${changedSince.join(", ")}.`,
+        );
       }
       startRefresh(() => router.refresh());
     } catch {
@@ -97,7 +130,7 @@ export function RunAnalysisPanel({
           value={range}
           onChange={setRange}
           disabled={!canRun || busy}
-          triggerLabel="Set period"
+          triggerLabel="Whole document"
         />
         <Button
           size="sm"

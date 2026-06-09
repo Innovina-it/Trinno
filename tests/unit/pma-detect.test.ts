@@ -37,6 +37,7 @@ type DriveFile = {
   headRevisionId: string | null;
   version: string | null;
   lastModifiedBy: string | null;
+  createdTime: string | null;
 };
 
 const doc = (id: string, name = id): DriveFile => ({
@@ -47,6 +48,7 @@ const doc = (id: string, name = id): DriveFile => ({
   headRevisionId: null, // Google docs have no headRevisionId …
   version: "v1", // … the monotonic `version` is the gate key
   lastModifiedBy: "Mario Rossi",
+  createdTime: "2026-06-07T10:00:00Z",
 });
 const pdf = (id: string, name = id): DriveFile => ({
   id,
@@ -56,6 +58,7 @@ const pdf = (id: string, name = id): DriveFile => ({
   headRevisionId: "rev1",
   version: "v1",
   lastModifiedBy: "Mario Rossi",
+  createdTime: "2026-06-07T10:00:00Z",
 });
 
 const SOURCE = "SRC_FOLDER";
@@ -281,6 +284,45 @@ describe("detect — window mode (U12.2)", () => {
 
     expect(res.files.map((x) => x.fileId)).toEqual(["A"]); // included despite later edit
     expect(res.files[0].windowAuthors).toEqual(["Luca"]); // ONLY the Jan reviser, not Paolo
+  });
+});
+
+describe("detect — all-files mode (U12.10/U12.11)", () => {
+  it("includes every current file (no date filter), credits all NAMED authors, reports the corpus range", async () => {
+    listFolder.mockResolvedValue([
+      { ...doc("A"), createdTime: "2026-01-01T00:00:00Z", modifiedTime: "2026-03-01T00:00:00Z" },
+      { ...doc("B"), createdTime: "2026-02-01T00:00:00Z", modifiedTime: "2026-06-01T00:00:00Z" },
+    ]);
+    listRevisions.mockImplementation((id: string) =>
+      Promise.resolve(
+        id === "A"
+          ? [
+              { id: "r1", modifiedTime: "2026-02-01T00:00:00Z", authorName: "Paolo Pavani" },
+              { id: "r2", modifiedTime: "2026-03-01T00:00:00Z", authorName: null }, // anonymous
+            ]
+          : [{ id: "r3", modifiedTime: "2026-06-01T00:00:00Z", authorName: "Luca" }],
+      ),
+    );
+
+    const res = await detect({
+      sourceFolderId: SOURCE,
+      pageToken: null,
+      deliverableLinks: [],
+      allFiles: true,
+    });
+
+    expect(res.files.map((f) => f.fileId).sort()).toEqual(["A", "B"]);
+    // Named author credited; the anonymous revision is labelled, not dropped.
+    expect(res.files.find((f) => f.fileId === "A")!.windowAuthors).toEqual([
+      "Paolo Pavani",
+      "anonymous user",
+    ]);
+    expect(res.files.find((f) => f.fileId === "B")!.windowAuthors).toEqual(["Luca"]);
+    // oldest createdTime → newest modifiedTime across the corpus.
+    expect(res.corpusRange).toEqual({
+      first: "2026-01-01T00:00:00Z",
+      last: "2026-06-01T00:00:00Z",
+    });
   });
 });
 

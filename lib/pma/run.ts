@@ -1,10 +1,11 @@
 import "server-only";
 
 import { StructuredError } from "@/lib/errors/structured-error";
-import { detect } from "./detect";
+import { detect, type DetectedFile } from "./detect";
 import { analyze } from "./analyze";
 import { synthesize } from "./synthesize";
 import { reconcile } from "./reconcile";
+import { findRunByWindow } from "./registry";
 import { getRunInputs } from "./inputs";
 
 // PMA U9 — RUN ORCHESTRATION (DESIGN §3, the A→G pipeline). Windowed as of U12.2.
@@ -32,15 +33,18 @@ export type RunAnalysisInput = {
   now: string; // ISO timestamp (run clock)
   runLabel: string; // display label (UTC+1) for the report Doc
   // U12.2 — the reporting window (ISO timestamps, inclusive) the run is scoped to.
-  window: { start: string; end: string };
+  // U12.10 — OPTIONAL: omitted → whole-document report (all files, no date filter).
+  window?: { start: string; end: string };
 };
 
 export type RunAnalysisResult = {
   runId: string;
   // U12.5 — "no_changes": files existed in the window but none changed.
   // U12.7 — "empty_period": no documents at all were modified in the window.
-  // Both produce NO report Doc (just a notice).
-  status: "success" | "error" | "no_changes" | "empty_period";
+  // U12.12 — "already_reported": an identical-window run with the same content
+  //   fingerprint already produced a report; we point at it, no new Doc.
+  // All three produce NO new report Doc (just a notice / a link).
+  status: "success" | "error" | "no_changes" | "empty_period" | "already_reported";
   reportFileId: string | null;
   reportWebViewLink: string | null;
   counts: { changed: number; missed: number; removed: number } | null;
@@ -48,7 +52,44 @@ export type RunAnalysisResult = {
   errored: number;
   removedApplied: number;
   bootstrapped: boolean;
+  // U12.10 — on an empty windowed run, the documents' available date range (oldest
+  // createdTime → newest modifiedTime) so the UI can guide the user. null otherwise.
+  availableRange?: { first: string | null; last: string | null } | null;
+  // U12.12 — when regenerating a same-window report, the files that changed since
+  // the previous report of this period (names). Empty/absent otherwise.
+  changedSince?: string[];
 };
+
+// U12.12 — content fingerprint of the in-window files: {fileId: driveVersion}.
+// Equal fingerprint for the same window ⇒ nothing changed since the last report.
+function fingerprintOf(files: DetectedFile[]): Record<string, string> {
+  const fp: Record<string, string> = {};
+  for (const f of files) fp[f.fileId] = f.version ?? "";
+  return fp;
+}
+
+function sameFingerprint(
+  a: Record<string, string> | null | undefined,
+  b: Record<string, string>,
+): boolean {
+  if (!a) return false;
+  const ak = Object.keys(a);
+  if (ak.length !== Object.keys(b).length) return false;
+  return ak.every((k) => a[k] === b[k]);
+}
+
+// Names of files new or version-changed vs a prior run's fingerprint.
+function changedFiles(
+  prior: Record<string, string> | null | undefined,
+  current: DetectedFile[],
+): string[] {
+  const names: string[] = [];
+  for (const f of current) {
+    const was = prior?.[f.fileId];
+    if (was === undefined || was !== (f.version ?? "")) names.push(f.name ?? f.fileId);
+  }
+  return names;
+}
 
 export async function runAnalysis(
   input: RunAnalysisInput,
@@ -74,10 +115,35 @@ export async function runAnalysis(
     sourceFolderId,
     pageToken: null,
     deliverableLinks: inputs.deliverableLinks,
-    window,
+    // U12.10 — window scopes to a period; no window → whole document (all files).
+    ...(window ? { window } : { allFiles: true }),
   });
   const added = detected.files.filter((f) => f.changeType === "added_or_edited");
   const removed = detected.files.filter((f) => f.changeType === "removed");
+
+  // 3b. Same-range dedup (U12.12). Fingerprint the in-window files; if a prior
+  //     SUCCESS run for the EXACT same window already produced a report and the
+  //     fingerprint is unchanged, nothing changed → point at that report instead
+  //     of regenerating a duplicate (skips analyze + Gemini entirely).
+  const windowStart = window?.start ?? null;
+  const windowEnd = window?.end ?? null;
+  const fingerprint = fingerprintOf(added);
+  const prior = await findRunByWindow(workspaceId, windowStart, windowEnd);
+  if (prior?.reportWebViewLink && sameFingerprint(prior.fingerprint, fingerprint)) {
+    return {
+      runId: prior.id,
+      status: "already_reported",
+      reportFileId: prior.reportFileId ?? null,
+      reportWebViewLink: prior.reportWebViewLink,
+      counts: (prior.counts as RunAnalysisResult["counts"]) ?? null,
+      registered: 0,
+      errored: 0,
+      removedApplied: 0,
+      bootstrapped: detected.bootstrapped,
+    };
+  }
+  // Files changed since the previous report of this same window (for the notice).
+  const changedSince = prior ? changedFiles(prior.fingerprint, added) : [];
 
   // 4. Analyze the editable changes (Flash recap inside). windowed → version
   //    gate bypassed so the chosen period is always (re)reported (U12.9).
@@ -111,6 +177,9 @@ export async function runAnalysis(
       report: null,
       runStatus: settledStatus,
       now,
+      windowStart,
+      windowEnd,
+      fingerprint,
     });
     return {
       runId: rec.run.id,
@@ -122,6 +191,8 @@ export async function runAnalysis(
       errored: rec.errored,
       removedApplied: rec.removedApplied,
       bootstrapped: detected.bootstrapped,
+      // U12.10 — tell the UI the documents' real range so the user can re-pick.
+      availableRange: detected.corpusRange ?? null,
     };
   }
 
@@ -138,6 +209,7 @@ export async function runAnalysis(
       removed,
       baseline: inputs.baseline,
       live: inputs.live,
+      changedSince,
     });
   } catch {
     runStatus = "error";
@@ -159,6 +231,9 @@ export async function runAnalysis(
       : null,
     runStatus,
     now,
+    windowStart,
+    windowEnd,
+    fingerprint,
   });
 
   return {
@@ -171,5 +246,7 @@ export async function runAnalysis(
     errored: rec.errored,
     removedApplied: rec.removedApplied,
     bootstrapped: detected.bootstrapped,
+    // U12.12 — what changed vs the previous report of this same window (if any).
+    changedSince: changedSince.length > 0 ? changedSince : undefined,
   };
 }

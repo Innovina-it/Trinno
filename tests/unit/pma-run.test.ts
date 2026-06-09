@@ -10,12 +10,16 @@ const detect = vi.fn();
 const analyze = vi.fn();
 const synthesize = vi.fn();
 const reconcile = vi.fn();
+const findRunByWindow = vi.fn();
 
 vi.mock("@/lib/pma/inputs", () => ({ getRunInputs: (...a: unknown[]) => getRunInputs(...a) }));
 vi.mock("@/lib/pma/detect", () => ({ detect: (...a: unknown[]) => detect(...a) }));
 vi.mock("@/lib/pma/analyze", () => ({ analyze: (...a: unknown[]) => analyze(...a) }));
 vi.mock("@/lib/pma/synthesize", () => ({ synthesize: (...a: unknown[]) => synthesize(...a) }));
 vi.mock("@/lib/pma/reconcile", () => ({ reconcile: (...a: unknown[]) => reconcile(...a) }));
+vi.mock("@/lib/pma/registry", () => ({
+  findRunByWindow: (...a: unknown[]) => findRunByWindow(...a),
+}));
 
 import { runAnalysis } from "@/lib/pma/run";
 import type { DetectedFile } from "@/lib/pma/detect";
@@ -64,6 +68,8 @@ beforeEach(() => {
   analyze.mockReset();
   synthesize.mockReset();
   reconcile.mockReset();
+  findRunByWindow.mockReset();
+  findRunByWindow.mockResolvedValue(null); // no prior run for the window by default
 
   getRunInputs.mockResolvedValue({ ...okInputs });
   detect.mockResolvedValue({
@@ -178,9 +184,14 @@ describe("runAnalysis — no changes (U12.5)", () => {
     expect(res.counts).toBeNull();
   });
 
-  it("records an empty_period run when no documents were modified in the window (U12.7)", async () => {
-    // detect finds nothing in the window at all.
-    detect.mockResolvedValue({ files: [], newPageToken: null, bootstrapped: false });
+  it("records an empty_period run + the available range when nothing matched the window (U12.7/U12.10)", async () => {
+    // detect finds nothing in the window, but reports the corpus range.
+    detect.mockResolvedValue({
+      files: [],
+      newPageToken: null,
+      bootstrapped: false,
+      corpusRange: { first: "2026-01-01T00:00:00Z", last: "2026-06-01T00:00:00Z" },
+    });
     analyze.mockResolvedValue([]);
 
     const res = await run();
@@ -189,6 +200,61 @@ describe("runAnalysis — no changes (U12.5)", () => {
     expect(reconcile.mock.calls[0][0].runStatus).toBe("empty_period");
     expect(res.status).toBe("empty_period");
     expect(res.reportWebViewLink).toBeNull();
+    // U12.10 — the documents' available range rides back so the UI can guide.
+    expect(res.availableRange).toEqual({
+      first: "2026-01-01T00:00:00Z",
+      last: "2026-06-01T00:00:00Z",
+    });
+  });
+
+  it("analyzes the whole document (allFiles, no window) when no date is given (U12.10)", async () => {
+    await run({ window: undefined });
+    expect(detect).toHaveBeenCalledWith({
+      sourceFolderId: "src-folder",
+      pageToken: null,
+      deliverableLinks: okInputs.deliverableLinks,
+      allFiles: true,
+    });
+  });
+});
+
+describe("runAnalysis — same-range dedup (U12.12)", () => {
+  it("does NOT regenerate when a prior report for the same window has the same fingerprint", async () => {
+    // Prior success run for this window with identical fingerprint {A: v1}.
+    findRunByWindow.mockResolvedValue({
+      id: "prior-run",
+      status: "success",
+      reportFileId: "doc-prior",
+      reportWebViewLink: "https://docs/prior",
+      counts: { changed: 1, missed: 0, removed: 0 },
+      fingerprint: { A: "v1" }, // addedFile("A").version is "v1"
+    });
+
+    const res = await run();
+
+    expect(synthesize).not.toHaveBeenCalled(); // no Gemini, no new Doc
+    expect(reconcile).not.toHaveBeenCalled(); // no new run recorded
+    expect(res.status).toBe("already_reported");
+    expect(res.runId).toBe("prior-run");
+    expect(res.reportWebViewLink).toBe("https://docs/prior");
+  });
+
+  it("regenerates and reports which files changed when the fingerprint differs", async () => {
+    findRunByWindow.mockResolvedValue({
+      id: "prior-run",
+      status: "success",
+      reportFileId: "doc-prior",
+      reportWebViewLink: "https://docs/prior",
+      counts: { changed: 1, missed: 0, removed: 0 },
+      fingerprint: { A: "v0" }, // A is now v1 → changed
+    });
+
+    const res = await run();
+
+    expect(synthesize).toHaveBeenCalledTimes(1);
+    expect(synthesize.mock.calls[0][0].changedSince).toEqual(["A"]);
+    expect(res.status).toBe("success");
+    expect(res.changedSince).toEqual(["A"]);
   });
 });
 

@@ -787,6 +787,11 @@ export const pmaAnalysisRuns = pgTable("pma_analysis_runs", {
   reportFileId: text("report_file_id"),
   // webViewLink the Analysis tab surfaces.
   reportWebViewLink: text("report_web_view_link"),
+  // U12.12 — the run's date window (null = whole-document run) + a content
+  // fingerprint ({fileId: driveVersion}) for same-range dedup.
+  windowStart: timestamp("window_start", { withTimezone: true }),
+  windowEnd: timestamp("window_end", { withTimezone: true }),
+  fingerprint: jsonb("fingerprint").$type<Record<string, string>>(),
 });
 
 export type PmaAnalysisRunRow = typeof pmaAnalysisRuns.$inferSelect;

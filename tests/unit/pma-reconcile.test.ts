@@ -227,6 +227,9 @@ describe("reconcile — run record", () => {
       },
       runStatus: "success",
       now: NOW,
+      windowStart: "2026-06-07T00:00:00.000Z",
+      windowEnd: "2026-06-08T23:59:59.999Z",
+      fingerprint: { A: "v1" },
     });
 
     expect(recordRun).toHaveBeenCalledWith({
@@ -237,6 +240,9 @@ describe("reconcile — run record", () => {
       reportFileId: "doc-1",
       reportWebViewLink: "https://docs/doc-1",
       runAt: NOW,
+      windowStart: "2026-06-07T00:00:00.000Z",
+      windowEnd: "2026-06-08T23:59:59.999Z",
+      fingerprint: { A: "v1" },
     });
     expect(res.run).toEqual({ id: "run-9" });
     expect(res.registered).toBe(2); // analyzed A + non_mod P
