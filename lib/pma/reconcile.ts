@@ -53,10 +53,11 @@ export type ReconcileInput = {
     reportWebViewLink: string;
     counts: { changed: number; missed: number; removed: number };
   } | null;
-  // U12.5 — "no_changes": recorded for an empty-window run (no report Doc). The
-  // version-advance branch keys off `=== "success"`, so no_changes never
-  // advances last_version (and an empty run has no analyzed files anyway).
-  runStatus: "success" | "error" | "no_changes";
+  // U12.5/U12.7 — "no_changes" (files unchanged) and "empty_period" (no docs in
+  // the window) are recorded for runs that produce no report Doc. The
+  // version-advance branch keys off `=== "success"`, so neither advances
+  // last_version (and such runs have no analyzed files anyway).
+  runStatus: "success" | "error" | "no_changes" | "empty_period";
   // ISO timestamp for last_analyzed_at / run_at. Passed in for determinism
   // (mirrors synthesize.runLabel) — the orchestrator stamps the run clock.
   now: string;

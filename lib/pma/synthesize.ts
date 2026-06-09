@@ -131,12 +131,22 @@ const SYNTHESIS_SYSTEM =
   "When a reporting period is given, cover ONLY work within that period and do " +
   "not discuss activity outside it. Each changed file carries `modified_by` — " +
   "the person who last modified it (or 'non noto'); name that person as the one " +
-  "who made the file's changes (e.g. in new_or_changed_files). Be specific and " +
-  "terse; do not invent content. Respond only as JSON matching the provided schema.";
+  "who made the file's changes (e.g. in new_or_changed_files), and use the " +
+  "`modified_by` value EXACTLY as given (verbatim — do not reformat or rewrite " +
+  "the name). Refer to files by the `file` value given (a human name), never by " +
+  "any id. Be specific and terse; do not invent content. Respond only as JSON " +
+  "matching the provided schema.";
 
 // The compact, model-facing payload. Kept small and structured: only the signal
 // (one-line summaries, importance, risk flags, non-trivial variance) is sent —
 // not the full recap bodies (those already live in the Output folder).
+// U12.9 — the people to credit for a file's changes: window revision authors if
+// present, else the single last modifier, else none (→ "non noto").
+function whoChanged(r: AnalyzeFileResult): string[] {
+  if (r.authors && r.authors.length > 0) return r.authors;
+  return r.modifiedBy ? [r.modifiedBy] : [];
+}
+
 function buildPayload(
   input: SynthesizeInput,
   variance: VarianceResult | null,
@@ -149,7 +159,8 @@ function buildPayload(
     run: input.runLabel,
     reporting_period: period,
     changed_files: analyzed.map((r) => ({
-      file: r.fileId,
+      // U12.8 — reference the file by its human name, not the raw Drive fileId.
+      file: r.name ?? r.fileId,
       summary: r.recap!.one_line_summary,
       importance: r.recap!.importance,
       is_deliverable: r.recap!.is_deliverable,
@@ -157,10 +168,11 @@ function buildPayload(
       edits: r.recap!.edits,
       structural_changes: r.recap!.structural_changes,
       risk_flags: r.recap!.risk_flags,
-      // U12.4 — who last modified the file (or "non noto"); the report names them.
-      modified_by: r.modifiedBy ?? "non noto",
+      // U12.9 — who revised the file within the period (or "non noto"); the report
+      // names them. Falls back to the single last modifier when no window authors.
+      modified_by: whoChanged(r).join(", ") || "non noto",
     })),
-    missed_files: missed.map((r) => ({ file: r.fileId, error: r.error })),
+    missed_files: missed.map((r) => ({ file: r.name ?? r.fileId, error: r.error })),
     removed_files: input.removed.map((f) => ({
       file: f.fileId,
       name: f.name,
@@ -214,13 +226,19 @@ function fmtPeriod(window: { start: string; end: string }): string {
   return `${f(window.start)} – ${f(window.end)}`;
 }
 
-// Render the structured report into a plain-text body. createDoc() converts
-// text/plain into a native Google Doc, so this produces clean, readable
-// sections (uppercase headers + bullet lists) rather than markup.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Render the structured report as an HTML body. createReport imports text/html
+// → Drive converts it to a native Google Doc carrying formatting. U12.6 — author
+// names (the `authors` set, grounded in Drive's lastModifyingUser) are wrapped in
+// <b> wherever they appear, so the person who made each change stands out.
 export function renderReportDoc(
   report: SynthesisReport,
   runLabel: string,
   period?: string | null,
+  authors: string[] = [],
 ): string {
   const lines: string[] = [];
   const section = (title: string) => {
@@ -266,7 +284,20 @@ export function renderReportDoc(
   section("Difficulties");
   bullets(report.difficulties);
 
-  return lines.join("\n");
+  // U12.6 — emit HTML. Escape every line first, then bold any author name within
+  // it (longest names first so overlapping names don't nest). Lines join with
+  // <br>; "non noto" is left unbolded (it is not a recognizable person).
+  const names = [...authors]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+    .map((n) => escapeHtml(n));
+  const bold = (escapedLine: string): string => {
+    let out = escapedLine;
+    for (const n of names) out = out.split(n).join(`<b>${n}</b>`);
+    return out;
+  };
+  const body = lines.map((l) => bold(escapeHtml(l))).join("<br>\n");
+  return `<html><body>${body}</body></html>`;
 }
 
 export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResult> {
@@ -286,7 +317,17 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
     temperature: 0,
   });
 
-  const content = renderReportDoc(report, input.runLabel, period);
+  // U12.6/U12.9 — the grounded set of author names to bold in the rendered
+  // report: every person who revised any analyzed file within the period.
+  const authors = Array.from(
+    new Set(
+      input.fileResults
+        .filter((r) => r.status === "analyzed")
+        .flatMap((r) => whoChanged(r))
+        .filter((n): n is string => !!n),
+    ),
+  );
+  const content = renderReportDoc(report, input.runLabel, period, authors);
   const { id, webViewLink } = await createReport(input.outputFolderId, {
     name: period
       ? `Analysis ${period} — ${input.runLabel}`

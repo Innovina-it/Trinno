@@ -4,8 +4,9 @@ import {
   getStartPageToken,
   listChanges,
   listFolder,
+  listRevisions,
 } from "./clients/drive";
-import type { DriveFile } from "./clients/drive";
+import type { DriveFile, DriveRevision } from "./clients/drive";
 
 // PMA U5 — DETECT (DESIGN §3 steps A + B).
 //
@@ -41,6 +42,9 @@ export type DetectedFile = {
   version: string | null;
   // U12.4 — displayName of the file's last modifier (null when unknown/removed).
   lastModifiedBy: string | null;
+  // U12.9 — display names of users who made a revision WITHIN the run's window
+  // (window mode only; undefined otherwise). Drives per-period attribution.
+  windowAuthors?: string[];
   // null only for removed files (no mimeType to classify).
   kind: FileKind | null;
   isDeliverable: boolean;
@@ -140,19 +144,48 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
     changeType: "added_or_edited",
   });
 
-  // ── Window mode (U12.2): scope by modifiedTime within [start,end]; no change
-  //    feed, no page token. Includes editable + non_mod files alike (analyze
-  //    filters to editable). Removed files are not detectable here.
+  // ── Window mode (U12.2, revisions as of U12.9): scope BY REVISION within
+  //    [start,end]; no change feed, no page token. A file is in-window if it has
+  //    ≥1 revision in the window (so a file last edited AFTER the window but
+  //    revised inside it is still caught). windowAuthors = who revised in the
+  //    window → per-period attribution. Removed files aren't detectable here.
   if (input.window) {
     const startMs = Date.parse(input.window.start);
     const endMs = Date.parse(input.window.end);
-    const files = currentList
-      .filter((f) => {
-        if (!f.modifiedTime) return false;
-        const t = Date.parse(f.modifiedTime);
-        return !Number.isNaN(t) && t >= startMs && t <= endMs;
-      })
-      .map(tag);
+    const inWin = (iso: string | null): boolean => {
+      if (!iso) return false;
+      const t = Date.parse(iso);
+      return !Number.isNaN(t) && t >= startMs && t <= endMs;
+    };
+    const files: DetectedFile[] = [];
+    for (const f of currentList) {
+      // Prune: a file last modified before the window can't have a revision in
+      // it (modifiedTime is the LAST edit). Skips the revisions call for most.
+      if (f.modifiedTime) {
+        const mt = Date.parse(f.modifiedTime);
+        if (!Number.isNaN(mt) && mt < startMs) continue;
+      }
+      let revs: DriveRevision[] = [];
+      try {
+        revs = await listRevisions(f.id);
+      } catch {
+        revs = [];
+      }
+      const windowRevs = revs.filter((r) => inWin(r.modifiedTime));
+      // Membership: a revision in the window. If Drive returned NO revisions at
+      // all (unavailable), fall back to the file's modifiedTime being in-window.
+      const member =
+        revs.length > 0 ? windowRevs.length > 0 : inWin(f.modifiedTime);
+      if (!member) continue;
+      const windowAuthors = Array.from(
+        new Set(
+          windowRevs
+            .map((r) => r.authorName)
+            .filter((n): n is string => !!n),
+        ),
+      );
+      files.push({ ...tag(f), windowAuthors });
+    }
     return { files, newPageToken: null, bootstrapped: false };
   }
 

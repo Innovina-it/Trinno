@@ -85,6 +85,29 @@ describe("analyze — version gate (C)", () => {
     const res = await analyze({ workspaceId: WS, outputFolderId: OUT, files: [editable("A", "rev1")] });
     expect(res[0].status).toBe("analyzed");
   });
+
+  it("BYPASSES the gate in window mode — re-reports even an already-analyzed version (U12.9)", async () => {
+    getRegistryEntry.mockResolvedValue({ last_version: "rev1" } as never); // would skip if not windowed
+    const res = await analyze({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      files: [editable("A", "rev1")],
+      windowed: true,
+    });
+    expect(res[0].status).toBe("analyzed"); // NOT skipped
+    expect(getRegistryEntry).not.toHaveBeenCalled(); // gate not even consulted
+    expect(generateStructured).toHaveBeenCalledTimes(1);
+  });
+
+  it("carries the window revision authors onto the result (U12.9)", async () => {
+    const res = await analyze({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      files: [editable("A", "rev1", { windowAuthors: ["Luca", "Paolo"] })],
+      windowed: true,
+    });
+    expect(res[0].authors).toEqual(["Luca", "Paolo"]);
+  });
 });
 
 describe("analyze — recap (D)", () => {

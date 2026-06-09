@@ -53,6 +53,12 @@ export type AnalyzeFileResult = {
   // U12.4 — displayName of the file's last modifier (or null/"unknown"); surfaced
   // in the report for attribution. Not persisted in recap_json.
   modifiedBy?: string | null;
+  // U12.8 — the file's human name, so the report references it by name instead of
+  // the raw Drive fileId.
+  name?: string | null;
+  // U12.9 — the people who revised the file within the run's window (per-period
+  // attribution). Supersedes the single modifiedBy when present.
+  authors?: string[];
 };
 
 export type AnalyzeInput = {
@@ -60,7 +66,18 @@ export type AnalyzeInput = {
   outputFolderId: string;
   // The full detect() output; this unit filters to editable changes itself.
   files: DetectedFile[];
+  // U12.9 — window mode: BYPASS the version gate so a chosen period is always
+  // (re)reported, regardless of whether the file's current version was analysed
+  // before. detect's revision-based membership already scoped the file set.
+  windowed?: boolean;
 };
+
+// U12.9 — who to attribute a file's changes to: the window's revision authors if
+// detect provided them, else the single last modifier, else nobody (→ "non noto").
+function authorsOf(file: DetectedFile): string[] {
+  if (file.windowAuthors && file.windowAuthors.length > 0) return file.windowAuthors;
+  return file.lastModifiedBy ? [file.lastModifiedBy] : [];
+}
 
 const RECAP_SCHEMA: Schema = {
   type: Type.OBJECT,
@@ -122,10 +139,13 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
     // Drive `version` is the gate key — headRevisionId is null for Google docs.
     const version = file.version;
     try {
-      // ── Gate C: skip if we've already analysed this exact version.
-      const entry = await getRegistryEntry(input.workspaceId, file.fileId);
+      // ── Gate C: skip if we've already analysed this exact version. BYPASSED in
+      //    window mode (U12.9) — a chosen period must always (re)report its files.
+      const entry = input.windowed
+        ? null
+        : await getRegistryEntry(input.workspaceId, file.fileId);
       const lastVersion = lastVersionOf(entry);
-      if (version && lastVersion && lastVersion === version) {
+      if (!input.windowed && version && lastVersion && lastVersion === version) {
         results.push({
           fileId: file.fileId,
           version,
@@ -134,6 +154,8 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
           recap: null,
           error: null,
           modifiedBy: file.lastModifiedBy,
+          name: file.name,
+          authors: authorsOf(file),
         });
         continue;
       }
@@ -160,6 +182,8 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         recap,
         error: null,
         modifiedBy: file.lastModifiedBy,
+        name: file.name,
+        authors: authorsOf(file),
       });
     } catch (err) {
       results.push({
@@ -170,6 +194,8 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         recap: null,
         error: err instanceof Error ? err.message : String(err),
         modifiedBy: file.lastModifiedBy,
+        name: file.name,
+        authors: authorsOf(file),
       });
     }
   }

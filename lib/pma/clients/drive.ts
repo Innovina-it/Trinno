@@ -222,6 +222,42 @@ export async function getFile(fileId: string): Promise<DriveFile> {
   return toDriveFile(res.data);
 }
 
+// U12.9 — a Drive revision: id + when + who. Used to scope a run to a date
+// window BY REVISION (not just the file's last modifiedTime) and to attribute
+// changes to the people who revised within that window.
+export type DriveRevision = {
+  id: string;
+  modifiedTime: string | null;
+  authorName: string | null;
+};
+
+// List a file's revisions (paginated). Read-only. Google COALESCES minor edits,
+// so this is a coarse per-revision history (not per-keystroke). Throws bubble to
+// the caller, which treats a failure as "no revision data".
+export async function listRevisions(fileId: string): Promise<DriveRevision[]> {
+  const drive = await getDriveClient();
+  const out: DriveRevision[] = [];
+  let pageToken: string | undefined;
+  do {
+    const res = await drive.revisions.list({
+      fileId,
+      fields:
+        "nextPageToken, revisions(id, modifiedTime, lastModifyingUser(displayName))",
+      pageSize: 1000,
+      pageToken,
+    });
+    for (const r of res.data.revisions ?? []) {
+      out.push({
+        id: r.id ?? "",
+        modifiedTime: r.modifiedTime ?? null,
+        authorName: r.lastModifyingUser?.displayName ?? null,
+      });
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+  return out;
+}
+
 // Get the Changes-API start page token for the SOURCE folder's drive. Used to
 // bootstrap incremental detection: persist this, then later call listChanges.
 export async function getStartPageToken(): Promise<string> {
@@ -333,10 +369,10 @@ export async function uploadFile(input: UploadFileInput): Promise<DriveFile> {
   return toDriveFile(res.data);
 }
 
-// Create a native Google Doc from plain-text `content` under `parentId`.
-// Uploading text/plain with the Google Doc target mimeType makes Drive convert
-// it. Returns the new file id plus its webViewLink (the report link the
-// Analysis tab will surface).
+// Create a native Google Doc from HTML `content` under `parentId`. Uploading
+// text/html with the Google Doc target mimeType makes Drive convert it, carrying
+// formatting (e.g. <b> author names — U12.6). Returns the new file id plus its
+// webViewLink (the report link the Analysis tab will surface).
 export async function createDoc(
   input: CreateDocInput,
 ): Promise<{ id: string; webViewLink: string }> {
@@ -347,7 +383,7 @@ export async function createDoc(
       parents: [input.parentId],
       mimeType: "application/vnd.google-apps.document",
     },
-    media: { mimeType: "text/plain", body: Readable.from(Buffer.from(input.content)) },
+    media: { mimeType: "text/html", body: Readable.from(Buffer.from(input.content)) },
     fields: "id, webViewLink",
     ...SHARED_DRIVE_WRITE,
   });

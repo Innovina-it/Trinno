@@ -102,11 +102,12 @@ describe("runAnalysis — happy path wiring", () => {
       window: WINDOW,
     });
 
-    // analyze gets only the added/edited files.
+    // analyze gets only the added/edited files, in windowed mode (gate bypassed).
     expect(analyze).toHaveBeenCalledWith({
       workspaceId: WS,
       outputFolderId: "out-folder",
       files: [expect.objectContaining({ fileId: "A", changeType: "added_or_edited" })],
+      windowed: true,
     });
 
     // synthesize gets the analysis results + removed files + baseline/live.
@@ -175,6 +176,19 @@ describe("runAnalysis — no changes (U12.5)", () => {
     expect(res.status).toBe("no_changes");
     expect(res.reportWebViewLink).toBeNull();
     expect(res.counts).toBeNull();
+  });
+
+  it("records an empty_period run when no documents were modified in the window (U12.7)", async () => {
+    // detect finds nothing in the window at all.
+    detect.mockResolvedValue({ files: [], newPageToken: null, bootstrapped: false });
+    analyze.mockResolvedValue([]);
+
+    const res = await run();
+
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(reconcile.mock.calls[0][0].runStatus).toBe("empty_period");
+    expect(res.status).toBe("empty_period");
+    expect(res.reportWebViewLink).toBeNull();
   });
 });
 

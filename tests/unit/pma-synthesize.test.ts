@@ -48,6 +48,7 @@ const analyzed = (id: string, over: Partial<FileRecap> = {}): AnalyzeFileResult 
   recap: recap(over),
   error: null,
   modifiedBy: "Mario Rossi",
+  name: `${id}.gdoc`,
 });
 
 const errored = (id: string): AnalyzeFileResult => ({
@@ -130,6 +131,34 @@ describe("synthesize — aggregate + report", () => {
     expect(res.reportWebViewLink).toBe("https://docs/doc-1");
     // changed = analyzed only; skipped does NOT count as changed.
     expect(res.counts).toEqual({ changed: 1, missed: 1, removed: 1 });
+  });
+
+  it("credits all window revision authors in modified_by (U12.9)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [{ ...analyzed("A"), authors: ["Luca", "Paolo"] }],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"modified_by": "Luca, Paolo"'); // window authors, joined
+  });
+
+  it("references the file by name, not the raw Drive fileId (U12.8)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [analyzed("A")], // helper sets name "A.gdoc"
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"file": "A.gdoc"'); // the name, not a bare id
   });
 
   it("includes each changed file's modified_by (or 'non noto') in the payload", async () => {
@@ -284,6 +313,18 @@ describe("renderReportDoc", () => {
     expect(body).toContain("DELIVERABLES");
     expect(body).toContain("Spec deliverable revised twice.");
     expect(body).toContain("[delay/medium] Ship onboarding: 2026-06-01 → 2026-06-11");
+  });
+
+  it("bolds known author names in the HTML body (U12.6)", () => {
+    const body = renderReportDoc(
+      { ...REPORT, new_or_changed_files: ["spec.gdoc — Mario Rossi", "plan.gdoc — non noto"] },
+      LABEL,
+      null,
+      ["Mario Rossi"],
+    );
+    expect(body).toContain("<b>Mario Rossi</b>");
+    expect(body).toContain("non noto"); // unknown author left unbolded
+    expect(body).not.toContain("<b>non noto</b>");
   });
 
   it("shows (none) for empty sections", () => {

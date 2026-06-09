@@ -37,8 +37,10 @@ export type RunAnalysisInput = {
 
 export type RunAnalysisResult = {
   runId: string;
-  // U12.5 — "no_changes": nothing reportable in the window → no report Doc.
-  status: "success" | "error" | "no_changes";
+  // U12.5 — "no_changes": files existed in the window but none changed.
+  // U12.7 — "empty_period": no documents at all were modified in the window.
+  // Both produce NO report Doc (just a notice).
+  status: "success" | "error" | "no_changes" | "empty_period";
   reportFileId: string | null;
   reportWebViewLink: string | null;
   counts: { changed: number; missed: number; removed: number } | null;
@@ -77,8 +79,14 @@ export async function runAnalysis(
   const added = detected.files.filter((f) => f.changeType === "added_or_edited");
   const removed = detected.files.filter((f) => f.changeType === "removed");
 
-  // 4. Analyze the editable changes (version gate + Flash recap inside).
-  const analysis = await analyze({ workspaceId, outputFolderId, files: added });
+  // 4. Analyze the editable changes (Flash recap inside). windowed → version
+  //    gate bypassed so the chosen period is always (re)reported (U12.9).
+  const analysis = await analyze({
+    workspaceId,
+    outputFolderId,
+    files: added,
+    windowed: true,
+  });
 
   // 4b. No-change short-circuit (U12.5). Nothing reportable in the window —
   //     every editable file was gated out as unchanged (skipped) and there are
@@ -89,6 +97,11 @@ export async function runAnalysis(
     analysis.some((r) => r.status === "analyzed" || r.status === "error") ||
     removed.length > 0;
   if (!reportable) {
+    // U12.7 — distinguish "nothing in this period at all" (no documents modified
+    // in the window — e.g. a future/empty date range) from "documents exist but
+    // none changed". Both skip the Doc; the page/notice wording differs.
+    const settledStatus =
+      added.length === 0 && removed.length === 0 ? "empty_period" : "no_changes";
     const rec = await reconcile({
       workspaceId,
       triggeredBy: actorId,
@@ -96,12 +109,12 @@ export async function runAnalysis(
       analysis,
       removed,
       report: null,
-      runStatus: "no_changes",
+      runStatus: settledStatus,
       now,
     });
     return {
       runId: rec.run.id,
-      status: "no_changes",
+      status: settledStatus,
       reportFileId: null,
       reportWebViewLink: null,
       counts: null,

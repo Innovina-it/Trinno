@@ -75,9 +75,11 @@ export function RunAnalysisPanel({
         setError(json?.error?.message ?? "The analysis could not be completed.");
         return;
       }
-      // U12.5 — an empty-window run produces no report; tell the user inline
-      // (the run still appears in history with the same notice).
-      if (json?.result?.status === "no_changes") {
+      // U12.5/U12.7 — a run that produces no report tells the user inline (the
+      // run also appears in history with the same notice).
+      if (json?.result?.status === "empty_period") {
+        setNotice("Nessun documento per il periodo selezionato.");
+      } else if (json?.result?.status === "no_changes") {
         setNotice("Nessuna nuova modifica nel periodo selezionato.");
       }
       startRefresh(() => router.refresh());

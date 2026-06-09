@@ -14,11 +14,13 @@ vi.mock("server-only", () => ({}));
 const listFolder = vi.fn();
 const getStartPageToken = vi.fn();
 const listChanges = vi.fn();
+const listRevisions = vi.fn();
 
 vi.mock("@/lib/pma/clients/drive", () => ({
   listFolder: (...a: unknown[]) => listFolder(...a),
   getStartPageToken: (...a: unknown[]) => getStartPageToken(...a),
   listChanges: (...a: unknown[]) => listChanges(...a),
+  listRevisions: (...a: unknown[]) => listRevisions(...a),
 }));
 
 import {
@@ -62,6 +64,9 @@ beforeEach(() => {
   listFolder.mockReset();
   getStartPageToken.mockReset();
   listChanges.mockReset();
+  listRevisions.mockReset();
+  // Default: no revision data → window mode falls back to modifiedTime membership.
+  listRevisions.mockResolvedValue([]);
 });
 
 describe("categorize", () => {
@@ -255,6 +260,27 @@ describe("detect — window mode (U12.2)", () => {
 
     expect(res.files.map((f) => f.fileId).sort()).toEqual(["A", "P"]);
     expect(res.files.find((f) => f.fileId === "P")!.kind).toBe("non_mod");
+  });
+
+  it("includes a file last edited AFTER the window if it has a revision IN it, and attributes only the window's authors (U12.9)", async () => {
+    // File's last edit is in March (outside the Jan window) — but it was also
+    // revised in January. The exact "I edit Feb, Paolo edits Mar, I ask Feb" case.
+    const f = { ...doc("A"), modifiedTime: "2026-03-10T00:00:00Z" };
+    listFolder.mockResolvedValue([f]);
+    listRevisions.mockResolvedValue([
+      { id: "r1", modifiedTime: "2026-01-15T00:00:00Z", authorName: "Luca" },
+      { id: "r2", modifiedTime: "2026-03-10T00:00:00Z", authorName: "Paolo" },
+    ]);
+
+    const res = await detect({
+      sourceFolderId: SOURCE,
+      pageToken: null,
+      deliverableLinks: [],
+      window: WIN,
+    });
+
+    expect(res.files.map((x) => x.fileId)).toEqual(["A"]); // included despite later edit
+    expect(res.files[0].windowAuthors).toEqual(["Luca"]); // ONLY the Jan reviser, not Paolo
   });
 });
 
