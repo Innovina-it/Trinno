@@ -34,6 +34,7 @@ type DriveFile = {
   modifiedTime: string;
   headRevisionId: string | null;
   version: string | null;
+  lastModifiedBy: string | null;
 };
 
 const doc = (id: string, name = id): DriveFile => ({
@@ -43,6 +44,7 @@ const doc = (id: string, name = id): DriveFile => ({
   modifiedTime: "2026-06-07T10:00:00Z",
   headRevisionId: null, // Google docs have no headRevisionId …
   version: "v1", // … the monotonic `version` is the gate key
+  lastModifiedBy: "Mario Rossi",
 });
 const pdf = (id: string, name = id): DriveFile => ({
   id,
@@ -51,6 +53,7 @@ const pdf = (id: string, name = id): DriveFile => ({
   modifiedTime: "2026-06-07T10:00:00Z",
   headRevisionId: "rev1",
   version: "v1",
+  lastModifiedBy: "Mario Rossi",
 });
 
 const SOURCE = "SRC_FOLDER";

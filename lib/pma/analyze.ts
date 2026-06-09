@@ -50,6 +50,9 @@ export type AnalyzeFileResult = {
   recapFileId: string | null;
   recap: FileRecap | null;
   error: string | null;
+  // U12.4 — displayName of the file's last modifier (or null/"unknown"); surfaced
+  // in the report for attribution. Not persisted in recap_json.
+  modifiedBy?: string | null;
 };
 
 export type AnalyzeInput = {
@@ -130,6 +133,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
           recapFileId: null,
           recap: null,
           error: null,
+          modifiedBy: file.lastModifiedBy,
         });
         continue;
       }
@@ -155,6 +159,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         recapFileId: null,
         recap,
         error: null,
+        modifiedBy: file.lastModifiedBy,
       });
     } catch (err) {
       results.push({
@@ -164,6 +169,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         recapFileId: null,
         recap: null,
         error: err instanceof Error ? err.message : String(err),
+        modifiedBy: file.lastModifiedBy,
       });
     }
   }

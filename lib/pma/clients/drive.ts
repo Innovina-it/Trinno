@@ -52,6 +52,9 @@ export type DriveFile = {
   // docs) is the actual change-gate key the PMA pipeline uses.
   headRevisionId: string | null;
   version: string | null;
+  // U12.4 — displayName of the file's last modifier (Drive lastModifyingUser),
+  // or null when Drive does not expose it. Surfaced in the report as attribution.
+  lastModifiedBy: string | null;
 };
 
 // Result of listChanges: the changed/removed files since a page token plus the
@@ -82,7 +85,8 @@ export type CreateDocInput = {
 };
 
 // Fields requested for every file lookup so DriveFile is always fully hydrated.
-const FILE_FIELDS = "id, name, mimeType, modifiedTime, headRevisionId, version";
+const FILE_FIELDS =
+  "id, name, mimeType, modifiedTime, headRevisionId, version, lastModifyingUser(displayName)";
 
 function toDriveFile(f: drive_v3.Schema$File): DriveFile {
   return {
@@ -92,6 +96,7 @@ function toDriveFile(f: drive_v3.Schema$File): DriveFile {
     modifiedTime: f.modifiedTime ?? "",
     headRevisionId: f.headRevisionId ?? null,
     version: f.version ?? null,
+    lastModifiedBy: f.lastModifyingUser?.displayName ?? null,
   };
 }
 

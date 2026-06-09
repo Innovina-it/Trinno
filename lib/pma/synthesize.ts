@@ -129,8 +129,10 @@ const SYNTHESIS_SYSTEM =
   "report. Give deliverable files a dedicated focus paragraph. For deviations, " +
   "use ONLY the supplied baseline-vs-live deltas — never invent dates or slips. " +
   "When a reporting period is given, cover ONLY work within that period and do " +
-  "not discuss activity outside it. Be specific and terse; do not invent " +
-  "content. Respond only as JSON matching the provided schema.";
+  "not discuss activity outside it. Each changed file carries `modified_by` — " +
+  "the person who last modified it (or 'non noto'); name that person as the one " +
+  "who made the file's changes (e.g. in new_or_changed_files). Be specific and " +
+  "terse; do not invent content. Respond only as JSON matching the provided schema.";
 
 // The compact, model-facing payload. Kept small and structured: only the signal
 // (one-line summaries, importance, risk flags, non-trivial variance) is sent —
@@ -155,6 +157,8 @@ function buildPayload(
       edits: r.recap!.edits,
       structural_changes: r.recap!.structural_changes,
       risk_flags: r.recap!.risk_flags,
+      // U12.4 — who last modified the file (or "non noto"); the report names them.
+      modified_by: r.modifiedBy ?? "non noto",
     })),
     missed_files: missed.map((r) => ({ file: r.fileId, error: r.error })),
     removed_files: input.removed.map((f) => ({

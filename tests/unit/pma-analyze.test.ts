@@ -30,6 +30,7 @@ const editable = (id: string, rev: string, over: Partial<DetectedFile> = {}): De
   modifiedTime: "2026-06-08T10:00:00Z",
   headRevisionId: null,
   version: rev,
+  lastModifiedBy: "Mario Rossi",
   kind: "editable",
   isDeliverable: false,
   cardLinkId: null,
@@ -101,6 +102,8 @@ describe("analyze — recap (D)", () => {
     // U12.1 — recap rides back in-memory; reconcile persists it. No recapFileId.
     expect(res[0]).toMatchObject({ fileId: "A", version: "rev9", status: "analyzed", recapFileId: null });
     expect(res[0].recap).toBeTruthy();
+    // U12.4 — the file's last modifier rides back on the result for attribution.
+    expect(res[0].modifiedBy).toBe("Mario Rossi");
   });
 
   it("never sends non-editable files to Gemini (they are filtered out)", async () => {

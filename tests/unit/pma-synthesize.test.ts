@@ -47,6 +47,7 @@ const analyzed = (id: string, over: Partial<FileRecap> = {}): AnalyzeFileResult 
   recapFileId: `recap-${id}`,
   recap: recap(over),
   error: null,
+  modifiedBy: "Mario Rossi",
 });
 
 const errored = (id: string): AnalyzeFileResult => ({
@@ -74,6 +75,7 @@ const removedFile = (id: string, over: Partial<DetectedFile> = {}): DetectedFile
   modifiedTime: null,
   headRevisionId: null,
   version: null,
+  lastModifiedBy: null,
   kind: null,
   isDeliverable: false,
   cardLinkId: null,
@@ -128,6 +130,23 @@ describe("synthesize — aggregate + report", () => {
     expect(res.reportWebViewLink).toBe("https://docs/doc-1");
     // changed = analyzed only; skipped does NOT count as changed.
     expect(res.counts).toEqual({ changed: 1, missed: 1, removed: 1 });
+  });
+
+  it("includes each changed file's modified_by (or 'non noto') in the payload", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      // A has a modifier (helper sets Mario Rossi); B's is cleared → "non noto".
+      fileResults: [analyzed("A"), { ...analyzed("B"), modifiedBy: null }],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"modified_by"');
+    expect(prompt).toContain("Mario Rossi"); // attributed author
+    expect(prompt).toContain("non noto"); // unknown author fallback
   });
 
   it("feeds analyzed recaps (not skipped ones) to the model", async () => {

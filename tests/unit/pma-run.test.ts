@@ -32,6 +32,7 @@ const addedFile = (id: string): DetectedFile => ({
   modifiedTime: NOW,
   headRevisionId: null,
   version: "v1",
+  lastModifiedBy: null,
   kind: "editable",
   isDeliverable: false,
   cardLinkId: null,

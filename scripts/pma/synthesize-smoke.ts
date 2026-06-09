@@ -97,6 +97,7 @@ const removed: DetectedFile[] = [
     modifiedTime: null,
     headRevisionId: null,
     version: null,
+    lastModifiedBy: null,
     kind: null,
     isDeliverable: false,
     cardLinkId: null,
