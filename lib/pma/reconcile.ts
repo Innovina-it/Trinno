@@ -19,7 +19,8 @@ import type { DetectedFile } from "./detect";
 //
 // STATE RULES (DESIGN §4.3):
 //  - analyzed  → state=active, ADVANCE last_version to the analysed version,
-//                stamp last_analyzed_at, point recap_file_id at the new recap.
+//                stamp last_analyzed_at, store the structured recap in recap_json
+//                (U12.1 — was a recaps/ Drive file pointed at by recap_file_id).
 //  - skipped   → state=active, last_version unchanged (already current); just
 //                refresh the metadata projection.
 //  - non_mod   → state=active, metadata only (no recap, no Gemini); still
@@ -106,7 +107,8 @@ export async function reconcile(input: ReconcileInput): Promise<ReconcileResult>
               state: "active",
               lastVersion: outcome.version ?? file.version,
               lastAnalyzedAt: input.now,
-              recapFileId: outcome.recapFileId,
+              // U12.1 — persist the recap body in Postgres (was a Drive pointer).
+              recapJson: outcome.recap,
             }
           : { ...base, state: "active" },
       );

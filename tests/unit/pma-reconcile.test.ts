@@ -76,12 +76,17 @@ beforeEach(() => {
 });
 
 describe("reconcile — registry state rules", () => {
-  it("analyzed → active, advances last_version, stamps last_analyzed_at + recap pointer", async () => {
+  it("analyzed → active, advances last_version, stamps last_analyzed_at + recap json", async () => {
     await reconcile({
       workspaceId: WS,
       triggeredBy: "u1",
       detected: [editable("A", "v9")],
-      analysis: [outcome("A", "analyzed", { version: "v9", recapFileId: "recap-A" })],
+      analysis: [
+        outcome("A", "analyzed", {
+          version: "v9",
+          recap: { one_line_summary: "did stuff" } as never,
+        }),
+      ],
       removed: [],
       report: null,
       runStatus: "success",
@@ -91,7 +96,8 @@ describe("reconcile — registry state rules", () => {
       state: "active",
       lastVersion: "v9",
       lastAnalyzedAt: NOW,
-      recapFileId: "recap-A",
+      // U12.1 — recap body persisted to recap_json, not a Drive pointer.
+      recapJson: { one_line_summary: "did stuff" },
     });
   });
 
@@ -100,7 +106,12 @@ describe("reconcile — registry state rules", () => {
       workspaceId: WS,
       triggeredBy: "u1",
       detected: [editable("A", "v9")],
-      analysis: [outcome("A", "analyzed", { version: "v9", recapFileId: "recap-A" })],
+      analysis: [
+        outcome("A", "analyzed", {
+          version: "v9",
+          recap: { one_line_summary: "did stuff" } as never,
+        }),
+      ],
       removed: [],
       report: null,
       runStatus: "error",
@@ -109,7 +120,7 @@ describe("reconcile — registry state rules", () => {
     const p = payloadFor("A");
     expect(p.state).toBe("active");
     expect("lastVersion" in p).toBe(false); // gate NOT advanced on a failed run
-    expect("recapFileId" in p).toBe(false);
+    expect("recapJson" in p).toBe(false);
   });
 
   it("error → state=error and last_version is LEFT UNTOUCHED (retries next run)", async () => {
@@ -141,7 +152,7 @@ describe("reconcile — registry state rules", () => {
     });
     const p = payloadFor("A");
     expect(p).toMatchObject({ state: "active", lastVersion: "v9" });
-    expect("recapFileId" in p).toBe(false);
+    expect("recapJson" in p).toBe(false);
     expect("lastAnalyzedAt" in p).toBe(false);
   });
 

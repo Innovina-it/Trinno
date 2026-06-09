@@ -44,6 +44,7 @@ export function mapRegistryRow(raw: Record<string, unknown>): PmaFileRegistryRow
     lastAnalyzedAt: raw.last_analyzed_at ?? null,
     state: raw.state,
     recapFileId: raw.recap_file_id ?? null,
+    recapJson: raw.recap_json ?? null,
     updatedAt: raw.updated_at,
   } as unknown as PmaFileRegistryRow;
 }
@@ -82,6 +83,8 @@ export type RegistryUpsert = {
   lastAnalyzedAt?: string | null; // ISO timestamp
   state?: RegistryState;
   recapFileId?: string | null;
+  // U12.1 — structured recap body persisted in Postgres (was a Drive file).
+  recapJson?: unknown | null;
 };
 
 // Upsert one registry row keyed (workspace_id, source_file_id). onConflict keeps
@@ -112,6 +115,7 @@ export async function upsertRegistryEntry(
     row.last_analyzed_at = entry.lastAnalyzedAt;
   if (entry.state !== undefined) row.state = entry.state;
   if (entry.recapFileId !== undefined) row.recap_file_id = entry.recapFileId;
+  if (entry.recapJson !== undefined) row.recap_json = entry.recapJson;
 
   const { data, error } = await sb
     .from("pma_file_registry")

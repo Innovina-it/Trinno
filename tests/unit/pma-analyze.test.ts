@@ -1,20 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // U6 analyze — version gate (C) + per-editable-file Flash recap (D). The Drive
-// content reader, Gemini client, registry read and Output writer are all mocked
-// so this verifies orchestration logic with no creds and no network. `Type` from
-// @google/genai stays real (the response schema is built from it).
+// content reader, Gemini client and registry read are all mocked so this
+// verifies orchestration logic with no creds and no network. `Type` from
+// @google/genai stays real (the response schema is built from it). U12.1: the
+// recap is returned in-memory (reconcile persists it) — analyze writes nothing.
 vi.mock("server-only", () => ({}));
 
 const exportText = vi.fn();
 const generateStructured = vi.fn();
 const getRegistryEntry = vi.fn();
-const writeRecap = vi.fn();
 
 vi.mock("@/lib/pma/clients/drive", () => ({ exportText: (...a: unknown[]) => exportText(...a) }));
 vi.mock("@/lib/pma/clients/gemini", () => ({ generateStructured: (...a: unknown[]) => generateStructured(...a) }));
 vi.mock("@/lib/pma/registry", () => ({ getRegistryEntry: (...a: unknown[]) => getRegistryEntry(...a) }));
-vi.mock("@/lib/pma/output", () => ({ writeRecap: (...a: unknown[]) => writeRecap(...a) }));
 
 import { analyze } from "@/lib/pma/analyze";
 import type { DetectedFile } from "@/lib/pma/detect";
@@ -54,11 +53,9 @@ beforeEach(() => {
   exportText.mockReset();
   generateStructured.mockReset();
   getRegistryEntry.mockReset();
-  writeRecap.mockReset();
   getRegistryEntry.mockResolvedValue(null);
   exportText.mockResolvedValue("document body text");
   generateStructured.mockResolvedValue({ ...RECAP });
-  writeRecap.mockResolvedValue({ id: "recap-file-1" });
 });
 
 describe("analyze — version gate (C)", () => {
@@ -72,7 +69,7 @@ describe("analyze — version gate (C)", () => {
     expect(res[0].status).toBe("skipped");
     expect(exportText).not.toHaveBeenCalled();
     expect(generateStructured).not.toHaveBeenCalled();
-    expect(writeRecap).not.toHaveBeenCalled();
+    expect(res[0].recap).toBeNull();
   });
 
   it("analyzes when the registry has a different (older) version", async () => {
@@ -90,7 +87,7 @@ describe("analyze — version gate (C)", () => {
 });
 
 describe("analyze — recap (D)", () => {
-  it("exports content, calls Flash, and writes the recap idempotently by (fileId, version)", async () => {
+  it("exports content, calls Flash, and returns the recap in-memory (no Drive write)", async () => {
     const res = await analyze({ workspaceId: WS, outputFolderId: OUT, files: [editable("A", "rev9")] });
 
     expect(exportText).toHaveBeenCalledWith("A", "application/vnd.google-apps.document");
@@ -101,8 +98,8 @@ describe("analyze — recap (D)", () => {
     expect(typeof gen.prompt).toBe("string");
     expect(gen.prompt).toContain("document body text"); // content fed to the model
 
-    expect(writeRecap).toHaveBeenCalledWith(OUT, "A", "rev9", expect.any(Object));
-    expect(res[0]).toMatchObject({ fileId: "A", version: "rev9", status: "analyzed", recapFileId: "recap-file-1" });
+    // U12.1 — recap rides back in-memory; reconcile persists it. No recapFileId.
+    expect(res[0]).toMatchObject({ fileId: "A", version: "rev9", status: "analyzed", recapFileId: null });
     expect(res[0].recap).toBeTruthy();
   });
 
@@ -144,9 +141,10 @@ describe("analyze — resilience", () => {
     expect(a.error).toMatch(/empty/i);
     expect(a.recapFileId).toBeNull();
     expect(b.status).toBe("analyzed");
-    // the errored file never wrote a recap
-    expect(writeRecap).toHaveBeenCalledTimes(1);
-    expect(writeRecap).toHaveBeenCalledWith(OUT, "B", "rev2", expect.any(Object));
+    // the errored file produced no recap; the healthy one did (in-memory)
+    expect(a.recap).toBeNull();
+    expect(b.recap).toBeTruthy();
+    expect(b.recapFileId).toBeNull();
   });
 
   it("errors (not skips) when export fails", async () => {

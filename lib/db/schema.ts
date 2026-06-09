@@ -762,8 +762,12 @@ export const pmaFileRegistry = pgTable("pma_file_registry", {
   lastAnalyzedAt: timestamp("last_analyzed_at", { withTimezone: true }),
   // 'active' | 'removed' | 'error' (CHECK-enforced in SQL).
   state: text("state").notNull().default("active"),
-  // Drive fileId of the latest recap in the OUTPUT folder.
+  // Drive fileId of the latest recap in the OUTPUT folder (deprecated by U12.1 —
+  // no longer written; the recap body now lives in recap_json below).
   recapFileId: text("recap_file_id"),
+  // U12.1 — the structured per-file recap, moved from the Drive recaps/ folder
+  // into Postgres. Null for files not yet analysed (or non_mod).
+  recapJson: jsonb("recap_json").$type<Record<string, unknown>>(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

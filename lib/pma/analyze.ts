@@ -6,20 +6,21 @@ import type { Schema } from "@google/genai";
 import { exportText } from "./clients/drive";
 import { generateStructured } from "./clients/gemini";
 import { getRegistryEntry } from "./registry";
-import { writeRecap } from "./output";
 import type { DetectedFile } from "./detect";
 
 // PMA U6 — VERSION GATE (DESIGN §3 C) + ANALYZE (D).
 //
 // For each EDITABLE changed file from detect(): a cheap registry lookup gates
 // out files we've already analysed at this exact version, then the remaining
-// files are exported to text, recapped by Gemini Flash, and the structured
-// recap is written to the OUTPUT folder as recaps/{fileId}__{version}.json.
+// files are exported to text and recapped by Gemini Flash. The structured recap
+// rides back in-memory; U12.1 persists it to pma_file_registry.recap_json (via
+// reconcile) instead of writing a recaps/{fileId}__{version}.json file to Drive.
 //
 // SCOPE BOUNDARIES (DESIGN §1, §3):
 //  - READS the registry (version gate) but NEVER writes it — registry
 //    persistence is U8 reconcile / U9 orchestration (step G).
-//  - WRITES only to the OUTPUT tree (via output.ts). Never the Source folder.
+//  - Touches NO Drive write path (U12.1 removed the recap write). Reads Source
+//    content via exportText only; never writes the Source folder.
 //  - Non-editable + removed files never reach Gemini (filtered out here).
 //  - A single file's failure becomes status=error ("missed update") and never
 //    aborts the batch.
@@ -145,18 +146,13 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
       // detect()'s links cross-ref is authoritative — not the model's guess.
       recap.is_deliverable = file.isDeliverable;
 
-      const { id } = await writeRecap(
-        input.outputFolderId,
-        file.fileId,
-        version ?? "unknown",
-        recap,
-      );
-
       results.push({
         fileId: file.fileId,
         version,
         status: "analyzed",
-        recapFileId: id,
+        // U12.1 — the recap body is no longer written to Drive here; it rides
+        // back in-memory and reconcile persists it to recap_json.
+        recapFileId: null,
         recap,
         error: null,
       });

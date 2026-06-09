@@ -5,7 +5,6 @@ import {
   createFolder,
   listFolder,
   trashFile,
-  uploadFile,
   type DriveFile,
 } from "@/lib/pma/clients/drive";
 
@@ -24,17 +23,16 @@ import {
 // (U4a). The output folder is the system of record; these helpers are what make
 // it rebuildable.
 //
-// Output-folder layout this module materializes (DESIGN §4.2):
+// Output-folder layout this module materializes (DESIGN §4.2, as amended by
+// U12.1 — recaps/ removed; recap bodies now live in Postgres):
 //   [Output Drive folder]/
-//     recaps/{sourceFileId}__{version}.json   per-file recap JSON
 //     analyses/{name}                         the run report (Google Doc)
-// The recaps/ and analyses/ sub-folders are created idempotently via
-// ensureSubfolder.
+// The analyses/ sub-folder is created idempotently via ensureSubfolder.
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
-// Sub-folder names under the output folder (DESIGN §4.2).
-const RECAPS_FOLDER = "recaps";
+// Sub-folder name under the output folder (DESIGN §4.2). recaps/ is gone as of
+// U12.1 — recap bodies now live in Postgres (pma_file_registry.recap_json).
 const ANALYSES_FOLDER = "analyses";
 
 // A minimal child-entry shape for rebuild/inspection (DESIGN §4.2 — "the
@@ -76,28 +74,6 @@ export async function ensureSubfolder(
   return created.id;
 }
 
-// Write a per-file recap JSON into the output folder's recaps/ sub-folder as
-// `recaps/{sourceFileId}__{version}.json` (DESIGN §4.2, §5.1). The recaps/
-// sub-folder is ensured idempotently. `recapJson` is any JSON-serializable
-// value (the structured Gemini recap in the real pipeline). Returns the new
-// Drive file id.
-export async function writeRecap(
-  outputFolderId: string,
-  sourceFileId: string,
-  version: string,
-  recapJson: unknown,
-): Promise<{ id: string }> {
-  const recapsFolderId = await ensureSubfolder(outputFolderId, RECAPS_FOLDER);
-  const name = `${sourceFileId}__${version}.json`;
-  const file = await uploadFile({
-    name,
-    parentId: recapsFolderId,
-    mimeType: "application/json",
-    body: JSON.stringify(recapJson, null, 2),
-  });
-  return { id: file.id };
-}
-
 // Create a run report as a native Google Doc under the output folder's
 // analyses/ sub-folder (DESIGN §4.2, §5.2). The analyses/ sub-folder is ensured
 // idempotently. Returns the new Doc id and its webViewLink (the link the
@@ -115,7 +91,7 @@ export async function createReport(
 }
 
 // List the immediate children of an output-tree folder (the output folder
-// itself, or its recaps/ or analyses/ sub-folder) for rebuild/inspection.
+// itself, or its analyses/ sub-folder) for rebuild/inspection.
 // Returns id/name/mimeType per child.
 export async function listOutput(folderId: string): Promise<OutputEntry[]> {
   const files = await listFolder(folderId);

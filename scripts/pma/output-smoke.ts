@@ -4,17 +4,14 @@
 // folder ONLY. NEVER writes to the Source folder — the only write target is
 // PMA_TEST_OUTPUT_FOLDER_ID.
 //
-// What it proves:
-//   1. ensureSubfolder("recaps") + ensureSubfolder("analyses") create the
-//      sub-folders, AND are IDEMPOTENT — a second call returns the SAME folder
-//      id and does NOT create a duplicate (asserted, and re-verified by
-//      counting matching children before/after).
-//   2. writeRecap writes recaps/{sourceFileId}__{version}.json.
-//   3. createReport creates a Google Doc under analyses/ (prints webViewLink).
-//   4. listOutput shows the recaps/ + analyses/ sub-folders, and listing each
-//      sub-folder shows the recap file + report Doc.
-//   5. Cleanup: the temp recap file + report Doc are trashed. The recaps/ and
-//      analyses/ sub-folders are left in place (idempotency makes that safe).
+// What it proves (U12.1 — recaps/ removed; recap bodies live in Postgres now):
+//   1. ensureSubfolder("analyses") creates the sub-folder AND is IDEMPOTENT — a
+//      second call returns the SAME folder id and does NOT create a duplicate
+//      (asserted, and re-verified by counting matching children before/after).
+//   2. createReport creates a Google Doc under analyses/ (prints webViewLink).
+//   3. listOutput shows the analyses/ sub-folder, and listing it shows the Doc.
+//   4. Cleanup: the temp report Doc is trashed. The analyses/ sub-folder is left
+//      in place (idempotency makes that safe).
 //
 // Run with the project's TS runner (tsx):
 //   GOOGLE_APPLICATION_CREDENTIALS=.secrets/pma-sa.json \
@@ -89,20 +86,8 @@ async function main(): Promise<void> {
   const countNamed = (entries: { name: string; mimeType: string }[], name: string) =>
     entries.filter((e) => e.name === name && e.mimeType === FOLDER_MIME).length;
 
-  // ---- 1. ensureSubfolder idempotency (recaps/ + analyses/) ----------------
+  // ---- 1. ensureSubfolder idempotency (analyses/) --------------------------
   console.log(`\n[OUTPUT] folder ${outputId}`);
-
-  console.log(`[ensureSubfolder] recaps/ — 1st call`);
-  const recaps1 = await out.ensureSubfolder(outputId, "recaps");
-  console.log(`  → ${recaps1}`);
-  console.log(`[ensureSubfolder] recaps/ — 2nd call (must be SAME id)`);
-  const recaps2 = await out.ensureSubfolder(outputId, "recaps");
-  console.log(`  → ${recaps2}`);
-  if (recaps1 !== recaps2) {
-    throw new Error(
-      `ensureSubfolder("recaps") NOT idempotent: ${recaps1} !== ${recaps2}`,
-    );
-  }
 
   console.log(`[ensureSubfolder] analyses/ — 1st call`);
   const analyses1 = await out.ensureSubfolder(outputId, "analyses");
@@ -116,33 +101,19 @@ async function main(): Promise<void> {
     );
   }
 
-  // Re-verify at the Drive level: exactly ONE recaps/ and ONE analyses/ child.
+  // Re-verify at the Drive level: exactly ONE analyses/ child.
   const topAfterEnsure = await out.listOutput(outputId);
-  const recapsCount = countNamed(topAfterEnsure, "recaps");
   const analysesCount = countNamed(topAfterEnsure, "analyses");
   console.log(
-    `[idempotency check] children named recaps=${recapsCount} analyses=${analysesCount} (each must be exactly 1)`,
+    `[idempotency check] children named analyses=${analysesCount} (must be exactly 1)`,
   );
-  if (recapsCount !== 1 || analysesCount !== 1) {
-    throw new Error(
-      `Duplicate sub-folder(s) created: recaps=${recapsCount} analyses=${analysesCount}`,
-    );
+  if (analysesCount !== 1) {
+    throw new Error(`Duplicate analyses/ sub-folder(s) created: ${analysesCount}`);
   }
 
-  // ---- 2. writeRecap -------------------------------------------------------
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const sourceFileId = `smoke-src-${stamp}`;
-  const version = "v1";
-  console.log(
-    `\n[writeRecap] recaps/${sourceFileId}__${version}.json`,
-  );
-  const recap = await out.writeRecap(outputId, sourceFileId, version, {
-    one_line_summary: "PMA output smoke recap. Safe to delete.",
-    at: new Date().toISOString(),
-  });
-  console.log(`  created recap id=${recap.id}`);
 
-  // ---- 3. createReport -----------------------------------------------------
+  // ---- 2. createReport -----------------------------------------------------
   const reportName = `pma-output-smoke-report-${stamp}`;
   console.log(`\n[createReport] analyses/${reportName} (Google Doc)`);
   const report = await out.createReport(outputId, {
@@ -152,34 +123,24 @@ async function main(): Promise<void> {
   console.log(`  created report id=${report.id}`);
   console.log(`  webViewLink=${report.webViewLink}`);
 
-  // ---- 4. listOutput confirms the artifacts appear -------------------------
-  console.log(`\n[listOutput] recaps/ (${recaps1})`);
-  const recapsList = await out.listOutput(recaps1);
-  for (const e of recapsList) console.log(`  - ${e.id}  ${e.name}  ${e.mimeType}`);
-  if (!recapsList.some((e) => e.id === recap.id)) {
-    throw new Error("writeRecap file not found in recaps/ listing.");
-  }
-
-  console.log(`[listOutput] analyses/ (${analyses1})`);
+  // ---- 3. listOutput confirms the artifact appears -------------------------
+  console.log(`\n[listOutput] analyses/ (${analyses1})`);
   const analysesList = await out.listOutput(analyses1);
   for (const e of analysesList) console.log(`  - ${e.id}  ${e.name}  ${e.mimeType}`);
   if (!analysesList.some((e) => e.id === report.id)) {
     throw new Error("createReport Doc not found in analyses/ listing.");
   }
 
-  // ---- 5. Cleanup: trash the temp recap file + report Doc ------------------
-  // Leave recaps/ + analyses/ sub-folders in place — idempotency makes reuse
-  // safe and matches how the real pipeline behaves.
-  console.log(`\n[cleanup] trashing temp recap ${recap.id}`);
-  await out.trashFile(recap.id);
-  console.log(`[cleanup] trashing temp report Doc ${report.id}`);
+  // ---- 4. Cleanup: trash the temp report Doc -------------------------------
+  // Leave the analyses/ sub-folder in place — idempotency makes reuse safe and
+  // matches how the real pipeline behaves.
+  console.log(`\n[cleanup] trashing temp report Doc ${report.id}`);
   await out.trashFile(report.id);
   console.log("  trashed.");
 
   console.log("\nSMOKE OK");
   console.log(
-    `  recaps/ folder id   = ${recaps1}\n` +
-      `  analyses/ folder id = ${analyses1}\n` +
+    `  analyses/ folder id = ${analyses1}\n` +
       `  report webViewLink  = ${report.webViewLink}`,
   );
 }

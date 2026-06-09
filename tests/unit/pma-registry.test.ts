@@ -25,6 +25,7 @@ describe("mapRegistryRow", () => {
       last_analyzed_at: "2026-06-08T10:00:00Z",
       state: "active",
       recap_file_id: "recap-1",
+      recap_json: { one_line_summary: "did stuff" },
       updated_at: "2026-06-08T10:00:00Z",
     };
     expect(mapRegistryRow(raw)).toEqual({
@@ -41,6 +42,7 @@ describe("mapRegistryRow", () => {
       lastAnalyzedAt: "2026-06-08T10:00:00Z",
       state: "active",
       recapFileId: "recap-1",
+      recapJson: { one_line_summary: "did stuff" },
       updatedAt: "2026-06-08T10:00:00Z",
     });
   });
@@ -55,6 +57,7 @@ describe("mapRegistryRow", () => {
     });
     expect(row.lastVersion).toBeNull();
     expect(row.recapFileId).toBeNull();
+    expect(row.recapJson).toBeNull();
     expect(row.isDeliverable).toBe(false);
   });
 });
