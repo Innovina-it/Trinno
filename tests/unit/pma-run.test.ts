@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // U9 runAnalysis — the A→G orchestration. inputs + the Drive/Gemini pipeline
 // units are mocked so this verifies wiring, the precondition gate, the
-// terminal-synthesis behaviour, and the checkpoint-advance policy with no
-// network/DB.
+// terminal-synthesis behaviour, and window scoping (U12.2) with no network/DB.
 vi.mock("server-only", () => ({}));
 
 const getRunInputs = vi.fn();
@@ -11,18 +10,12 @@ const detect = vi.fn();
 const analyze = vi.fn();
 const synthesize = vi.fn();
 const reconcile = vi.fn();
-const getWorkspacePageToken = vi.fn();
-const setWorkspacePageToken = vi.fn();
 
 vi.mock("@/lib/pma/inputs", () => ({ getRunInputs: (...a: unknown[]) => getRunInputs(...a) }));
 vi.mock("@/lib/pma/detect", () => ({ detect: (...a: unknown[]) => detect(...a) }));
 vi.mock("@/lib/pma/analyze", () => ({ analyze: (...a: unknown[]) => analyze(...a) }));
 vi.mock("@/lib/pma/synthesize", () => ({ synthesize: (...a: unknown[]) => synthesize(...a) }));
 vi.mock("@/lib/pma/reconcile", () => ({ reconcile: (...a: unknown[]) => reconcile(...a) }));
-vi.mock("@/lib/pma/registry", () => ({
-  getWorkspacePageToken: (...a: unknown[]) => getWorkspacePageToken(...a),
-  setWorkspacePageToken: (...a: unknown[]) => setWorkspacePageToken(...a),
-}));
 
 import { runAnalysis } from "@/lib/pma/run";
 import type { DetectedFile } from "@/lib/pma/detect";
@@ -30,6 +23,7 @@ import type { DetectedFile } from "@/lib/pma/detect";
 const WS = "ws-1";
 const NOW = "2026-06-08T13:00:00Z";
 const LABEL = "08/06/2026 14:00:00 (UTC+1)";
+const WINDOW = { start: "2026-06-01T00:00:00.000Z", end: "2026-06-08T23:59:59.999Z" };
 
 const addedFile = (id: string): DetectedFile => ({
   fileId: id,
@@ -61,7 +55,7 @@ const okInputs = {
 };
 
 const run = (over: Record<string, unknown> = {}) =>
-  runAnalysis({ token: "tok", workspaceId: WS, actorId: "user-1", now: NOW, runLabel: LABEL, ...over });
+  runAnalysis({ token: "tok", workspaceId: WS, actorId: "user-1", now: NOW, runLabel: LABEL, window: WINDOW, ...over });
 
 beforeEach(() => {
   getRunInputs.mockReset();
@@ -69,11 +63,8 @@ beforeEach(() => {
   analyze.mockReset();
   synthesize.mockReset();
   reconcile.mockReset();
-  getWorkspacePageToken.mockReset();
-  setWorkspacePageToken.mockReset();
 
   getRunInputs.mockResolvedValue({ ...okInputs });
-  getWorkspacePageToken.mockResolvedValue("tok-prev");
   detect.mockResolvedValue({
     files: [addedFile("A"), removedFile("R")],
     newPageToken: "tok-next",
@@ -100,14 +91,14 @@ describe("runAnalysis — precondition", () => {
 });
 
 describe("runAnalysis — happy path wiring", () => {
-  it("loads the checkpoint, detects, analyzes added, synthesizes, reconciles, advances the token", async () => {
+  it("detects in-window, analyzes added, synthesizes (with the window), reconciles", async () => {
     const res = await run();
 
-    expect(getWorkspacePageToken).toHaveBeenCalledWith(WS);
     expect(detect).toHaveBeenCalledWith({
       sourceFolderId: "src-folder",
-      pageToken: "tok-prev",
+      pageToken: null,
       deliverableLinks: okInputs.deliverableLinks,
+      window: WINDOW,
     });
 
     // analyze gets only the added/edited files.
@@ -121,6 +112,7 @@ describe("runAnalysis — happy path wiring", () => {
     const synthArg = synthesize.mock.calls[0][0];
     expect(synthArg.removed).toEqual([expect.objectContaining({ fileId: "R", changeType: "removed" })]);
     expect(synthArg.runLabel).toBe(LABEL);
+    expect(synthArg.window).toEqual(WINDOW);
     expect(synthArg.baseline).toBeNull();
 
     // reconcile records the run with the report pointer + success status.
@@ -133,9 +125,6 @@ describe("runAnalysis — happy path wiring", () => {
       report: { reportFileId: "doc-1", reportWebViewLink: "https://docs/doc-1", counts: { changed: 1, missed: 0, removed: 1 } },
     });
     expect(recArg.detected).toEqual([expect.objectContaining({ fileId: "A" })]);
-
-    // token advanced on success.
-    expect(setWorkspacePageToken).toHaveBeenCalledWith(WS, "tok-next");
 
     expect(res).toMatchObject({
       runId: "run-1",
@@ -164,7 +153,7 @@ describe("runAnalysis — tripwire: write-only-to-Output (DESIGN §52)", () => {
 });
 
 describe("runAnalysis — synthesis is terminal", () => {
-  it("on synthesize failure: status=error, reconcile gets report=null, token NOT advanced, run still recorded", async () => {
+  it("on synthesize failure: status=error, reconcile gets report=null, run still recorded", async () => {
     synthesize.mockRejectedValue(new Error("Gemini returned an empty response."));
 
     const res = await run();
@@ -173,7 +162,6 @@ describe("runAnalysis — synthesis is terminal", () => {
     expect(recArg.runStatus).toBe("error");
     expect(recArg.report).toBeNull();
 
-    expect(setWorkspacePageToken).not.toHaveBeenCalled(); // failed run re-detects next time
     expect(res.status).toBe("error");
     expect(res.runId).toBe("run-1"); // a (failed) run is still recorded
     expect(res.reportWebViewLink).toBeNull();

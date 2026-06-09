@@ -214,6 +214,47 @@ describe("detect — incremental", () => {
   });
 });
 
+describe("detect — window mode (U12.2)", () => {
+  const WIN = { start: "2026-01-01T00:00:00.000Z", end: "2026-01-31T23:59:59.999Z" };
+
+  it("keeps only files modified within [start,end]; no change feed, null token", async () => {
+    const inWin = { ...doc("A"), modifiedTime: "2026-01-15T10:00:00Z" };
+    const before = { ...doc("B"), modifiedTime: "2025-12-20T10:00:00Z" };
+    const after = { ...pdf("C"), modifiedTime: "2026-02-05T10:00:00Z" };
+    listFolder.mockResolvedValue([inWin, before, after]);
+
+    const res = await detect({
+      sourceFolderId: SOURCE,
+      pageToken: null,
+      deliverableLinks: [],
+      window: WIN,
+    });
+
+    expect(listChanges).not.toHaveBeenCalled();
+    expect(getStartPageToken).not.toHaveBeenCalled();
+    expect(res.newPageToken).toBeNull();
+    expect(res.bootstrapped).toBe(false);
+    expect(res.files.map((f) => f.fileId)).toEqual(["A"]);
+    expect(res.files[0].changeType).toBe("added_or_edited");
+  });
+
+  it("includes non_mod files in-window (analyze filters to editable later)", async () => {
+    const editableIn = { ...doc("A"), modifiedTime: "2026-01-10T00:00:00Z" };
+    const pdfIn = { ...pdf("P"), modifiedTime: "2026-01-12T00:00:00Z" };
+    listFolder.mockResolvedValue([editableIn, pdfIn]);
+
+    const res = await detect({
+      sourceFolderId: SOURCE,
+      pageToken: null,
+      deliverableLinks: [],
+      window: WIN,
+    });
+
+    expect(res.files.map((f) => f.fileId).sort()).toEqual(["A", "P"]);
+    expect(res.files.find((f) => f.fileId === "P")!.kind).toBe("non_mod");
+  });
+});
+
 describe("detect — deliverable cross-ref", () => {
   it("tags changed files that match a card-scope deliverable link", async () => {
     listFolder.mockResolvedValue([doc("A"), pdf("B")]);

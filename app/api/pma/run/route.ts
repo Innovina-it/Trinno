@@ -36,15 +36,55 @@ export async function POST(req: Request) {
   const token = (await getSessionToken())!;
 
   let workspaceId: string | undefined;
+  let startDate: string | undefined;
+  let endDate: string | undefined;
   try {
-    const body = (await req.json()) as { workspaceId?: unknown };
+    const body = (await req.json()) as {
+      workspaceId?: unknown;
+      startDate?: unknown;
+      endDate?: unknown;
+    };
     if (typeof body?.workspaceId === "string") workspaceId = body.workspaceId;
+    if (typeof body?.startDate === "string") startDate = body.startDate;
+    if (typeof body?.endDate === "string") endDate = body.endDate;
   } catch {
     // malformed/absent body → handled by the guard below
   }
   if (!workspaceId) {
     return NextResponse.json(
       { error: { code: "BAD_REQUEST", message: "workspaceId is required." } },
+      { status: 400 },
+    );
+  }
+
+  // U12.2 — resolve the reporting window. Default: end = today, start = 7 days
+  // before. Dates are clamped to UTC day boundaries (the picker uses UTC).
+  const endRaw = endDate ? new Date(endDate) : new Date();
+  const startRaw = startDate
+    ? new Date(startDate)
+    : new Date(endRaw.getTime() - 7 * 86_400_000);
+  if (Number.isNaN(startRaw.getTime()) || Number.isNaN(endRaw.getTime())) {
+    return NextResponse.json(
+      { error: { code: "BAD_REQUEST", message: "Invalid start or end date." } },
+      { status: 400 },
+    );
+  }
+  const window = {
+    start: new Date(
+      Date.UTC(startRaw.getUTCFullYear(), startRaw.getUTCMonth(), startRaw.getUTCDate(), 0, 0, 0, 0),
+    ).toISOString(),
+    end: new Date(
+      Date.UTC(endRaw.getUTCFullYear(), endRaw.getUTCMonth(), endRaw.getUTCDate(), 23, 59, 59, 999),
+    ).toISOString(),
+  };
+  if (Date.parse(window.start) > Date.parse(window.end)) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "BAD_REQUEST",
+          message: "The start date must be on or before the end date.",
+        },
+      },
       { status: 400 },
     );
   }
@@ -67,6 +107,7 @@ export async function POST(req: Request) {
       actorId: user.id,
       now: now.toISOString(),
       runLabel,
+      window,
     });
     return NextResponse.json({ result });
   } catch (err) {

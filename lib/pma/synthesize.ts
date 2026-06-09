@@ -64,6 +64,9 @@ export type SynthesizeInput = {
   // Display label (UTC+1) for the Doc title/header. Passed in by the
   // orchestrator so this unit stays deterministic (no clock read here).
   runLabel: string;
+  // U12.2 — the reporting window (ISO, inclusive). When present, the report is
+  // titled + scoped to this period and the model is told to cover only it.
+  window?: { start: string; end: string };
   // Per-file recaps from analyze() (DESIGN §5.2 — in-memory).
   fileResults: AnalyzeFileResult[];
   // Files detected as removed this run (DESIGN §5.2 removed list).
@@ -125,18 +128,24 @@ const SYNTHESIS_SYSTEM =
   "(date/scope/order deltas already computed for you). Synthesise a factual " +
   "report. Give deliverable files a dedicated focus paragraph. For deviations, " +
   "use ONLY the supplied baseline-vs-live deltas — never invent dates or slips. " +
-  "Be specific and terse; do not invent content. Respond only as JSON matching " +
-  "the provided schema.";
+  "When a reporting period is given, cover ONLY work within that period and do " +
+  "not discuss activity outside it. Be specific and terse; do not invent " +
+  "content. Respond only as JSON matching the provided schema.";
 
 // The compact, model-facing payload. Kept small and structured: only the signal
 // (one-line summaries, importance, risk flags, non-trivial variance) is sent —
 // not the full recap bodies (those already live in the Output folder).
-function buildPayload(input: SynthesizeInput, variance: VarianceResult | null) {
+function buildPayload(
+  input: SynthesizeInput,
+  variance: VarianceResult | null,
+  period: string | null,
+) {
   const analyzed = input.fileResults.filter((r) => r.status === "analyzed" && r.recap);
   const missed = input.fileResults.filter((r) => r.status === "error");
 
   return {
     run: input.runLabel,
+    reporting_period: period,
     changed_files: analyzed.map((r) => ({
       file: r.fileId,
       summary: r.recap!.one_line_summary,
@@ -170,10 +179,17 @@ function buildPayload(input: SynthesizeInput, variance: VarianceResult | null) {
   };
 }
 
-function buildPrompt(input: SynthesizeInput, variance: VarianceResult | null): string {
-  const payload = buildPayload(input, variance);
+function buildPrompt(
+  input: SynthesizeInput,
+  variance: VarianceResult | null,
+  period: string | null,
+): string {
+  const payload = buildPayload(input, variance, period);
   return (
     `Workspace analysis run: ${input.runLabel}\n` +
+    (period
+      ? `Reporting period: ${period}. Cover ONLY work within this period.\n`
+      : "") +
     (variance
       ? "An Approved baseline exists — compare against the grounded variance below.\n"
       : "No Approved roadmap baseline is set for this workspace — omit deviations.\n") +
@@ -181,10 +197,27 @@ function buildPrompt(input: SynthesizeInput, variance: VarianceResult | null): s
   );
 }
 
+// Format the reporting window as a human "dd/mm/yyyy – dd/mm/yyyy" label (UTC,
+// matching the date-picker's UTC day boundaries). U12.2.
+function fmtPeriod(window: { start: string; end: string }): string {
+  const f = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-GB", {
+      timeZone: "UTC",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  return `${f(window.start)} – ${f(window.end)}`;
+}
+
 // Render the structured report into a plain-text body. createDoc() converts
 // text/plain into a native Google Doc, so this produces clean, readable
 // sections (uppercase headers + bullet lists) rather than markup.
-export function renderReportDoc(report: SynthesisReport, runLabel: string): string {
+export function renderReportDoc(
+  report: SynthesisReport,
+  runLabel: string,
+  period?: string | null,
+): string {
   const lines: string[] = [];
   const section = (title: string) => {
     lines.push("", title.toUpperCase(), "");
@@ -195,6 +228,7 @@ export function renderReportDoc(report: SynthesisReport, runLabel: string): stri
   };
 
   lines.push(`PROJECT ANALYSIS — ${runLabel}`);
+  if (period) lines.push(`Reporting period: ${period}`);
 
   section("Executive summary");
   lines.push(report.executive_summary || "(none)");
@@ -237,17 +271,22 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
     ? compareToBaseline(input.live, input.baseline)
     : null;
 
+  // U12.2 — human period label for the title/header/prompt (null if unwindowed).
+  const period = input.window ? fmtPeriod(input.window) : null;
+
   const report = await generateStructured<SynthesisReport>({
     model: "gemini-2.5-pro",
     systemInstruction: SYNTHESIS_SYSTEM,
-    prompt: buildPrompt(input, variance),
+    prompt: buildPrompt(input, variance, period),
     responseSchema: REPORT_SCHEMA,
     temperature: 0,
   });
 
-  const content = renderReportDoc(report, input.runLabel);
+  const content = renderReportDoc(report, input.runLabel, period);
   const { id, webViewLink } = await createReport(input.outputFolderId, {
-    name: `Analysis — ${input.runLabel}`,
+    name: period
+      ? `Analysis ${period} — ${input.runLabel}`
+      : `Analysis — ${input.runLabel}`,
     content,
   });
 

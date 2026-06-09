@@ -48,18 +48,30 @@ export type DetectedFile = {
 
 export type DeliverableLink = { id: string; url: string };
 
+// U12.2 — an explicit [start,end] reporting window (ISO timestamps, inclusive).
+export type DetectWindow = { start: string; end: string };
+
 export type DetectInput = {
   sourceFolderId: string;
   // null → first run (bootstrap with getStartPageToken + full folder listing).
+  // Ignored entirely in WINDOW mode.
   pageToken: string | null;
   // Workspace card-scope links, cross-referenced read-only to tag deliverables.
   deliverableLinks: DeliverableLink[];
+  // U12.2 — when present, run in WINDOW mode: list the Source folder and keep
+  // files whose modifiedTime falls in [start,end]. The Changes-API page-token
+  // path is bypassed (the window is the scope, not "since the last run"). No
+  // removed-file detection in this mode — there is no change feed to read it
+  // from; and a file edited in the window but last-modified later is missed here
+  // (U12.4 refines window membership via the revisions API).
+  window?: DetectWindow;
 };
 
 export type DetectResult = {
   files: DetectedFile[];
-  // The checkpoint to persist for the next incremental run.
-  newPageToken: string;
+  // The checkpoint to persist for the next incremental run. null in WINDOW mode
+  // (no page token is produced or advanced there).
+  newPageToken: string | null;
   bootstrapped: boolean;
 };
 
@@ -124,6 +136,22 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
     cardLinkId: deliverableByFileId.get(file.id) ?? null,
     changeType: "added_or_edited",
   });
+
+  // ── Window mode (U12.2): scope by modifiedTime within [start,end]; no change
+  //    feed, no page token. Includes editable + non_mod files alike (analyze
+  //    filters to editable). Removed files are not detectable here.
+  if (input.window) {
+    const startMs = Date.parse(input.window.start);
+    const endMs = Date.parse(input.window.end);
+    const files = currentList
+      .filter((f) => {
+        if (!f.modifiedTime) return false;
+        const t = Date.parse(f.modifiedTime);
+        return !Number.isNaN(t) && t >= startMs && t <= endMs;
+      })
+      .map(tag);
+    return { files, newPageToken: null, bootstrapped: false };
+  }
 
   // ── Bootstrap (first run): seed every current source file; the start token
   //    becomes the "since previous analysis" checkpoint for the next run.
