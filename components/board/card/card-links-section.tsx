@@ -191,16 +191,33 @@ export function CardLinksSection({
       // The mirror row will arrive via realtime
       setOpen(false);
       setQ("");
+      // Redo recreates with a NEW link id; the mutable binding keeps a
+      // later undo pointed at the live row.
+      let currentLink = link;
       undoBus.push({
         message: "Card link added",
         undo: async () => {
-          removeCardLinkLocal(link.id);
+          removeCardLinkLocal(currentLink.id);
           try {
-            await deleteCardLink({ id: link.id });
+            await deleteCardLink({ id: currentLink.id });
           } catch (err) {
-            addCardLinkLocal(link);
+            addCardLinkLocal(currentLink);
             toast.error("Undo failed: " + (err as Error).message);
+            throw err;
           }
+        },
+        redo: async () => {
+          const restored = await createCardLink({
+            fromCardId: cardId,
+            toCardId: targetId,
+            kind,
+          });
+          if (!restored.ok) {
+            toast.error("Redo failed: " + restored.error.message);
+            throw new Error(restored.error.message);
+          }
+          currentLink = restored.data;
+          addCardLinkLocal(restored.data);
         },
       });
     });
@@ -213,6 +230,7 @@ export function CardLinksSection({
     start(async () => {
       try {
         await deleteCardLink({ id });
+        let currentId = id;
         undoBus.push({
           message: "Card link removed",
           undo: async () => {
@@ -223,9 +241,19 @@ export function CardLinksSection({
             });
             if (!restored.ok) {
               toast.error("Undo failed: " + restored.error.message);
-              return;
+              throw new Error(restored.error.message);
             }
+            currentId = restored.data.id;
             addCardLinkLocal(restored.data);
+          },
+          redo: async () => {
+            removeCardLinkLocal(currentId);
+            try {
+              await deleteCardLink({ id: currentId });
+            } catch (err) {
+              toast.error("Redo failed: " + (err as Error).message);
+              throw err;
+            }
           },
         });
       } catch (err) {

@@ -67,24 +67,25 @@ export function RoadmapDatesSection({ cardId }: { cardId: string }) {
           startDate: next.start,
           targetDate: next.target,
         });
+        const nextVals = { startDate: next.start, targetDate: next.target };
+        const write = async (to: typeof prev, from: typeof prev) => {
+          updateCardLocal(cardId, to);
+          try {
+            await updateCard({
+              id: cardId,
+              startDate: to.startDate,
+              targetDate: to.targetDate,
+            });
+          } catch (err) {
+            updateCardLocal(cardId, from);
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
         undoBus.push({
           message: "Roadmap dates updated",
-          undo: async () => {
-            updateCardLocal(cardId, prev);
-            try {
-              await updateCard({
-                id: cardId,
-                startDate: prev.startDate,
-                targetDate: prev.targetDate,
-              });
-            } catch (err) {
-              updateCardLocal(cardId, {
-                startDate: next.start,
-                targetDate: next.target,
-              });
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
+          undo: () => write(prev, nextVals),
+          redo: () => write(nextVals, prev),
         });
       } catch (err) {
         updateCardLocal(cardId, prev);

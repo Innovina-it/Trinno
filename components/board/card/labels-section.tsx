@@ -71,19 +71,22 @@ export function LabelsSection({ cardId }: { cardId: string }) {
     start(async () => {
       try {
         await toggleCardLabel({ cardId, labelId });
+        const applyToggle = async (attach: boolean) => {
+          if (attach) addCardLabel({ cardId, labelId });
+          else removeCardLabel(cardId, labelId);
+          try {
+            await toggleCardLabel({ cardId, labelId });
+          } catch (err) {
+            if (attach) removeCardLabel(cardId, labelId);
+            else addCardLabel({ cardId, labelId });
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
         undoBus.push({
           message: wasAttached ? `Removed ${labelName}` : `Added ${labelName}`,
-          undo: async () => {
-            if (wasAttached) addCardLabel({ cardId, labelId });
-            else removeCardLabel(cardId, labelId);
-            try {
-              await toggleCardLabel({ cardId, labelId });
-            } catch (err) {
-              if (wasAttached) removeCardLabel(cardId, labelId);
-              else addCardLabel({ cardId, labelId });
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
+          undo: () => applyToggle(wasAttached),
+          redo: () => applyToggle(!wasAttached),
         });
       } catch (err) {
         // rollback

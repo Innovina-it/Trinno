@@ -61,23 +61,26 @@ export function TimeSection({
         updateCardLocal(cardId, { estimateMin: n } as {
           estimateMin: number | null;
         });
-        undoBus.push({
-          message: n == null ? "Estimate cleared" : "Estimate updated",
-          undo: async () => {
-            setEstimate(prev?.toString() ?? "");
-            updateCardLocal(cardId, { estimateMin: prev } as {
+        const write = async (to: number | null, from: number | null) => {
+          setEstimate(to?.toString() ?? "");
+          updateCardLocal(cardId, { estimateMin: to } as {
+            estimateMin: number | null;
+          });
+          try {
+            await updateCard({ id: cardId, estimateMin: to });
+          } catch (err) {
+            setEstimate(from?.toString() ?? "");
+            updateCardLocal(cardId, { estimateMin: from } as {
               estimateMin: number | null;
             });
-            try {
-              await updateCard({ id: cardId, estimateMin: prev });
-            } catch (err) {
-              setEstimate(n?.toString() ?? "");
-              updateCardLocal(cardId, { estimateMin: n } as {
-                estimateMin: number | null;
-              });
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: n == null ? "Estimate cleared" : "Estimate updated",
+          undo: () => write(prev, n),
+          redo: () => write(n, prev),
         });
       } catch (err) {
         setEstimate(prev?.toString() ?? "");

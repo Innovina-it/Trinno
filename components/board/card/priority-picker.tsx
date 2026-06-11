@@ -114,17 +114,20 @@ export function PriorityPicker({
     start(async () => {
       try {
         await updateCard({ id: cardId, priority: next });
+        const write = async (to: CardPriority | null, from: CardPriority | null) => {
+          updateCardLocal(cardId, { priority: to });
+          try {
+            await updateCard({ id: cardId, priority: to });
+          } catch (err) {
+            updateCardLocal(cardId, { priority: from });
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
         undoBus.push({
           message: next ? `Priority ${PRIORITY_LABELS[next]}` : "Priority cleared",
-          undo: async () => {
-            updateCardLocal(cardId, { priority: prev });
-            try {
-              await updateCard({ id: cardId, priority: prev });
-            } catch (err) {
-              updateCardLocal(cardId, { priority: next });
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
+          undo: () => write(prev, next),
+          redo: () => write(next, prev),
         });
       } catch (err) {
         updateCardLocal(cardId, { priority: prev });

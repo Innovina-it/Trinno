@@ -54,19 +54,22 @@ export function CompleteToggle({
         // sub-task whose parent transition criteria are met. No-op
         // when no listener is mounted (off-board surfaces).
         subtaskSyncBus.emit({ cardId, completed: next });
+        const write = async (to: boolean, from: boolean) => {
+          setOptimistic(to);
+          onLocalChange?.(to);
+          try {
+            await updateCard({ id: cardId, completed: to });
+          } catch (err) {
+            setOptimistic(from);
+            onLocalChange?.(from);
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
         undoBus.push({
           message: next ? "Marked complete" : "Marked not complete",
-          undo: async () => {
-            setOptimistic(value);
-            onLocalChange?.(value);
-            try {
-              await updateCard({ id: cardId, completed: value });
-            } catch (err) {
-              setOptimistic(next);
-              onLocalChange?.(next);
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
+          undo: () => write(value, next),
+          redo: () => write(next, value),
         });
       } catch (err) {
         setOptimistic(value);

@@ -49,21 +49,24 @@ export function MembersSection({ cardId }: { cardId: string }) {
     start(async () => {
       try {
         await toggleCardMember({ cardId, userId });
+        const applyToggle = async (assign: boolean) => {
+          if (assign) addCardMember({ cardId, userId });
+          else removeCardMember(cardId, userId);
+          try {
+            await toggleCardMember({ cardId, userId });
+          } catch (err) {
+            if (assign) removeCardMember(cardId, userId);
+            else addCardMember({ cardId, userId });
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
         undoBus.push({
           message: wasAssigned
             ? `Unassigned ${memberName}`
             : `Assigned ${memberName}`,
-          undo: async () => {
-            if (wasAssigned) addCardMember({ cardId, userId });
-            else removeCardMember(cardId, userId);
-            try {
-              await toggleCardMember({ cardId, userId });
-            } catch (err) {
-              if (wasAssigned) removeCardMember(cardId, userId);
-              else addCardMember({ cardId, userId });
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
+          undo: () => applyToggle(wasAssigned),
+          redo: () => applyToggle(!wasAssigned),
         });
       } catch (err) {
         if (wasAssigned) addCardMember({ cardId, userId });

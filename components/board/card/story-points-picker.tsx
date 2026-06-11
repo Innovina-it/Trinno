@@ -43,21 +43,24 @@ export function StoryPointsPicker({
     start(async () => {
       try {
         await updateCard({ id: cardId, storyPoints: next });
-        undoBus.push({
-          message: next == null ? "Story points cleared" : "Story points updated",
-          undo: async () => {
-            updateCardLocal(cardId, { storyPoints: prev } as {
+        const write = async (to: number | null, from: number | null) => {
+          updateCardLocal(cardId, { storyPoints: to } as {
+            storyPoints: number | null;
+          });
+          try {
+            await updateCard({ id: cardId, storyPoints: to });
+          } catch (err) {
+            updateCardLocal(cardId, { storyPoints: from } as {
               storyPoints: number | null;
             });
-            try {
-              await updateCard({ id: cardId, storyPoints: prev });
-            } catch (err) {
-              updateCardLocal(cardId, { storyPoints: next } as {
-                storyPoints: number | null;
-              });
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: next == null ? "Story points cleared" : "Story points updated",
+          undo: () => write(prev, next),
+          redo: () => write(next, prev),
         });
       } catch (err) {
         updateCardLocal(cardId, { storyPoints: prev } as {

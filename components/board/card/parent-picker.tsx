@@ -71,17 +71,20 @@ export function ParentPicker({
       try {
         await updateCard({ id: cardId, parentCardId: nextId });
         setOpen(false);
+        const write = async (to: string | null, from: string | null) => {
+          updateCardLocal(cardId, { parentCardId: to });
+          try {
+            await updateCard({ id: cardId, parentCardId: to });
+          } catch (err) {
+            updateCardLocal(cardId, { parentCardId: from });
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
         undoBus.push({
           message: nextParent ? "Parent card updated" : "Parent card cleared",
-          undo: async () => {
-            updateCardLocal(cardId, { parentCardId: prev });
-            try {
-              await updateCard({ id: cardId, parentCardId: prev });
-            } catch (err) {
-              updateCardLocal(cardId, { parentCardId: nextId });
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
+          undo: () => write(prev, nextId),
+          redo: () => write(nextId, prev),
         });
       }
       catch (err) {

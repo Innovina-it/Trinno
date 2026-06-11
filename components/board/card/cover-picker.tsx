@@ -136,24 +136,25 @@ export function CoverPicker({
           coverKind: nextKind,
           coverValue: nextValue,
         });
+        const nextVals = { coverKind: nextKind, coverValue: nextValue };
+        const write = async (to: typeof prev, from: typeof prev) => {
+          updateCardLocal(cardId, to);
+          try {
+            await updateCard({
+              id: cardId,
+              coverKind: to.coverKind,
+              coverValue: to.coverValue,
+            });
+          } catch (err) {
+            updateCardLocal(cardId, from);
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
         undoBus.push({
           message: nextKind === "none" ? "Cover cleared" : "Cover updated",
-          undo: async () => {
-            updateCardLocal(cardId, prev);
-            try {
-              await updateCard({
-                id: cardId,
-                coverKind: prev.coverKind,
-                coverValue: prev.coverValue,
-              });
-            } catch (err) {
-              updateCardLocal(cardId, {
-                coverKind: nextKind,
-                coverValue: nextValue,
-              });
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
+          undo: () => write(prev, nextVals),
+          redo: () => write(nextVals, prev),
         });
       } catch (err) {
         updateCardLocal(cardId, prev);

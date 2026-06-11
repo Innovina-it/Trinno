@@ -51,35 +51,38 @@ export function ComponentCardSection({ cardId }: { cardId: string }) {
     start(async () => {
       try {
         await toggleCardComponent({ cardId, componentId });
-        undoBus.push({
-          message: wasAttached
-            ? `Removed ${componentName}`
-            : `Added ${componentName}`,
-          undo: async () => {
-            if (wasAttached) {
+        const applyToggle = async (attach: boolean) => {
+          if (attach) {
+            addCardComponent({
+              cardId,
+              componentId,
+              boardId: "00000000-0000-0000-0000-000000000000",
+            });
+          } else {
+            removeCardComponent(cardId, componentId);
+          }
+          try {
+            await toggleCardComponent({ cardId, componentId });
+          } catch (err) {
+            if (attach) {
+              removeCardComponent(cardId, componentId);
+            } else {
               addCardComponent({
                 cardId,
                 componentId,
                 boardId: "00000000-0000-0000-0000-000000000000",
               });
-            } else {
-              removeCardComponent(cardId, componentId);
             }
-            try {
-              await toggleCardComponent({ cardId, componentId });
-            } catch (err) {
-              if (wasAttached) {
-                removeCardComponent(cardId, componentId);
-              } else {
-                addCardComponent({
-                  cardId,
-                  componentId,
-                  boardId: "00000000-0000-0000-0000-000000000000",
-                });
-              }
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: wasAttached
+            ? `Removed ${componentName}`
+            : `Added ${componentName}`,
+          undo: () => applyToggle(wasAttached),
+          redo: () => applyToggle(!wasAttached),
         });
       } catch (err) {
         if (wasAttached) {

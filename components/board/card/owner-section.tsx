@@ -68,17 +68,20 @@ export function OwnerSection({ cardId }: { cardId: string }) {
     start(async () => {
       try {
         await updateCard({ id: cardId, ownerId: next });
+        const write = async (to: string | null, from: string | null) => {
+          updateCardLocal(cardId, { ownerId: to });
+          try {
+            await updateCard({ id: cardId, ownerId: to });
+          } catch (err) {
+            updateCardLocal(cardId, { ownerId: from });
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
         undoBus.push({
           message: ownerName,
-          undo: async () => {
-            updateCardLocal(cardId, { ownerId: prev });
-            try {
-              await updateCard({ id: cardId, ownerId: prev });
-            } catch (err) {
-              updateCardLocal(cardId, { ownerId: next });
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
+          undo: () => write(prev, next),
+          redo: () => write(next, prev),
         });
       } catch (err) {
         updateCardLocal(cardId, { ownerId: prev });

@@ -647,6 +647,17 @@ export function CardModal({
               const m = "Failed to undo archive: " + (err as Error).message;
               toast.error(m);
               errorBus.push({ message: m });
+              throw err;
+            }
+          },
+          redo: async () => {
+            try {
+              await archiveCard({ id: card.id, archived: true });
+            } catch (err) {
+              const m = "Failed to redo archive: " + (err as Error).message;
+              toast.error(m);
+              errorBus.push({ message: m });
+              throw err;
             }
           },
         });
@@ -678,21 +689,24 @@ export function CardModal({
       try {
         await retry();
         setLastSavedAt(new Date());
+        const writeTitle = async (to: string, from: string) => {
+          setTitle(to);
+          lastSavedTitle.current = to;
+          updateCardLocal(card.id, { title: to });
+          try {
+            await updateCard({ id: card.id, title: to });
+          } catch (err) {
+            setTitle(from);
+            lastSavedTitle.current = from;
+            updateCardLocal(card.id, { title: from });
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
         undoBus.push({
           message: "Title updated",
-          undo: async () => {
-            setTitle(prev);
-            lastSavedTitle.current = prev;
-            updateCardLocal(card.id, { title: prev });
-            try {
-              await updateCard({ id: card.id, title: prev });
-            } catch (err) {
-              setTitle(trimmed);
-              lastSavedTitle.current = trimmed;
-              updateCardLocal(card.id, { title: trimmed });
-              toast.error("Undo failed: " + (err as Error).message);
-            }
-          },
+          undo: () => writeTitle(prev, trimmed),
+          redo: () => writeTitle(trimmed, prev),
         });
       } catch (err) {
         lastSavedTitle.current = prev;
@@ -722,28 +736,31 @@ export function CardModal({
         try {
           await retry();
           setLastSavedAt(new Date());
+          const writeDesc = async (to: string, from: string) => {
+            setDescription(to);
+            lastSavedDesc.current = to;
+            updateCardLocal(card.id, {
+              description: to.length === 0 ? null : to,
+            });
+            try {
+              await updateCard({
+                id: card.id,
+                description: to.length === 0 ? null : to,
+              });
+            } catch (err) {
+              setDescription(from);
+              lastSavedDesc.current = from;
+              updateCardLocal(card.id, {
+                description: from.length === 0 ? null : from,
+              });
+              toast.error("Undo failed: " + (err as Error).message);
+              throw err;
+            }
+          };
           undoBus.push({
             message: next.length === 0 ? "Description cleared" : "Description updated",
-            undo: async () => {
-              setDescription(prev);
-              lastSavedDesc.current = prev;
-              updateCardLocal(card.id, {
-                description: prev.length === 0 ? null : prev,
-              });
-              try {
-                await updateCard({
-                  id: card.id,
-                  description: prev.length === 0 ? null : prev,
-                });
-              } catch (err) {
-                setDescription(next);
-                lastSavedDesc.current = next;
-                updateCardLocal(card.id, {
-                  description: next.length === 0 ? null : next,
-                });
-                toast.error("Undo failed: " + (err as Error).message);
-              }
-            },
+            undo: () => writeDesc(prev, next),
+            redo: () => writeDesc(next, prev),
           });
         } catch (err) {
           lastSavedDesc.current = prev;
@@ -845,6 +862,20 @@ export function CardModal({
                 dueComplete: next,
               });
               toast.error("Undo failed: " + (err as Error).message);
+              throw err;
+            }
+          },
+          redo: async () => {
+            updateCardLocal(card.id, {
+              completedAt: next ? new Date() : null,
+              dueComplete: next,
+            });
+            try {
+              await updateCard({ id: card.id, completed: next });
+            } catch (err) {
+              updateCardLocal(card.id, prev);
+              toast.error("Redo failed: " + (err as Error).message);
+              throw err;
             }
           },
         });

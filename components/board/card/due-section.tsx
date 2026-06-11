@@ -59,6 +59,17 @@ export function DueSection({ cardId }: { cardId: string }) {
             } catch (err) {
               updateCardLocal(cardId, patch);
               toast.error("Undo failed: " + (err as Error).message);
+              throw err;
+            }
+          },
+          redo: async () => {
+            updateCardLocal(cardId, patch);
+            try {
+              await updateCard({ id: cardId, ...patch });
+            } catch (err) {
+              updateCardLocal(cardId, prev);
+              toast.error("Redo failed: " + (err as Error).message);
+              throw err;
             }
           },
         });
@@ -99,6 +110,20 @@ export function DueSection({ cardId }: { cardId: string }) {
                 completedAt: checked ? new Date() : null,
               });
               toast.error("Undo failed: " + (err as Error).message);
+              throw err;
+            }
+          },
+          redo: async () => {
+            updateCardLocal(cardId, {
+              dueComplete: checked,
+              completedAt: checked ? new Date() : null,
+            });
+            try {
+              await updateCard({ id: cardId, completed: checked });
+            } catch (err) {
+              updateCardLocal(cardId, prev);
+              toast.error("Redo failed: " + (err as Error).message);
+              throw err;
             }
           },
         });
