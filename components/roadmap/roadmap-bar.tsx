@@ -153,6 +153,7 @@ export function RoadmapBar({
   baselineEntry = null,
   variance = null,
   baselineName = null,
+  removed = false,
   onMoveStart,
   onResizeLeftStart,
   onResizeRightStart,
@@ -178,6 +179,10 @@ export function RoadmapBar({
   // bar's top-left (mirroring the +/− delta chip on the right) so a moved bar
   // shows which baseline its ghost belongs to.
   baselineName?: string | null;
+  // Removed-since-baseline phantom: a synthetic card placed inline in its
+  // original lane (archived, still resolvable from the store). Renders a
+  // read-only red-dashed bar at the baseline geometry — no drag/resize/chips.
+  removed?: boolean;
   // Pixels of empty space between this bar's right edge and the next bar
   // (or canvas edge) in the same row. Used to suppress the assignee
   // overflow stack when it would collide with the next bar.
@@ -439,6 +444,26 @@ export function RoadmapBar({
     variance.status !== "removed" &&
     targetDelta != null &&
     targetDelta !== 0;
+
+  // Removed-since-baseline phantom — read-only red-dashed bar at this card's
+  // (baseline) geometry. Rendered inline in the lane it belonged to, so it
+  // sits where the card used to live. Short-circuits the full interactive bar
+  // (no drag, resize, chips, tooltip, ghost).
+  if (removed) {
+    return (
+      <div
+        data-testid={`baseline-removed-inline-${card.id}`}
+        aria-label={`Removed since baseline: ${card.title}`}
+        title={`${card.title} · removed since baseline`}
+        className="absolute flex h-7 items-center rounded-md border border-dashed border-rose-500/70 bg-rose-500/[0.08] px-2 pointer-events-none"
+        style={{ left: x, width: Math.max(width, 12), top: row * 36 + 4 }}
+      >
+        <span className="truncate text-xs text-rose-300 line-through">
+          {card.title}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <>

@@ -1,12 +1,14 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import {
   roadmapBaselines,
   roadmapBaselineEntries,
   roadmapBaselineAssignees,
   roadmapBaselineMilestones,
+  cards,
+  boards,
 } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
@@ -249,5 +251,46 @@ export async function setApprovedBaseline(input: { id: string }) {
     const r = await setApprovedBaselineImpl(t, input);
     revalidatePath(`/w/${r.workspaceId}/roadmap`);
     return r;
+  });
+}
+
+// Lane metadata (boardId + ordering) for a set of card ids, INCLUDING
+// archived ones — the roadmap snapshot drops archived cards at the query
+// layer, so a baseline's removed-but-archived cards can't be placed back in
+// their lane without this. Hard-deleted cards simply don't come back (no row)
+// and stay in the removed band. RLS-scoped via dbAsUser; the board join +
+// workspace filter keep it to the caller's workspace.
+export async function getRemovedCardLaneMetaImpl(
+  token: string,
+  input: { workspaceId: string; cardIds: string[] },
+) {
+  const { workspaceId, cardIds } = input;
+  if (!workspaceId || !Array.isArray(cardIds) || cardIds.length === 0) return [];
+  return dbAsUser(token, async (tx) =>
+    tx
+      .select({
+        id: cards.id,
+        boardId: cards.boardId,
+        type: cards.type,
+        parentCardId: cards.parentCardId,
+        roadmapOrder: cards.roadmapOrder,
+        priority: cards.priority,
+      })
+      .from(cards)
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .where(
+        and(eq(boards.workspaceId, workspaceId), inArray(cards.id, cardIds)),
+      ),
+  );
+}
+
+export async function getRemovedCardLaneMeta(input: {
+  workspaceId: string;
+  cardIds: string[];
+}) {
+  return actionResult(async () => {
+    await requireUser();
+    const t = (await getSessionToken())!;
+    return getRemovedCardLaneMetaImpl(t, input);
   });
 }

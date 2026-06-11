@@ -44,7 +44,10 @@ import { useWorkspaceStore } from "@/stores/workspace-store";
 import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { RoadmapBar, type RoadmapBarAssignee } from "./roadmap-bar";
-import { getRoadmapBaselineDetail } from "@/actions/roadmap-baselines";
+import {
+  getRoadmapBaselineDetail,
+  getRemovedCardLaneMeta,
+} from "@/actions/roadmap-baselines";
 import { compareToBaseline } from "@/lib/baselines/compare";
 import type { LiveEntry, LiveMilestone } from "@/lib/baselines/types";
 import { PriorityGutter } from "./priority-gutter";
@@ -1079,6 +1082,86 @@ export function RoadmapView({
     for (const p of storeProfiles) map[p.id] = { displayName: p.displayName };
     return map;
   }, [storeProfiles]);
+
+  // Removed-since-baseline cards placed INLINE in their original lane (#A).
+  // The roadmap snapshot drops archived cards at the query layer, so they
+  // aren't in `storeCards` — we fetch the lane metadata (boardId, type, …) for
+  // every removed card id on demand and cache it here. Hard-deleted cards
+  // return no row and fall back to the bottom band (see `removedPhantoms`).
+  const [removedLaneMetaById, setRemovedLaneMetaById] = useState<
+    Map<
+      string,
+      {
+        boardId: string;
+        type: string;
+        parentCardId: string | null;
+        roadmapOrder: number | null;
+        priority: "p0" | "p1" | "p2" | "p3" | "p4" | null;
+      }
+    >
+  >(new Map());
+  // Ids removed vs the compared baseline (only meaningful in sub-board mode —
+  // other lane modes can't be reconstructed and stay in the band).
+  const removedCardIds = useMemo(() => {
+    if (!compareBaselineId || !variance || laneMode !== "sub_board") return [];
+    return variance.cards
+      .filter((c) => c.status === "removed")
+      .map((c) => c.cardId);
+  }, [compareBaselineId, variance, laneMode]);
+  useEffect(() => {
+    const missing = removedCardIds.filter((id) => !removedLaneMetaById.has(id));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const res = await getRemovedCardLaneMeta({ workspaceId, cardIds: missing });
+      if (cancelled || !res.ok) return;
+      setRemovedLaneMetaById((prev) => {
+        const next = new Map(prev);
+        for (const r of res.data) next.set(r.id, r);
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [removedCardIds, removedLaneMetaById, workspaceId]);
+  const removedInlineCards = useMemo<RoadmapCard[]>(() => {
+    if (!compareBaselineId || !variance || laneMode !== "sub_board") return [];
+    const boardTitleById = new Map(storeBoards.map((b) => [b.id, b.title]));
+    const out: RoadmapCard[] = [];
+    for (const cv of variance.cards) {
+      if (cv.status !== "removed") continue;
+      const meta = removedLaneMetaById.get(cv.cardId);
+      const base = baselineEntryByCard.get(cv.cardId);
+      // No meta → card row gone (hard-deleted) or still loading → band.
+      if (!meta || !base?.startDate || !base?.targetDate) continue;
+      out.push({
+        id: cv.cardId,
+        title: cv.title,
+        type: meta.type,
+        parentCardId: base.parentCardId ?? meta.parentCardId ?? null,
+        startDate: new Date(base.startDate),
+        targetDate: new Date(base.targetDate),
+        boardId: meta.boardId,
+        boardTitle: boardTitleById.get(meta.boardId) ?? "",
+        archived: true,
+        priority: meta.priority ?? null,
+        roadmapOrder: base.roadmapOrder ?? meta.roadmapOrder ?? null,
+      });
+    }
+    return out;
+  }, [
+    compareBaselineId,
+    variance,
+    baselineEntryByCard,
+    removedLaneMetaById,
+    storeBoards,
+    laneMode,
+  ]);
+  const removedInlineIdSet = useMemo(
+    () => new Set(removedInlineCards.map((c) => c.id)),
+    [removedInlineCards],
+  );
   // === BASELINE COMPARE END ===
 
   const cardsRef = useRef(cards);
@@ -1270,10 +1353,17 @@ export function RoadmapView({
     if (laneMode === "component") {
       return groupByComponent(cards, storeCardComponents, storeComponents);
     }
-    return groupBySubBoard(cards, subBoardsForLanes, storeBoards);
+    // Inline removed-since-baseline phantoms (#A) join the sub-board grouping
+    // so they land in the lane the card belonged to. `removedInlineCards` is
+    // already empty outside sub-board mode.
+    const subBoardInput = removedInlineCards.length
+      ? [...cards, ...removedInlineCards]
+      : cards;
+    return groupBySubBoard(subBoardInput, subBoardsForLanes, storeBoards);
   }, [
     laneMode,
     cards,
+    removedInlineCards,
     storeCardMembers,
     storeProfiles,
     storeCardComponents,
@@ -1404,6 +1494,9 @@ export function RoadmapView({
       [];
     for (const cv of variance.cards) {
       if (cv.status !== "removed") continue;
+      // Skip cards already placed inline in their lane (#A) — only the
+      // un-placeable (hard-deleted) removals remain for the bottom band.
+      if (removedInlineIdSet.has(cv.cardId)) continue;
       const e = baselineEntryByCard.get(cv.cardId);
       if (!e?.startDate || !e?.targetDate) continue;
       const x = xForDate(
@@ -1418,7 +1511,14 @@ export function RoadmapView({
       out.push({ cardId: cv.cardId, title: cv.title, x, width: w });
     }
     return out;
-  }, [compareBaselineId, variance, baselineEntryByCard, gridStart, effectivePpd]);
+  }, [
+    compareBaselineId,
+    variance,
+    baselineEntryByCard,
+    gridStart,
+    effectivePpd,
+    removedInlineIdSet,
+  ]);
 
   // Band height: a label-header row + one row per phantom + the lane gap.
   // 0 when not comparing or nothing was removed. Added onto the canvas height
@@ -2402,13 +2502,41 @@ export function RoadmapView({
               const isDragging =
                 drag.rowDragGhost !== null &&
                 laneHeaderCard?.id === drag.rowDragGhost.cardId;
-              const count = ll.placed.length;
+              // Exclude inline removed-since-baseline phantoms from the lane's
+              // card count — they aren't live cards.
+              const count = removedInlineIdSet.size
+                ? ll.placed.filter((p) => !removedInlineIdSet.has(p.card.id))
+                    .length
+                : ll.placed.length;
               // Cards-per-lane label. Orphan self-lanes get the ORPHAN
               // wording so it's clear they're not grouped under a sub-board.
               const meta =
                 ll.lane.kind === "uncategorized"
                   ? `${count} ${count === 1 ? "ORPHAN" : "ORPHANS"}`
                   : `${count} ${count === 1 ? "CARD" : "CARDS"}`;
+              // New-since-baseline lane: comparing and every live card in it
+              // is `added` (none existed in the baseline). Closest inference to
+              // a lane/sub-board that didn't exist before — board membership
+              // isn't snapshotted, so a lane built only from new cards is the
+              // signal. Inline removed phantoms are excluded.
+              const laneVarianceCards = [
+                ...(laneHeaderCard ? [laneHeaderCard] : []),
+                ...ll.placed.map((p) => p.card),
+              ].filter((c) => !removedInlineIdSet.has(c.id));
+              const isNewLane =
+                compareBaselineId != null &&
+                laneVarianceCards.length > 0 &&
+                laneVarianceCards.every(
+                  (c) => varianceByCard.get(c.id)?.status === "added",
+                );
+              // Lane already present in the baseline: comparing, has cards, and
+              // not all-new → at least one card existed before. Gets the blue
+              // baseline-name tag (mirrors the card top-left tag). Mutually
+              // exclusive with isNewLane.
+              const isBaselineLane =
+                compareBaselineId != null &&
+                laneVarianceCards.length > 0 &&
+                !isNewLane;
               // Lane titles link to the board the lane represents:
               // sub_board → the sub-board itself (lane.id is its board id);
               // uncategorized → the parent board (lane.id is the board id
@@ -2434,32 +2562,51 @@ export function RoadmapView({
                       onDragStart={drag.beginRowDrag}
                     />
                   )}
-                  {boardHref ? (
-                    <Link
-                      href={boardHref}
-                      className="mono-meta text-fg line-clamp-2 break-words underline decoration-transparent hover:decoration-fg-muted focus-visible:decoration-fg-muted underline-offset-2 outline-none transition-[text-decoration-color] duration-150"
-                      data-testid={laneHeaderCard ? "lane-header-label" : undefined}
-                      data-card-id={laneHeaderCard?.id}
-                      title={ll.lane.title}
-                      aria-label={`Open board ${ll.lane.title}`}
-                      // Don't let the link's pointerdown start a drag on the
-                      // row handle (handle stops its own propagation; this
-                      // is the symmetric guard for plain clicks landing on
-                      // the title itself).
-                      onPointerDown={(e) => e.stopPropagation()}
-                    >
-                      {ll.lane.title}
-                    </Link>
-                  ) : (
-                    <span
-                      className="mono-meta text-fg line-clamp-2 break-words"
-                      data-testid={laneHeaderCard ? "lane-header-label" : undefined}
-                      data-card-id={laneHeaderCard?.id}
-                      title={ll.lane.title}
-                    >
-                      {ll.lane.title}
-                    </span>
-                  )}
+                  <div className="flex items-start gap-1.5">
+                    {boardHref ? (
+                      <Link
+                        href={boardHref}
+                        className="mono-meta text-fg line-clamp-2 break-words underline decoration-transparent hover:decoration-fg-muted focus-visible:decoration-fg-muted underline-offset-2 outline-none transition-[text-decoration-color] duration-150"
+                        data-testid={laneHeaderCard ? "lane-header-label" : undefined}
+                        data-card-id={laneHeaderCard?.id}
+                        title={ll.lane.title}
+                        aria-label={`Open board ${ll.lane.title}`}
+                        // Don't let the link's pointerdown start a drag on the
+                        // row handle (handle stops its own propagation; this
+                        // is the symmetric guard for plain clicks landing on
+                        // the title itself).
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        {ll.lane.title}
+                      </Link>
+                    ) : (
+                      <span
+                        className="mono-meta text-fg line-clamp-2 break-words"
+                        data-testid={laneHeaderCard ? "lane-header-label" : undefined}
+                        data-card-id={laneHeaderCard?.id}
+                        title={ll.lane.title}
+                      >
+                        {ll.lane.title}
+                      </span>
+                    )}
+                    {isNewLane && (
+                      <span
+                        data-testid={`lane-new-${ll.lane.id}`}
+                        className="mt-0.5 shrink-0 rounded-sm bg-emerald-500/20 px-1 text-[9px] font-medium leading-tight tracking-[0.08em] text-emerald-300"
+                      >
+                        NEW
+                      </span>
+                    )}
+                    {isBaselineLane && compareDetail && (
+                      <span
+                        data-testid={`lane-baseline-${ll.lane.id}`}
+                        title={`Baseline: ${compareDetail.meta.name}`}
+                        className="mt-0.5 max-w-[90px] shrink-0 truncate rounded-sm bg-sky-500/20 px-1 text-[9px] font-medium leading-tight tracking-[0.08em] text-sky-300"
+                      >
+                        {compareDetail.meta.name}
+                      </span>
+                    )}
+                  </div>
                   <span className="mono-meta-sm text-fg-faint truncate">
                     {meta}
                   </span>
@@ -2475,7 +2622,7 @@ export function RoadmapView({
                 style={{ height: removedBandHeight }}
                 data-testid="roadmap-removed-lane-label"
               >
-                <span className="mono-meta text-[color:var(--accent-rose)] line-clamp-2 break-words">
+                <span className="mono-meta text-rose-300 line-clamp-2 break-words">
                   Removed
                 </span>
                 <span className="mono-meta-sm text-fg-faint truncate">
@@ -2873,6 +3020,7 @@ export function RoadmapView({
                               variance={varianceByCard.get(sc.id) ?? null}
                               baselineEntry={baselineEntryByCard.get(sc.id) ?? null}
                               baselineName={compareDetail?.meta.name ?? null}
+                              removed={removedInlineIdSet.has(sc.id)}
                               onMoveStart={handleMoveStart}
                               onResizeLeftStart={handleResizeLeftStart}
                               onResizeRightStart={handleResizeRightStart}
@@ -2950,6 +3098,7 @@ export function RoadmapView({
                         variance={varianceByCard.get(c.id) ?? null}
                         baselineEntry={baselineEntryByCard.get(c.id) ?? null}
                         baselineName={compareDetail?.meta.name ?? null}
+                        removed={removedInlineIdSet.has(c.id)}
                         onMoveStart={handleMoveStart}
                         onResizeLeftStart={handleResizeLeftStart}
                         onResizeRightStart={handleResizeRightStart}
@@ -3076,14 +3225,14 @@ export function RoadmapView({
                       key={p.cardId}
                       data-testid={`baseline-removed-${p.cardId}`}
                       aria-label={`Removed since baseline: ${p.title}`}
-                      className="absolute flex h-7 items-center rounded-md border border-dashed border-[color:var(--accent-rose)]/60 bg-[color:var(--accent-rose)]/[0.06] px-2"
+                      className="absolute flex h-7 items-center rounded-md border border-dashed border-rose-500/70 bg-rose-500/[0.08] px-2"
                       style={{
                         left: p.x,
                         width: Math.max(p.width, 12),
                         top: LANE_HEADER_HEIGHT + i * ROW_HEIGHT + 4,
                       }}
                     >
-                      <span className="truncate mono-meta-sm text-[color:var(--accent-rose)] line-through opacity-80">
+                      <span className="truncate mono-meta-sm text-rose-300 line-through">
                         {p.title}
                       </span>
                     </div>
