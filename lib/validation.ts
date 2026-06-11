@@ -174,6 +174,14 @@ export const CascadeShiftBlockedInput = z.object({
   deltaDays: z.number().int().min(-365).max(365),
 });
 
+// undo-redo-stack Unit B2 — exact inverse of a cascade shift: move a
+// KNOWN id set by N days, no graph re-walk (the dependency graph may
+// have changed since the forward shift).
+export const ShiftCardsByIdsInput = z.object({
+  cardIds: z.array(Uuid).min(1).max(500),
+  deltaDays: z.number().int().min(-365).max(365),
+});
+
 export const CreateCardInput = z.object({
   listId: Uuid,
   title: Title,

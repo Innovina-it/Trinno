@@ -9,7 +9,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { cascadeShiftBlockedAfter } from "@/actions/cards";
+import { cascadeShiftBlockedAfter, shiftCardsByIds } from "@/actions/cards";
+import { undoBus } from "@/lib/undo-bus";
 
 // Plan #16b-γ-A (#4) — confirmation surface for the auto-cascade flow.
 // We surface the count of affected cards (capped at 20 in the preview)
@@ -63,6 +64,25 @@ export function CascadeConfirmDialog({
           }`,
         );
         onApplied?.(r.shifted);
+        if (r.shifted.length > 0) {
+          const ids = r.shifted.map((s) => s.id);
+          const replay = async (delta: number) => {
+            try {
+              const rr = await shiftCardsByIds({ cardIds: ids, deltaDays: delta });
+              onApplied?.(rr.shifted);
+            } catch (err) {
+              toast.error((err as Error).message);
+              throw err;
+            }
+          };
+          undoBus.push({
+            message: `Shifted ${r.shifted.length} dependent card${
+              r.shifted.length === 1 ? "" : "s"
+            }`,
+            undo: () => replay(-deltaDays),
+            redo: () => replay(deltaDays),
+          });
+        }
         onOpenChange(false);
       } catch (err) {
         toast.error((err as Error).message);

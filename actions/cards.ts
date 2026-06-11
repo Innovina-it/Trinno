@@ -18,7 +18,7 @@ import { getSessionToken, requireUser } from "@/lib/auth";
 import { positionBetween } from "@/lib/ordering";
 import {
   CreateCardInput, UpdateCardInput, MoveCardInput, ArchiveCardInput,
-  CascadeShiftBlockedInput, ReorderRoadmapRowInput, Uuid, CardPriority,
+  CascadeShiftBlockedInput, ShiftCardsByIdsInput, ReorderRoadmapRowInput, Uuid, CardPriority,
   BulkSetCompletedInput, SetRoadmapCompletionInput,
 } from "@/lib/validation";
 import {
@@ -861,6 +861,48 @@ export async function cascadeShiftBlockedAfterImpl(
   });
 }
 
+// undo-redo-stack Unit B2 — shift a KNOWN id set by N days. Exact
+// inverse/replay of a cascade shift: no dependency re-walk, so undo and
+// redo touch precisely the cards the original shift reported. RLS drops
+// any id the user can't write so partial application is the honest
+// behavior.
+export async function shiftCardsByIdsImpl(
+  token: string,
+  input: { cardIds: string[]; deltaDays: number },
+): Promise<{ shifted: { id: string; deltaDays: number }[] }> {
+  const p = ShiftCardsByIdsInput.parse(input);
+  if (p.deltaDays === 0) return { shifted: [] };
+  const actorId = decodeSub(token);
+  return dbAsUser(token, async (tx) => {
+    assertNotGuest(await getWorkspaceRoleForCard(tx, p.cardIds[0]!, actorId));
+    const rows = await tx
+      .select({
+        id: cards.id,
+        startDate: cards.startDate,
+        targetDate: cards.targetDate,
+      })
+      .from(cards)
+      .where(inArray(cards.id, p.cardIds));
+    const shiftMs = p.deltaDays * MS_PER_DAY;
+    const updated: { id: string; deltaDays: number }[] = [];
+    for (const r of rows) {
+      const patch: Record<string, Date | null> = {};
+      if (r.startDate)
+        patch.startDate = new Date(r.startDate.getTime() + shiftMs);
+      if (r.targetDate)
+        patch.targetDate = new Date(r.targetDate.getTime() + shiftMs);
+      if (Object.keys(patch).length === 0) continue;
+      const [u] = await tx
+        .update(cards)
+        .set(patch)
+        .where(eq(cards.id, r.id))
+        .returning();
+      if (u) updated.push({ id: r.id, deltaDays: p.deltaDays });
+    }
+    return { shifted: updated };
+  });
+}
+
 // Plan #16b-γ-D (#8) — bulk archive. Single UPDATE keeps it cheap; RLS
 // drops any id the user can't write to so partial application is the
 // honest behavior.
@@ -1265,6 +1307,16 @@ export async function cascadeShiftBlockedAfter(
   const t = (await getSessionToken())!;
   const r = await cascadeShiftBlockedAfterImpl(t, input);
   return r;
+}
+
+// No revalidatePath — roadmap/board views reconcile via realtime CDC,
+// matching cascadeShiftBlockedAfter.
+export async function shiftCardsByIds(
+  input: Parameters<typeof shiftCardsByIdsImpl>[1],
+) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  return shiftCardsByIdsImpl(t, input);
 }
 
 // Plan #16b-γ-G G1 — manual roadmap row reorder.

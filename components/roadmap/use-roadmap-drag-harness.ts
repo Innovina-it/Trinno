@@ -832,6 +832,23 @@ export function useRoadmapDragHarness(
           void (async () => {
             try {
               await moveCardToBoard({ cardId, toBoardId });
+              if (origBoardId) {
+                const writeBoard = async (to: string, from: string) => {
+                  patchCardInStore(cardId, { boardId: to });
+                  try {
+                    await moveCardToBoard({ cardId, toBoardId: to });
+                  } catch (err) {
+                    patchCardInStore(cardId, { boardId: from });
+                    toast.error((err as Error).message);
+                    throw err;
+                  }
+                };
+                undoBus.push({
+                  message: `Moved "${origCard?.title ?? "card"}" to ${targetTitle}`,
+                  undo: () => writeBoard(origBoardId, toBoardId),
+                  redo: () => writeBoard(toBoardId, origBoardId),
+                });
+              }
             } catch (err) {
               if (origBoardId) patchCardInStore(cardId, { boardId: origBoardId });
               const e = err as { message?: string; cause?: { message?: string } };
@@ -1189,6 +1206,13 @@ export function useRoadmapDragHarness(
       patchCardInStore(cardId, { roadmapOrder: optimistic });
     }
 
+    const origNeighbourAfter =
+      lanes
+        .slice(origIdx + 1)
+        .find(
+          (ln) => ln.cardId !== null && ln.laneIndex !== drag.laneIndex,
+        )?.cardId ?? null;
+
     startTransition(() => {
       void (async () => {
         try {
@@ -1200,6 +1224,33 @@ export function useRoadmapDragHarness(
             workspaceId,
           });
           patchCardInStore(cardId, { roadmapOrder: r.roadmapOrder });
+          const writeReorder = async (pos: {
+            beforeId: string | null;
+            afterId: string | null;
+          }) => {
+            try {
+              const rr = await reorderRoadmapRow({
+                cardId,
+                beforeId: pos.beforeId,
+                afterId: pos.afterId,
+                boardId,
+                workspaceId,
+              });
+              patchCardInStore(cardId, { roadmapOrder: rr.roadmapOrder });
+            } catch (err) {
+              toast.error((err as Error).message);
+              throw err;
+            }
+          };
+          undoBus.push({
+            message: "Row reordered",
+            undo: () =>
+              writeReorder({
+                beforeId: origNeighbourBefore,
+                afterId: origNeighbourAfter,
+              }),
+            redo: () => writeReorder({ beforeId, afterId }),
+          });
         } catch (err) {
           patchCardInStore(cardId, { roadmapOrder: origRoadmapOrder });
           toast.error((err as Error).message);
