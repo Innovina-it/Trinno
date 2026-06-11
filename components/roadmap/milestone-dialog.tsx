@@ -32,8 +32,10 @@ function dateToIso(d: Date | null): string {
 }
 import {
   createMilestone,
+  deleteMilestone,
   updateMilestone,
 } from "@/actions/milestones";
+import { undoBus } from "@/lib/undo-bus";
 import { LINK_COLORS } from "@/lib/links/colors";
 
 // Preset milestone swatches reuse the shared deliverable/link palette, but
@@ -70,6 +72,8 @@ export interface MilestoneDialogProps {
   /** Pass to edit an existing milestone; omit to create. */
   milestone?: MilestoneRow | null;
   onSaved: (row: MilestoneRow) => void;
+  /** Local-state removal patch, used when undoing a create. */
+  onRemoved?: (id: string) => void;
 }
 
 export function MilestoneDialog({
@@ -79,6 +83,7 @@ export function MilestoneDialog({
   boardId,
   milestone,
   onSaved,
+  onRemoved,
 }: MilestoneDialogProps) {
   const isEdit = Boolean(milestone);
   const [pending, startTransition] = useTransition();
@@ -150,6 +155,72 @@ export function MilestoneDialog({
             })) as MilestoneRow;
           }
           onSaved(saved);
+          if (isEdit && milestone) {
+            const id = milestone.id;
+            const prevVals = {
+              name: milestone.name,
+              date: new Date(milestone.date).toISOString().slice(0, 10),
+              description: milestone.description,
+              color: milestone.color,
+              icon: milestone.icon,
+            };
+            const nextVals = {
+              name: saved.name,
+              date: new Date(saved.date).toISOString().slice(0, 10),
+              description: saved.description,
+              color: saved.color,
+              icon: saved.icon,
+            };
+            const write = async (vals: typeof prevVals) => {
+              try {
+                const row = (await updateMilestone({ id, ...vals })) as MilestoneRow;
+                onSaved(row);
+              } catch (err) {
+                toast.error(`Failed to update milestone: ${(err as Error).message}`);
+                throw err;
+              }
+            };
+            undoBus.push({
+              message: `Milestone "${saved.name}" updated`,
+              undo: () => write(prevVals),
+              redo: () => write(nextVals),
+            });
+          } else {
+            // Re-creating on redo mints a NEW id; the mutable binding keeps
+            // a later undo pointed at the live row.
+            let currentId = saved.id;
+            const payload = {
+              workspaceId,
+              boardId: boardId ?? null,
+              name: saved.name,
+              date: new Date(saved.date).toISOString().slice(0, 10),
+              description: saved.description,
+              color: saved.color,
+              icon: saved.icon,
+            };
+            undoBus.push({
+              message: `Milestone "${saved.name}" created`,
+              undo: async () => {
+                try {
+                  await deleteMilestone({ id: currentId });
+                  onRemoved?.(currentId);
+                } catch (err) {
+                  toast.error(`Failed to remove milestone: ${(err as Error).message}`);
+                  throw err;
+                }
+              },
+              redo: async () => {
+                try {
+                  const row = (await createMilestone(payload)) as MilestoneRow;
+                  currentId = row.id;
+                  onSaved(row);
+                } catch (err) {
+                  toast.error(`Failed to restore milestone: ${(err as Error).message}`);
+                  throw err;
+                }
+              },
+            });
+          }
           dirtyRef.current = false;
           setConfirming(false);
           onOpenChange(false);
@@ -162,7 +233,7 @@ export function MilestoneDialog({
         }
       });
     },
-    [isEdit, milestone, workspaceId, boardId, onSaved, onOpenChange],
+    [isEdit, milestone, workspaceId, boardId, onSaved, onRemoved, onOpenChange],
   );
 
   const commitSave = useCallback(() => {

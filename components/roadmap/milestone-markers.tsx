@@ -9,7 +9,8 @@ import {
   type Zoom,
 } from "@/lib/roadmap/dates";
 import type { MilestoneRow } from "./milestone-dialog";
-import { deleteMilestone, updateMilestone } from "@/actions/milestones";
+import { createMilestone, deleteMilestone, updateMilestone } from "@/actions/milestones";
+import { undoBus } from "@/lib/undo-bus";
 import { toast } from "sonner";
 
 export interface MilestoneMarkersProps {
@@ -36,6 +37,8 @@ export interface MilestoneMarkersProps {
   /** Called with an optimistic row on drop, then again with the persisted
    *  row from the server. On error, called with the original row to revert. */
   onChanged?: (m: MilestoneRow) => void;
+  /** Local-state upsert patch, used when undoing a delete (new id). */
+  onRestored?: (m: MilestoneRow) => void;
   /** Milestone ids added since the compared baseline — render a "NEW" badge,
    *  mirroring the card NEW chip. Empty/undefined when not comparing. */
   addedMilestoneIds?: Set<string>;
@@ -64,6 +67,7 @@ export function MilestoneMarkers({
   onEdit,
   onDeleted,
   onChanged,
+  onRestored,
   addedMilestoneIds,
 }: MilestoneMarkersProps) {
   const [popoverId, setPopoverId] = useState<string | null>(null);
@@ -130,6 +134,23 @@ export function MilestoneMarkers({
     try {
       const row = await updateMilestone({ id: m.id, date: iso });
       onChanged?.(row as MilestoneRow);
+      const origIso = toIsoDate(original);
+      const writeDate = async (to: string, from: string) => {
+        onChanged?.({ ...m, date: to });
+        try {
+          const r2 = await updateMilestone({ id: m.id, date: to });
+          onChanged?.(r2 as MilestoneRow);
+        } catch (err) {
+          onChanged?.({ ...m, date: from });
+          toast.error("Failed to move milestone");
+          throw err;
+        }
+      };
+      undoBus.push({
+        message: `Moved milestone "${m.name}"`,
+        undo: () => writeDate(origIso, iso),
+        redo: () => writeDate(iso, origIso),
+      });
     } catch {
       onChanged?.({ ...m, date: toIsoDate(original) });
       toast.error("Failed to move milestone");
@@ -275,6 +296,42 @@ export function MilestoneMarkers({
                           await deleteMilestone({ id: m.id });
                           onDeleted(m.id);
                           setPopoverId(null);
+                          // Undo recreates with a NEW id; the mutable
+                          // binding keeps redo pointed at the live row.
+                          let currentId = m.id;
+                          const payload = {
+                            workspaceId: m.workspaceId,
+                            boardId: m.boardId,
+                            name: m.name,
+                            date: toIsoDate(startOfDay(new Date(m.date))),
+                            description: m.description,
+                            color: m.color,
+                            icon: m.icon,
+                          };
+                          undoBus.push({
+                            message: `Milestone "${m.name}" deleted`,
+                            undo: async () => {
+                              try {
+                                const row = (await createMilestone(
+                                  payload,
+                                )) as MilestoneRow;
+                                currentId = row.id;
+                                (onRestored ?? onChanged)?.(row);
+                              } catch (err) {
+                                toast.error("Failed to restore milestone");
+                                throw err;
+                              }
+                            },
+                            redo: async () => {
+                              try {
+                                await deleteMilestone({ id: currentId });
+                                onDeleted(currentId);
+                              } catch (err) {
+                                toast.error("Failed to delete milestone");
+                                throw err;
+                              }
+                            },
+                          });
                         } catch {
                           toast.error("Failed to delete milestone");
                         }

@@ -2928,6 +2928,17 @@ export function RoadmapView({
                   onDeleted={(id) =>
                     setStoredMilestones((prev) => prev.filter((m) => m.id !== id))
                   }
+                  onRestored={(row) =>
+                    setStoredMilestones((prev) => {
+                      const idx = prev.findIndex((m) => m.id === row.id);
+                      if (idx >= 0) {
+                        const next = [...prev];
+                        next[idx] = row;
+                        return next;
+                      }
+                      return [...prev, row];
+                    })
+                  }
                   onChanged={(row) =>
                     setStoredMilestones((prev) => {
                       const idx = prev.findIndex((m) => m.id === row.id);
@@ -3340,6 +3351,9 @@ export function RoadmapView({
             return [...prev, row];
           });
         }}
+        onRemoved={(id) =>
+          setStoredMilestones((prev) => prev.filter((m) => m.id !== id))
+        }
       />
       {/* === MILESTONE MARKERS END (dialog) === */}
       {/* Roadmap quick-view popup. Opened in-place by RoadmapBar clicks
