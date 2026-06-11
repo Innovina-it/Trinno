@@ -3,27 +3,27 @@
 Generated from code 2026-06-11 (all `undoBus.push` sites + planned Epic B/C wiring).
 Legend: U = undo, R = redo. Board sites become multi-step via Unit A1 with zero file changes.
 
-## BOARDS — already wired today (41 sites). After A1: multi-step undo, 10-min retention. Undo-only unless Unit E1 is added.
+## BOARDS — 41 pre-existing sites. After A1: multi-step undo, 10-min retention. The 16 card-field actions gained redo in Unit E1 (built 2026-06-11).
 
 ### Card fields (card modal + side sections)
 | Action | U | R | Site |
 |---|---|---|---|
-| Archive card | U | E1? | card-modal.tsx:642 |
-| Edit title | U | E1? | card-modal.tsx:682 |
-| Edit / clear description (debounced save) | U | E1? | card-modal.tsx:726 |
-| Mark complete / not complete | U | E1? | card-modal.tsx:834, complete-toggle.tsx:58, due-section.tsx:88 |
-| Assign / unassign member | U | E1? | members-section.tsx:53 |
-| Set / clear priority | U | E1? | priority-picker.tsx:118 |
-| Change owner | U | E1? | owner-section.tsx:72 |
-| Set / clear parent card | U | E1? | parent-picker.tsx:75 |
-| Set / clear story points | U | E1? | story-points-picker.tsx:47 |
-| Update roadmap dates (from card) | U | E1? | roadmap-dates-section.tsx:71 |
-| Set / clear time estimate | U | E1? | time-section.tsx:65 |
-| Set / clear due date | U | E1? | due-section.tsx:49 |
-| Set / clear cover | U | E1? | cover-picker.tsx:140 |
-| Add / remove label | U | E1? | labels-section.tsx:75 |
-| Add / remove card link | U | E1? | card-links-section.tsx:195/217 |
-| Toggle component on card | U | E1? | component-card-section.tsx:55 |
+| Archive card | U | R | card-modal.tsx:642 |
+| Edit title | U | R | card-modal.tsx:682 |
+| Edit / clear description (debounced save) | U | R | card-modal.tsx:726 |
+| Mark complete / not complete | U | R | card-modal.tsx:834, complete-toggle.tsx:58, due-section.tsx:88 |
+| Assign / unassign member | U | R | members-section.tsx:53 |
+| Set / clear priority | U | R | priority-picker.tsx:118 |
+| Change owner | U | R | owner-section.tsx:72 |
+| Set / clear parent card | U | R | parent-picker.tsx:75 |
+| Set / clear story points | U | R | story-points-picker.tsx:47 |
+| Update roadmap dates (from card) | U | R | roadmap-dates-section.tsx:71 |
+| Set / clear time estimate | U | R | time-section.tsx:65 |
+| Set / clear due date | U | R | due-section.tsx:49 |
+| Set / clear cover | U | R | cover-picker.tsx:140 |
+| Add / remove label | U | R | labels-section.tsx:75 |
+| Add / remove card link | U | R | card-links-section.tsx:195/217 |
+| Toggle component on card | U | R | component-card-section.tsx:55 |
 
 ### Comments / attachments
 | Action | U | R | Site |
@@ -87,4 +87,6 @@ Legend: U = undo, R = redo. Board sites become multi-step via Unit A1 with zero 
 - Baseline approve / compare (own approved-state workflow)
 - Text typing inside fields → native browser undo (focus guard)
 - Realtime-received changes from teammates (only your own actions enter your stack)
-- E1? marks the 16 card-field actions that would gain redo if optional Unit E1 is approved; comments/attachments/checklists/bulk/inbox would stay undo-only even with E1 (destructive-ish or noisy actions where redo has unclear semantics, e.g. re-uploading attachments).
+- Comments/attachments/checklists/bulk/inbox stay undo-only by design (ID-rebirth chains, lost blobs, or blast radius make casual redo unsafe there).
+- Dependency links (blocks / is_blocked_by) have no roadmap-native mutation surface — arrows are render-only; the card modal's links section is the single site (undo since before, redo via E1 with id-rebirth handling).
+- Full page refresh clears both stacks (in-memory by design).

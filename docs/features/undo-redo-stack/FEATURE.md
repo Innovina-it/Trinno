@@ -1,6 +1,7 @@
 # FEATURE — undo-redo-stack (Gate 1-F)
 
-Status: APPROVED at Gate 1-F, 2026-06-11 (as-is, incl. 10-min max age)
+Status: BUILT 2026-06-11 (all 8 units, autonomous run; commits 7e2d080…+D1) — awaiting Ali's final Gate 4 review. Evidence: evidence/D1-feature-evidence.md
+Approved at Gate 1-F 2026-06-11 (as-is, incl. 10-min max age); Gate 2-F approved with E1 added.
 Tier: 2 (shared component — global bus consumed by 41 call sites; server actions; no DB/schema/auth → no Tier 3 units)
 Recon: [recon.md](recon.md), frozen 2026-06-11, collision resolved
 
