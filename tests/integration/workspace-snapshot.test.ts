@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createWorkspaceImpl } from "@/actions/workspaces";
 import { createBoardImpl } from "@/actions/boards";
 import { createListImpl } from "@/actions/lists";
-import { createCardImpl } from "@/actions/cards";
+import { createCardImpl, archiveCardImpl } from "@/actions/cards";
 import { createSprintImpl } from "@/actions/sprints";
 import { createComponentImpl } from "@/actions/components";
 import { createVersionImpl } from "@/actions/versions";
@@ -79,6 +79,23 @@ describe("getWorkspaceSnapshot", () => {
     // The card itself is part of the snapshot.
     expect(snap.cards.find((c) => c.id === card.id)).toBeDefined();
     void comp;
+  });
+
+  it('variant "active" excludes archived cards; default keeps them', async () => {
+    const u = await makeUser("ws-snap-4");
+    const { ws, l } = await setup(u.jwt);
+    await createCardImpl(u.jwt, { listId: l.id, title: "Live" });
+    const gone = await createCardImpl(u.jwt, { listId: l.id, title: "Gone" });
+    await archiveCardImpl(u.jwt, { id: gone.id, archived: true });
+
+    const full = await getWorkspaceSnapshot(u.jwt, ws.id);
+    expect(full.cards.map((c) => c.title).sort()).toEqual(["Gone", "Live"]);
+
+    const active = await getWorkspaceSnapshot(u.jwt, ws.id, "active");
+    expect(active.cards.map((c) => c.title)).toEqual(["Live"]);
+    // Only the card rows are scoped — the rest of the snapshot is intact.
+    expect(active.boards.length).toBe(full.boards.length);
+    expect(active.lists.length).toBe(full.lists.length);
   });
 
   it("isolates workspaces — user B's snapshot of their own workspace excludes A's data", async () => {

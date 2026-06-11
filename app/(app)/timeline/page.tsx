@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser, getSessionToken } from "@/lib/auth";
-import { listAllAcrossWorkspaces } from "@/lib/queries/cards";
+import { mapWithConcurrency } from "@/lib/concurrency";
+import { listAllAcrossWorkspaces, MAX_CROSS_WS_CARDS } from "@/lib/queries/cards";
 import { listWorkspaces } from "@/lib/queries/workspaces";
 import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import { listEffectiveWorkspaceHolidays } from "@/lib/queries/workspace-holidays";
@@ -48,25 +49,39 @@ export default async function CommonTimelinePage({
   // Apply the ?ws= filter (multi-select chip) before fetching heavy
   // per-workspace data. URL filters (type/assignee/etc.) are applied
   // client-side inside TimelineBands.
-  const visibleWsIds =
+  const candidateWsIds =
     selectedWsIds.length > 0
       ? allWorkspaces.filter((w) => selectedWsIds.includes(w.id)).map((w) => w.id)
       : allWorkspaces.map((w) => w.id);
 
-  const wsData = await Promise.all(
-    visibleWsIds.map(async (id) => {
-      const [snapshot, holidays] = await Promise.all([
-        getWorkspaceSnapshot(token, id),
-        listEffectiveWorkspaceHolidays(token, id),
-      ]);
-      return {
-        id,
-        name: wsByIdName.get(id) ?? id,
-        snapshot,
-        holidays,
-      };
-    }),
+  // Only workspaces with at least one scheduled card get the heavy
+  // snapshot fetch — allCards is already exactly the scheduled set
+  // (dated, non-archived), so a workspace absent from it can only
+  // produce an empty band, which the render below drops anyway. When
+  // the cross-workspace card cap truncates allCards it stops being a
+  // complete index, so fall back to fetching every candidate.
+  const scheduledWsIds = new Set(allCards.map((c) => c.workspaceId));
+  const allCardsTruncated = allCards.length >= MAX_CROSS_WS_CARDS;
+  const visibleWsIds = candidateWsIds.filter(
+    (id) => allCardsTruncated || scheduledWsIds.has(id),
   );
+
+  // Bounded fan-out: each snapshot + holidays pair holds DB connections
+  // for its whole transaction, so an unbounded Promise.all over every
+  // workspace can drain the shared pool and starve auth/realtime too
+  // (the 2026-06-11 prod 504 cascade).
+  const wsData = await mapWithConcurrency(visibleWsIds, 3, async (id) => {
+    const [snapshot, holidays] = await Promise.all([
+      getWorkspaceSnapshot(token, id, "active"),
+      listEffectiveWorkspaceHolidays(token, id),
+    ]);
+    return {
+      id,
+      name: wsByIdName.get(id) ?? id,
+      snapshot,
+      holidays,
+    };
+  });
 
   // Bands with NO scheduled cards at all are dropped server-side — they
   // can't match any filter so there's no reason to ship the snapshot.

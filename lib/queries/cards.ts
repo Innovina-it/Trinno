@@ -34,7 +34,7 @@ export type CrossWorkspaceCard = {
   role: "owner" | "member";
 };
 
-const MAX_CROSS_WS_CARDS = 500;
+export const MAX_CROSS_WS_CARDS = 500;
 
 /**
  * Returns cards with both startDate and targetDate set where the authed user

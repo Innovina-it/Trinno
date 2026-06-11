@@ -140,9 +140,18 @@ export type WorkspaceSnapshot = {
   baselines?: BaselineMeta[];
 };
 
+// "active" drops archived cards at the query layer. Safe for read surfaces
+// that never render them (the /timeline bands: every RoadmapView consumer
+// filters `c.archived` client-side already) — long-lived workspaces carry
+// far more archived cards (with full descriptions) than live ones, so the
+// cut is the bulk of the row count and payload. "full" keeps today's shape
+// for the roadmap page. Primitive param so React cache keys stay stable.
+export type WorkspaceSnapshotVariant = "full" | "active";
+
 export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
   token: string,
   workspaceId: string,
+  variant: WorkspaceSnapshotVariant = "full",
 ): Promise<WorkspaceSnapshot> {
   return dbAsUser(token, async (tx) => {
     const [wsRow] = await tx
@@ -317,7 +326,11 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
           completedAt: cards.completedAt,
         })
         .from(cards)
-        .where(inArray(cards.boardId, boardIds)),
+        .where(
+          variant === "active"
+            ? and(inArray(cards.boardId, boardIds), eq(cards.archived, false))
+            : inArray(cards.boardId, boardIds),
+        ),
 
       tx
         .select({
