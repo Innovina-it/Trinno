@@ -114,11 +114,20 @@ export function BaselineMenu({
                   <DropdownMenuItem
                     key={b.id}
                     data-testid={`baseline-row-${b.id}`}
-                    onClick={() => onCompare(b.id)}
+                    onClick={() =>
+                      compareBaselineId === b.id
+                        ? setCompareBaselineId(null)
+                        : onCompare(b.id)
+                    }
                     className={
+                      // Selected (actively compared) baseline keeps the
+                      // surface highlight persistently — that IS the selected
+                      // marker. Non-selected rows neutralise Base UI's
+                      // roving-focus highlight (fires on menu open, no mouse)
+                      // and only tint on real mouse hover. No border/ring.
                       compareBaselineId === b.id
                         ? "bg-[color:var(--surface-hi)] text-fg"
-                        : undefined
+                        : "focus:bg-transparent focus:translate-x-0 hover:bg-[color:var(--surface-hi)] hover:text-fg"
                     }
                   >
                     <GitCompare className="size-3.5 text-fg-faint" />

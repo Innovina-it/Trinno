@@ -36,6 +36,9 @@ export interface MilestoneMarkersProps {
   /** Called with an optimistic row on drop, then again with the persisted
    *  row from the server. On error, called with the original row to revert. */
   onChanged?: (m: MilestoneRow) => void;
+  /** Milestone ids added since the compared baseline — render a "NEW" badge,
+   *  mirroring the card NEW chip. Empty/undefined when not comparing. */
+  addedMilestoneIds?: Set<string>;
 }
 
 function pad2(n: number): string {
@@ -61,6 +64,7 @@ export function MilestoneMarkers({
   onEdit,
   onDeleted,
   onChanged,
+  addedMilestoneIds,
 }: MilestoneMarkersProps) {
   const [popoverId, setPopoverId] = useState<string | null>(null);
   const [drag, setDrag] = useState<{
@@ -152,6 +156,7 @@ export function MilestoneMarkers({
         // Render line at end of milestone day, not start.
         const x = Math.round((days + 1) * ppd);
         const isOpen = popoverId === m.id;
+        const isNew = addedMilestoneIds?.has(m.id) ?? false;
 
         // When bodyHeight is provided, clamp the vertical line to lane
         // content height so the empty area below lanes (on /timeline with
@@ -192,7 +197,7 @@ export function MilestoneMarkers({
               onPointerMove={(e) => moveDrag(e, m)}
               onPointerUp={(e) => endDrag(e, m)}
               onPointerCancel={() => cancelDrag(m)}
-              className="absolute flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap max-w-[100px] truncate cursor-ew-resize hover:opacity-90 select-none"
+              className="absolute flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap max-w-[120px] cursor-ew-resize hover:opacity-90 select-none"
               style={{
                 top: headerHeight - 36,
                 left: 4,
@@ -201,8 +206,16 @@ export function MilestoneMarkers({
                 touchAction: "none",
               }}
             >
-              {m.icon && <span className="mr-0.5">{m.icon}</span>}
-              {m.name}
+              {m.icon && <span className="mr-0.5 shrink-0">{m.icon}</span>}
+              <span className="truncate">{m.name}</span>
+              {isNew && (
+                <span
+                  data-testid={`milestone-new-${m.id}`}
+                  className="ml-0.5 shrink-0 rounded-sm bg-emerald-500 px-1 text-[8px] leading-none tracking-[0.08em] text-white"
+                >
+                  NEW
+                </span>
+              )}
             </button>
 
             {/* Drag-date tooltip */}

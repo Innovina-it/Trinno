@@ -152,6 +152,7 @@ export function RoadmapBar({
   availableSpaceRight = Number.POSITIVE_INFINITY,
   baselineEntry = null,
   variance = null,
+  baselineName = null,
   onMoveStart,
   onResizeLeftStart,
   onResizeRightStart,
@@ -173,6 +174,10 @@ export function RoadmapBar({
   // compare → bar renders exactly as before.
   baselineEntry?: { startDate: string | null; targetDate: string | null } | null;
   variance?: CardVariance | null;
+  // Name of the baseline being compared. Surfaced as a small blue tag at the
+  // bar's top-left (mirroring the +/− delta chip on the right) so a moved bar
+  // shows which baseline its ghost belongs to.
+  baselineName?: string | null;
   // Pixels of empty space between this bar's right edge and the next bar
   // (or canvas edge) in the same row. Used to suppress the assignee
   // overflow stack when it would collide with the next bar.
@@ -411,6 +416,21 @@ export function RoadmapBar({
       ghost = { left: ghostLeft, width: ghostWidth };
     }
   }
+  // Leader line (#F) bridging the baseline ghost and the live bar, drawn only
+  // when they DON'T overlap — that's exactly when the eye needs help pairing
+  // "moved from here" with "to here". Spans the gap at the bars' shared
+  // vertical centre; suppressed while they overlap (visually adjacent already).
+  let connector: { left: number; width: number } | null = null;
+  if (ghost) {
+    const ghostLeft = ghost.left;
+    const ghostRight = ghost.left + Math.max(ghost.width, 4);
+    const liveLeft = x;
+    const liveRight = x + Math.max(width, 12);
+    if (liveLeft > ghostRight)
+      connector = { left: ghostRight, width: liveLeft - ghostRight };
+    else if (ghostLeft > liveRight)
+      connector = { left: liveRight, width: ghostLeft - liveRight };
+  }
   // Target-date delta chip. Positive = slipped later (red), negative =
   // pulled in earlier (green). Only when comparing + non-zero.
   const targetDelta = variance?.targetDeltaDays ?? null;
@@ -426,11 +446,29 @@ export function RoadmapBar({
         <div
           data-testid={`baseline-ghost-${card.id}`}
           aria-hidden
-          className="absolute h-7 rounded border border-dashed border-fg/40 bg-transparent opacity-50 pointer-events-none"
+          title={`${card.title} · baseline position`}
+          className="absolute flex h-7 items-center overflow-hidden rounded border border-dashed border-fg/40 bg-transparent px-2 opacity-60 pointer-events-none"
           style={{
             left: ghost.left,
             width: Math.max(ghost.width, 4),
             top: row * 36 + 4,
+            zIndex: 0,
+          }}
+        >
+          <span className="truncate mono-meta-sm italic text-fg-faint">
+            {card.title}
+          </span>
+        </div>
+      )}
+      {connector && (
+        <div
+          aria-hidden
+          data-testid={`baseline-connector-${card.id}`}
+          className="absolute border-t border-dashed border-fg/40 pointer-events-none"
+          style={{
+            left: connector.left,
+            width: connector.width,
+            top: row * 36 + 18,
             zIndex: 0,
           }}
         />
@@ -653,6 +691,16 @@ export function RoadmapBar({
           )}
         </span>
       )}
+      {baselineName && showDeltaChip && (
+        <span
+          data-testid={`baseline-name-${card.id}`}
+          title={`Baseline: ${baselineName}`}
+          className="absolute z-20 max-w-[140px] truncate rounded px-1 mono-meta-sm leading-none bg-sky-500/20 text-sky-300 pointer-events-none"
+          style={{ left: x, top: row * 36 - 4 }}
+        >
+          {baselineName}
+        </span>
+      )}
       {showDeltaChip && targetDelta != null && (
         <span
           data-testid={`baseline-delta-${card.id}`}
@@ -667,9 +715,22 @@ export function RoadmapBar({
               ? "bg-[color:var(--status-blocked)]/20 text-[color:var(--status-blocked)]"
               : "bg-emerald-500/20 text-emerald-300"
           }`}
-          style={{ left: barRight + 4 + linkOffset, top: row * 36 + 2 }}
+          style={{ left: barRight + 4 + linkOffset, top: row * 36 - 4 }}
         >
           {targetDelta > 0 ? `+${targetDelta}d` : `−${-targetDelta}d`}
+        </span>
+      )}
+      {/* "NEW" chip (#2) — card created after the baseline (no baseline
+          counterpart, so no ghost/delta chip). Reuses the delta-chip slot and
+          the emerald accent the variance panel uses for additions. */}
+      {variance?.status === "added" && (
+        <span
+          data-testid={`baseline-added-${card.id}`}
+          aria-label="Added since baseline"
+          className="absolute z-20 pointer-events-none rounded px-1 mono-meta-sm leading-none tracking-[0.08em] bg-emerald-500/20 text-emerald-300"
+          style={{ left: barRight + 4 + linkOffset, top: row * 36 - 4 }}
+        >
+          NEW
         </span>
       )}
       {tooltipOpen && !menu && tooltipPos && typeof document !== "undefined" &&

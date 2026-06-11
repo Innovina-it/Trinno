@@ -1390,6 +1390,57 @@ export function RoadmapView({
       : laneLayout[laneLayout.length - 1].top +
         laneLayout[laneLayout.length - 1].height;
 
+  // === BASELINE REMOVED-PHANTOM BAND (#1) START ===
+  // Cards in the baseline but absent from the live set (archived/deleted)
+  // vanish from the live layout entirely, so a viewer comparing against a
+  // baseline can't see what was dropped. We surface them as a read-only band
+  // appended below the lanes, using the baseline's own start/target through
+  // the SAME grid mapping the live bars use. Both baseline dates are required
+  // (no geometry otherwise). Empty — and the whole band collapses — unless
+  // we're comparing and at least one removed card has dates.
+  const removedPhantoms = useMemo(() => {
+    if (!compareBaselineId || !variance) return [];
+    const out: { cardId: string; title: string; x: number; width: number }[] =
+      [];
+    for (const cv of variance.cards) {
+      if (cv.status !== "removed") continue;
+      const e = baselineEntryByCard.get(cv.cardId);
+      if (!e?.startDate || !e?.targetDate) continue;
+      const x = xForDate(
+        startOfDay(new Date(e.startDate)),
+        gridStart,
+        effectivePpd,
+      );
+      const w =
+        xForDate(startOfDay(new Date(e.targetDate)), gridStart, effectivePpd) -
+        x +
+        effectivePpd;
+      out.push({ cardId: cv.cardId, title: cv.title, x, width: w });
+    }
+    return out;
+  }, [compareBaselineId, variance, baselineEntryByCard, gridStart, effectivePpd]);
+
+  // Band height: a label-header row + one row per phantom + the lane gap.
+  // 0 when not comparing or nothing was removed. Added onto the canvas height
+  // (and mirrored in the left label column) so the band scrolls with the grid.
+  const removedBandHeight =
+    removedPhantoms.length > 0
+      ? LANE_HEADER_HEIGHT + removedPhantoms.length * ROW_HEIGHT + LANE_GAP
+      : 0;
+  // === BASELINE REMOVED-PHANTOM BAND (#1) END ===
+
+  // Milestones added since the compared baseline — fed to MilestoneMarkers
+  // for the "NEW" badge (mirrors the card NEW chip). Empty when not comparing.
+  const addedMilestoneIds = useMemo(
+    () =>
+      new Set(
+        (variance?.milestones ?? [])
+          .filter((m) => m.status === "added")
+          .map((m) => m.milestoneId),
+      ),
+    [variance],
+  );
+
   // Bar boxes for arrow rendering.
   const barCoords = useMemo(() => {
     const map = new Map<string, BarBox>();
@@ -2131,9 +2182,9 @@ export function RoadmapView({
                 {compareDetail.meta.name}
               </span>
               <span className="text-fg-muted tabular-nums">
-                {variance.rollup.slipped} slipped · {variance.rollup.added} added
-                {" · "}
-                {variance.rollup.removed} removed
+                {variance.rollup.slipped} slipped ·{" "}
+                {variance.rollup.pulledIn} pulled in · {variance.rollup.added}{" "}
+                added · {variance.rollup.removed} removed
                 {variance.rollup.worstSlipDays > 0
                   ? ` · worst +${variance.rollup.worstSlipDays}d`
                   : ""}
@@ -2415,6 +2466,23 @@ export function RoadmapView({
                 </div>
               );
             })}
+            {/* Removed-since-baseline band label (#1) — mirrors the canvas
+                band appended below the lanes. Same flow-stacking as the lane
+                rows above so it lines up with the absolute band at totalHeight. */}
+            {removedBandHeight > 0 && (
+              <div
+                className="border-b border-hairline pl-7 pr-3 flex flex-col justify-center"
+                style={{ height: removedBandHeight }}
+                data-testid="roadmap-removed-lane-label"
+              >
+                <span className="mono-meta text-[color:var(--accent-rose)] line-clamp-2 break-words">
+                  Removed
+                </span>
+                <span className="mono-meta-sm text-fg-faint truncate">
+                  {removedPhantoms.length} SINCE BASELINE
+                </span>
+              </div>
+            )}
             {/* Plan #16b-γ-G G1 — drop indicator overlay during a row
                 drag. Renders a thin line at the resolved insertion
                 point. */}
@@ -2458,8 +2526,12 @@ export function RoadmapView({
               className="relative"
               style={
                 fillHeight
-                  ? { width, minHeight: totalHeight, height: "100%" }
-                  : { width, height: totalHeight }
+                  ? {
+                      width,
+                      minHeight: totalHeight + removedBandHeight,
+                      height: "100%",
+                    }
+                  : { width, height: totalHeight + removedBandHeight }
               }
               data-testid="roadmap-canvas"
               onPointerDown={isGuest ? undefined : drag.onCanvasEmptyPointerDown}
@@ -2701,6 +2773,7 @@ export function RoadmapView({
                   bodyHeight={fillHeight ? totalHeight : undefined}
                   canAdmin={true}
                   minDate={earliestCardStart}
+                  addedMilestoneIds={addedMilestoneIds}
                   onEdit={(m) => {
                     setEditingMilestone(m);
                     setMilestoneDialogOpen(true);
@@ -2799,6 +2872,7 @@ export function RoadmapView({
                               availableSpaceRight={nextLeft - (sx + sw)}
                               variance={varianceByCard.get(sc.id) ?? null}
                               baselineEntry={baselineEntryByCard.get(sc.id) ?? null}
+                              baselineName={compareDetail?.meta.name ?? null}
                               onMoveStart={handleMoveStart}
                               onResizeLeftStart={handleResizeLeftStart}
                               onResizeRightStart={handleResizeRightStart}
@@ -2875,6 +2949,7 @@ export function RoadmapView({
                         availableSpaceRight={nextLeft - (x + w)}
                         variance={varianceByCard.get(c.id) ?? null}
                         baselineEntry={baselineEntryByCard.get(c.id) ?? null}
+                        baselineName={compareDetail?.meta.name ?? null}
                         onMoveStart={handleMoveStart}
                         onResizeLeftStart={handleResizeLeftStart}
                         onResizeRightStart={handleResizeRightStart}
@@ -2985,6 +3060,36 @@ export function RoadmapView({
                   <div key={`bars-${ll.lane.id}`}>{renderedBars}</div>
                 );
               })}
+              {/* Removed-since-baseline band (#1) — read-only phantom bars for
+                  cards that existed in the baseline but are gone from the live
+                  set. Anchored at totalHeight (just below the last lane); each
+                  bar uses the baseline geometry computed in `removedPhantoms`.
+                  pointer-events-none: purely informational, never interactive. */}
+              {removedBandHeight > 0 && (
+                <div
+                  data-testid="roadmap-removed-band"
+                  className="absolute left-0 right-0 border-t border-dashed border-hairline pointer-events-none"
+                  style={{ top: totalHeight, height: removedBandHeight }}
+                >
+                  {removedPhantoms.map((p, i) => (
+                    <div
+                      key={p.cardId}
+                      data-testid={`baseline-removed-${p.cardId}`}
+                      aria-label={`Removed since baseline: ${p.title}`}
+                      className="absolute flex h-7 items-center rounded-md border border-dashed border-[color:var(--accent-rose)]/60 bg-[color:var(--accent-rose)]/[0.06] px-2"
+                      style={{
+                        left: p.x,
+                        width: Math.max(p.width, 12),
+                        top: LANE_HEADER_HEIGHT + i * ROW_HEIGHT + 4,
+                      }}
+                    >
+                      <span className="truncate mono-meta-sm text-[color:var(--accent-rose)] line-through opacity-80">
+                        {p.title}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {/* Critical-path overlay sits between bars and arrows. */}
               {showCriticalPath && (
                 <CriticalPathOverlay
