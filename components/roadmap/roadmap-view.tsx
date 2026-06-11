@@ -70,6 +70,7 @@ import { listMilestones } from "@/actions/milestones";
 import { createCard, updateCard } from "@/actions/cards";
 import { toggleCardMember } from "@/actions/card-members";
 import { toast } from "sonner";
+import { undoBus } from "@/lib/undo-bus";
 import {
   RoadmapHeader,
   ZOOMS,
@@ -1912,6 +1913,23 @@ export function RoadmapView({
       }
       try {
         await toggleCardMember({ cardId: id, userId });
+        const applyToggle = async (assign: boolean) => {
+          if (assign) upsertCardMemberLocal({ cardId: id, userId });
+          else removeCardMemberLocal(id, userId);
+          try {
+            await toggleCardMember({ cardId: id, userId });
+          } catch (err) {
+            if (assign) removeCardMemberLocal(id, userId);
+            else upsertCardMemberLocal({ cardId: id, userId });
+            toast.error((err as Error).message ?? "Failed to update assignees");
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: isAssigned ? "Assignee removed" : "Assignee added",
+          undo: () => applyToggle(isAssigned),
+          redo: () => applyToggle(!isAssigned),
+        });
       } catch (err) {
         toast.error((err as Error).message ?? "Failed to update assignees");
       }

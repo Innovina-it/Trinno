@@ -43,6 +43,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { LinkIcon } from "@/components/links/link-icon";
 import { LinkEditDialog } from "@/components/links/link-edit-dialog";
 import { upsertCardLink, removeCardLink } from "@/actions/links";
+import { undoBus } from "@/lib/undo-bus";
 import { DEFAULT_LINK_COLOR } from "@/lib/links/colors";
 
 export type RoadmapBarAssignee = {
@@ -891,21 +892,68 @@ export function RoadmapBar({
           initialUrl={link.url}
           initialColor={link.color ?? DEFAULT_LINK_COLOR}
           onSave={async ({ url, color }) => {
+            const prev = { url: link.url, color: link.color ?? DEFAULT_LINK_COLOR };
             setCardLink({ id: link.id, cardId: card.id, url, color });
             const res = await upsertCardLink({ cardId: card.id, url, color });
-            if (res.ok)
+            if (res.ok) {
               setCardLink({
                 id: res.data.id,
                 cardId: card.id,
                 url: res.data.url ?? url,
                 color: res.data.color ?? color,
               });
-            else toast.error(res.error.message);
+              const write = async (vals: { url: string; color: string }) => {
+                const r2 = await upsertCardLink({ cardId: card.id, ...vals });
+                if (r2.ok)
+                  setCardLink({
+                    id: r2.data.id,
+                    cardId: card.id,
+                    url: r2.data.url ?? vals.url,
+                    color: r2.data.color ?? vals.color,
+                  });
+                else {
+                  toast.error(r2.error.message);
+                  throw new Error(r2.error.message);
+                }
+              };
+              undoBus.push({
+                message: "Card link updated",
+                undo: () => write(prev),
+                redo: () => write({ url, color }),
+              });
+            } else toast.error(res.error.message);
           }}
           onRemove={async () => {
+            const prev = { url: link.url, color: link.color ?? DEFAULT_LINK_COLOR };
             removeCardLinkLocal(card.id);
             const res = await removeCardLink({ cardId: card.id });
             if (!res.ok) toast.error(res.error.message);
+            else
+              undoBus.push({
+                message: "Card link removed",
+                undo: async () => {
+                  const r2 = await upsertCardLink({ cardId: card.id, ...prev });
+                  if (r2.ok)
+                    setCardLink({
+                      id: r2.data.id,
+                      cardId: card.id,
+                      url: r2.data.url ?? prev.url,
+                      color: r2.data.color ?? prev.color,
+                    });
+                  else {
+                    toast.error(r2.error.message);
+                    throw new Error(r2.error.message);
+                  }
+                },
+                redo: async () => {
+                  removeCardLinkLocal(card.id);
+                  const r2 = await removeCardLink({ cardId: card.id });
+                  if (!r2.ok) {
+                    toast.error(r2.error.message);
+                    throw new Error(r2.error.message);
+                  }
+                },
+              });
           }}
         />
       )}
