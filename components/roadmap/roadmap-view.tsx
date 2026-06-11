@@ -1161,6 +1161,20 @@ export function RoadmapView({
     const open = cards.filter((c) => c.completedAt == null);
     return open.length > 0 ? open : cards;
   }, [cards, zoom]);
+  // Milestone dates participate in the grid range only while their markers
+  // are shown — a milestone before the first task (or past the zoom
+  // horizon) must stay reachable by scroll, but hidden markers shouldn't
+  // stretch the canvas. Dates arrive as string | Date; normalise like the
+  // markers do so range and render agree on the day.
+  const milestoneTimes = useMemo<number[]>(() => {
+    if (!showMilestones) return [];
+    const out: number[] = [];
+    for (const m of storedMilestones) {
+      const t = startOfDay(new Date(m.date)).getTime();
+      if (!Number.isNaN(t)) out.push(t);
+    }
+    return out;
+  }, [showMilestones, storedMilestones]);
   // Base origin = current period (week/month/quarter). If any card starts
   // before that, walk the origin back to cover it (snapped to the same
   // zoom period so grid ticks stay aligned). Mirrors the forward extension
@@ -1168,23 +1182,31 @@ export function RoadmapView({
   const gridStart = useMemo(() => {
     if (sharedRangeStart) return sharedRangeStart;
     const base = gridStartFor(now, zoom);
-    const minStart = rangeCards.reduce(
+    let minStart = rangeCards.reduce(
       (acc, c) => (c.startDate.getTime() < acc ? c.startDate.getTime() : acc),
       base.getTime(),
     );
+    for (const t of milestoneTimes) if (t < minStart) minStart = t;
     if (minStart >= base.getTime()) return base;
     return gridStartFor(new Date(minStart), zoom);
-  }, [rangeCards, now, zoom, sharedRangeStart]);
+  }, [rangeCards, milestoneTimes, now, zoom, sharedRangeStart]);
   const gridEnd = useMemo(() => {
     if (sharedRangeEnd) return sharedRangeEnd;
     const baseEnd = gridEndFor(gridStart, zoom);
     // Extend to cover any card past 6 months.
-    const maxTarget = rangeCards.reduce(
+    let maxTarget = rangeCards.reduce(
       (acc, c) => (c.targetDate.getTime() > acc ? c.targetDate.getTime() : acc),
       baseEnd.getTime(),
     );
+    // Markers clip at days >= totalDays and draw at the end of their day,
+    // so a milestone needs its full day column inside the grid plus a one
+    // day margin to stay visible at the right edge.
+    for (const t of milestoneTimes) {
+      const needed = addDays(new Date(t), 2).getTime();
+      if (needed > maxTarget) maxTarget = needed;
+    }
     return new Date(maxTarget);
-  }, [rangeCards, gridStart, zoom, sharedRangeEnd]);
+  }, [rangeCards, milestoneTimes, gridStart, zoom, sharedRangeEnd]);
   const totalDays = Math.max(1, dayDiff(gridStart, gridEnd));
   const width = totalDays * effectivePpd;
   // Intra-day offset for the today markers. Week zoom only — month/quarter/fit
