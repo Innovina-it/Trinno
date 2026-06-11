@@ -79,8 +79,11 @@ error.log
 docs/ai-agent-user-preferences-workflow.html
 .gstack/
 
-# Local planning/scratch docs — keep out of the repo
-/FEATURE-UNIVERSE.md
-/PMA-test-doc.md
-/PROJECT-MAP.md
+# Local planning/scratch docs — no root-level md gets committed except the
+# four long-tracked ones below
+/*.md
+!/README.md
+!/DEPLOYMENT.md
+!/DESIGN.md
+!/PRODUCT.md
 /Work Package*.xlsx

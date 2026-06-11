@@ -6,8 +6,6 @@ Stack: Next.js 15 (App Router, Server Actions) + Supabase (Postgres / Auth / Rea
 
 ## Project status
 
-See **[PROJECT-MAP.md](PROJECT-MAP.md)** for the current subsystem map (state, gaps, upgrade backlog per section).
-
 Shipped, roughly in order:
 
 - **Foundation (Plans 1–7):** auth + `dbAsUser` per-request RLS, workspaces/boards/members, kanban core (lists, cards, dnd-kit, fractional positions), realtime + presence, card features (labels, members, checklists, due dates, comments, attachments), activity log + full-text search, CI matrix.
