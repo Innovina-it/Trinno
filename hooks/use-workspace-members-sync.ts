@@ -3,6 +3,14 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
+// Shape of the CDC event forwarded to `onEvent`. For DELETE, `old`
+// carries the primary-key columns (workspace_id, user_id) of the
+// removed row.
+export type WorkspaceMembersChange = {
+  eventType: "INSERT" | "UPDATE" | "DELETE";
+  old: Record<string, unknown> | null;
+};
+
 // Live-sync against `workspace_members` changes — covers a concurrent
 // admin's invite, role change, or removal in another tab. Default
 // reaction is router.refresh(); callers can pass `onEvent` to react
@@ -10,7 +18,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 // without re-rendering the route).
 export function useWorkspaceMembersSync(
   workspaceId: string,
-  onEvent?: () => void,
+  onEvent?: (change: WorkspaceMembersChange) => void,
 ) {
   const router = useRouter();
   // Ref keeps the subscription stable when callers pass an inline arrow.
@@ -39,9 +47,9 @@ export function useWorkspaceMembersSync(
             table: "workspace_members",
             filter: `workspace_id=eq.${workspaceId}`,
           },
-          () => {
+          (payload: { eventType: WorkspaceMembersChange["eventType"]; old?: Record<string, unknown> | null }) => {
             const fn = onEventRef.current;
-            if (fn) fn();
+            if (fn) fn({ eventType: payload.eventType, old: payload.old ?? null });
             else router.refresh();
           },
         )

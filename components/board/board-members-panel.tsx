@@ -54,26 +54,52 @@ export function BoardMembersPanel({
     setLiveMembers(members);
   }, [members]);
 
+  // Viewer id, seeded once — lets the event handler detect self-removal
+  // synchronously, without an async hop that could race the router.
+  const uidRef = useRef<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    createSupabaseBrowser()
+      .auth.getSession()
+      .then(({ data }) => {
+        if (alive) uidRef.current = data.session?.user.id ?? null;
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Refresh at most once: StrictMode double-subscription can deliver the
+  // same event twice, and a second refresh landing mid-transition crashes
+  // the Next dev router ("Rendered more hooks…").
+  const ejectedRef = useRef(false);
   // Realtime events can burst (bulk add); only the latest refetch wins.
   const fetchSeq = useRef(0);
   useBoardMembershipSync(boardId, (change) => {
+    if (ejectedRef.current) return;
+    // Self removed from the board: keep today's full-refresh behavior,
+    // which ejects the viewer from a private board's settings page. An
+    // empty member list is legitimate here, so it can't signal that.
+    if (
+      change.eventType === "DELETE" &&
+      uidRef.current &&
+      change.old?.user_id === uidRef.current
+    ) {
+      ejectedRef.current = true;
+      router.refresh();
+      return;
+    }
     const seq = ++fetchSeq.current;
     (async () => {
       try {
-        const { data } = await createSupabaseBrowser().auth.getSession();
-        const uid = data.session?.user.id;
-        // Self removed from the board: keep today's full-refresh behavior,
-        // which ejects the viewer from a private board's settings page. An
-        // empty member list is legitimate here, so it can't signal that.
-        if (change.eventType === "DELETE" && uid && change.old?.user_id === uid) {
-          router.refresh();
-          return;
-        }
         const fresh = await fetchBoardMembers({ boardId });
-        if (seq !== fetchSeq.current) return;
+        if (ejectedRef.current || seq !== fetchSeq.current) return;
         setLiveMembers(fresh);
       } catch {
-        router.refresh();
+        if (!ejectedRef.current) {
+          ejectedRef.current = true;
+          router.refresh();
+        }
       }
     })();
   });

@@ -44,29 +44,61 @@ export function MemberList({
     setLiveMembers(members);
   }, [members]);
 
+  // Viewer id, seeded once — lets the event handler detect self-removal
+  // synchronously, without an async hop that could race the router.
+  const uidRef = useRef<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    createSupabaseBrowser()
+      .auth.getSession()
+      .then(({ data }) => {
+        if (alive) uidRef.current = data.session?.user.id ?? null;
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Refresh at most once per mount: duplicate event deliveries must not
+  // stack a second refresh onto an in-flight eject transition.
+  const ejectedRef = useRef(false);
   // Realtime events can burst (bulk changes); only the latest refetch wins.
   const fetchSeq = useRef(0);
-  useWorkspaceMembersSync(workspaceId, () => {
+  useWorkspaceMembersSync(workspaceId, (change) => {
+    if (ejectedRef.current) return;
+    // Self removed → same synchronous refresh the pre-patch code did; the
+    // server redirects to the removed-notice page.
+    if (
+      change.eventType === "DELETE" &&
+      uidRef.current &&
+      change.old?.user_id === uidRef.current
+    ) {
+      ejectedRef.current = true;
+      router.refresh();
+      return;
+    }
     const seq = ++fetchSeq.current;
     (async () => {
       try {
-        const { data } = await createSupabaseBrowser().auth.getSession();
-        const uid = data.session?.user.id;
         const fresh = await fetchWorkspaceMembers({ workspaceId });
-        if (seq !== fetchSeq.current) return;
+        if (ejectedRef.current || seq !== fetchSeq.current) return;
         // Revocation fallback: an empty list (RLS hides the workspace) or
         // self missing means this viewer lost access — let the server
         // decide where they land.
         if (
           fresh.length === 0 ||
-          (uid && !fresh.some((m) => m.userId === uid))
+          (uidRef.current && !fresh.some((m) => m.userId === uidRef.current))
         ) {
+          ejectedRef.current = true;
           router.refresh();
           return;
         }
         setLiveMembers(fresh);
       } catch {
-        router.refresh();
+        if (!ejectedRef.current) {
+          ejectedRef.current = true;
+          router.refresh();
+        }
       }
     })();
   });
