@@ -6,6 +6,7 @@ import { TourOverlay } from "@/components/onboarding/tour-overlay";
 import { ErrorPane } from "@/components/error-pane";
 import { SeedFailureBanner } from "@/components/seed-failure-banner";
 import { UndoBanner } from "@/components/undo-banner";
+import { UndoHotkeys } from "@/components/undo-hotkeys";
 import { ShortcutsOverlay } from "@/components/shortcuts-overlay";
 import { AccessNotice } from "@/components/access-notice";
 import { QuickAddCardMount } from "@/components/quick-add-card-dialog";
@@ -210,6 +211,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <ErrorPane />
       <SeedFailureBanner />
       <UndoBanner />
+      <UndoHotkeys />
       <ShortcutsOverlay />
       <AccessNotice />
       <VersionWatcher />

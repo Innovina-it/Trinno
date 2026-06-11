@@ -15,6 +15,8 @@ const GROUPS: Group[] = [
     rows: [
       { keys: "?", desc: "Show this overlay" },
       { keys: "Cmd / Ctrl + K", desc: "Open command palette" },
+      { keys: "Cmd / Ctrl + Z", desc: "Undo last action" },
+      { keys: "Cmd / Ctrl + Shift + Z", desc: "Redo" },
       { keys: "/", desc: "Open command palette (search)" },
       { keys: "Esc", desc: "Close dialog or overlay" },
     ],
