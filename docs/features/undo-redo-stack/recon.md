@@ -34,8 +34,8 @@ Main focus: undo/redo working in the **roadmap Gantt edits** and the **cards tou
 - Redo ("Ctrl+Shift+Z walks forward") requires per-action `redo()` info that NO site provides → redo ships as mechanism + gets wired per entity (roadmap sites get it from day one; board sites incrementally).
 - Roadmap was not mentioned in the doc but is the user's main focus and has zero coverage.
 
-## ⚠️ In-flight collision
-Working tree has uncommitted USER edits to `components/roadmap/roadmap-view.tsx`, `components/roadmap/roadmap-bar.tsx`, `actions/roadmap-baselines.ts` (plus `tests/roadmap/static-source.test.ts` failing against them). Epic B/C wiring touches this area → user should land their roadmap work first (as done for the invite feature), or those files get excluded until landed.
+## ⚠️ In-flight collision — RESOLVED 2026-06-11
+User's roadmap edits landed as `2b1fd49` (feat(roadmap): inline removed-since-baseline phantoms in original lanes). Working tree clean; Epic B/C have no file exclusions.
 
 ## Stale-write risk (carried, accepted at 8s today)
 Undoing an old action after a teammate changed the same entity writes stale data. A 50-entry stack widens the window. Mitigation candidates at spec time: per-entry max age, confirm dialog for entries older than N minutes, or accept (server validation still applies).
