@@ -11,6 +11,7 @@ import {
   AddBoardMembersByIdsInput,
 } from "@/lib/validation";
 import { StructuredError } from "@/lib/errors";
+import { listBoardMembersFor } from "@/lib/queries/workspaces";
 
 type BoardMembersTx = Parameters<Parameters<typeof dbAsUser>[1]>[0];
 
@@ -234,4 +235,13 @@ export async function addBoardMembersByIds(
   revalidatePath(`/b/${input.boardId}/settings`);
   revalidatePath(`/b/${input.boardId}`);
   return r;
+}
+
+// Read-only fetch used by the board members panel to patch itself on
+// realtime events instead of refreshing the whole route. RLS scopes the
+// result to boards the viewer can still see.
+export async function fetchBoardMembers(input: { boardId: string }) {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  return listBoardMembersFor(token, input.boardId);
 }

@@ -1,5 +1,6 @@
 "use client";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,10 +9,12 @@ import { toast } from "sonner";
 import {
   addBoardMembersByIds,
   changeBoardMemberRole,
+  fetchBoardMembers,
   removeBoardMember,
 } from "@/actions/board-members";
 import { useBoardMembershipSync } from "@/hooks/use-board-membership-sync";
 import { useIsGuest } from "@/lib/permissions/use-is-guest";
+import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import {
   PeoplePicker,
   type PickerSelected,
@@ -41,13 +44,43 @@ export function BoardMembersPanel({
   const [selected, setSelected] = useState<PickerSelected<Role>[]>([]);
   const [pending, start] = useTransition();
   const isGuest = useIsGuest();
-  // Live updates so a concurrent admin's role change / removal in
-  // another tab is reflected here without a hard reload.
-  useBoardMembershipSync(boardId);
+  const router = useRouter();
+
+  // Live local copy: rendered instead of the server prop so a concurrent
+  // admin's add / role change / removal patches in place without a route
+  // refresh. Own actions still revalidate, which re-feeds `members`.
+  const [liveMembers, setLiveMembers] = useState(members);
+  useEffect(() => {
+    setLiveMembers(members);
+  }, [members]);
+
+  // Realtime events can burst (bulk add); only the latest refetch wins.
+  const fetchSeq = useRef(0);
+  useBoardMembershipSync(boardId, (change) => {
+    const seq = ++fetchSeq.current;
+    (async () => {
+      try {
+        const { data } = await createSupabaseBrowser().auth.getSession();
+        const uid = data.session?.user.id;
+        // Self removed from the board: keep today's full-refresh behavior,
+        // which ejects the viewer from a private board's settings page. An
+        // empty member list is legitimate here, so it can't signal that.
+        if (change.eventType === "DELETE" && uid && change.old?.user_id === uid) {
+          router.refresh();
+          return;
+        }
+        const fresh = await fetchBoardMembers({ boardId });
+        if (seq !== fetchSeq.current) return;
+        setLiveMembers(fresh);
+      } catch {
+        router.refresh();
+      }
+    })();
+  });
 
   const existingIds = useMemo(
-    () => new Set(members.map((m) => m.userId)),
-    [members],
+    () => new Set(liveMembers.map((m) => m.userId)),
+    [liveMembers],
   );
 
   function add() {
@@ -101,7 +134,7 @@ export function BoardMembersPanel({
       )}
 
       <ul className="divide-y divide-hairline rounded-xl border border-hairline">
-        {members.map((m) => (
+        {liveMembers.map((m) => (
           <li
             key={m.userId}
             className="flex items-center gap-3 p-3"

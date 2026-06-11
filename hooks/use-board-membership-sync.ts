@@ -1,13 +1,29 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
-// Refresh the board route's RSC payload when `board_members` changes.
-// Covers role changes, additions, and removals so the members panel
-// and the topnav-side member chips stay live without a hard reload.
-export function useBoardMembershipSync(boardId: string) {
+// Shape of the CDC event forwarded to `onEvent`. For DELETE, `old`
+// carries the primary-key columns (board_id, user_id) of the removed row.
+export type BoardMembersChange = {
+  eventType: "INSERT" | "UPDATE" | "DELETE";
+  old: Record<string, unknown> | null;
+};
+
+// Live-sync against `board_members` changes — role changes, additions,
+// and removals. Default reaction is router.refresh(); callers can pass
+// `onEvent` to react granularly instead (e.g. a targeted refetch that
+// patches local state without re-rendering the route).
+export function useBoardMembershipSync(
+  boardId: string,
+  onEvent?: (change: BoardMembersChange) => void,
+) {
   const router = useRouter();
+  // Ref keeps the subscription stable when callers pass an inline arrow.
+  const onEventRef = useRef(onEvent);
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
   useEffect(() => {
     if (!boardId) return;
     const supa = createSupabaseBrowser();
@@ -29,7 +45,11 @@ export function useBoardMembershipSync(boardId: string) {
             table: "board_members",
             filter: `board_id=eq.${boardId}`,
           },
-          () => router.refresh(),
+          (payload: { eventType: BoardMembersChange["eventType"]; old?: Record<string, unknown> | null }) => {
+            const fn = onEventRef.current;
+            if (fn) fn({ eventType: payload.eventType, old: payload.old ?? null });
+            else router.refresh();
+          },
         )
         .subscribe();
     })();
