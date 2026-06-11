@@ -18,6 +18,7 @@ import {
 import type { Lane, PlacedCard } from "@/lib/roadmap/layout";
 import { updateCard, reorderRoadmapRow, moveCardToBoard } from "@/actions/cards";
 import { errorBus } from "@/lib/errors/error-bus";
+import { undoBus } from "@/lib/undo-bus";
 import { PRIORITIES } from "./priority-gutter";
 import type { CardPriority } from "@/components/board/card/priority-picker";
 import type { LaneMode } from "./roadmap-header";
@@ -341,6 +342,33 @@ export function useRoadmapDragHarness(
           startDate: next.start.toISOString(),
           targetDate: next.target.toISOString(),
         });
+        const title =
+          storeCardsRef.current.find((c) => c.id === cardId)?.title ?? "card";
+        const writeDates = async (
+          to: { start: Date; target: Date },
+          from: { start: Date; target: Date },
+        ) => {
+          patchCardInStore(cardId, { startDate: to.start, targetDate: to.target });
+          try {
+            await updateCard({
+              id: cardId,
+              startDate: to.start.toISOString(),
+              targetDate: to.target.toISOString(),
+            });
+          } catch (err) {
+            patchCardInStore(cardId, {
+              startDate: from.start,
+              targetDate: from.target,
+            });
+            toast.error((err as Error).message);
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: `Rescheduled "${title}"`,
+          undo: () => writeDates(orig, next),
+          redo: () => writeDates(next, orig),
+        });
         const targetDeltaMs = next.target.getTime() - orig.target.getTime();
         const deltaDays = Math.round(targetDeltaMs / 86_400_000);
         if (autoCascadeRef.current && deltaDays > 0) {
@@ -360,7 +388,7 @@ export function useRoadmapDragHarness(
         toast.error((err as Error).message);
       }
     },
-    [patchCardInStore, collectDependents, autoCascadeRef, onCascadeNeeded],
+    [patchCardInStore, collectDependents, autoCascadeRef, onCascadeNeeded, storeCardsRef],
   );
 
   // ---- Auto-scroll ----
@@ -726,6 +754,24 @@ export function useRoadmapDragHarness(
         void (async () => {
           try {
             await updateCard({ id: cardId, priority: nextPriority });
+            const writePriority = async (
+              to: typeof origPriority,
+              from: typeof origPriority,
+            ) => {
+              patchCardInStore(cardId, { priority: to });
+              try {
+                await updateCard({ id: cardId, priority: to });
+              } catch (err) {
+                patchCardInStore(cardId, { priority: from });
+                toast.error((err as Error).message);
+                throw err;
+              }
+            };
+            undoBus.push({
+              message: "Priority updated",
+              undo: () => writePriority(origPriority, nextPriority),
+              redo: () => writePriority(nextPriority, origPriority),
+            });
           } catch (err) {
             patchCardInStore(cardId, { priority: origPriority });
             toast.error((err as Error).message);
@@ -809,6 +855,24 @@ export function useRoadmapDragHarness(
           void (async () => {
             try {
               await updateCard({ id: cardId, parentCardId: targetLaneAnchorId });
+              const writeParent = async (
+                to: string | null,
+                from: string | null,
+              ) => {
+                patchCardInStore(cardId, { parentCardId: to });
+                try {
+                  await updateCard({ id: cardId, parentCardId: to });
+                } catch (err) {
+                  patchCardInStore(cardId, { parentCardId: from });
+                  toast.error((err as Error).message);
+                  throw err;
+                }
+              };
+              undoBus.push({
+                message: `Moved "${origCard?.title ?? "card"}" to ${targetTitle}`,
+                undo: () => writeParent(origParentId, targetLaneAnchorId),
+                redo: () => writeParent(targetLaneAnchorId, origParentId),
+              });
             } catch (err) {
               patchCardInStore(cardId, { parentCardId: origParentId });
               const e = err as { message?: string; cause?: { message?: string } };
