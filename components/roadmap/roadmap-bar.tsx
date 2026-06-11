@@ -728,7 +728,7 @@ export function RoadmapBar({
           data-testid={`baseline-added-${card.id}`}
           aria-label="Added since baseline"
           className="absolute z-20 pointer-events-none rounded px-1 mono-meta-sm leading-none tracking-[0.08em] bg-emerald-500/20 text-emerald-300"
-          style={{ left: barRight + 4 + linkOffset, top: row * 36 - 4 }}
+          style={{ left: x, top: row * 36 - 4 }}
         >
           NEW
         </span>
