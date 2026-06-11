@@ -18,7 +18,8 @@ export default async function BacklogPage({
   // Plan #16b-α (β concern fix) — backlog now reads sprints + cards from
   // the workspace store instead of from server-shaped props. Realtime
   // CDC echoes propagate live across tabs.
-  const snapshot = await getWorkspaceSnapshot(token, workspaceId);
+  // "active" matches the /w layout's call — same args, one deduped fetch.
+  const snapshot = await getWorkspaceSnapshot(token, workspaceId, "active");
   const members = await listMembers(token, workspaceId);
   const currentMember = members.find((m) => m.userId === user.id);
   const canManageSprints =

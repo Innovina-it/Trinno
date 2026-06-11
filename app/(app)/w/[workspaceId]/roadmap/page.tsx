@@ -21,7 +21,8 @@ export default async function RoadmapPage({
   if (!ws) notFound();
   const [cards, snapshot, holidays] = await Promise.all([
     listRoadmapCards(token, workspaceId),
-    getWorkspaceSnapshot(token, workspaceId),
+    // "active" matches the /w layout's call — same args, one deduped fetch.
+    getWorkspaceSnapshot(token, workspaceId, "active"),
     listEffectiveWorkspaceHolidays(token, workspaceId),
   ]);
 

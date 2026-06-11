@@ -39,7 +39,11 @@ export default async function WorkspaceLayout({
     // banner (and any other client component that reads viewerRole) can
     // render. The shared-cache branch below already wraps in a richer
     // provider via the HydrationBoundary path.
-    const minimalSnapshot = await getWorkspaceSnapshot(token, workspaceId);
+    const minimalSnapshot = await getWorkspaceSnapshot(
+      token,
+      workspaceId,
+      "active",
+    );
     return (
       <>
         <WorkspaceVisitMarker workspaceId={workspaceId} />
@@ -51,8 +55,11 @@ export default async function WorkspaceLayout({
     );
   }
 
+  // "active" must match every getWorkspaceSnapshot call in the /w subtree
+  // (this layout + roadmap + backlog pages): React cache dedupes by args,
+  // so a mixed full/active pair would fetch the snapshot twice per request.
   const [snapshot, members] = await Promise.all([
-    getWorkspaceSnapshot(token, workspaceId),
+    getWorkspaceSnapshot(token, workspaceId, "active"),
     listMembers(token, workspaceId),
   ]);
   const sharedSnapshot = {
