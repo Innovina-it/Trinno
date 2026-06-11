@@ -38,6 +38,14 @@ export const InviteMemberInput = z.object({
   email: Email,
   role: z.enum(["admin", "member", "guest"]),
 });
+// Invite an already-existing person picked from the suggestion dropdown.
+// We only have their profile id client-side (auth.users.email is RLS-hidden),
+// so the server resolves the email via service-role and reuses the email path.
+export const InviteMemberByUserIdInput = z.object({
+  workspaceId: Uuid,
+  userId: Uuid,
+  role: z.enum(["admin", "member", "guest"]),
+});
 export const ChangeMemberRoleInput = z.object({
   workspaceId: Uuid,
   userId: Uuid,

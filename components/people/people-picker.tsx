@@ -50,7 +50,7 @@ function swatchFor(id: string): string {
   return SWATCHES[h % SWATCHES.length];
 }
 
-function Avatar({
+export function Avatar({
   profile,
   size = 24,
 }: {

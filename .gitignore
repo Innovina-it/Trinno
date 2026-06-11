@@ -78,3 +78,9 @@ error.log
 /image*.png
 docs/ai-agent-user-preferences-workflow.html
 .gstack/
+
+# Local planning/scratch docs — keep out of the repo
+/FEATURE-UNIVERSE.md
+/PMA-test-doc.md
+/PROJECT-MAP.md
+/Work Package*.xlsx

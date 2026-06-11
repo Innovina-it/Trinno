@@ -5,7 +5,7 @@ import { dbAsUser } from "@/lib/db/client";
 import { workspaceMembers, workspaceInvitations, workspaces, profiles } from "@/lib/db/schema";
 import { getSessionToken, requireUser } from "@/lib/auth";
 import {
-  InviteMemberInput, ChangeMemberRoleInput, RemoveMemberInput, ResendInvitationInput,
+  InviteMemberInput, InviteMemberByUserIdInput, ChangeMemberRoleInput, RemoveMemberInput, ResendInvitationInput,
 } from "@/lib/validation";
 import { StructuredError } from "@/lib/errors";
 import { getServiceSupabase } from "@/lib/supabase/service-role";
@@ -41,7 +41,16 @@ async function assertCanManageWorkspaceMembers(
   }
 }
 
+// Success shape returned by the *Impl functions (they throw on failure).
 export type InviteResult = { kind: "added" | "invited"; userId: string };
+
+// What the exported actions return to the client. Expected, user-fixable
+// failures (rate limit, already invited, …) are RETURNED rather than thrown:
+// Next.js redacts thrown Server Action messages in production (digest only),
+// so a thrown message never reaches the UI.
+export type InviteActionResult =
+  | InviteResult
+  | { kind: "error"; code: string; message: string };
 
 export async function inviteMemberImpl(
   token: string,
@@ -199,6 +208,15 @@ export async function inviteMemberImpl(
           return { kind: "added", userId: retryId };
         }
       }
+      // Supabase Auth caps how many invite emails go out per hour
+      // (config.toml [auth.rate_limit] email_sent). Surface a clear,
+      // user-facing reason instead of the raw GoTrue string.
+      if (/rate limit/i.test(error?.message ?? "")) {
+        throw new StructuredError(
+          "INVITE_RATE_LIMITED",
+          "Invite limit reached. Please try again later.",
+        );
+      }
       throw new StructuredError("INVITE_FAILED", error?.message ?? "Failed to send invitation");
     }
 
@@ -237,6 +255,38 @@ export async function inviteMemberImpl(
     }
     throw StructuredError.fromUnknown(e, "INVITE_FAILED");
   }
+}
+
+// Invite a person picked from the suggestion dropdown. We only have their
+// profile id client-side (auth.users.email is RLS-hidden), so authorize the
+// caller first, resolve the target email via service-role, then delegate to
+// the battle-tested email path so every branch (confirmed/unconfirmed/dup)
+// behaves identically to a typed-email invite.
+export async function inviteMemberByUserIdImpl(
+  token: string,
+  input: { workspaceId: string; userId: string; role: "admin" | "member" | "guest" },
+): Promise<InviteResult> {
+  const parsed = InviteMemberByUserIdInput.parse(input);
+  const actorId = decodeSub(token);
+
+  // Authorize BEFORE touching the service-role email lookup, otherwise a
+  // non-admin could probe arbitrary users' emails by id.
+  await dbAsUser(token, async (tx) => {
+    await assertCanManageWorkspaceMembers(tx, parsed.workspaceId, actorId);
+  });
+
+  const sb = getServiceSupabase();
+  const { data, error } = await sb.auth.admin.getUserById(parsed.userId);
+  const email = data?.user?.email;
+  if (error || !email) {
+    throw new StructuredError("NOT_FOUND", "That person no longer has an account.");
+  }
+
+  return inviteMemberImpl(token, {
+    workspaceId: parsed.workspaceId,
+    email,
+    role: parsed.role,
+  });
 }
 
 export async function resendInvitationImpl(
@@ -340,12 +390,35 @@ function revalidateWorkspace(workspaceId: string) {
   revalidatePath("/dashboards", "layout");
 }
 
-export async function inviteMember(input: Parameters<typeof inviteMemberImpl>[1]): Promise<InviteResult> {
+export async function inviteMember(input: Parameters<typeof inviteMemberImpl>[1]): Promise<InviteActionResult> {
   await requireUser();
   const token = (await getSessionToken())!;
-  const r = await inviteMemberImpl(token, input);
-  revalidateWorkspace(input.workspaceId);
-  return r;
+  try {
+    const r = await inviteMemberImpl(token, input);
+    revalidateWorkspace(input.workspaceId);
+    return r;
+  } catch (e) {
+    if (e instanceof StructuredError) {
+      return { kind: "error", code: e.code, message: e.message };
+    }
+    throw e;
+  }
+}
+export async function inviteMemberByUserId(
+  input: Parameters<typeof inviteMemberByUserIdImpl>[1],
+): Promise<InviteActionResult> {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  try {
+    const r = await inviteMemberByUserIdImpl(token, input);
+    revalidateWorkspace(input.workspaceId);
+    return r;
+  } catch (e) {
+    if (e instanceof StructuredError) {
+      return { kind: "error", code: e.code, message: e.message };
+    }
+    throw e;
+  }
 }
 export async function changeMemberRole(input: Parameters<typeof changeMemberRoleImpl>[1]) {
   await requireUser();

@@ -5,7 +5,7 @@ import { workspaceMembers } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { createWorkspaceImpl } from "@/actions/workspaces";
 import {
-  inviteMemberImpl, changeMemberRoleImpl, removeMemberImpl,
+  inviteMemberImpl, inviteMemberByUserIdImpl, changeMemberRoleImpl, removeMemberImpl,
 } from "@/actions/workspace-members";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -71,6 +71,39 @@ describe("workspace member actions (impl)", () => {
     const stranger = await makeUser("wm-s");
     await expect(inviteMemberImpl(guest.jwt, {
       workspaceId: ws.id, email: stranger.email, role: "member",
+    })).rejects.toThrow();
+  });
+
+  it("invite by userId (picked from the suggestion dropdown)", async () => {
+    const owner = await makeUser("wm-uid-o");
+    const guest = await makeUser("wm-uid-g");
+    const ws = await createWorkspaceImpl(owner.jwt, { name: "ById" });
+
+    const res = await inviteMemberByUserIdImpl(owner.jwt, {
+      workspaceId: ws.id, userId: guest.id, role: "member",
+    });
+    // Confirmed account → resolved to email + direct-added, same as typing it.
+    expect(res.kind).toBe("added");
+
+    const rows = await dbAsUser(owner.jwt, async (tx) =>
+      tx.select().from(workspaceMembers).where(and(
+        eq(workspaceMembers.workspaceId, ws.id),
+        eq(workspaceMembers.userId, guest.id),
+      ))
+    );
+    expect(rows[0].role).toBe("member");
+  });
+
+  it("non-admin cannot invite by userId", async () => {
+    const owner = await makeUser("wm-uid-o2");
+    const member = await makeUser("wm-uid-m2");
+    const ws = await createWorkspaceImpl(owner.jwt, { name: "ByIdLocked" });
+    await inviteMemberByUserIdImpl(owner.jwt, {
+      workspaceId: ws.id, userId: member.id, role: "member",
+    });
+    const stranger = await makeUser("wm-uid-s2");
+    await expect(inviteMemberByUserIdImpl(member.jwt, {
+      workspaceId: ws.id, userId: stranger.id, role: "member",
     })).rejects.toThrow();
   });
 });

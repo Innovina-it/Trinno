@@ -6,15 +6,19 @@ Stack: Next.js 15 (App Router, Server Actions) + Supabase (Postgres / Auth / Rea
 
 ## Project status
 
-Shipped:
+See **[PROJECT-MAP.md](PROJECT-MAP.md)** for the current subsystem map (state, gaps, upgrade backlog per section).
 
-- **Plan 1 — foundation:** Next.js scaffold, Supabase local, auth (email + password), profiles, workspaces, boards, board_members, RLS, `dbAsUser` per-request RLS via JWT claims.
-- **Plan 2 — workspaces & boards:** workspace + board CRUD, member invites, role changes, board grid, settings pages.
-- **Plan 3 — lists, cards, drag-drop:** kanban core. Lists + cards CRUD + dnd-kit + fractional positions. Card modal via parallel-route interception.
-- **Plan 4 — realtime + presence:** Supabase Realtime channels per board, optimistic moves reconciled with CDC echoes, viewer avatars in board header.
-- **Plan 5 — card features:** labels, card members, checklists, due dates, comments, attachments (table + Storage bucket + signed-URL upload route).
-- **Plan 6 — activity + search:** SECURITY DEFINER triggers writing the activity log, board + card activity feeds, full-text search across cards (tsvector + GIN).
-- **Plan 7 — CI + hardening:** GitHub Actions matrix (lint, integration, e2e).
+Shipped, roughly in order:
+
+- **Foundation (Plans 1–7):** auth + `dbAsUser` per-request RLS, workspaces/boards/members, kanban core (lists, cards, dnd-kit, fractional positions), realtime + presence, card features (labels, members, checklists, due dates, comments, attachments), activity log + full-text search, CI matrix.
+- **Planning layer:** roadmap/Gantt (4 view modes, lanes, zoom), sprints + backlog + sprint reports, milestones, versions, components, baselines with variance analysis + Approved flag, critical path, dependency arrows.
+- **Reporting:** dashboards with gadgets, workload allocation view, aggregate kanban (My tasks), `/me` personal surfaces, worklogs.
+- **Notifications:** in-app inbox, email (Resend, per-event + daily digest crons), Telegram channel (link handshake, /stop), watchers, SLA policies + breach scan, tiered per-event prefs.
+- **Membership:** invitation flow with reminders + domain carve-out, guest role, onboarding spotlight tour, demo seeding.
+- **PMA (Project Management Assistant):** Google Drive change detection → Gemini analysis → native Google Doc reports vs approved baselines, run history UI (U1–U12).
+- **Misc:** links with brand-color palette, card relations, favorites, holidays calendar (IT presets), sub-boards (flag-gated), card field/sprint history, archive view, board templates.
+
+Current state of the data layer: 43 tables, 133 migrations, RLS on 35 tables, 170 test files.
 
 ## Prereqs
 
