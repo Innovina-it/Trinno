@@ -10,6 +10,7 @@ import {
 import { StructuredError } from "@/lib/errors";
 import { getServiceSupabase } from "@/lib/supabase/service-role";
 import { sendInviteEmail } from "@/lib/invite-email";
+import { listMembers } from "@/lib/queries/workspaces";
 
 type MemberTx = Parameters<Parameters<typeof dbAsUser>[1]>[0];
 
@@ -432,4 +433,13 @@ export async function removeMember(input: Parameters<typeof removeMemberImpl>[1]
   const token = (await getSessionToken())!;
   await removeMemberImpl(token, input);
   revalidateWorkspace(input.workspaceId);
+}
+
+// Read-only fetch used by the members panel to patch itself on realtime
+// events instead of refreshing the whole route. RLS scopes the result:
+// a viewer who lost workspace access gets an empty list back.
+export async function fetchWorkspaceMembers(input: { workspaceId: string }) {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  return listMembers(token, input.workspaceId);
 }

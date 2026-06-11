@@ -1,13 +1,23 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
-// Refresh the workspace settings page when its `workspace_members`
-// list changes — covers a concurrent admin's invite, role change, or
-// removal in another tab.
-export function useWorkspaceMembersSync(workspaceId: string) {
+// Live-sync against `workspace_members` changes — covers a concurrent
+// admin's invite, role change, or removal in another tab. Default
+// reaction is router.refresh(); callers can pass `onEvent` to react
+// granularly instead (e.g. a targeted refetch that patches local state
+// without re-rendering the route).
+export function useWorkspaceMembersSync(
+  workspaceId: string,
+  onEvent?: () => void,
+) {
   const router = useRouter();
+  // Ref keeps the subscription stable when callers pass an inline arrow.
+  const onEventRef = useRef(onEvent);
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
   useEffect(() => {
     if (!workspaceId) return;
     const supa = createSupabaseBrowser();
@@ -29,7 +39,11 @@ export function useWorkspaceMembersSync(workspaceId: string) {
             table: "workspace_members",
             filter: `workspace_id=eq.${workspaceId}`,
           },
-          () => router.refresh(),
+          () => {
+            const fn = onEventRef.current;
+            if (fn) fn();
+            else router.refresh();
+          },
         )
         .subscribe();
     })();

@@ -1,12 +1,19 @@
 "use client";
-import { useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, type SelectOption } from "@/components/ui/select";
-import { changeMemberRole, removeMember, resendInvitation } from "@/actions/workspace-members";
+import {
+  changeMemberRole,
+  removeMember,
+  resendInvitation,
+  fetchWorkspaceMembers,
+} from "@/actions/workspace-members";
 import { useWorkspaceMembersSync } from "@/hooks/use-workspace-members-sync";
 import { useIsGuest } from "@/lib/permissions/use-is-guest";
+import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { toast } from "sonner";
 
 type Member = {
@@ -27,13 +34,46 @@ export function MemberList({
 }) {
   const [pending, start] = useTransition();
   const isGuest = useIsGuest();
-  // Live updates so a concurrent admin's invite / role change / removal
-  // in another tab is reflected here without a manual reload.
-  useWorkspaceMembersSync(workspaceId);
+  const router = useRouter();
+
+  // Live local copy: rendered instead of the server prop so a concurrent
+  // admin's invite / role change / removal patches in place without a
+  // route refresh. Own actions still revalidate, which re-feeds `members`.
+  const [liveMembers, setLiveMembers] = useState(members);
+  useEffect(() => {
+    setLiveMembers(members);
+  }, [members]);
+
+  // Realtime events can burst (bulk changes); only the latest refetch wins.
+  const fetchSeq = useRef(0);
+  useWorkspaceMembersSync(workspaceId, () => {
+    const seq = ++fetchSeq.current;
+    (async () => {
+      try {
+        const { data } = await createSupabaseBrowser().auth.getSession();
+        const uid = data.session?.user.id;
+        const fresh = await fetchWorkspaceMembers({ workspaceId });
+        if (seq !== fetchSeq.current) return;
+        // Revocation fallback: an empty list (RLS hides the workspace) or
+        // self missing means this viewer lost access — let the server
+        // decide where they land.
+        if (
+          fresh.length === 0 ||
+          (uid && !fresh.some((m) => m.userId === uid))
+        ) {
+          router.refresh();
+          return;
+        }
+        setLiveMembers(fresh);
+      } catch {
+        router.refresh();
+      }
+    })();
+  });
 
   return (
     <ul className="divide-y rounded border">
-      {members.map((m) => (
+      {liveMembers.map((m) => (
         <li key={m.userId} className="flex items-center gap-3 p-3">
           <Avatar className="size-8">
             <AvatarImage src={m.avatarUrl ?? undefined} />
