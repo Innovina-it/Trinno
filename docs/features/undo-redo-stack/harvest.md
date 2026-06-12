@@ -11,3 +11,11 @@
 4. **Failed undos used to be silently swallowed;** under a redo stack that mis-files them as redoable. E1 added rethrows at every touched site. Pattern for new sites: optimistic patch → server write → on failure revert + toast + RETHROW.
 
 **Proposed tripwire (needs Gate 5 approval before registry):** keep `tests/e2e/undo-redo-stack.spec.ts` in the standing e2e set — it catches: hotkey regressions, focus-guard breakage (people losing typing undo), banner-contract drift, and cross-surface bus breakage. Owner: ali.
+
+## 2026-06-12 — follow-up session (authorized autonomous)
+
+- **Signup revival:** @example.com → @innovina.it across all 13 affected e2e spec files; every suite now gets past signup.
+- **Gantt suite deeper drift:** beyond the domain bug, gantt-drag-first.spec.ts predates the epic→sub-board pivot (ead4c80 removed Story/Epic card types) and two UI overhauls (inline composer → NewCardDialog; tile-click modal → full-page route). Helpers modernized; 5/7 tests still need a product-semantics redesign around sub-boards — needs Ali's direction, parked.
+- **B1 live gap CLOSED:** third test in undo-redo-stack.spec.ts performs the real bar-drag gesture and proves Ctrl+Z restores the pre-drag start date, Ctrl+Shift+Z re-applies (3/3 green). D1 evidence updated.
+- **Red tests realigned:** filter-bar + static-source now assert the same invariants against the moved badge (components/filters/assignee-filter-row) and the deliberately-clickable board-link lane labels. tests/unit + tests/roadmap: 455/455 — first fully green run.
+- **Dev DB cleanup:** 36 throwaway e2e users (ur-/g8x-/e2e- timestamped, created 2026-06-11/12) + their 74 cascaded workspaces deleted from local dev DB in ordered transactions (workspaces first — no FK cascade from profiles). Real user count untouched (1646 remain, incl. qa-unitb users).
