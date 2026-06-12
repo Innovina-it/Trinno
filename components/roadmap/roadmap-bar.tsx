@@ -23,6 +23,7 @@ import { STATUS_LABEL, statusBarFill, type StatusKind } from "@/lib/status";
 import { archiveCard, setRoadmapCompletion, updateCard } from "@/actions/cards";
 import { formatDate } from "@/lib/format-date";
 import {
+  PRIORITY_LABELS,
   PRIORITY_TINT,
   type CardPriority,
 } from "@/components/board/card/priority-picker";
@@ -285,6 +286,19 @@ export function RoadmapBar({
       try {
         await archiveCard({ id: card.id, archived: true });
         toast.success(`Archived "${card.title}"`);
+        const writeArchived = async (to: boolean) => {
+          try {
+            await archiveCard({ id: card.id, archived: to });
+          } catch (err) {
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: `Archived "${card.title}"`,
+          undo: () => writeArchived(false),
+          redo: () => writeArchived(true),
+        });
       } catch (err) {
         toast.error((err as Error).message);
       }
@@ -304,6 +318,27 @@ export function RoadmapBar({
     startTransition(async () => {
       try {
         await setRoadmapCompletion({ cardId: card.id, completed: next });
+        const writeCompleted = async (to: boolean) => {
+          patchCardLocal(card.id, {
+            completedAt: to ? new Date() : null,
+            dueComplete: to,
+          });
+          try {
+            await setRoadmapCompletion({ cardId: card.id, completed: to });
+          } catch (err) {
+            patchCardLocal(card.id, {
+              completedAt: to ? null : new Date(),
+              dueComplete: !to,
+            });
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: next ? "Marked complete" : "Marked not complete",
+          undo: () => writeCompleted(!next),
+          redo: () => writeCompleted(next),
+        });
       } catch (err) {
         // Roll back optimistic patch.
         patchCardLocal(card.id, {
@@ -319,9 +354,24 @@ export function RoadmapBar({
   // are flat (no submenu) since the existing menu is a stack of plain
   // buttons. Includes a "Clear priority" entry when one is set.
   function handleSetPriority(next: CardPriority | null) {
+    const prev = (card.priority ?? null) as CardPriority | null;
+    if (next === prev) return;
     startTransition(async () => {
       try {
         await updateCard({ id: card.id, priority: next });
+        const writePriority = async (to: CardPriority | null) => {
+          try {
+            await updateCard({ id: card.id, priority: to });
+          } catch (err) {
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: next ? `Priority ${PRIORITY_LABELS[next]}` : "Priority cleared",
+          undo: () => writePriority(prev),
+          redo: () => writePriority(next),
+        });
       } catch (err) {
         toast.error((err as Error).message);
       }
@@ -339,12 +389,27 @@ export function RoadmapBar({
     }
     const startISO = new Date(`${datesStart}T00:00:00.000Z`).toISOString();
     const targetISO = new Date(`${datesTarget}T00:00:00.000Z`).toISOString();
+    const prevStartISO = card.startDate.toISOString();
+    const prevTargetISO = card.targetDate.toISOString();
     startTransition(async () => {
       try {
         await updateCard({
           id: card.id,
           startDate: startISO,
           targetDate: targetISO,
+        });
+        const writeDates = async (s: string, t: string) => {
+          try {
+            await updateCard({ id: card.id, startDate: s, targetDate: t });
+          } catch (err) {
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: `Rescheduled "${card.title}"`,
+          undo: () => writeDates(prevStartISO, prevTargetISO),
+          redo: () => writeDates(startISO, targetISO),
         });
         setDatesOpen(false);
       } catch (err) {

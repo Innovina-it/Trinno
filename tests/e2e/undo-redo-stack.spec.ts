@@ -273,4 +273,19 @@ test("roadmap: Gantt bar drag is undoable and redoable (B1 commit path, live ges
   await page.keyboard.press("Control+Shift+z");
   await expect(page.getByText(/Redid: Rescheduled "Drag me"/)).toBeVisible();
   expect(await readStartDate()).not.toBe(originalStart);
+
+  // Context-menu parity (unit G1): right-click → set priority pushes an
+  // undo entry like every other mutation.
+  await bar.click({ button: "right" });
+  await page
+    .locator('[data-testid="roadmap-bar-menu-set-priority"][data-priority="p1"]')
+    .click();
+  // The push surfaces in the banner with the entry message.
+  await expect(
+    page.getByTestId("undo-banner").getByText("Priority High"),
+  ).toBeVisible();
+  await page.keyboard.press("Control+z");
+  await expect(page.getByText(/Undid: Priority High/)).toBeVisible();
+  await page.keyboard.press("Control+Shift+z");
+  await expect(page.getByText(/Redid: Priority High/)).toBeVisible();
 });

@@ -19,10 +19,12 @@ import { BlockedBadge } from "./card/blocked-badge";
 import { StoryPointsChip } from "./card/story-points-chip";
 import { TimeChip } from "./card/time-chip";
 import {
+  PRIORITY_LABELS,
   PRIORITY_TINT,
   PriorityChip,
   type CardPriority,
 } from "./card/priority-picker";
+import { undoBus } from "@/lib/undo-bus";
 import {
   CardContextMenu,
   type CardContextMenuPosition,
@@ -454,6 +456,27 @@ export function CardTile({
     startTransition(async () => {
       try {
         await updateCard({ id: card.id, completed: next });
+        const writeCompleted = async (to: boolean) => {
+          updateCardLocal(card.id, {
+            completedAt: to ? new Date() : null,
+            dueComplete: to,
+          });
+          try {
+            await updateCard({ id: card.id, completed: to });
+          } catch (err) {
+            updateCardLocal(card.id, {
+              completedAt: to ? null : new Date(),
+              dueComplete: !to,
+            });
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: next ? "Marked complete" : "Marked not complete",
+          undo: () => writeCompleted(!next),
+          redo: () => writeCompleted(next),
+        });
       } catch (err) {
         updateCardLocal(card.id, {
           completedAt: next ? null : new Date(),
@@ -470,6 +493,24 @@ export function CardTile({
     startTransition(async () => {
       try {
         await updateCard({ id: card.id, priority: next });
+        const writePriority = async (
+          to: CardPriority | null,
+          from: CardPriority | null,
+        ) => {
+          updateCardLocal(card.id, { priority: to });
+          try {
+            await updateCard({ id: card.id, priority: to });
+          } catch (err) {
+            updateCardLocal(card.id, { priority: from });
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: next ? `Priority ${PRIORITY_LABELS[next]}` : "Priority cleared",
+          undo: () => writePriority(prev, next),
+          redo: () => writePriority(next, prev),
+        });
       } catch (err) {
         updateCardLocal(card.id, { priority: prev });
         toast.error((err as Error).message);
@@ -481,6 +522,19 @@ export function CardTile({
       try {
         await archiveCard({ id: card.id, archived: true });
         toast.success(`Archived "${card.title}"`);
+        const writeArchived = async (to: boolean) => {
+          try {
+            await archiveCard({ id: card.id, archived: to });
+          } catch (err) {
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: `Archived "${card.title}"`,
+          undo: () => writeArchived(false),
+          redo: () => writeArchived(true),
+        });
       } catch (err) {
         toast.error((err as Error).message);
       }
