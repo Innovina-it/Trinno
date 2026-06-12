@@ -28,7 +28,7 @@ import {
 } from "@/lib/roadmap/sparse-rank";
 import { ensureStatusListImpl } from "@/actions/lists";
 import type { StatusKind } from "@/lib/status";
-import { StructuredError } from "@/lib/errors";
+import { StructuredError, actionResult } from "@/lib/errors";
 import {
   assertGuestCardWriteAllowed,
   assertNotGuest,
@@ -1306,6 +1306,19 @@ export async function updateCard(input: Parameters<typeof updateCardImpl>[1]) {
   const t = (await getSessionToken())!;
   const r = await updateCardImpl(t, input);
   revalidatePath(`/b/${r.boardId}`);
+  return r;
+}
+// card-edit-concurrency U3 — result-style variant for the rev-checked
+// text surfaces: a thrown StructuredError loses its context across the
+// server-action boundary (see the PARENT_CYCLE prefix contract above),
+// so VERSION_CONFLICT must RETURN its payload instead of throwing.
+export async function updateCardChecked(
+  input: Parameters<typeof updateCardImpl>[1],
+) {
+  await requireUser();
+  const t = (await getSessionToken())!;
+  const r = await actionResult(() => updateCardImpl(t, input));
+  if (r.ok) revalidatePath(`/b/${r.data.boardId}`);
   return r;
 }
 export async function moveCard(input: Parameters<typeof moveCardImpl>[1]) {
