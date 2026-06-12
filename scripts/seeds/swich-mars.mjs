@@ -427,7 +427,7 @@ const OBJECTIVES = [
         title:
           "WP1.7 — Analysis of the requirements for the real-time release point and UAV interface",
         kind: "RI",
-        partner: "BE-ST S.r.l.",
+        partner: "BE-ST",
         startMonth: 3,
         endMonth: 6,
         consulting: "Rafla S.r.l.",
@@ -449,7 +449,7 @@ const OBJECTIVES = [
         title:
           "WP1.8 — Testdeck creation through acquisition of simulated-fire video",
         kind: "RI",
-        partner: "BE-ST S.r.l.",
+        partner: "BE-ST",
         startMonth: 1,
         endMonth: 6,
         consulting: "Rafla S.r.l.",
@@ -471,7 +471,7 @@ const OBJECTIVES = [
         title:
           "WP1.9 — Software sizing and identification of the suitable electronic platform (BE-ST)",
         kind: "RI",
-        partner: "BE-ST S.r.l.",
+        partner: "BE-ST",
         startMonth: 6,
         endMonth: 15,
         consulting: "Rafla S.r.l.",
@@ -501,7 +501,7 @@ const OBJECTIVES = [
     code: "OR2",
     title:
       "OR2 — Design, development and control of the UAV system for extinguishant release",
-    leader: "BE-ST S.r.l.",
+    leader: "BE-ST",
     cost: "€ 908.602,81",
     startMonth: 7,
     endMonth: 30,
@@ -564,7 +564,7 @@ const OBJECTIVES = [
         title:
           "WP2.3 — Development of algorithms for fire-front recognition, flight steering and extinguishing-liquid release control",
         kind: "SS",
-        partner: "BE-ST S.r.l.",
+        partner: "BE-ST",
         startMonth: 16,
         endMonth: 27,
         description:
@@ -861,7 +861,7 @@ const OBJECTIVES = [
         title:
           "WP5.1 — Construction of the UAV supports, mounting of the developed devices, system wiring",
         kind: "SS",
-        partner: "BE-ST S.r.l.",
+        partner: "BE-ST",
         startMonth: 16,
         endMonth: 30,
         description:
@@ -924,7 +924,7 @@ const OBJECTIVES = [
         title:
           "WP5.4 — Test of the release system on flames in a scenario decoupled from refuelling",
         kind: "SS",
-        partner: "BE-ST S.r.l.",
+        partner: "BE-ST",
         startMonth: 16,
         endMonth: 30,
         description:
