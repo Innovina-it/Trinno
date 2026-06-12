@@ -192,7 +192,7 @@ export function PriorityPicker({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onSelect={() => set(null)}
+              onClick={() => set(null)}
               className="text-fg-muted"
             >
               Clear priority

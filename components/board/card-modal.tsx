@@ -963,7 +963,7 @@ export function CardModal({
                     <DropdownMenuLabel>Card</DropdownMenuLabel>
                     {card.boardId && (
                       <DropdownMenuItem
-                        onSelect={() => setMoveOpen(true)}
+                        onClick={() => setMoveOpen(true)}
                         data-testid="card-modal-move-to-board"
                       >
                         <Move className="size-3.5" aria-hidden />
@@ -972,7 +972,7 @@ export function CardModal({
                     )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onSelect={onArchive}
+                      onClick={onArchive}
                       disabled={pending}
                       data-testid="card-modal-archive"
                       className="text-fg-muted"

@@ -132,6 +132,24 @@ test("board: multi-step undo/redo via keyboard, banner dismiss keeps entry, focu
   await expect(page.getByText(/Redid: Added Important/)).toBeVisible();
   await expect(labelChip).toHaveAttribute("data-attached", "true");
 
+  // instant-feedback A1: card type flips through optimisticWrite — chip
+  // updates, entry lands on the stack, Ctrl+Z reverts it.
+  await page.getByTestId("card-type-edit").click();
+  const bugOption = page.getByTestId("card-type-option-bug");
+  await bugOption.waitFor({ state: "visible" });
+  // base-ui menu items need a pointermove before the click registers.
+  await bugOption.hover();
+  await bugOption.click();
+  await expect(page.getByTestId("card-type-edit")).toContainText(/bug/i);
+  // The chip flips optimistically; wait for the background write to land
+  // (the banner appears when the entry is pushed) before undoing.
+  await expect(
+    page.getByTestId("undo-banner").getByText("Type set to bug"),
+  ).toBeVisible();
+  await page.keyboard.press("Control+z");
+  await expect(page.getByText(/Undid: Type set to bug/)).toBeVisible();
+  await expect(page.getByTestId("card-type-edit")).toContainText(/task/i);
+
   // BANNER DISMISS KEEPS ENTRY (A1): new action → dismiss banner → Ctrl+Z
   // still undoes it.
   await labelChip.click(); // detach → "Removed Important" pushed

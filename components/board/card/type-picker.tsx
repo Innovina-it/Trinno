@@ -1,5 +1,5 @@
 "use client";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useStore } from "zustand";
 import { useContext } from "react";
@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { updateCard } from "@/actions/cards";
+import { optimisticWrite } from "@/lib/optimistic-write";
 import { useIsGuest } from "@/lib/permissions/use-is-guest";
 import { BoardStoreContext } from "@/stores/board-store";
 
@@ -57,12 +58,17 @@ export function TypePicker({
 }) {
   const isGuest = useIsGuest();
   const editable = !!cardId && !isGuest;
+  // instant-feedback A1 — local optimistic value so the chip flips even
+  // on surfaces where the `type` prop isn't store-subscribed (full-page
+  // card route). Mirrors complete-toggle's setOptimistic pattern.
+  const [optimisticType, setOptimisticType] = useState<string | null>(null);
+  const shownType = optimisticType ?? type;
   const cur =
-    TYPES.find((x) => x.id === type) ??
+    TYPES.find((x) => x.id === shownType) ??
     (LEGACY_TYPES[type]
       ? { id: type, label: LEGACY_TYPES[type].label, Icon: LEGACY_TYPES[type].Icon }
       : { id: type, label: type, Icon: Layers3 });
-  const isLegacy = !TYPES.some((x) => x.id === type);
+  const isLegacy = !TYPES.some((x) => x.id === shownType);
   const boardStore = useContext(BoardStoreContext);
   const updateCardLocal = useStore(
     boardStore!,
@@ -70,15 +76,23 @@ export function TypePicker({
   );
   const [pending, start] = useTransition();
   const change = (next: EditableType) => {
-    if (!cardId || next === type) return;
+    if (!cardId || next === shownType) return;
+    const prev = shownType;
     start(async () => {
-      try {
-        await updateCard({ id: cardId, type: next });
-        updateCardLocal(cardId, { type: next });
-        toast.success(`Type set to ${next}`);
-      } catch (err) {
-        toast.error((err as Error).message);
-      }
+      // instant-feedback A1 — chip flips before the round-trip; failed
+      // writes roll back (previously: lag + silent divergence on error).
+      await optimisticWrite<string>({
+        prev,
+        next,
+        apply: (v) => {
+          setOptimisticType(v);
+          updateCardLocal(cardId, { type: v });
+        },
+        write: (v) => updateCard({ id: cardId, type: v as EditableType }),
+        message: `Type set to ${next}`,
+      })
+        .then(() => toast.success(`Type set to ${next}`))
+        .catch(() => {});
     });
   };
 
@@ -121,7 +135,7 @@ export function TypePicker({
         {TYPES.map((opt) => (
           <DropdownMenuItem
             key={opt.id}
-            onSelect={() => change(opt.id)}
+            onClick={() => change(opt.id)}
             data-testid={`card-type-option-${opt.id}`}
           >
             {opt.Icon ? <opt.Icon className="size-3.5 mr-2" /> : <span className="size-3.5 mr-2" />}

@@ -9,7 +9,7 @@ import { logWork, deleteWorklog } from "@/actions/worklogs";
 import { updateCard } from "@/actions/cards";
 import { Hourglass, Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { undoBus } from "@/lib/undo-bus";
+import { optimisticWrite } from "@/lib/optimistic-write";
 import { formatDate } from "@/lib/format-date";
 
 type WorklogRow = {
@@ -56,36 +56,20 @@ export function TimeSection({
     if (n === estimateMin) return;
     const prev = estimateMin;
     start(async () => {
-      try {
-        await updateCard({ id: cardId, estimateMin: n });
-        updateCardLocal(cardId, { estimateMin: n } as {
-          estimateMin: number | null;
-        });
-        const write = async (to: number | null, from: number | null) => {
-          setEstimate(to?.toString() ?? "");
-          updateCardLocal(cardId, { estimateMin: to } as {
+      // instant-feedback A1 — local apply runs before the server write,
+      // so the field no longer waits on the round-trip.
+      await optimisticWrite<number | null>({
+        prev,
+        next: n,
+        apply: (v) => {
+          setEstimate(v?.toString() ?? "");
+          updateCardLocal(cardId, { estimateMin: v } as {
             estimateMin: number | null;
           });
-          try {
-            await updateCard({ id: cardId, estimateMin: to });
-          } catch (err) {
-            setEstimate(from?.toString() ?? "");
-            updateCardLocal(cardId, { estimateMin: from } as {
-              estimateMin: number | null;
-            });
-            toast.error("Undo failed: " + (err as Error).message);
-            throw err;
-          }
-        };
-        undoBus.push({
-          message: n == null ? "Estimate cleared" : "Estimate updated",
-          undo: () => write(prev, n),
-          redo: () => write(n, prev),
-        });
-      } catch (err) {
-        setEstimate(prev?.toString() ?? "");
-        toast.error((err as Error).message);
-      }
+        },
+        write: (v) => updateCard({ id: cardId, estimateMin: v }),
+        message: n == null ? "Estimate cleared" : "Estimate updated",
+      }).catch(() => {});
     });
   }
 
