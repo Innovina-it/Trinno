@@ -5,11 +5,16 @@ const roadmapView = () =>
   readFileSync("components/roadmap/roadmap-view.tsx", "utf8");
 
 describe("roadmap source-level regressions", () => {
-  it("keeps lane names non-clickable so retired epic routes do not 404", () => {
+  it("lane names link only to live board routes, never retired epic routes", () => {
     const src = roadmapView();
 
-    expect(src).toContain("data-testid=\"lane-epic-header-label\"");
-    expect(src).not.toContain("data-testid=\"lane-epic-header-link\"");
+    // Lane labels were made clickable on purpose — but only as board
+    // links (boardHref + "Open board" aria). The original 404 hazard was
+    // links into retired epic routes; keep asserting those never return.
+    expect(src).toContain('"lane-header-label"');
+    expect(src).toContain("aria-label={`Open board ${ll.lane.title}`}");
+    expect(src).not.toContain("lane-epic-header-link");
+    expect(src).not.toMatch(/href=\{?[`"']\/e(pics)?\//);
   });
 
   it("invalidates the workspace snapshot when board CDC events arrive", () => {
