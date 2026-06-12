@@ -480,6 +480,11 @@ function CardQuickViewBody({
   const [memberDraft, setMemberDraft] = useState<Set<string>>(
     () => new Set(memberProfiles.map((p) => p.id)),
   );
+  // card-edit-concurrency — freeze the rev at OPEN, not at Save time. The
+  // body is keyed by card.id so this re-snapshots per card. Reading
+  // card.editRev live at commitSave would let a realtime echo advance our
+  // baseline between open and Save, so a stale edit would never conflict.
+  const [baselineEditRev] = useState(() => card.editRev ?? 0);
 
   const [titleEditing, setTitleEditing] = useState(false);
   const titleCommitRef = useRef(false);
@@ -603,7 +608,7 @@ function CardQuickViewBody({
     // after a conflict resolution re-run.
     if (titleChanged || descChanged) {
       patch.expectedEditRev =
-        conflictRevOverrideRef.current ?? card.editRev ?? 0;
+        conflictRevOverrideRef.current ?? baselineEditRev;
     }
     const queuedDrafts = draftSubtasks;
     const memberAdds: string[] = [];
@@ -736,7 +741,7 @@ function CardQuickViewBody({
     card.title,
     card.startDate,
     card.targetDate,
-    card.editRev,
+    baselineEditRev,
     onPatch,
     onCreateSubtask,
     onToggleMember,
