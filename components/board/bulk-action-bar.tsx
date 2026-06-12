@@ -91,6 +91,8 @@ export function BulkActionBar({
   const clearSelection = useBoardStore((s) => s.clearSelection);
   const moveCardLocal = useBoardStore((s) => s.moveCard);
   const updateCardLocal = useBoardStore((s) => s.updateCard);
+  const addCardLocal = useBoardStore((s) => s.addCard);
+  const removeCardLocal = useBoardStore((s) => s.removeCard);
   const addCardLabelLocal = useBoardStore((s) => s.addCardLabel);
   const removeCardLabelLocal = useBoardStore((s) => s.removeCardLabel);
   const addCardMemberLocal = useBoardStore((s) => s.addCardMember);
@@ -197,7 +199,6 @@ export function BulkActionBar({
             },
           });
         }
-        router.refresh();
       } catch (err) {
         // Rollback optimistic update on failure.
         for (const p of prior) {
@@ -217,6 +218,12 @@ export function BulkActionBar({
 
   function onArchive() {
     const ids = canBulk;
+    // instant-feedback B1 — snapshot full rows so tiles vanish locally
+    // (no router.refresh blink) and undo can re-add them in place.
+    const rows = ids
+      .map((id) => cards.find((c) => c.id === id))
+      .filter((c): c is NonNullable<typeof c> => !!c);
+    for (const id of ids) removeCardLocal(id);
     start(async () => {
       try {
         await bulkArchiveCards({ cardIds: ids, archived: true });
@@ -224,15 +231,28 @@ export function BulkActionBar({
         undoBus.push({
           message: `Archived ${ids.length} card${ids.length === 1 ? "" : "s"}`,
           undo: async () => {
+            for (const row of rows) addCardLocal(row);
             try {
               await bulkArchiveCards({ cardIds: ids, archived: false });
             } catch (err) {
+              for (const id of ids) removeCardLocal(id);
               pushError("Undo failed: " + (err as Error).message);
+              throw err;
+            }
+          },
+          redo: async () => {
+            for (const id of ids) removeCardLocal(id);
+            try {
+              await bulkArchiveCards({ cardIds: ids, archived: true });
+            } catch (err) {
+              for (const row of rows) addCardLocal(row);
+              pushError("Redo failed: " + (err as Error).message);
+              throw err;
             }
           },
         });
-        router.refresh();
       } catch (err) {
+        for (const row of rows) addCardLocal(row);
         pushError("Bulk archive failed: " + (err as Error).message);
       }
     });
@@ -297,6 +317,8 @@ export function BulkActionBar({
         });
       } catch (err) {
         pushError("Bulk move failed: " + (err as Error).message);
+        // Partial multi-card moves can leave server and store divergent —
+        // a full refresh is the honest recovery on this failure path.
         router.refresh();
       }
     });
@@ -344,7 +366,6 @@ export function BulkActionBar({
             },
           });
         }
-        router.refresh();
       } catch (err) {
         for (const cardId of addedIds) removeCardLabelLocal(cardId, labelId);
         pushError("Bulk label failed: " + (err as Error).message);
@@ -414,7 +435,6 @@ export function BulkActionBar({
             }
           },
         });
-        router.refresh();
       } catch (err) {
         if (shouldUnassign) {
           for (const cardId of targetIds) addCardMemberLocal({ cardId, userId });
@@ -458,7 +478,6 @@ export function BulkActionBar({
             }
           },
         });
-        router.refresh();
       } catch (err) {
         for (const p of prior) updateCardLocal(p.id, { sprintId: p.sprintId });
         pushError("Bulk sprint failed: " + (err as Error).message);
@@ -504,7 +523,6 @@ export function BulkActionBar({
             }
           },
         });
-        router.refresh();
       } catch (err) {
         // Rollback optimistic update.
         for (const p of prior) {
@@ -584,7 +602,6 @@ export function BulkActionBar({
             }
           },
         });
-        router.refresh();
       } catch (err) {
         for (const cardId of ids) {
           if (wasAttachedIds.has(cardId)) {
