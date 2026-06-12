@@ -1,6 +1,6 @@
 # FEATURE — card-edit-concurrency (Gate 1-F)
 
-Status: APPROVED at Gate 1-F, 2026-06-12
+Status: ACCEPTED at Gate 4 by Ali, 2026-06-12 (U1 13188f8, U2 9a70e29, U3 9c43976+ccff1f8, quick-view fix cfd54b5, label d8b4c9b). Migration applied to local dev only — preview/prod at Ali's deploy.
 Tier: 3 (schema migration on the hot `cards` table; destined for prod)
 Recon: [recon.md](recon.md), approved Gate 0 2026-06-12
 
