@@ -45,7 +45,7 @@ export function EditConflictDialog({
         </DialogHeader>
         <div className="space-y-3 text-sm">
           <div className="space-y-1">
-            <p className="mono-meta-sm text-fg-faint">YOURS</p>
+            <p className="mono-meta-sm text-fg-faint">MINE</p>
             <p
               className="rounded-md border border-hairline bg-[color:var(--surface)] px-3 py-2 max-h-32 overflow-auto whitespace-pre-wrap"
               data-testid="conflict-mine"
