@@ -452,17 +452,27 @@ export function RoadmapBar({
   // (no drag, resize, chips, tooltip, ghost).
   if (removed) {
     return (
-      <div
-        data-testid={`baseline-removed-inline-${card.id}`}
-        aria-label={`Removed since baseline: ${card.title}`}
-        title={`${card.title} · removed since baseline`}
-        className="absolute flex h-7 items-center rounded-md border border-dashed border-rose-500/70 bg-rose-500/[0.08] px-2 pointer-events-none"
-        style={{ left: x, width: Math.max(width, 12), top: row * 36 + 4 }}
-      >
-        <span className="truncate text-xs text-rose-300 line-through">
-          {card.title}
+      <>
+        <span
+          data-testid={`baseline-tag-${card.id}`}
+          title={`Baseline: ${baselineName ?? ""}`}
+          className="absolute z-20 rounded px-1 mono-meta-sm leading-none tracking-[0.08em] bg-sky-500/20 text-sky-300 pointer-events-none"
+          style={{ left: x, top: row * 36 - 4 }}
+        >
+          Baseline
         </span>
-      </div>
+        <div
+          data-testid={`baseline-removed-inline-${card.id}`}
+          aria-label={`Removed since baseline: ${card.title}`}
+          title={`${card.title} · removed since baseline`}
+          className="absolute flex h-7 items-center rounded-md border border-dashed border-rose-500/70 bg-rose-500/[0.08] px-2 pointer-events-none"
+          style={{ left: x, width: Math.max(width, 12), top: row * 36 + 4 }}
+        >
+          <span className="truncate text-xs text-rose-300 line-through">
+            {card.title}
+          </span>
+        </div>
+      </>
     );
   }
 
@@ -485,6 +495,16 @@ export function RoadmapBar({
             {card.title}
           </span>
         </div>
+      )}
+      {ghost && showDeltaChip && (
+        <span
+          data-testid={`baseline-tag-${card.id}`}
+          title={`Baseline: ${baselineName ?? ""}`}
+          className="absolute z-20 rounded px-1 mono-meta-sm leading-none tracking-[0.08em] bg-sky-500/20 text-sky-300 pointer-events-none"
+          style={{ left: ghost.left, top: row * 36 - 4 }}
+        >
+          Baseline
+        </span>
       )}
       {connector && (
         <div
@@ -719,12 +739,12 @@ export function RoadmapBar({
       )}
       {baselineName && showDeltaChip && (
         <span
-          data-testid={`baseline-name-${card.id}`}
-          title={`Baseline: ${baselineName}`}
-          className="absolute z-20 max-w-[140px] truncate rounded px-1 mono-meta-sm leading-none bg-sky-500/20 text-sky-300 pointer-events-none"
+          data-testid={`baseline-live-${card.id}`}
+          title={`Live · baseline: ${baselineName}`}
+          className="absolute z-20 rounded px-1 mono-meta-sm leading-none tracking-[0.08em] bg-orange-500/20 text-orange-300 pointer-events-none"
           style={{ left: x, top: row * 36 - 4 }}
         >
-          {baselineName}
+          Live
         </span>
       )}
       {showDeltaChip && targetDelta != null && (

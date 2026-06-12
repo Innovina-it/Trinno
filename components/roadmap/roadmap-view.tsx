@@ -3250,20 +3250,31 @@ export function RoadmapView({
                   style={{ top: totalHeight, height: removedBandHeight }}
                 >
                   {removedPhantoms.map((p, i) => (
-                    <div
-                      key={p.cardId}
-                      data-testid={`baseline-removed-${p.cardId}`}
-                      aria-label={`Removed since baseline: ${p.title}`}
-                      className="absolute flex h-7 items-center rounded-md border border-dashed border-rose-500/70 bg-rose-500/[0.08] px-2"
-                      style={{
-                        left: p.x,
-                        width: Math.max(p.width, 12),
-                        top: LANE_HEADER_HEIGHT + i * ROW_HEIGHT + 4,
-                      }}
-                    >
-                      <span className="truncate mono-meta-sm text-rose-300 line-through">
-                        {p.title}
+                    <div key={p.cardId}>
+                      <span
+                        data-testid={`baseline-tag-${p.cardId}`}
+                        className="absolute z-20 rounded px-1 mono-meta-sm leading-none tracking-[0.08em] bg-sky-500/20 text-sky-300 pointer-events-none"
+                        style={{
+                          left: p.x,
+                          top: LANE_HEADER_HEIGHT + i * ROW_HEIGHT - 4,
+                        }}
+                      >
+                        Baseline
                       </span>
+                      <div
+                        data-testid={`baseline-removed-${p.cardId}`}
+                        aria-label={`Removed since baseline: ${p.title}`}
+                        className="absolute flex h-7 items-center rounded-md border border-dashed border-rose-500/70 bg-rose-500/[0.08] px-2"
+                        style={{
+                          left: p.x,
+                          width: Math.max(p.width, 12),
+                          top: LANE_HEADER_HEIGHT + i * ROW_HEIGHT + 4,
+                        }}
+                      >
+                        <span className="truncate mono-meta-sm text-rose-300 line-through">
+                          {p.title}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
