@@ -3,6 +3,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncE
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { undoBus } from "@/lib/undo-bus";
 import {
   ArrowRight,
   FolderKanban,
@@ -608,6 +609,32 @@ function CardQuickViewBody({
     try {
       if (Object.keys(patch).length > 0) {
         await onPatch?.(patch);
+        // undo-redo-stack G2 — the quick view commits all field edits as
+        // one batched patch, so mirror it as ONE history entry. onPatch's
+        // closure carries the card id, so undo works after close too.
+        const inverse: PatchInput = {};
+        if (titleChanged) inverse.title = card.title;
+        if (descChanged)
+          inverse.description =
+            baseDescription.length === 0 ? null : baseDescription;
+        if (priorityChanged) inverse.priority = basePriority;
+        if (completedChanged) inverse.completed = baseCompleted;
+        if (typeChanged) inverse.type = cardType as QuickViewCardType;
+        if (startChanged) inverse.startDate = card.startDate;
+        if (targetChanged) inverse.targetDate = card.targetDate;
+        const writePatch = async (p: PatchInput) => {
+          try {
+            await onPatch?.(p);
+          } catch (err) {
+            toast.error("Undo failed: " + (err as Error).message);
+            throw err;
+          }
+        };
+        undoBus.push({
+          message: `Updated "${card.title}"`,
+          undo: () => writePatch(inverse),
+          redo: () => writePatch(patch),
+        });
       }
       // Sequentially commit queued subtasks. The injected onCreateSubtask
       // handlers (card-tile, roadmap-view) already swallow errors with a
@@ -652,6 +679,13 @@ function CardQuickViewBody({
     membersChanged,
     memberDraft,
     baselineMemberIds,
+    baseCompleted,
+    baseDescription,
+    basePriority,
+    cardType,
+    card.title,
+    card.startDate,
+    card.targetDate,
     onPatch,
     onCreateSubtask,
     onToggleMember,

@@ -288,4 +288,24 @@ test("roadmap: Gantt bar drag is undoable and redoable (B1 commit path, live ges
   await expect(page.getByText(/Undid: Priority High/)).toBeVisible();
   await page.keyboard.press("Control+Shift+z");
   await expect(page.getByText(/Redid: Priority High/)).toBeVisible();
+
+  // Quick-view batched save (unit G2): edit the start date inside the
+  // card popup, Save — one composite history entry, undoable after the
+  // popup closes.
+  const preQuickStart = await readStartDate();
+  await bar.click();
+  const quickView = page.getByTestId("card-quick-view");
+  await expect(quickView).toBeVisible();
+  await quickView
+    .getByTestId("card-quick-view-start-edit")
+    .getByTestId("date-picker-display")
+    .fill("01/09/2026");
+  await quickView.getByTestId("card-quick-view-title").click(); // close date popover
+  await quickView.getByRole("button", { name: /^save$/i }).click();
+  await expect(quickView).toHaveCount(0);
+  await page.keyboard.press("Control+z");
+  await expect(page.getByText(/Undid: Updated "Drag me"/)).toBeVisible();
+  expect(await readStartDate()).toBe(preQuickStart);
+  await page.keyboard.press("Control+Shift+z");
+  await expect(page.getByText(/Redid: Updated "Drag me"/)).toBeVisible();
 });
