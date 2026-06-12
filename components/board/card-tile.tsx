@@ -33,7 +33,20 @@ import { CardCover } from "./card/cover-picker";
 import { mergeMemberPool } from "./card/member-pool";
 import { CompleteToggle } from "./card/complete-toggle";
 import { cardCode } from "@/lib/format";
-import { archiveCard, createCard, updateCard } from "@/actions/cards";
+import {
+  archiveCard,
+  createCard,
+  updateCard,
+  updateCardChecked,
+} from "@/actions/cards";
+import {
+  CardEditConflictError,
+  isVersionConflict,
+} from "@/lib/card-edit-conflict";
+import {
+  EditConflictDialog,
+  type EditConflict,
+} from "./card/edit-conflict-dialog";
 import { toggleCardMember } from "@/actions/card-members";
 import { SubtaskBadge } from "./card-tile-subtask-badge";
 import { formatDate } from "@/lib/format-date";
@@ -221,6 +234,25 @@ export function CardTile({
         }
       }
       updateCardLocal(card.id, localPatch);
+      // card-edit-concurrency U3 — rev-checked path. Conflicts are thrown
+      // CLIENT-SIDE as a typed error so the quick view can open the
+      // keep/take dialog (server-action throws lose their context).
+      if (patch.expectedEditRev !== undefined) {
+        const r = await updateCardChecked({ id: card.id, ...patch });
+        if (!r.ok) {
+          if (liveCard) updateCardLocal(card.id, revert);
+          if (isVersionConflict(r.error)) {
+            throw new CardEditConflictError(r.error.context);
+          }
+          toast.error(r.error.message ?? "Failed to save");
+        } else {
+          updateCardLocal(card.id, { editRev: r.data.editRev } as Record<
+            string,
+            unknown
+          >);
+        }
+        return;
+      }
       try {
         await updateCard({ id: card.id, ...patch });
       } catch (err) {
@@ -310,12 +342,18 @@ export function CardTile({
   // Track whether blur should be ignored after a keyboard-commit/cancel.
   const commitRef = useRef(false);
 
+  // card-edit-concurrency U3 — rev captured when inline rename begins,
+  // so a teammate's mid-edit change conflicts instead of being clobbered.
+  const editStartRevRef = useRef<number>(0);
+  const [editConflict, setEditConflict] = useState<EditConflict | null>(null);
+
   const enterEdit = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setEditValue(card.title);
+    editStartRevRef.current = (card as { editRev?: number }).editRev ?? 0;
     setIsEditing(true);
-  }, [card.title]);
+  }, [card]);
 
   const cancelEdit = useCallback(() => {
     commitRef.current = true;
@@ -340,15 +378,68 @@ export function CardTile({
     setIsEditing(false);
     updateCardLocal(card.id, { title: trimmed });
     startTransition(async () => {
-      try {
-        await updateCard({ id: card.id, title: trimmed });
-      } catch (err) {
-        updateCardLocal(card.id, { title: prev });
-        setEditValue(prev);
-        toast.error((err as Error).message ?? "Failed to save title");
+      const r = await updateCardChecked({
+        id: card.id,
+        title: trimmed,
+        expectedEditRev: editStartRevRef.current,
+      });
+      if (r.ok) {
+        // Persist the fresh rev so a rapid second rename (before the
+        // realtime echo lands) doesn't conflict with our own save
+        // (cold-review #3).
+        updateCardLocal(card.id, { editRev: r.data.editRev } as Record<
+          string,
+          unknown
+        >);
+        return;
       }
+      if (isVersionConflict(r.error)) {
+        setEditConflict({
+          field: "title",
+          mine: trimmed,
+          theirs: r.error.context.currentTitle,
+          currentRev: r.error.context.currentRev,
+        });
+        return;
+      }
+      updateCardLocal(card.id, { title: prev });
+      setEditValue(prev);
+      toast.error(r.error.message ?? "Failed to save title");
     });
   }, [editValue, card.title, card.id, updateCardLocal]);
+
+  const resolveEditConflict = useCallback(
+    (choice: "mine" | "theirs", c: EditConflict) => {
+      setEditConflict(null);
+      if (choice === "theirs") {
+        updateCardLocal(card.id, { title: c.theirs });
+        setEditValue(c.theirs);
+        return;
+      }
+      startTransition(async () => {
+        const r = await updateCardChecked({
+          id: card.id,
+          title: c.mine,
+          expectedEditRev: c.currentRev,
+        });
+        if (r.ok) {
+          updateCardLocal(card.id, {
+            title: c.mine,
+            editRev: r.data.editRev,
+          } as Record<string, unknown>);
+        } else if (isVersionConflict(r.error)) {
+          setEditConflict({
+            ...c,
+            theirs: r.error.context.currentTitle,
+            currentRev: r.error.context.currentRev,
+          });
+        } else {
+          toast.error(r.error.message);
+        }
+      });
+    },
+    [card.id, updateCardLocal],
+  );
 
   const handleEditKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -743,6 +834,7 @@ export function CardTile({
           priority: card.priority,
           startDate: card.startDate,
           targetDate: card.targetDate,
+          editRev: (card as { editRev?: number }).editRev ?? 0,
         }}
         memberProfiles={quickViewMemberIds
           .map((id) => quickViewMemberPool.find((p) => p.id === id))
@@ -769,6 +861,13 @@ export function CardTile({
         onCreateSubtask={isGuest ? undefined : onQuickCreateSubtask}
       />
     )}
+    <EditConflictDialog
+      conflict={editConflict}
+      onResolve={resolveEditConflict}
+      onOpenChange={(open) => {
+        if (!open) setEditConflict(null);
+      }}
+    />
     <CardContextMenu
       menu={contextMenu}
       setMenu={setContextMenu}

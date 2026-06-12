@@ -67,7 +67,11 @@ import { MilestoneMarkers } from "./milestone-markers";
 import type { MilestoneRow } from "./milestone-dialog";
 import { MilestoneDialog } from "./milestone-dialog";
 import { listMilestones } from "@/actions/milestones";
-import { createCard, updateCard } from "@/actions/cards";
+import { createCard, updateCard, updateCardChecked } from "@/actions/cards";
+import {
+  CardEditConflictError,
+  isVersionConflict,
+} from "@/lib/card-edit-conflict";
 import { toggleCardMember } from "@/actions/card-members";
 import { toast } from "sonner";
 import { undoBus } from "@/lib/undo-bus";
@@ -1867,6 +1871,22 @@ export function RoadmapView({
         id,
         localPatch as Parameters<typeof patchCardInStore>[1],
       );
+      // card-edit-concurrency U3 — rev-checked path: conflicts surface as
+      // a typed client-side throw so the quick view opens its dialog.
+      if (patch.expectedEditRev !== undefined) {
+        const r = await updateCardChecked({ id, ...patch });
+        if (!r.ok) {
+          if (isVersionConflict(r.error)) {
+            throw new CardEditConflictError(r.error.context);
+          }
+          toast.error(r.error.message ?? "Failed to save");
+        } else {
+          patchCardInStore(id, { editRev: r.data.editRev } as Parameters<
+            typeof patchCardInStore
+          >[1]);
+        }
+        return;
+      }
       try {
         await updateCard({ id, ...patch });
       } catch (err) {
@@ -3402,6 +3422,8 @@ export function RoadmapView({
                 priority: quickViewStoreCard.priority,
                 startDate: quickViewStoreCard.startDate,
                 targetDate: quickViewStoreCard.targetDate,
+                editRev:
+                  (quickViewStoreCard as { editRev?: number }).editRev ?? 0,
               }
             : null
         }

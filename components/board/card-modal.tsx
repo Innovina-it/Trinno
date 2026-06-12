@@ -70,6 +70,12 @@ import {
 } from "lucide-react";
 import { promoteCardToSubboard } from "@/actions/boards";
 import { MoveToBoardDialog } from "./card/move-to-board-dialog";
+import {
+  EditConflictDialog,
+  type EditConflict,
+} from "./card/edit-conflict-dialog";
+import { isVersionConflict } from "@/lib/card-edit-conflict";
+import { updateCardChecked } from "@/actions/cards";
 import { MarkdownView } from "@/components/markdown";
 import {
   useCardHistoryPaginated,
@@ -98,6 +104,7 @@ export type CardModalCard = {
   dueDate?: Date | string | null;
   dueComplete?: boolean;
   completedAt?: Date | string | null;
+  editRev?: number;
 };
 
 function fmtSavedAt(d: Date) {
@@ -540,6 +547,23 @@ export function CardModal({
   const cardVisible = useStore(boardStore!, (s) =>
     s.cards.some((c) => c.id === card.id),
   );
+
+  // card-edit-concurrency U3 — rev plumbing. liveRev tracks the freshest
+  // known rev (save responses + realtime); the per-field refs capture the
+  // rev at EDIT START, so a teammate's mid-edit change conflicts on save
+  // instead of being silently clobbered.
+  const liveRevRef = useRef<number>(card.editRev ?? 0);
+  useEffect(() => {
+    const lr = (liveCard as { editRev?: number } | undefined)?.editRev;
+    // Monotonic only: an optimistic local patch re-creates the store row
+    // with its STALE editRev, so never let this lower a rev our own save
+    // already advanced (cold-review finding #1). Genuine bumps (realtime
+    // CDC, or a teammate's change) only ever increase it.
+    if (lr !== undefined && lr > liveRevRef.current) liveRevRef.current = lr;
+  }, [liveCard]);
+  const titleEditRevRef = useRef<number | null>(null);
+  const descEditRevRef = useRef<number | null>(null);
+  const [editConflict, setEditConflict] = useState<EditConflict | null>(null);
   const siblingNav = useMemo(() => {
     if (!card.listId || !card.boardId) return { prev: null, next: null };
     const siblings = allCards
@@ -685,9 +709,32 @@ export function CardModal({
     const retry = async () => {
       await updateCard({ id: card.id, title: trimmed });
     };
+    // Rev captured when editing began (input focus); falls back to the
+    // freshest known rev for programmatic saves.
+    const expected = titleEditRevRef.current ?? liveRevRef.current;
     start(async () => {
-      try {
-        await retry();
+      const r = await updateCardChecked({
+        id: card.id,
+        title: trimmed,
+        expectedEditRev: expected,
+      });
+      if (r.ok) {
+        liveRevRef.current = r.data.editRev;
+        // Write the fresh rev into the store so the monotonic effect and
+        // every other surface see truth (cold-review #1/#3), and advance
+        // a pending description burst past our own title change so the
+        // autosave can't conflict with it (cold-review #2).
+        updateCardLocal(card.id, { editRev: r.data.editRev } as Record<
+          string,
+          unknown
+        >);
+        if (
+          descEditRevRef.current !== null &&
+          descEditRevRef.current < r.data.editRev
+        ) {
+          descEditRevRef.current = r.data.editRev;
+        }
+        titleEditRevRef.current = null;
         setLastSavedAt(new Date());
         const writeTitle = async (to: string, from: string) => {
           setTitle(to);
@@ -708,18 +755,86 @@ export function CardModal({
           undo: () => writeTitle(prev, trimmed),
           redo: () => writeTitle(trimmed, prev),
         });
-      } catch (err) {
+      } else if (isVersionConflict(r.error)) {
+        setEditConflict({
+          field: "title",
+          mine: trimmed,
+          theirs: r.error.context.currentTitle,
+          currentRev: r.error.context.currentRev,
+        });
+      } else {
         lastSavedTitle.current = prev;
         updateCardLocal(card.id, { title: prev });
-        const msg = (err as Error).message;
-        toast.error(msg);
-        errorBus.push({ message: `Title save failed: ${msg}`, retry });
+        toast.error(r.error.message);
+        errorBus.push({ message: `Title save failed: ${r.error.message}`, retry });
+      }
+    });
+  }
+
+  // card-edit-concurrency U3 — resolution for the keep/take dialog.
+  function resolveEditConflict(choice: "mine" | "theirs", c: EditConflict) {
+    setEditConflict(null);
+    const applyLocal = (value: string) => {
+      if (c.field === "title") {
+        setTitle(value);
+        lastSavedTitle.current = value;
+        updateCardLocal(card.id, { title: value });
+      } else {
+        setDescription(value);
+        lastSavedDesc.current = value;
+        updateCardLocal(card.id, {
+          description: value.length === 0 ? null : value,
+        });
+      }
+    };
+    if (choice === "theirs") {
+      applyLocal(c.theirs);
+      liveRevRef.current = c.currentRev;
+      titleEditRevRef.current = null;
+      descEditRevRef.current = null;
+      return;
+    }
+    start(async () => {
+      const r = await updateCardChecked({
+        id: card.id,
+        ...(c.field === "title"
+          ? { title: c.mine }
+          : { description: c.mine.length === 0 ? null : c.mine }),
+        expectedEditRev: c.currentRev,
+      });
+      if (r.ok) {
+        liveRevRef.current = r.data.editRev;
+        descEditRevRef.current = r.data.editRev;
+        updateCardLocal(card.id, { editRev: r.data.editRev } as Record<
+          string,
+          unknown
+        >);
+        applyLocal(c.mine);
+        setLastSavedAt(new Date());
+      } else if (isVersionConflict(r.error)) {
+        // Lost another race meanwhile — re-open with the fresher theirs.
+        setEditConflict({
+          ...c,
+          theirs:
+            c.field === "title"
+              ? r.error.context.currentTitle
+              : r.error.context.currentDescription ?? "",
+          currentRev: r.error.context.currentRev,
+        });
+      } else {
+        toast.error(r.error.message);
       }
     });
   }
 
   function scheduleDescSave(next: string) {
     setDescription(next);
+    // Arm the burst baseline on the first keystroke of an edit burst —
+    // each successful autosave re-arms it, so autosave never conflicts
+    // with itself while a teammate's mid-burst change still does.
+    if (descEditRevRef.current === null) {
+      descEditRevRef.current = liveRevRef.current;
+    }
     if (descTimer.current) clearTimeout(descTimer.current);
     descTimer.current = setTimeout(() => {
       if (next === lastSavedDesc.current) return;
@@ -732,9 +847,41 @@ export function CardModal({
           description: next.length === 0 ? null : next,
         });
       };
+      const expected = descEditRevRef.current ?? liveRevRef.current;
       start(async () => {
-        try {
-          await retry();
+        const rc = await updateCardChecked({
+          id: card.id,
+          description: next.length === 0 ? null : next,
+          expectedEditRev: expected,
+        });
+        if (!rc.ok) {
+          if (isVersionConflict(rc.error)) {
+            setEditConflict({
+              field: "description",
+              mine: next,
+              theirs: rc.error.context.currentDescription ?? "",
+              currentRev: rc.error.context.currentRev,
+            });
+          } else {
+            lastSavedDesc.current = prev;
+            updateCardLocal(card.id, {
+              description: prev.length === 0 ? null : prev,
+            });
+            toast.error(rc.error.message);
+            errorBus.push({
+              message: `Description save failed: ${rc.error.message}`,
+              retry,
+            });
+          }
+          return;
+        }
+        {
+          liveRevRef.current = rc.data.editRev;
+          descEditRevRef.current = rc.data.editRev;
+          updateCardLocal(card.id, { editRev: rc.data.editRev } as Record<
+            string,
+            unknown
+          >);
           setLastSavedAt(new Date());
           const writeDesc = async (to: string, from: string) => {
             setDescription(to);
@@ -761,17 +908,6 @@ export function CardModal({
             message: next.length === 0 ? "Description cleared" : "Description updated",
             undo: () => writeDesc(prev, next),
             redo: () => writeDesc(next, prev),
-          });
-        } catch (err) {
-          lastSavedDesc.current = prev;
-          updateCardLocal(card.id, {
-            description: prev.length === 0 ? null : prev,
-          });
-          const msg = (err as Error).message;
-          toast.error(msg);
-          errorBus.push({
-            message: `Description save failed: ${msg}`,
-            retry,
           });
         }
       });
@@ -930,6 +1066,11 @@ export function CardModal({
             id="card-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            onFocus={() => {
+              // Capture the rev the user starts editing from (conflict
+              // baseline) — see liveRevRef block above.
+              titleEditRevRef.current = liveRevRef.current;
+            }}
             onBlur={persistTitle}
             readOnly={isGuest}
             required
@@ -1249,6 +1390,13 @@ export function CardModal({
           cardTitle={card.title}
         />
       )}
+      <EditConflictDialog
+        conflict={editConflict}
+        onResolve={resolveEditConflict}
+        onOpenChange={(open) => {
+          if (!open) setEditConflict(null);
+        }}
+      />
     </div>
   );
 

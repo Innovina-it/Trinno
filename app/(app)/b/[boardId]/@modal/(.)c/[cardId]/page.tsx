@@ -55,6 +55,7 @@ export default async function InterceptedCardPage({
         priority: c.priority,
         coverKind: c.coverKind as "none" | "color" | "image",
         coverValue: c.coverValue,
+        editRev: c.editRev,
       }}
       sprints={sprints.map((s) => ({ id: s.id, name: s.name, state: s.state }))}
       workspaceId={board?.workspaceId}

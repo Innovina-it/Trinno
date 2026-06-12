@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { undoBus } from "@/lib/undo-bus";
+import { CardEditConflictError } from "@/lib/card-edit-conflict";
+import {
+  EditConflictDialog,
+  type EditConflict,
+} from "./card/edit-conflict-dialog";
 import {
   ArrowRight,
   FolderKanban,
@@ -89,6 +94,7 @@ export type QuickViewCard = {
   priority: string | null;
   startDate: Date | string | null;
   targetDate: Date | string | null;
+  editRev?: number;
 };
 
 export type QuickViewCardType = "story" | "task" | "subtask" | "bug";
@@ -118,6 +124,10 @@ export type PatchInput = {
   priority?: CardPriority | null;
   startDate?: Date | string | null;
   targetDate?: Date | string | null;
+  // card-edit-concurrency U3 — when present (text fields in the patch),
+  // the host routes through the rev-checked write and throws a typed
+  // CardEditConflictError on conflict.
+  expectedEditRev?: number;
 };
 
 type TypeOption = {
@@ -477,6 +487,10 @@ function CardQuickViewBody({
 
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
+  // card-edit-concurrency U3 — conflict dialog state + the fresh rev to
+  // use when re-running the save after a resolution.
+  const [editConflict, setEditConflict] = useState<EditConflict | null>(null);
+  const conflictRevOverrideRef = useRef<number | null>(null);
 
   const exitTitleEdit = useCallback(() => {
     titleCommitRef.current = true;
@@ -584,6 +598,13 @@ function CardQuickViewBody({
     if (typeChanged) patch.type = typeDraft;
     if (startChanged) patch.startDate = startDraft;
     if (targetChanged) patch.targetDate = targetDraft;
+    // card-edit-concurrency U3 — engage the rev check only when text
+    // fields ride in this save. revOverrideRef carries the fresh rev
+    // after a conflict resolution re-run.
+    if (titleChanged || descChanged) {
+      patch.expectedEditRev =
+        conflictRevOverrideRef.current ?? card.editRev ?? 0;
+    }
     const queuedDrafts = draftSubtasks;
     const memberAdds: string[] = [];
     const memberRemoves: string[] = [];
@@ -608,7 +629,32 @@ function CardQuickViewBody({
     setSaving(true);
     try {
       if (Object.keys(patch).length > 0) {
-        await onPatch?.(patch);
+        try {
+          await onPatch?.(patch);
+        } catch (err) {
+          if (err instanceof CardEditConflictError) {
+            const onTitle =
+              titleChanged && err.ctx.currentTitle !== trimmedTitle;
+            setEditConflict(
+              onTitle
+                ? {
+                    field: "title",
+                    mine: trimmedTitle,
+                    theirs: err.ctx.currentTitle,
+                    currentRev: err.ctx.currentRev,
+                  }
+                : {
+                    field: "description",
+                    mine: descDraft,
+                    theirs: err.ctx.currentDescription ?? "",
+                    currentRev: err.ctx.currentRev,
+                  },
+            );
+            return; // popup stays open; dialog drives the retry
+          }
+          throw err;
+        }
+        conflictRevOverrideRef.current = null;
         // undo-redo-stack G2 — the quick view commits all field edits as
         // one batched patch, so mirror it as ONE history entry. onPatch's
         // closure carries the card id, so undo works after close too.
@@ -630,10 +676,14 @@ function CardQuickViewBody({
             throw err;
           }
         };
+        // Strip the rev from the replayed patch — undo/redo are unchecked
+        // writes by design (a stale rev here would dead-end the redo).
+        const redoPatch = { ...patch };
+        delete redoPatch.expectedEditRev;
         undoBus.push({
           message: `Updated "${card.title}"`,
           undo: () => writePatch(inverse),
-          redo: () => writePatch(patch),
+          redo: () => writePatch(redoPatch),
         });
       }
       // Sequentially commit queued subtasks. The injected onCreateSubtask
@@ -686,12 +736,34 @@ function CardQuickViewBody({
     card.title,
     card.startDate,
     card.targetDate,
+    card.editRev,
     onPatch,
     onCreateSubtask,
     onToggleMember,
     onClose,
     dirtyRef,
   ]);
+
+  // card-edit-concurrency U3 — dialog resolution. Drafts are state, so
+  // the save re-run rides a flag + effect to see the updated values.
+  const [pendingConflictRerun, setPendingConflictRerun] = useState(false);
+  useEffect(() => {
+    if (!pendingConflictRerun) return;
+    setPendingConflictRerun(false);
+    void commitSave();
+  }, [pendingConflictRerun, commitSave]);
+  const resolveEditConflict = useCallback(
+    (choice: "mine" | "theirs", c: EditConflict) => {
+      setEditConflict(null);
+      conflictRevOverrideRef.current = c.currentRev;
+      if (choice === "theirs") {
+        if (c.field === "title") setTitleDraft(c.theirs);
+        else setDescDraft(c.theirs);
+      }
+      setPendingConflictRerun(true);
+    },
+    [],
+  );
 
   const discardAndClose = useCallback(() => {
     resetDrafts();
@@ -1267,6 +1339,13 @@ function CardQuickViewBody({
               }
             : undefined
         }
+      />
+      <EditConflictDialog
+        conflict={editConflict}
+        onResolve={resolveEditConflict}
+        onOpenChange={(open) => {
+          if (!open) setEditConflict(null);
+        }}
       />
     </>
   );
