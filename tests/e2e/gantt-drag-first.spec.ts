@@ -33,7 +33,9 @@ async function signupAndLandOnWorkspace(
   page: Page,
   prefix: string,
 ): Promise<{ email: string; workspaceId: string }> {
-  const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
+  // Allowed domain — the email-domain hook rejects @example.com (see
+  // auth.spec.ts); using it here made every test fail at signup.
+  const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@innovina.it`;
   await page.context().addCookies([{ name: "tr_seed_demo", value: "minimal", domain: "localhost", path: "/" }]);
     await page.goto("/signup");
   await page.getByLabel("Email").fill(email);
@@ -80,35 +82,46 @@ async function addCardToList(page: Page, listTitle: string, cardTitle: string) {
     .locator("[data-list-id]")
     .filter({ hasText: listTitle })
     .first();
-  const trigger = column.getByRole("button", { name: "+ Add a card" });
-  if (await trigger.isVisible().catch(() => false)) {
-    await trigger.click();
+  // The inline composer was replaced by the NewCardDialog (list-add-card
+  // trigger + roadmap-new-card-* inputs) — see card-features.spec.ts.
+  await column.getByTestId("list-add-card").click();
+  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
+  await page.getByTestId("roadmap-new-card-title").fill(cardTitle);
+  await page.getByTestId("roadmap-new-card-submit").click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 5000 });
+  // Default board filter is "Mine"; flip via URL so the unassigned card
+  // is visible (same workaround as card-features.spec.ts).
+  const url = new URL(page.url());
+  if (url.searchParams.get("assignee") !== "all") {
+    url.searchParams.set("assignee", "all");
+    await page.goto(url.toString());
   }
-  await column.getByPlaceholder("Card title").fill(cardTitle);
-  await column.getByRole("button", { name: /^add$/i }).click();
   await expect(column.getByText(cardTitle, { exact: true })).toBeVisible({
     timeout: 5000,
   });
 }
 
 async function openCardModal(page: Page, cardTitle: string) {
+  // Tile click opens the quick-view popover, not the full modal —
+  // navigate to /b/<board>/c/<card> directly (card-features.spec.ts
+  // pattern); the hero title input is the readiness signal.
   const tile = page
     .locator("[data-card-id]")
     .filter({ hasText: cardTitle })
     .first();
-  const title = tile.getByText(cardTitle, { exact: true }).first();
-  await title.click();
-  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
+  const cardId = await tile.getAttribute("data-card-id");
+  expect(cardId, "tile carries a data-card-id").toBeTruthy();
+  const boardMatch = page.url().match(/\/b\/([0-9a-f-]{36})/);
+  expect(boardMatch, "currently on a board route").toBeTruthy();
+  await page.goto(`/b/${boardMatch![1]}/c/${cardId}`);
+  await expect(page.locator("#card-title")).toBeVisible();
 }
 
 async function closeCardModal(page: Page) {
-  const dialog = page.getByRole("dialog");
-  await dialog.click({ position: { x: 5, y: 5 } }).catch(() => {});
-  await page.keyboard.press("Escape");
-  if ((await page.getByRole("dialog").count()) > 0) {
-    await page.keyboard.press("Escape");
-  }
-  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 5000 });
+  // Full-page route doesn't render as <Dialog>; the explicit Close
+  // button dismisses + bounces back to /b/...
+  await page.getByRole("button", { name: /^close$/i }).click();
+  await expect(page).toHaveURL(/\/b\/[0-9a-f-]{36}(\?|$)/);
 }
 
 async function setRoadmapDates(page: Page, start: Date, target: Date) {
@@ -119,16 +132,15 @@ async function setRoadmapDates(page: Page, start: Date, target: Date) {
 }
 
 async function setCardType(page: Page, kind: "Epic" | "Story") {
-  await page
-    .getByRole("button", { name: /^(TASK|STORY|EPIC|BUG|SUBTASK)/ })
-    .first()
-    .click();
-  await page
-    .getByRole("menuitemradio", { name: new RegExp(`^${kind}$`) })
-    .click();
-  await expect(
-    page.getByRole("button", { name: new RegExp(`^${kind.toUpperCase()}`) }),
-  ).toBeVisible({ timeout: 5000 });
+  // Type picker now exposes card-type-edit (trigger) and
+  // card-type-option-<id> items; the old TASK/STORY/EPIC button name
+  // became "Change type from <label>".
+  await page.getByTestId("card-type-edit").click();
+  await page.getByTestId(`card-type-option-${kind.toLowerCase()}`).click();
+  await expect(page.getByTestId("card-type-display")).toContainText(
+    new RegExp(kind, "i"),
+    { timeout: 5000 },
+  );
 }
 
 async function setParentToCard(page: Page, parentCardTitle: string) {
@@ -700,6 +712,28 @@ test("G8.5 dragging start edge near a blocker target snaps exactly", async ({
     .slice(0, 10);
   const validSnaps = [blockerISO, prevMondayISO, nextMondayISO];
   expect(validSnaps).toContain(startInputValue);
+
+  // undo-redo-stack B1: the drag pushed an undo entry — Ctrl+Z reverts
+  // the reschedule (start back to its pre-drag value), Ctrl+Shift+Z
+  // re-applies it.
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("roadmap-bar-dates-dialog")).toHaveCount(0);
+  await page.keyboard.press("Control+z");
+  await expect(
+    page.getByText(/Undid: Rescheduled "Card A Blocked"/),
+  ).toBeVisible();
+  await barAPost.hover();
+  await barAPost.getByTestId("roadmap-bar-overflow").click();
+  await page.getByTestId("roadmap-bar-menu-edit-dates").click();
+  await expect(page.getByTestId("roadmap-bar-dates-start")).toHaveValue(
+    aStart.toISOString().slice(0, 10),
+  );
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("roadmap-bar-dates-dialog")).toHaveCount(0);
+  await page.keyboard.press("Control+Shift+z");
+  await expect(
+    page.getByText(/Redid: Rescheduled "Card A Blocked"/),
+  ).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

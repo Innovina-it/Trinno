@@ -85,8 +85,8 @@ test("watchers, mentions, inbox, time tracking, dashboards", async ({
   const b = await ctxB.newPage();
 
   const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-  const emailA = `jca-${stamp}@example.com`;
-  const emailB = `jcb-${stamp}@example.com`;
+  const emailA = `jca-${stamp}@innovina.it`;
+  const emailB = `jcb-${stamp}@innovina.it`;
   const localPartB = emailB.split("@")[0];
 
   // 1. Sign up user A. Create board with one card "Bug X".

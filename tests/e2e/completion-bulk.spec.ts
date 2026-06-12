@@ -26,7 +26,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
 async function signupAndSeed(page: Page, prefix: string): Promise<{ workspaceId: string }> {
-  const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
+  const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@innovina.it`;
   // "1" -> rich seed (boards + dated cards + sprints).
   await page.context().addCookies([
     { name: "tr_seed_demo", value: "1", domain: "localhost", path: "/" },

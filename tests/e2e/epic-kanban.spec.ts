@@ -38,7 +38,7 @@ async function fetchConfirmLink(email: string): Promise<string> {
 }
 
 async function signupSeedAndLand(page: Page, prefix: string) {
-  const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
+  const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@innovina.it`;
   await page.context().addCookies([{ name: "tr_seed_demo", value: "minimal", domain: "localhost", path: "/" }]);
     await page.goto("/signup");
   await page.getByLabel("Email").fill(email);

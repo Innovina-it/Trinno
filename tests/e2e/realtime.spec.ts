@@ -18,8 +18,8 @@ test("user A creates a list → user B sees it within 3 s", async ({ browser }) 
   const b = await ctxB.newPage();
 
   const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-  const emailA = `rta-${stamp}@example.com`;
-  const emailB = `rtb-${stamp}@example.com`;
+  const emailA = `rta-${stamp}@innovina.it`;
+  const emailB = `rtb-${stamp}@innovina.it`;
   // Display name is the email's local-part (see migration 0002_profile_trigger.sql).
   const localPartB = emailB.split("@")[0];
 

@@ -193,3 +193,84 @@ test("roadmap: milestone create undone from the boards page, redone on roadmap (
   await page.keyboard.press("Control+Shift+z");
   await expect(page.getByText(/Redid: Milestone "QA M1" created/)).toBeVisible();
 });
+
+test("roadmap: Gantt bar drag is undoable and redoable (B1 commit path, live gesture)", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const wsId = await signupAndLandOnDefaultWorkspace(page);
+  await gotoBoards(page, wsId);
+
+  // Scaffold: board + list + card (same flow as the first test).
+  await expect(async () => {
+    await page.getByRole("button", { name: /new board/i }).click();
+    await expect(
+      page.getByRole("button", { name: /^continue$/i }),
+    ).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
+  await page.getByRole("button", { name: /^continue$/i }).click();
+  await page.getByLabel("Title").fill("Drag QA");
+  await page.getByRole("button", { name: /create board/i }).click();
+  await expect(page).toHaveURL(/\/b\/[0-9a-f-]{36}/);
+  await page.getByRole("button", { name: "+ Add a list" }).click();
+  await page.getByPlaceholder("List title").fill("Tasks");
+  await page.getByRole("button", { name: /^add list$/i }).click();
+  const tasksColumn = page
+    .locator("[data-list-id]")
+    .filter({ hasText: "Tasks" })
+    .first();
+  await tasksColumn.getByTestId("list-add-card").click();
+  await page.getByTestId("roadmap-new-card-title").fill("Drag me");
+  await page.getByTestId("roadmap-new-card-submit").click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  {
+    const url = new URL(page.url());
+    url.searchParams.set("assignee", "all");
+    await page.goto(url.toString());
+  }
+
+  // The NewCardDialog creates the card already scheduled (default
+  // 2-week span), so it lands on the roadmap without a promote step.
+  await gotoRetry(page, `/w/${wsId}/roadmap`, /\/w\/[0-9a-f-]{36}\/roadmap/);
+  const bar = page
+    .getByTestId("roadmap-bar")
+    .filter({ hasText: "Drag me" })
+    .first();
+  await expect(bar).toBeVisible({ timeout: 8000 });
+
+  // Capture the pre-drag start date from the bar's edit-dates dialog.
+  async function readStartDate(): Promise<string> {
+    await bar.hover();
+    await bar.getByTestId("roadmap-bar-overflow").click();
+    await page.getByTestId("roadmap-bar-menu-edit-dates").click();
+    await expect(page.getByTestId("roadmap-bar-dates-dialog")).toBeVisible();
+    const v = await page
+      .getByTestId("roadmap-bar-dates-start")
+      .getByTestId("date-picker-display")
+      .inputValue();
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("roadmap-bar-dates-dialog")).toHaveCount(0);
+    return v;
+  }
+  const originalStart = await readStartDate();
+
+  // Drag the bar body rightwards (move mode), far enough to change days.
+  const box = await bar.boundingBox();
+  if (!box) throw new Error("missing bar bbox");
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 6, startY, { steps: 4 });
+  await page.mouse.move(startX + 160, startY, { steps: 25 });
+  await page.mouse.up();
+  await page.waitForTimeout(800);
+
+  // Undo restores the original start date; redo re-applies the drag.
+  await page.keyboard.press("Control+z");
+  await expect(page.getByText(/Undid: Rescheduled "Drag me"/)).toBeVisible();
+  expect(await readStartDate()).toBe(originalStart);
+  await page.keyboard.press("Control+Shift+z");
+  await expect(page.getByText(/Redid: Rescheduled "Drag me"/)).toBeVisible();
+  expect(await readStartDate()).not.toBe(originalStart);
+});

@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
 async function signupAndCreateBoard(page: Page) {
-  const email = `sa-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
+  const email = `sa-${Date.now()}-${Math.floor(Math.random() * 1e6)}@innovina.it`;
   await page.context().addCookies([{ name: "tr_seed_demo", value: "minimal", domain: "localhost", path: "/" }]);
     await page.goto("/signup");
   await page.getByLabel("Email").fill(email);

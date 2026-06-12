@@ -13,7 +13,7 @@ async function signupAndLand(page: Page, email: string) {
 
 
 test("workspace+board lifecycle", async ({ page }) => {
-  const email = `wb-${Date.now()}@example.com`;
+  const email = `wb-${Date.now()}@innovina.it`;
   await signupAndLand(page, email);
 
   // Open workspace switcher in nav, click "New workspace".

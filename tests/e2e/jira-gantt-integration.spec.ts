@@ -93,8 +93,8 @@ test("jira-gantt integration: drag, critical path, cascade, cross-context realti
   test.setTimeout(180_000);
 
   const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-  const emailA = `jga-${stamp}@example.com`;
-  const emailB = `jgb-${stamp}@example.com`;
+  const emailA = `jga-${stamp}@innovina.it`;
+  const emailB = `jgb-${stamp}@innovina.it`;
 
   // Context A: owner. Context B: workspace member who joins via invite.
   const ctxA = await browser.newContext();

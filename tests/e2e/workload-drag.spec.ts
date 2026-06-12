@@ -25,7 +25,7 @@ const PX_PER_DAY_MONTH = 22;
 const PX_TOLERANCE = 1.5;
 
 async function signupAndSeed(page: Page, prefix: string): Promise<{ workspaceId: string }> {
-  const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
+  const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@innovina.it`;
   await page.context().addCookies([
     { name: "tr_seed_demo", value: "1", domain: "localhost", path: "/" },
   ]);

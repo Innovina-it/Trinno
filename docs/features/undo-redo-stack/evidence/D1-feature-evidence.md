@@ -21,7 +21,7 @@ Real artifact observed (tests/e2e/undo-redo-stack.spec.ts, 2/2 passed; full app 
 Flake note: board test passed runs 1 and 3, failed once mid-batch on a timing wait (dev server under 3 parallel spec-run load); not reproducible standalone.
 
 Known gaps (honest):
-  - Gantt BAR DRAG undo (B1) not exercised in the spec — the repo's own gantt-drag e2e suite is entirely broken on a pre-existing bed issue (its signup helper uses @example.com, which the email-domain hook rejects; every test fails at signup before reaching the Gantt). B1's commit path (persistDates) is the same entry shape verified via milestones/labels, but the drag gesture itself awaits either fixing that spec's email domain or a manual pass.
+  - Gantt BAR DRAG undo (B1): GAP CLOSED 2026-06-12 — third test added to undo-redo-stack.spec.ts performs the real drag gesture (mouse down/sweep/up on the bar), then verifies Ctrl+Z restores the captured pre-drag start date and Ctrl+Shift+Z re-applies it. 3/3 green. (The repo's own gantt-drag suite remains blocked on a deeper issue: it predates the epic→sub-board pivot, ead4c80 — see follow-ups.)
   - cascade composite undo (B2) verified by code + unit-level bus tests only; needs a seeded dependency chain to exercise live.
   - full page refresh drops the stack — BY DESIGN (in-memory, documented in A1 spec and the e2e spec comments).
   - e2e runs created throwaway users/workspaces (ur-*/cf-*@innovina.it) on the dev DB, consistent with existing spec practice; cleanup not run.
