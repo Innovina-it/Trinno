@@ -1,6 +1,6 @@
 # Recon — card edit concurrency protection (Gate 0 artifact, consolidated)
 
-Date: 2026-06-11 · Tier: 3 (schema migration on a hot table; prod) · Status: presented at Gate 0, awaiting approval
+Date: 2026-06-11 · Tier: 3 (schema migration on a hot table; prod) · Status: APPROVED at Gate 0, 2026-06-12 (conflict UX: keep-mine/take-theirs dialog; column name edit_rev; mixed-patch policy: check only when title/description present)
 
 Consolidates two prior recon passes (this dir + docs/features/concurrent-card-edits/, both 2026-06-11, neither approved at Gate 0). Conflicting migration-state claims re-verified fresh this session; all load-bearing code claims spot-checked.
 
