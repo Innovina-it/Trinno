@@ -64,7 +64,9 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { createReadStream, readFileSync } from "fs";
+import { spawnSync } from "child_process";
+import { createReadStream, readFileSync, unlinkSync } from "fs";
+import { tmpdir } from "os";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -157,11 +159,52 @@ const DRIVE_FOLDER_ID =
 const DELIVERABLE_SUBFOLDER =
   process.env.SWICH_DELIVERABLE_SUBFOLDER || "Deliverables";
 const SA_KEYFILE = process.env.GOOGLE_SA_KEYFILE;
-// Each deliverable doc is a copy of the project .docx template (same skeleton as
-// the ARISE template, with Swich's header) — uploaded via Drive; no Docs API.
+// Each deliverable doc starts from the project .docx template (same skeleton as
+// the ARISE template, with Swich's header), gets its [DOCUMENT TITLE] and
+// [Document subtitle] placeholders filled inside the .docx, and is uploaded via
+// Drive with conversion to a native Google Doc. Drive API only — no Docs API.
 const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const TEMPLATE_DOCX = join(__dirname, "templates", "swich.docx");
+
+// Fill the title placeholders inside the .docx (a zip) before upload — the same
+// zipfile surgery as build-templates.py. Both placeholders are contiguous
+// strings in word/document.xml (verified against templates/swich.docx).
+const PATCH_DOCX_PY = `
+import sys, zipfile
+from xml.sax.saxutils import escape
+src, dst, title, subtitle = sys.argv[1:5]
+zin = zipfile.ZipFile(src)
+zout = zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED)
+for item in zin.infolist():
+    data = zin.read(item.filename)
+    if item.filename == "word/document.xml":
+        xml = data.decode("utf-8")
+        xml = xml.replace("[DOCUMENT TITLE]", escape(title))
+        xml = xml.replace("[Document subtitle]", escape(subtitle))
+        data = xml.encode("utf-8")
+    zout.writestr(item, data)
+zout.close()
+`;
+
+let patchSeq = 0;
+function patchDocxTemplate(title, subtitle) {
+  const out = join(tmpdir(), `seed-docx-${process.pid}-${++patchSeq}.docx`);
+  const r = spawnSync("python3", [
+    "-c",
+    PATCH_DOCX_PY,
+    TEMPLATE_DOCX,
+    out,
+    title,
+    subtitle,
+  ]);
+  if (r.status !== 0) {
+    throw new Error(
+      `docx patch failed for "${title}": ${r.stderr?.toString().trim() || r.error?.message}`,
+    );
+  }
+  return out;
+}
 
 async function setupDrive() {
   if (!SA_KEYFILE) return null;
@@ -188,10 +231,12 @@ async function setupDrive() {
   // Deliverables folders are resolved once and reused across deliverables in
   // the same OR (one create, not one per doc).
   const cache = new Map();
-  async function findOrCreate(name, mimeType, parentId, tplDocx) {
+  async function findOrCreate(name, mimeType, parentId, makeDocx) {
     const key = `${parentId} ${name}`;
     if (cache.has(key)) return cache.get(key);
-    const q = `name='${esc(name)}' and '${parentId}' in parents and trashed=false`;
+    // mimeType filter: leftover .docx uploads from before native-Doc conversion
+    // must not be reused — a fresh native Doc is created next to them instead.
+    const q = `name='${esc(name)}' and '${parentId}' in parents and mimeType='${mimeType}' and trashed=false`;
     const list = await drive.files.list({
       q,
       fields: "files(id,name,webViewLink)",
@@ -210,12 +255,19 @@ async function setupDrive() {
         supportsAllDrives: true,
         fields: "id,name,webViewLink",
       };
-      // Deliverable docs are a copy of the project .docx template — Drive API only.
-      if (tplDocx) {
-        args.media = { mimeType: DOCX_MIME, body: createReadStream(tplDocx) };
+      // Deliverable docs upload a per-doc patched copy of the template (title
+      // filled); requestBody.mimeType is the native Doc mime, so Drive converts
+      // on upload (no .DOCX badge). makeDocx runs lazily — only when creating.
+      const tmpDocx = makeDocx ? makeDocx() : null;
+      if (tmpDocx) {
+        args.media = { mimeType: DOCX_MIME, body: createReadStream(tmpDocx) };
       }
-      const r = await drive.files.create(args);
-      res = { ...r.data, created: true };
+      try {
+        const r = await drive.files.create(args);
+        res = { ...r.data, created: true };
+      } finally {
+        if (tmpDocx) unlinkSync(tmpDocx);
+      }
     }
     cache.set(key, res);
     return res;
@@ -223,16 +275,21 @@ async function setupDrive() {
 
   return {
     folderName: folder.data.name,
-    // <folder>/<OR title>/<Deliverables>/<doc>  — each doc is a copy of the
-    // project template (scripts/seeds/templates/swich.docx).
-    async docUrlFor(orName, docName) {
+    // <folder>/<OR title>/<Deliverables>/<doc>  — each doc is a native Google
+    // Doc converted from the project template (scripts/seeds/templates/swich.docx),
+    // with [DOCUMENT TITLE]/[Document subtitle] filled in the .docx pre-upload.
+    async docUrlFor(orName, docName, meta = {}) {
       const orFolder = await findOrCreate(orName, FOLDER_MIME, DRIVE_FOLDER_ID);
       const delFolder = await findOrCreate(
         DELIVERABLE_SUBFOLDER,
         FOLDER_MIME,
         orFolder.id,
       );
-      const doc = await findOrCreate(docName, DOCX_MIME, delFolder.id, TEMPLATE_DOCX);
+      const subtitle =
+        [meta.lead, meta.milestone].filter(Boolean).join(" · ") || orName;
+      const doc = await findOrCreate(docName, DOC_MIME, delFolder.id, () =>
+        patchDocxTemplate(docName, subtitle),
+      );
       return { url: doc.webViewLink, created: doc.created };
     },
   };
