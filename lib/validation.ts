@@ -203,6 +203,9 @@ export const UpdateCardInput = z.object({
   id: Uuid,
   title: Title.optional(),
   description: z.string().max(20_000).nullable().optional(),
+  // card-edit-concurrency — opt-in optimistic check; only consulted when
+  // the patch touches title/description.
+  expectedEditRev: z.number().int().min(0).optional(),
   dueDate: z.union([z.string(), z.date()]).nullable().optional(),
   dueComplete: z.boolean().optional(),
   type: CardType.optional(),

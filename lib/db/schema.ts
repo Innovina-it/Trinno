@@ -189,6 +189,9 @@ export const cards = pgTable("cards", {
   // Roadmap completion sync: the list this card was in right before the
   // roadmap auto-moved it to 'done'. Consumed + cleared on un-complete.
   preDoneListId: uuid("pre_done_list_id"),
+  // card-edit-concurrency — optimistic-concurrency token for TEXT edits.
+  // Bumped by trigger (0134) only when title/description actually change.
+  editRev: integer("edit_rev").notNull().default(0),
 });
 
 export const labels = pgTable("labels", {

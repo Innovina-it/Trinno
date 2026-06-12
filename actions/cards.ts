@@ -288,6 +288,7 @@ export async function updateCardImpl(token: string, input: {
   coverValue?: string | null;
   ownerId?: string | null;
   completed?: boolean;
+  expectedEditRev?: number;
 }) {
   const parsed = UpdateCardInput.parse(input);
   const actorId = decodeSub(token);
@@ -530,10 +531,51 @@ export async function updateCardImpl(token: string, input: {
         );
       }
     }
+    // card-edit-concurrency U2 — opt-in optimistic check, engaged only
+    // when the caller supplies a rev AND the patch touches text fields.
+    const revCheckActive =
+      parsed.expectedEditRev !== undefined &&
+      (patch.title !== undefined || patch.description !== undefined);
     try {
       const [row] = await tx.update(cards).set(patch)
-        .where(eq(cards.id, parsed.id)).returning();
-      if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
+        .where(
+          revCheckActive
+            ? and(
+                eq(cards.id, parsed.id),
+                eq(cards.editRev, parsed.expectedEditRev!),
+              )
+            : eq(cards.id, parsed.id),
+        )
+        .returning();
+      if (!row) {
+        if (revCheckActive) {
+          // Zero rows is ambiguous: stale rev OR RLS denial. Re-select
+          // under the same user — a visible row means genuine conflict,
+          // and its current text rides along so the client can offer
+          // "take theirs" without a refetch.
+          const [cur] = await tx
+            .select({
+              editRev: cards.editRev,
+              title: cards.title,
+              description: cards.description,
+            })
+            .from(cards)
+            .where(eq(cards.id, parsed.id))
+            .limit(1);
+          if (cur) {
+            throw new StructuredError(
+              "VERSION_CONFLICT",
+              "Card was modified by someone else",
+              {
+                currentRev: cur.editRev,
+                currentTitle: cur.title,
+                currentDescription: cur.description,
+              },
+            );
+          }
+        }
+        throw new StructuredError("ACCESS_DENIED", "Forbidden");
+      }
       return row;
     } catch (err) {
       // Plan #8 cycle-guard trigger raises 'cards: parent cycle detected'.

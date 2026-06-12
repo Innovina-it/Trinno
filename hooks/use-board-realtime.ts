@@ -60,6 +60,7 @@ function rowToCard(r: Record<string, unknown>): CardRow {
     ownerId: (r.owner_id ?? null) as string | null,
     completedAt: r.completed_at ? new Date(r.completed_at as string) : null,
     preDoneListId: (r.pre_done_list_id ?? null) as string | null,
+    editRev: (r.edit_rev ?? 0) as number,
   };
 }
 
