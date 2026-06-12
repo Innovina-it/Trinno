@@ -28,6 +28,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "templates")
@@ -64,6 +65,14 @@ PROJECTS = {
         "partners": "Inspire S.r.l. (consultants: Rafla, Invenio, CNR; research: UNIGE-DIME)",
     },
     "arise": {},  # keep ARISE identity; only strip the placeholder
+    "aegis": {
+        "name": "AEGIS",
+        "sub": "Agricultural Earth-observation with Geospatial Intelligence and Sensing",
+        "partners": "INNOVINA, AITRUST, DARTS, LOGOIL (research: CNR-IMEM, CeRSAA)",
+        # INNOVINA is AEGIS's capofila — keep the Innovina identity in the
+        # Task-lead cell + footer instead of the M.A.R.S. Inspire swap.
+        "lead": "Innovina",
+    },
 }
 
 
@@ -76,7 +85,14 @@ def main():
         raise SystemExit(
             f"source docx not found ({SRC}); re-download the ARISE template first"
         )
-    for key, v in PROJECTS.items():
+    # Optional argv filter (e.g. `build-templates.py aegis`) — rebuilding only
+    # the named templates keeps the other .docx files byte-stable in git.
+    keys = sys.argv[1:] or list(PROJECTS)
+    unknown = [k for k in keys if k not in PROJECTS]
+    if unknown:
+        raise SystemExit(f"unknown project key(s): {', '.join(unknown)}")
+    for key in keys:
+        v = PROJECTS[key]
         wd = f"/tmp/_tpl_{key}"
         if os.path.exists(wd):
             shutil.rmtree(wd)
@@ -88,10 +104,12 @@ def main():
                 continue
             x = open(p, encoding="utf-8").read()
             x = PLACEHOLDER.sub("", x)                      # all projects
-            if "name" in v:                                 # M.A.R.S. header swap
+            if "name" in v:                                 # per-project header swap
                 x = x.replace(T_SUB, esc(v["sub"]))
                 x = x.replace(T_PARTNERS, esc(v["partners"]))
-                x = x.replace("Innovina", "Inspire")        # footer + Task-lead cell
+                # footer + Task-lead cell; M.A.R.S. projects swap to Inspire,
+                # projects led by Innovina set "lead": "Innovina" (no-op).
+                x = x.replace("Innovina", esc(v.get("lead", "Inspire")))
                 x = x.replace("ARISE", esc(v["name"]))      # H1 + Project cell + header
             open(p, "w", encoding="utf-8").write(x)
         out = os.path.join(OUT, key + ".docx")

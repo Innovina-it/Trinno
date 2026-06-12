@@ -34,6 +34,7 @@ Bare names (`aiwepi`, `testbed-500-cards`, …) resolve to `scripts/seeds/<name>
 |---|---|---|---|
 | `aiwepi` | AIWEPI Switch project plan — sub-boards, milestones, status-mixed cards | `team@innovina.it` | sub-boards (parent_board_id), `workspaces.feature_flags`, `milestones` table, status_kind on INSERT |
 | `swich-mars` | Swich / M.A.R.S. Firefighter plan — 5 OR sub-boards, 25 WP tasks, 22 deliverable subtasks (+ Google Doc per deliverable), 8 milestones (16 Jan 2026 → 16 Jul 2028) | `team@innovina.it` | sub-boards (parent_board_id + parent_card_id), `workspaces.feature_flags`, `milestones` table w/ description, calendar-month dating |
+| `aegis` | AEGIS olive-monitoring plan (azione111ds Liguria) — 5 WP sub-boards, 20 task cards, 7 deliverable subtasks (+ native Google Doc per deliverable, title-filled), 5 milestones (1 Jan 2026 → 30 Jun 2027) | `team@innovina.it` | same machinery as swich-mars; real calendar dates; prod ops: `seed-aegis-prod.sh` / `delete-aegis-prod.sh` (runtime name+owner resolution) |
 | `testbed-500-cards` | Board "TB-Big" with 500 cards in Backlog | `testbed@local` | `feature_flags.virtualized_board=true` |
 | `testbed-100-sprint` | "TB-Sprint" board + "TB-Sprint-100" sprint w/ 100 cards | `testbed@local` | bulk-archive / sprint-shift fixtures |
 | `testbed-5k-notif` | 5000 unread notifications for testbed user | `testbed@local` | partial index fixture (mig 0101) |
