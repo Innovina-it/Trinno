@@ -781,6 +781,9 @@ export function RoadmapView({
     // parentCardId chain.
     const baseEligible = (c: typeof storeCards[number]) => {
       if (c.archived) return false;
+      // milestone-as-card: milestones render as their own line/diamond marker
+      // (MilestoneMarkers), never as a roadmap bar — keep them out of the lanes.
+      if (c.type === "milestone") return false;
       if (c.startDate === null || c.targetDate === null) return false;
       return true;
     };

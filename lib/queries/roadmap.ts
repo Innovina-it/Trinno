@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, ne, sql } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
 import { boards, cards } from "@/lib/db/schema";
 
@@ -61,6 +61,8 @@ export async function listRoadmapCards(
         and(
           eq(boards.workspaceId, workspaceId),
           eq(cards.archived, false),
+          // milestone-as-card: milestones are drawn as markers, never as bars.
+          ne(cards.type, "milestone"),
           isNotNull(cards.startDate),
           isNotNull(cards.targetDate),
         ),
