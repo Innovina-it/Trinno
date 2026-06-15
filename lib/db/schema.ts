@@ -187,6 +187,9 @@ export const cards = pgTable("cards", {
   priority: cardPriority("priority"),
   coverKind: text("cover_kind").notNull().default("none"),
   coverValue: text("cover_value"),
+  // milestone-as-card — emoji/icon shown on the roadmap marker label.
+  // Null for non-milestone cards (migration 0136).
+  icon: text("icon"),
   ownerId: uuid("owner_id"),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   // Roadmap completion sync: the list this card was in right before the
