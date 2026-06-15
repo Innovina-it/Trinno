@@ -10,6 +10,7 @@ export async function searchCards(token: string, query: string, limit = 20) {
       from public.cards c
       join public.boards b on b.id = c.board_id
       where c.archived = false
+        and c.type <> 'milestone'
         and c.tsv @@ websearch_to_tsquery('simple', ${query})
       order by ts_rank(c.tsv, websearch_to_tsquery('simple', ${query})) desc
       limit ${limit}

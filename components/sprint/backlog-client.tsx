@@ -74,6 +74,9 @@ export function BacklogClient({
   const cardsBySprint = useMemo(() => {
     const map = new Map<string | null, SprintCardRow[]>();
     for (const c of cards) {
+      // milestone-as-card cards live in a hidden list and must never
+      // surface on normal card surfaces like the backlog/sprint groups.
+      if (c.type === "milestone") continue;
       const k = c.sprintId ?? null;
       const arr = map.get(k) ?? [];
       arr.push({
