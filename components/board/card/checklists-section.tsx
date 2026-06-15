@@ -11,8 +11,9 @@ import {
   toggleChecklistItem,
   removeChecklistItem,
 } from "@/actions/checklists";
+import { createCard, updateCard, archiveCard } from "@/actions/cards";
 import { toast } from "sonner";
-import { Plus, X } from "lucide-react";
+import { ArrowUpRight, Plus, X } from "lucide-react";
 import type { ChecklistItemRow } from "@/lib/queries/board-snapshot";
 import { undoBus } from "@/lib/undo-bus";
 
@@ -28,6 +29,62 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
   const addItem = useBoardStore((s) => s.addChecklistItem);
   const removeItem = useBoardStore((s) => s.removeChecklistItem);
   const updateItem = useBoardStore((s) => s.updateChecklistItem);
+  // milestone-as-card sibling work — "promote" a checklist item into a real
+  // subtask card. Reuses the subtasks-section pattern (createCard + type, then
+  // archive on undo). The parent card's list hosts the new subtask.
+  const parentListId = useBoardStore(
+    (s) => s.cards.find((c) => c.id === cardId)?.listId ?? null,
+  );
+  const addCardLocal = useBoardStore((s) => s.addCard);
+  const updateCardLocal = useBoardStore((s) => s.updateCard);
+  const removeCardLocal = useBoardStore((s) => s.removeCard);
+
+  function promote(it: ChecklistItemRow) {
+    if (!parentListId) {
+      toast.error("Cannot find the card's list");
+      return;
+    }
+    start(async () => {
+      const snapshot = it;
+      try {
+        const child = await createCard({
+          listId: parentListId,
+          title: snapshot.text,
+          parentCardId: cardId,
+        });
+        addCardLocal(child);
+        await updateCard({ id: child.id, type: "subtask" });
+        updateCardLocal(child.id, {
+          type: "subtask",
+          parentCardId: cardId,
+        } as Partial<typeof child>);
+        await removeChecklistItem({ id: snapshot.id });
+        removeItem(snapshot.id);
+        undoBus.push({
+          message: "Promoted to sub-task",
+          undo: async () => {
+            removeCardLocal(child.id);
+            try {
+              await archiveCard({ id: child.id, archived: true });
+              const restored = await addChecklistItem({
+                checklistId: snapshot.checklistId,
+                text: snapshot.text,
+              });
+              addItem(restored);
+              if (snapshot.completed) {
+                await toggleChecklistItem({ id: restored.id, completed: true });
+                updateItem(restored.id, { completed: true });
+              }
+            } catch (err) {
+              toast.error("Undo failed: " + (err as Error).message);
+            }
+          },
+        });
+      } catch (err) {
+        toast.error((err as Error).message);
+      }
+    });
+  }
 
   const isGuest = useIsGuest();
   const [adding, setAdding] = useState(false);
@@ -192,10 +249,20 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
                     {it.text}
                   </span>
                   {!isGuest && (
+                  <>
                   <Button
                     size="sm"
                     variant="ghost"
                     className="ml-auto"
+                    disabled={pending}
+                    title="Promote to sub-task"
+                    onClick={() => promote(it)}
+                  >
+                    <ArrowUpRight className="size-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     disabled={pending}
                     onClick={() =>
                       start(async () => {
@@ -236,6 +303,7 @@ export function ChecklistsSection({ cardId }: { cardId: string }) {
                   >
                     <X className="size-3" />
                   </Button>
+                  </>
                   )}
                 </li>
               ))}
