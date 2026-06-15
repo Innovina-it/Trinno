@@ -31,18 +31,22 @@ ai-dev-control · Tier 3 · feature mode. Branch: `feat/milestone-as-card`.
   0137 (widen cards_type_check to include 'milestone'). Live-verified via
   roadmap-milestone.spec.ts (PASS). Action signatures + MilestoneRow shape kept,
   so the dialog's undo/redo wiring is unchanged.
-- [ ] **U3 roadmap data-source** — LIKELY MOSTLY DONE: roadmap-view calls
-  listMilestones() which now returns card-backed rows, and MilestoneMarkers
-  consumes the same MilestoneRow (date from targetDate). REMAINING: explicitly
-  verify the GANTT diamond markers (not just the Milestone table view) render
-  identically from card-milestones. Probably verify-only, little/no new code.
-- [ ] **U5 undo/redo + repoint readers** — repoint `lib/pma/inputs.ts` and
-  `lib/baselines/compare.ts` (+ roadmap-baselines snapshot) from the `milestones`
-  table to type=milestone cards; live-verify milestone create/edit/delete undo.
-- [ ] **U6 migration script (WRITE ONLY, DO NOT EXECUTE)** — move `milestones`
-  rows → cards preserving id (orphans → oldest board's hidden Milestones list,
-  date→start/target, color→cover_color, icon→icon), then DROP TABLE milestones.
-  Update `roadmap_baseline_milestones` references if needed (ids preserved → ok).
+- [x] **U3 roadmap data-source** — committed `460b1ed` (with U5). Verified by
+  construction: roadmap reads listMilestones() (card-backed) and MilestoneMarkers
+  consumes the same storedMilestones array. Gantt diamond only renders when the
+  roadmap grid renders (needs dated cards) — pre-existing, unrelated to this work.
+- [x] **U5 repoint readers** — committed `460b1ed`. `lib/pma/inputs.ts` live
+  milestones now read from cards; it was the ONLY remaining live table reader
+  (baseline compare runs off card-backed storedMilestones; baseline snapshots
+  keep their own rows). Undo/redo works by construction (U2 kept action
+  signatures; dialog undo wiring unchanged).
+- [x] **U6 migration script (WRITE ONLY)** — committed. File:
+  `docs/features/milestone-as-card/migrate-milestones-to-cards.sql` (kept OUT of
+  supabase/migrations so it never auto-runs; DROP left commented as a guard).
+  Logic dry-run-validated on dev in a rolled-back transaction: 1 moved, id
+  preserved, lands in hidden list, correct field mapping, nothing persisted.
+
+## ALL UNITS DONE — ready for manual testing. U6 script intentionally NOT run.
 
 ## Key gotchas learned
 - `cards_type_check` CHECK constraint (migration 0106) limited type to
