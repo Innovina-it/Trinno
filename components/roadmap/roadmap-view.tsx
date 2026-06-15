@@ -2642,9 +2642,9 @@ export function RoadmapView({
                       <span
                         data-testid={`lane-baseline-${ll.lane.id}`}
                         title={`Baseline: ${compareDetail.meta.name}`}
-                        className="mt-0.5 max-w-[90px] shrink-0 truncate rounded-sm bg-sky-500/20 px-1 text-[9px] font-medium leading-tight tracking-[0.08em] text-sky-300"
+                        className="mt-0.5 shrink-0 rounded-sm bg-sky-500/20 px-1 text-[9px] font-medium leading-tight tracking-[0.08em] text-sky-300"
                       >
-                        {compareDetail.meta.name}
+                        BASELINE
                       </span>
                     )}
                   </div>
