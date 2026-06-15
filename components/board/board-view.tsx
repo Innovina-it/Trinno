@@ -96,7 +96,10 @@ export function BoardView({
   const { preferences, setPreferences } = useUserPreferences();
   const boardPreferences = getBoardPreferences(preferences, board.id);
   const isGuest = useIsGuest();
-  const lists = useBoardStore((s) => s.lists);
+  const allLists = useBoardStore((s) => s.lists);
+  // milestone-as-card (U1) — hidden lists (e.g. the milestone host list)
+  // never render as board columns or become drag targets.
+  const lists = useMemo(() => allLists.filter((l) => !l.hidden), [allLists]);
   const cards = useBoardStore((s) => s.cards);
   const cardLabels = useBoardStore((s) => s.cardLabels);
   const cardMembers = useBoardStore((s) => s.cardMembers);

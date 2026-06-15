@@ -29,6 +29,7 @@ function rowToList(r: Record<string, unknown>): ListRow {
     wipLimit: (r.wip_limit ?? null) as number | null,
     statusKind: (r.status_kind ?? null) as ListRow["statusKind"],
     color: (r.color ?? null) as string | null,
+    hidden: (r.hidden ?? false) as boolean,
   };
 }
 

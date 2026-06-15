@@ -145,6 +145,9 @@ export const lists = pgTable("lists", {
   wipLimit: integer("wip_limit"),
   statusKind: listStatusKind("status_kind"),
   color: text("color"),
+  // milestone-as-card — a hidden list never renders as a board column;
+  // hosts type="milestone" cards so they stay off the board (migration 0135).
+  hidden: boolean("hidden").notNull().default(false),
 });
 
 export const cardPriority = pgEnum("card_priority", [

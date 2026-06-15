@@ -196,7 +196,7 @@ export const CreateCardInput = z.object({
   // the owner-change trigger only fires on UPDATE.
   ownerId: Uuid.nullable().optional(),
 });
-export const CardType = z.enum(["story", "task", "subtask", "bug"]);
+export const CardType = z.enum(["story", "task", "subtask", "bug", "milestone"]);
 // Plan #16b-γ-C (#1) — card priority. Mirrors the SQL enum.
 export const CardPriority = z.enum(["p0", "p1", "p2", "p3", "p4"]);
 export const UpdateCardInput = z.object({
