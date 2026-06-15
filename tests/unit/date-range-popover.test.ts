@@ -31,6 +31,21 @@ describe("DateRangePopover typed entry", () => {
     expect(onChange).toHaveBeenCalledWith({ start: utc(2026, 6, 10), target: utc(2026, 6, 20) });
   });
 
+  it("auto-advances focus to the target field once a complete start is typed", () => {
+    const { start, target } = renderPicker({ start: null, target: null });
+    start.focus();
+    fireEvent.change(start, { target: { value: "15/06/2026" } });
+    expect(document.activeElement).toBe(target);
+  });
+
+  it("does NOT steal focus to target when editing a start that already has a target", () => {
+    const { start, target } = renderPicker({ start: utc(2026, 6, 1), target: utc(2026, 6, 20) });
+    start.focus();
+    fireEvent.change(start, { target: { value: "05/06/2026" } });
+    expect(document.activeElement).toBe(start);
+    expect(target).not.toBe(document.activeElement);
+  });
+
   it("does NOT commit a target before start, and flags it invalid", () => {
     const { onChange, target } = renderPicker({ start: utc(2026, 6, 10), target: null });
     fireEvent.change(target, { target: { value: "05/06/2026" } });

@@ -78,6 +78,7 @@ export function DateRangePopover({
   const [textStart, setTextStart] = useState(formatDate(value.start));
   const [textTarget, setTextTarget] = useState(formatDate(value.target));
   const startInputRef = useRef<HTMLInputElement | null>(null);
+  const targetInputRef = useRef<HTMLInputElement | null>(null);
 
   // Re-sync internal state when the popover opens.
   useEffect(() => {
@@ -119,6 +120,9 @@ export function DateRangePopover({
     commit({ start: parsed, target: value.target });
     setAnchor(new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), 1)));
     setFocusDay(parsed);
+    // A complete start date auto-advances to the target field, but only when
+    // target is still empty — don't yank focus while editing a full range.
+    if (!value.target) targetInputRef.current?.focus();
   }
   function onTargetText(next: string) {
     setTextTarget(next);
@@ -291,6 +295,7 @@ export function DateRangePopover({
           disabled={disabled}
           placeholder="dd/mm/yyyy"
           value={textTarget}
+          ref={targetInputRef}
           data-testid="date-range-target"
           onClick={(e) => {
             e.stopPropagation();
