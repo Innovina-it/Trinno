@@ -10,7 +10,7 @@ import {
   type MouseEvent,
 } from "react";
 import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, parseDisplayDate } from "@/lib/format-date";
 
 const MS_DAY = 86_400_000;
 const PRESETS: { label: string; days: number }[] = [
@@ -56,26 +56,6 @@ function buildMonth(anchor: Date): { day: Date; inMonth: boolean }[] {
   }
 
   return cells;
-}
-
-function parseDisplayDate(text: string): Date | null {
-  const match = text.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!match) return null;
-
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  const year = Number(match[3]);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-
-  if (
-    parsed.getUTCFullYear() !== year ||
-    parsed.getUTCMonth() !== month - 1 ||
-    parsed.getUTCDate() !== day
-  ) {
-    return null;
-  }
-
-  return parsed;
 }
 
 export function DatePicker({

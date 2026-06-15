@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, parseDisplayDate } from "@/lib/format-date";
 import { Calendar, CalendarRange, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 // Studio-Console date range picker. Replaces the native <input type="date">
@@ -73,6 +73,11 @@ export function DateRangePopover({
   const [hover, setHover] = useState<Date | null>(null);
   const [focusDay, setFocusDay] = useState<Date>(() => startOfDayUTC(value.start ?? new Date()));
   const gridRef = useRef<HTMLDivElement | null>(null);
+  // Typed text mirrors of each endpoint. Kept in sync with the committed value
+  // (grid clicks, presets, clear) via the effects below, mirroring DatePicker.
+  const [textStart, setTextStart] = useState(formatDate(value.start));
+  const [textTarget, setTextTarget] = useState(formatDate(value.target));
+  const startInputRef = useRef<HTMLInputElement | null>(null);
 
   // Re-sync internal state when the popover opens.
   useEffect(() => {
@@ -84,8 +89,49 @@ export function DateRangePopover({
     setFocusDay(seed);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keep the typed fields in step with the committed value when it changes from
+  // outside the inputs (grid click, preset, clear, parent update).
+  useEffect(() => {
+    setTextStart(formatDate(value.start));
+  }, [value.start]);
+  useEffect(() => {
+    setTextTarget(formatDate(value.target));
+  }, [value.target]);
+
   function commit(next: DateRange) {
     onChange(next);
+  }
+
+  // Typed entry, coherent with DatePicker: parse dd/mm/yyyy (slashes by hand),
+  // commit only a complete, in-order date; otherwise keep the text uncommitted
+  // and let aria-invalid flag it. Never store start > target — the edited field
+  // that would invert the range is treated as not-yet-valid, like a below-min
+  // date in DatePicker. No auto-swap on typing (that stays a grid-click thing).
+  function onStartText(next: string) {
+    setTextStart(next);
+    if (next.trim() === "") {
+      commit({ start: null, target: value.target });
+      return;
+    }
+    const parsed = parseDisplayDate(next);
+    if (!parsed) return;
+    if (value.target && parsed.getTime() > value.target.getTime()) return;
+    commit({ start: parsed, target: value.target });
+    setAnchor(new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), 1)));
+    setFocusDay(parsed);
+  }
+  function onTargetText(next: string) {
+    setTextTarget(next);
+    if (next.trim() === "") {
+      commit({ start: value.start, target: null });
+      return;
+    }
+    const parsed = parseDisplayDate(next);
+    if (!parsed) return;
+    if (value.start && parsed.getTime() < value.start.getTime()) return;
+    commit({ start: value.start, target: parsed });
+    setAnchor(new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), 1)));
+    setFocusDay(parsed);
   }
 
   function pickDay(d: Date) {
@@ -157,16 +203,22 @@ export function DateRangePopover({
   const cells = buildMonth(anchor);
   const cellsNext = buildMonth(addDaysUTC(new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 1)), 0));
 
-  // Trigger label: "Jun 1 — Jul 14 · 6w" or empty-state.
-  const triggerText = (() => {
-    if (value.start && value.target) {
-      const d = diffDays(value.start, value.target);
-      return `${formatDate(value.start)} — ${formatDate(value.target)} · ${fmtDuration(d)}`;
-    }
-    if (value.start) return `${formatDate(value.start)} —`;
-    if (value.target) return `— ${formatDate(value.target)}`;
-    return triggerLabel;
-  })();
+  // Per-field validity, mirroring DatePicker: a non-empty field is invalid when
+  // it doesn't parse, or when committing it would invert the range (start after
+  // target, or target before start). Drives aria-invalid; uncommitted either way.
+  const startParsed = parseDisplayDate(textStart);
+  const startInvalid =
+    Boolean(textStart.trim()) &&
+    (!startParsed ||
+      Boolean(value.target && startParsed.getTime() > value.target.getTime()));
+  const targetParsed = parseDisplayDate(textTarget);
+  const targetInvalid =
+    Boolean(textTarget.trim()) &&
+    (!targetParsed ||
+      Boolean(value.start && targetParsed.getTime() < value.start.getTime()));
+  // Duration readout ("6w") shown after the fields when the range is complete.
+  const durationLabel =
+    value.start && value.target ? fmtDuration(diffDays(value.start, value.target)) : null;
 
   const isEmpty = !value.start && !value.target;
 
@@ -194,16 +246,69 @@ export function DateRangePopover({
 
   return (
     <div ref={wrapRef} className="relative inline-block">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+      <div
+        role="group"
+        aria-label={triggerLabel}
         data-testid="date-range-trigger"
-        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-hairline-hi bg-[color:var(--surface)] text-fg hover:bg-[color:var(--surface-strong)] disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40 font-mono text-[0.8rem] tabular-nums"
+        onClick={() => {
+          if (disabled) return;
+          setOpen(true);
+          startInputRef.current?.focus();
+        }}
+        className={
+          "inline-flex items-center gap-1 h-8 px-2.5 rounded-md border border-hairline-hi bg-[color:var(--surface)] text-fg hover:bg-[color:var(--surface-strong)] transition-colors focus-within:ring-1 focus-within:ring-fg/40 cursor-text " +
+          (disabled ? "opacity-50 pointer-events-none" : "")
+        }
       >
-        <CalendarRange className="size-3.5 text-fg-muted" aria-hidden />
-        <span className={isEmpty ? "text-fg-faint" : undefined}>{triggerText}</span>
-      </button>
+        <CalendarRange className="size-3.5 text-fg-muted pointer-events-none" aria-hidden />
+        <input
+          type="text"
+          inputMode="numeric"
+          aria-label="Start date"
+          aria-invalid={startInvalid || undefined}
+          disabled={disabled}
+          placeholder="dd/mm/yyyy"
+          value={textStart}
+          ref={startInputRef}
+          data-testid="date-range-start"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => onStartText(e.target.value)}
+          className={
+            "w-[5.25rem] bg-transparent font-mono text-[0.8rem] tabular-nums outline-none placeholder:text-fg-faint " +
+            (!textStart.trim() ? "text-fg-faint" : "text-fg")
+          }
+        />
+        <span className="text-fg-faint text-[0.8rem] pointer-events-none">—</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          aria-label="Target date"
+          aria-invalid={targetInvalid || undefined}
+          disabled={disabled}
+          placeholder="dd/mm/yyyy"
+          value={textTarget}
+          data-testid="date-range-target"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => onTargetText(e.target.value)}
+          className={
+            "w-[5.25rem] bg-transparent font-mono text-[0.8rem] tabular-nums outline-none placeholder:text-fg-faint " +
+            (!textTarget.trim() ? "text-fg-faint" : "text-fg")
+          }
+        />
+        {durationLabel ? (
+          <span className="mono-meta-sm text-fg-faint pointer-events-none ml-0.5">
+            · {durationLabel}
+          </span>
+        ) : null}
+      </div>
       {open && (
         <div
           role="dialog"
