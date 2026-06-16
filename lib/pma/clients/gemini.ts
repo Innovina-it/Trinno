@@ -29,7 +29,27 @@ export type StructuredInput = {
   // emit application/json conforming to this.
   responseSchema: Schema;
   temperature?: number;
+  // Optional binary parts (e.g. a PDF) sent alongside the prompt. When present
+  // the request becomes multimodal; when absent behaviour is unchanged, so the
+  // existing text-only PMA callers are not affected. `data` is base64.
+  files?: { mimeType: string; data: string }[];
 };
+
+// Pure: build the genai `contents` argument. Text-only (no files) → the bare
+// prompt string, byte-identical to the original PMA behaviour. With files →
+// the inlineData parts followed by the text part.
+export function buildContents(
+  prompt: string,
+  files: { mimeType: string; data: string }[] | undefined,
+):
+  | string
+  | (
+      | { inlineData: { mimeType: string; data: string } }
+      | { text: string }
+    )[] {
+  if (!files || files.length === 0) return prompt;
+  return [...files.map((f) => ({ inlineData: f })), { text: prompt }];
+}
 
 // Cached authenticated client. Built lazily on first use so importing this
 // module is side-effect-free (no env read).
@@ -55,7 +75,7 @@ export async function generateStructured<T>(input: StructuredInput): Promise<T> 
   const ai = getClient();
   const res = await ai.models.generateContent({
     model: input.model,
-    contents: input.prompt,
+    contents: buildContents(input.prompt, input.files),
     config: {
       ...(input.systemInstruction
         ? { systemInstruction: input.systemInstruction }
