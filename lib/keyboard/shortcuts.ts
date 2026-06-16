@@ -57,7 +57,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     name: "Roadmap",
     rows: [
-      { keys: "z / x  ·  − / +", desc: "Zoom out / in" },
+      { keys: "− / +", desc: "Zoom out / in" },
       { keys: "n", desc: "New card" },
       { keys: "/", desc: "Focus search" },
       { keys: "Drag bar", desc: "Reschedule" },
