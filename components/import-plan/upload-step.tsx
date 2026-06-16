@@ -1,10 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Upload } from "lucide-react";
+import { FileText, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ProjectPlan } from "@/lib/plan-import/types";
+
+const MAX_MB = 15;
 
 export function UploadStep({
   driveFolderId,
@@ -16,10 +19,19 @@ export function UploadStep({
   onExtracted: (plan: ProjectPlan) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  function reject(msg: string) {
+    setError(msg);
+    setDragging(false);
+  }
+
   async function onFile(file: File) {
+    if (file.type !== "application/pdf") return reject("That isn't a PDF. Drop a project-plan PDF.");
+    if (file.size > MAX_MB * 1024 * 1024)
+      return reject(`That PDF is over ${MAX_MB} MB. Use a smaller export.`);
     setBusy(true);
     setError(null);
     try {
@@ -30,28 +42,63 @@ export function UploadStep({
       if (!res.ok) throw new Error(json.error ?? "Extraction failed.");
       onExtracted(json.plan as ProjectPlan);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Extraction failed.");
+      setError(
+        `Couldn't read that PDF: ${e instanceof Error ? e.message : "unknown error"}. Try again, or enter the plan by hand.`,
+      );
     } finally {
       setBusy(false);
+      setDragging(false);
       if (fileRef.current) fileRef.current.value = "";
     }
   }
 
   return (
     <div className="space-y-5">
-      <div className="space-y-2">
-        <Label>Project-plan PDF</Label>
-        <Input
-          ref={fileRef}
-          type="file"
-          accept="application/pdf"
-          disabled={busy}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onFile(f);
-          }}
-        />
-      </div>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => fileRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (!busy) setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          const f = e.dataTransfer.files?.[0];
+          if (f) onFile(f);
+        }}
+        className={cn(
+          "flex w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-6 py-12 text-center transition-[background-color,border-color] duration-200 ease-out outline-none",
+          "border-[color:var(--hairline-hi)] bg-[color:var(--surface)]",
+          "hover:bg-[color:var(--surface-strong)] focus-visible:ring-1 focus-visible:ring-fg/40",
+          dragging && "bg-[color:var(--surface-strong)] border-fg/40",
+          busy && "pointer-events-none opacity-60",
+        )}
+      >
+        {busy ? (
+          <Loader2 className="size-5 animate-spin text-fg-muted" />
+        ) : (
+          <FileText className="size-5 text-fg-muted" />
+        )}
+        <span className="text-sm text-fg">
+          {busy ? "Reading the plan. This can take up to a minute." : "Drop a project-plan PDF, or click to choose."}
+        </span>
+        {!busy && (
+          <span className="font-serif text-sm italic text-fg-faint">PDF up to {MAX_MB} MB</span>
+        )}
+      </button>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+        }}
+      />
 
       <div className="space-y-2">
         <Label>Google Drive folder for deliverable docs (optional)</Label>
@@ -62,18 +109,12 @@ export function UploadStep({
           onChange={(e) => onDriveFolderId(e.target.value)}
           placeholder="Drive folder ID or link"
         />
-        <p className="text-xs text-fg-muted">
+        <p className="text-xs text-fg-faint">
           Share the folder with the service account as Editor, then paste its link. Leave blank
-          to skip Drive docs — deliverables get a placeholder link you can edit later.
+          to skip Drive docs; deliverables get a placeholder link you can edit later.
         </p>
       </div>
 
-      {busy && (
-        <p className="flex items-center gap-2 text-sm text-fg-muted">
-          <Upload className="size-3.5 animate-pulse" />
-          Extracting… this can take up to a minute for a long PDF.
-        </p>
-      )}
       {error && <p className="text-sm text-[color:var(--accent-magenta)]">{error}</p>}
     </div>
   );
