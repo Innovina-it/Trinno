@@ -1,0 +1,218 @@
+import "server-only";
+
+import { dbAsUser } from "@/lib/db/client";
+import { lists as listsTable } from "@/lib/db/schema";
+import { eq, asc } from "drizzle-orm";
+
+import { createWorkspaceImpl } from "@/actions/workspaces";
+import { createBoardImpl, createSubboardImpl } from "@/actions/boards";
+import { setListStatusKindImpl } from "@/actions/lists";
+import { createCardImpl, updateCardImpl } from "@/actions/cards";
+import { upsertCardLinkImpl } from "@/actions/links";
+import { createMilestoneImpl } from "@/actions/milestones";
+
+import type { ProjectPlan } from "./types";
+import { makeDriveDocsClient, probeFolder, type DriveDocsClient } from "./drive-docs";
+
+const PLACEHOLDER_LINK_URL = "https://www.corriere.it";
+const LINK_COLOR = "#facc15";
+
+function decodeSub(jwt: string): string {
+  const [, payload] = jwt.split(".");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).sub as string;
+}
+
+export type BuildFailure = { step: string; message: string };
+export type BuildResult = {
+  workspaceId: string | null;
+  ok: boolean;
+  partial: boolean;
+  failures: BuildFailure[];
+};
+
+async function step<T>(
+  failures: BuildFailure[],
+  name: string,
+  fn: () => Promise<T>,
+): Promise<T | null> {
+  try {
+    return await fn();
+  } catch (e) {
+    failures.push({ step: name, message: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
+// Both createBoardImpl(seedDefaultLists) and createSubboardImpl auto-seed the 3
+// DEFAULT_LIST_TEMPLATES (Todo / In Progress / Done) but return only the board.
+// Read them back in position order so we can target the Todo list and stamp
+// status_kind (the auto-seeded sub-board lists have a null status_kind).
+async function boardListsByPosition(token: string, boardId: string) {
+  return dbAsUser(token, (tx) =>
+    tx
+      .select({ id: listsTable.id, statusKind: listsTable.statusKind })
+      .from(listsTable)
+      .where(eq(listsTable.boardId, boardId))
+      .orderBy(asc(listsTable.position)),
+  );
+}
+
+const STATUS_BY_INDEX = ["todo", "in_progress", "done"] as const;
+
+async function ensureStatusKinds(token: string, boardId: string): Promise<string> {
+  const rows = await boardListsByPosition(token, boardId);
+  if (rows.length === 0) {
+    throw new Error(`board ${boardId} has no lists to place cards in`);
+  }
+  for (let i = 0; i < rows.length && i < STATUS_BY_INDEX.length; i++) {
+    if (rows[i].statusKind !== STATUS_BY_INDEX[i]) {
+      await setListStatusKindImpl(token, { id: rows[i].id, statusKind: STATUS_BY_INDEX[i] });
+    }
+  }
+  return rows[0].id; // the Todo list
+}
+
+export async function buildWorkspaceFromPlan(
+  token: string,
+  plan: ProjectPlan,
+  driveFolderId?: string,
+): Promise<BuildResult> {
+  const failures: BuildFailure[] = [];
+  const userId = decodeSub(token);
+
+  // Drive fail-fast: if a folder was given but the SA cannot read it, drop to
+  // placeholder links rather than aborting the whole import.
+  let drive: DriveDocsClient | null = null;
+  if (driveFolderId) {
+    const ok = await step(failures, "drive-probe", async () => {
+      await probeFolder(driveFolderId);
+      return true;
+    });
+    if (ok) drive = makeDriveDocsClient(driveFolderId);
+  }
+
+  const ws = await step(failures, "workspace", () =>
+    createWorkspaceImpl(token, { name: plan.workspaceName }),
+  );
+  if (!ws) return { workspaceId: null, ok: false, partial: false, failures };
+
+  const parent = await step(failures, "parent-board", () =>
+    createBoardImpl(token, {
+      workspaceId: ws.id,
+      title: plan.parentBoardTitle,
+      backgroundKind: "color",
+      backgroundValue: "#0f0f12",
+      seedDefaultLists: true,
+    }),
+  );
+  if (!parent) return { workspaceId: ws.id, ok: false, partial: true, failures };
+
+  const parentTodo = await ensureStatusKinds(token, parent.id);
+
+  for (const wp of plan.workPackages) {
+    // 1. WP anchor card on the parent board.
+    const anchor = await step(failures, `anchor:${wp.code}`, async () => {
+      const c = await createCardImpl(token, {
+        listId: parentTodo,
+        title: wp.title,
+        startDate: wp.start,
+        targetDate: wp.end,
+        ownerId: null,
+      });
+      await updateCardImpl(token, {
+        id: c.id,
+        type: "task",
+        description: `**Work Package** · ${wp.option}${wp.lead ? ` · Leader ${wp.lead}` : ""}\n\n${wp.description}`,
+      });
+      return c;
+    });
+    if (!anchor) continue;
+
+    // 2. Sub-board anchored 1:1 to the anchor card.
+    const sub = await step(failures, `subboard:${wp.code}`, () =>
+      createSubboardImpl(token, {
+        parentBoardId: parent.id,
+        parentCardId: anchor.id,
+        title: wp.title,
+      }),
+    );
+    if (!sub) continue;
+    const subTodo = await ensureStatusKinds(token, sub.id);
+
+    // 3. Task cards.
+    const taskCards: { id: string }[] = [];
+    for (const [i, t] of wp.tasks.entries()) {
+      const tc = await step(failures, `task:${wp.code}.${i}`, async () => {
+        const c = await createCardImpl(token, {
+          listId: subTodo,
+          title: t.title,
+          startDate: wp.start,
+          targetDate: wp.end,
+          ownerId: null,
+        });
+        await updateCardImpl(token, {
+          id: c.id,
+          type: "task",
+          description: `**${wp.option}**\n\n${t.description}`,
+        });
+        return c;
+      });
+      taskCards.push(tc ?? { id: "" });
+    }
+
+    // 4. Deliverable subtasks + a card-scope link (Drive doc or placeholder).
+    for (const [i, d] of wp.deliverables.entries()) {
+      await step(failures, `deliverable:${wp.code}.${i}`, async () => {
+        const parentTask = taskCards[d.taskIndex] ?? taskCards[0];
+        const parentTaskId = parentTask && parentTask.id ? parentTask.id : null;
+        const startOfDueMonth = `${d.due.slice(0, 8)}01`;
+        const dc = await createCardImpl(token, {
+          listId: subTodo,
+          title: d.title,
+          startDate: startOfDueMonth,
+          targetDate: d.due,
+          parentCardId: parentTaskId,
+          ownerId: null,
+        });
+        await updateCardImpl(token, {
+          id: dc.id,
+          type: "subtask",
+          parentCardId: parentTaskId,
+          description: `**Deliverable** · ${wp.code} · M${d.month}\n\n${d.description}`,
+        });
+
+        let url = PLACEHOLDER_LINK_URL;
+        if (drive) {
+          const { webViewLink } = await drive.createDeliverableDoc({
+            wpTitle: wp.title,
+            deliverableTitle: d.title,
+            subtitle: [wp.lead, `M${d.month}`].filter(Boolean).join(" · "),
+          });
+          if (webViewLink) url = webViewLink;
+        }
+        await upsertCardLinkImpl(token, { cardId: dc.id, url, color: LINK_COLOR });
+      });
+    }
+  }
+
+  // 5. Plan milestones pinned to the parent board.
+  for (const [i, m] of plan.milestones.entries()) {
+    await step(failures, `milestone:${i}`, () =>
+      createMilestoneImpl(token, {
+        workspaceId: ws.id,
+        boardId: parent.id,
+        name: m.name,
+        date: `${m.date}T12:00:00Z`,
+        description: m.description,
+        createdBy: userId,
+      }),
+    );
+  }
+
+  return {
+    workspaceId: ws.id,
+    ok: failures.length === 0,
+    partial: failures.length > 0,
+    failures,
+  };
+}
