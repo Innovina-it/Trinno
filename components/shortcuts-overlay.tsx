@@ -82,11 +82,11 @@ export function ShortcutsOverlay() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-lg max-h-[85dvh] flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Keyboard shortcuts</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 min-h-0 overflow-y-auto pr-1">
           {SHORTCUT_GROUPS.map((g) => (
             <section key={g.name} className="space-y-1.5">
               <h3 className="mono-meta-sm text-fg-faint">
