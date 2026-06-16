@@ -1,3 +1,5 @@
+import { logEvent } from "@/lib/observability/log";
+
 export type StructuredErrorShape = {
   code: string;
   message: string;
@@ -13,6 +15,11 @@ export class StructuredError extends Error implements StructuredErrorShape {
     this.name = "StructuredError";
     this.code = code;
     this.context = context;
+    // Observability: log authorization denials at their one choke point.
+    // Server-only — never runs in the browser bundle.
+    if (code === "ACCESS_DENIED" && typeof window === "undefined") {
+      logEvent({ type: "denial", code, message });
+    }
   }
 
   toJSON(): StructuredErrorShape {

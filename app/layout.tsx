@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthBroadcastListener } from "./(auth)/auth-broadcast-listener";
 import { EnvBadge } from "@/components/ui/env-badge";
+import { WebVitals } from "@/components/system/web-vitals";
 
 const geistSans = Geist({
   subsets: ["latin"],
@@ -76,6 +77,7 @@ export default async function RootLayout({
         {...(sidebarCollapsed ? { "data-sidebar-collapsed": "true" } : {})}
       >
         <AuthBroadcastListener />
+        <WebVitals />
         {children}
         <EnvBadge />
         <Toaster richColors />

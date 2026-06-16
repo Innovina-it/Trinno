@@ -6,6 +6,7 @@ import { sql as dsql } from "drizzle-orm";
 import * as schema from "./schema";
 import { getServiceSupabase } from "@/lib/supabase/service-role";
 import { StructuredError } from "@/lib/errors";
+import { logEvent } from "@/lib/observability/log";
 
 const queryClient = postgres(process.env.DATABASE_URL!, {
   max: Number(process.env.DATABASE_POOL_MAX ?? 2),
@@ -72,6 +73,18 @@ export async function dbAsUser<T>(
     await tx.execute(
       dsql`select set_config('role', 'authenticated', true), set_config('request.jwt.claims', ${claimsJson}, true)`,
     );
-    return fn(tx);
+    // Time the operation body. Logs only when it crosses the threshold;
+    // the `finally` guarantees errors still propagate and the result is
+    // returned unchanged.
+    const startedAt = performance.now();
+    try {
+      return await fn(tx);
+    } finally {
+      const ms = performance.now() - startedAt;
+      const thresholdMs = Number(process.env.SLOW_QUERY_MS ?? 500);
+      if (ms > thresholdMs) {
+        logEvent({ type: "slow-query", ms: Math.round(ms), thresholdMs });
+      }
+    }
   });
 }
