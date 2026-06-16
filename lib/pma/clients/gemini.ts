@@ -18,7 +18,10 @@ import type { Schema } from "@google/genai";
 // NOTE: uses `@google/genai` (the current SDK). The legacy
 // `@google/generative-ai` named in the original design is deprecated.
 
-export type GeminiModel = "gemini-2.5-flash" | "gemini-2.5-pro";
+export type GeminiModel =
+  | "gemini-2.5-flash"
+  | "gemini-2.5-pro"
+  | "gemini-3.5-flash";
 
 export type StructuredInput = {
   model: GeminiModel;

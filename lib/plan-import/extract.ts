@@ -24,7 +24,7 @@ Rules:
 
 export async function extractPlanFromPdf(pdfBytes: Buffer): Promise<ProjectPlan> {
   const raw = await generateStructured<unknown>({
-    model: "gemini-2.5-flash",
+    model: "gemini-3.5-flash",
     prompt: EXTRACTION_PROMPT,
     responseSchema: PROJECT_PLAN_GENAI_SCHEMA,
     files: [{ mimeType: "application/pdf", data: pdfBytes.toString("base64") }],

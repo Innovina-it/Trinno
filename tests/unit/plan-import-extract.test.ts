@@ -35,7 +35,7 @@ describe("extractPlanFromPdf", () => {
     const plan = await extractPlanFromPdf(Buffer.from("PDFBYTES"));
     expect(plan.workspaceName).toBe("X — Project Plan");
     const arg = generateStructured.mock.calls[0][0];
-    expect(arg.model).toBe("gemini-2.5-flash");
+    expect(arg.model).toBe("gemini-3.5-flash");
     expect(arg.files[0]).toEqual({
       mimeType: "application/pdf",
       data: Buffer.from("PDFBYTES").toString("base64"),
