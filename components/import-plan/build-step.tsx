@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,13 @@ export function BuildStep({
   const [status, setStatus] = useState<"building" | "partial" | "error">("building");
   const [failures, setFailures] = useState<BuildFailure[]>([]);
   const [wsId, setWsId] = useState<string | null>(null);
+  // One-shot guard: the build must fire exactly once. Without it, React
+  // StrictMode (dev) double-invokes this effect and builds two workspaces.
+  const started = useRef(false);
 
   useEffect(() => {
+    if (started.current) return;
+    started.current = true;
     let cancelled = false;
     (async () => {
       try {
