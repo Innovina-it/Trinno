@@ -20,6 +20,12 @@
 | U8 | components/import-plan/* + page | 1 | done (e983b13) |
 | U9 | scripts/plan-import/extract-smoke.ts | 0 | done (49bf336) |
 
+## UI elevation (next chunk — NOT yet built)
+- Design brief confirmed + committed: `docs/features/plan-import/UI-BRIEF.md` (c3f0cf4), via impeccable shape.
+- Scope (production-ready, monochrome studio-console): 3-step stepper, real PDF drop-zone, collapsible WP cards (collapsed + mono-meta counts), calendar DatePicker (YYYY-MM-DD↔Date adapter), sticky summary footer, fix the em-dash CTA → "Build workspace".
+- Touches: components/import-plan/* (+ maybe a small stepper/footer component). Tier 1-2. Implement under a FRESH ai-dev-control run (decompose into ~5 units: stepper, drop-zone, review redesign, footer+summary, date adapter).
+- Resume with: "resume plan-import UI".
+
 ## Notes / decisions
 - WIP limit ≤2 unverified units; Gate 4 evidence before passing each Tier 2 unit.
 - Integration test (U5) needs local Supabase (:54321).
