@@ -50,13 +50,16 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     rows: [
       { keys: "[", desc: "Previous sibling card" },
       { keys: "]", desc: "Next sibling card" },
+      { keys: "c", desc: "Toggle complete" },
       { keys: "Cmd / Ctrl + Enter", desc: "Send comment, save notes" },
     ],
   },
   {
     name: "Roadmap",
     rows: [
-      { keys: "z / x", desc: "Zoom out / in" },
+      { keys: "z / x  ·  − / +", desc: "Zoom out / in" },
+      { keys: "n", desc: "New card" },
+      { keys: "/", desc: "Focus search" },
       { keys: "Drag bar", desc: "Reschedule" },
       { keys: "Drag edges", desc: "Resize start or target" },
     ],
