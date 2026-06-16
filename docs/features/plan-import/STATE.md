@@ -29,6 +29,11 @@
 - Live-test bug fixes: (1) cf86d33 one-shot ref guard in BuildStep — StrictMode dev double-invoke was building 2 workspaces per attempt (4 dup ARISE workspaces cleaned from dev DB). (2) 4e55182 catch-all in the extract route so a failure is logged + returned readable instead of a bare 500/hung spinner.
 - OPEN: extract 500 root cause unconfirmed (likely Turbopack rebuild churn during commits); now observable via banner + `[import-plan/extract] failed:` server log. Awaiting a clean user retry to confirm/fix.
 
+## Upload types (broadened 2026-06-16, commit 72b3324)
+- Accepts the Gemini-native set: PDF, png/jpeg/webp, text/plain/markdown/csv (lib/plan-import/supported-types.ts is the single allowlist). Office docs rejected with "export as PDF". Exposed in the UI.
+- DEFERRED by decision: docx/xlsx auto-conversion. soffice (LibreOffice 24.2) IS on the dev box but NOT on Vercel serverless → an auto-converter would break in hosted prod. Revisit with a serverless converter / cloud API if prod needs Office support.
+- DEFERRED: large-file Gemini Files-API path (over the 15 MB inline cap). SDK surface: ai.files.upload + createPartFromUri.
+
 ## Notes / decisions
 - WIP limit ≤2 unverified units; Gate 4 evidence before passing each Tier 2 unit.
 - Integration test (U5) needs local Supabase (:54321).
