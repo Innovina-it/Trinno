@@ -6,60 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-type Group = { name: string; rows: Array<{ keys: string; desc: string }> };
-
-const GROUPS: Group[] = [
-  {
-    name: "Global",
-    rows: [
-      { keys: "?", desc: "Show this overlay" },
-      { keys: "Cmd / Ctrl + K", desc: "Open command palette" },
-      { keys: "Cmd / Ctrl + Z", desc: "Undo last action" },
-      { keys: "Cmd / Ctrl + Shift + Z", desc: "Redo" },
-      { keys: "/", desc: "Open command palette (search)" },
-      { keys: "Esc", desc: "Close dialog or overlay" },
-    ],
-  },
-  {
-    name: "Navigation",
-    rows: [
-      { keys: "g r", desc: "Go to roadmap" },
-      { keys: "g b", desc: "Go to boards" },
-      { keys: "g l", desc: "Go to backlog" },
-      { keys: "g t", desc: "Go to my tasks" },
-      { keys: "g i", desc: "Go to inbox" },
-      { keys: "g d", desc: "Go to dashboards" },
-      { keys: "g w", desc: "Go to workload" },
-    ],
-  },
-  {
-    name: "Inbox",
-    rows: [
-      { keys: "j / ↓", desc: "Next" },
-      { keys: "k / ↑", desc: "Previous" },
-      { keys: "Enter", desc: "Open" },
-      { keys: "e", desc: "Mark active read" },
-      { keys: "Shift + E", desc: "Mark all read" },
-    ],
-  },
-  {
-    name: "Card modal",
-    rows: [
-      { keys: "[", desc: "Previous sibling card" },
-      { keys: "]", desc: "Next sibling card" },
-      { keys: "Cmd / Ctrl + Enter", desc: "Send comment, save notes" },
-    ],
-  },
-  {
-    name: "Roadmap",
-    rows: [
-      { keys: "z / x", desc: "Zoom out / in" },
-      { keys: "Drag bar", desc: "Reschedule" },
-      { keys: "Drag edges", desc: "Resize start or target" },
-    ],
-  },
-];
+import { SHORTCUT_GROUPS } from "@/lib/keyboard/shortcuts";
 
 // Roadmap bar pattern legend. Mirrors the documented status textures in
 // DESIGN.md so the operator can decode bars without leaving the page.
@@ -140,7 +87,7 @@ export function ShortcutsOverlay() {
           <DialogTitle>Keyboard shortcuts</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          {GROUPS.map((g) => (
+          {SHORTCUT_GROUPS.map((g) => (
             <section key={g.name} className="space-y-1.5">
               <h3 className="mono-meta-sm text-fg-faint">
                 {g.name.toUpperCase()}
