@@ -9,11 +9,17 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { QueryClient, type Updater } from "@tanstack/react-query";
 
-// TanStack Query is not installed in this branch. This adapter keeps the
-// workspace cache surface intentionally close to the TanStack calls this
-// feature needs (`fetchQuery`, hydration, and `invalidateQueries`) so the
-// flag-on path can be tested now and replaced with the real package later.
+// Backed by a real TanStack Query `QueryClient`. This module keeps the
+// historical export surface (`WorkspaceQueryClient`, `fetchQuery`, hydration,
+// `invalidateQueries`) as a thin adapter so the existing call sites and the
+// shared-cache tests keep working unchanged. The previous hand-rolled
+// Map/notify engine has been removed in favour of TanStack's QueryCache.
+//
+// Defaults pin gcTime/staleTime to Infinity so server-hydrated snapshots
+// persist (no observer-based garbage collection) and stay fresh until an
+// explicit `invalidateQueries` — matching the prior in-memory behaviour.
 export type WorkspaceQueryKey = readonly unknown[];
 
 export type WorkspaceCacheEntry<T = unknown> = {
@@ -28,72 +34,57 @@ export type DehydratedWorkspaceCache = {
 
 type QueryFn<T> = () => Promise<T>;
 
-type QueryRecord<T = unknown> = WorkspaceCacheEntry<T> & {
-  stale: boolean;
-  queryFn?: QueryFn<T>;
-};
-
-function hashKey(queryKey: WorkspaceQueryKey): string {
-  return JSON.stringify(queryKey);
-}
-
-function keyStartsWith(key: WorkspaceQueryKey, prefix: WorkspaceQueryKey) {
-  if (prefix.length > key.length) return false;
-  return prefix.every((part, idx) => Object.is(part, key[idx]));
+function createInnerClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: Infinity,
+        staleTime: Infinity,
+      },
+    },
+  });
 }
 
 export class WorkspaceQueryClient {
-  private records = new Map<string, QueryRecord>();
-  private listeners = new Set<() => void>();
+  private client: QueryClient;
 
   constructor(state?: DehydratedWorkspaceCache) {
+    this.client = createInnerClient();
     this.hydrate(state);
   }
 
   hydrate(state?: DehydratedWorkspaceCache) {
     if (!state) return;
     for (const entry of state.queries) {
-      this.records.set(hashKey(entry.queryKey), {
-        ...entry,
-        stale: false,
-      });
+      this.client.setQueryData(entry.queryKey as unknown[], entry.data);
     }
-    this.notify();
   }
 
   dehydrate(): DehydratedWorkspaceCache {
     return {
-      queries: [...this.records.values()].map(({ queryKey, data, updatedAt }) => ({
-        queryKey,
-        data,
-        updatedAt,
-      })),
+      queries: this.client
+        .getQueryCache()
+        .getAll()
+        .map((query) => ({
+          queryKey: query.queryKey as WorkspaceQueryKey,
+          data: query.state.data,
+          updatedAt: query.state.dataUpdatedAt,
+        })),
     };
   }
 
   getQueryData<T>(queryKey: WorkspaceQueryKey): T | undefined {
-    return this.records.get(hashKey(queryKey))?.data as T | undefined;
+    return this.client.getQueryData<T>(queryKey as unknown[]);
   }
 
   setQueryData<T>(
     queryKey: WorkspaceQueryKey,
     updater: T | ((current: T | undefined) => T),
   ): T {
-    const key = hashKey(queryKey);
-    const current = this.records.get(key) as QueryRecord<T> | undefined;
-    const data =
-      typeof updater === "function"
-        ? (updater as (current: T | undefined) => T)(current?.data)
-        : updater;
-    this.records.set(key, {
-      queryKey,
-      data,
-      updatedAt: Date.now(),
-      stale: false,
-      queryFn: current?.queryFn,
-    });
-    this.notify();
-    return data;
+    return this.client.setQueryData<T>(
+      queryKey as unknown[],
+      updater as Updater<T | undefined, T | undefined>,
+    ) as T;
   }
 
   async fetchQuery<T>({
@@ -105,22 +96,12 @@ export class WorkspaceQueryClient {
     queryFn: QueryFn<T>;
     force?: boolean;
   }): Promise<T> {
-    const key = hashKey(queryKey);
-    const current = this.records.get(key) as QueryRecord<T> | undefined;
-    if (current && !current.stale && !force) {
-      current.queryFn = queryFn;
-      return current.data;
-    }
-    const data = await queryFn();
-    this.records.set(key, {
-      queryKey,
-      data,
-      updatedAt: Date.now(),
-      stale: false,
+    return this.client.fetchQuery<T>({
+      queryKey: queryKey as unknown[],
       queryFn,
+      // Infinity = serve the cached value when present; 0 = always refetch.
+      staleTime: force ? 0 : Infinity,
     });
-    this.notify();
-    return data;
   }
 
   async invalidateQueries({
@@ -128,32 +109,18 @@ export class WorkspaceQueryClient {
   }: {
     queryKey: WorkspaceQueryKey;
   }): Promise<void> {
-    const refetches: Array<Promise<unknown>> = [];
-    for (const [key, record] of this.records) {
-      if (!keyStartsWith(record.queryKey, queryKey)) continue;
-      record.stale = true;
-      this.records.set(key, record);
-      if (record.queryFn) {
-        refetches.push(
-          this.fetchQuery({
-            queryKey: record.queryKey,
-            queryFn: record.queryFn,
-            force: true,
-          }),
-        );
-      }
-    }
-    if (refetches.length === 0) this.notify();
-    await Promise.all(refetches);
+    // Default partial matching invalidates every query whose key starts with
+    // this prefix; `refetchType: "all"` refetches them (including inactive,
+    // observer-less queries) using their stored queryFn — mirroring the old
+    // engine which re-ran the stored fetcher for each stale prefix match.
+    await this.client.invalidateQueries({
+      queryKey: queryKey as unknown[],
+      refetchType: "all",
+    });
   }
 
   subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  private notify() {
-    for (const listener of this.listeners) listener();
+    return this.client.getQueryCache().subscribe(() => listener());
   }
 }
 

@@ -87,3 +87,6 @@ docs/ai-agent-user-preferences-workflow.html
 !/DESIGN.md
 !/PRODUCT.md
 /Work Package*.xlsx
+
+# ai-dev-control backups (temporary, removed at harvest)
+.backups/
