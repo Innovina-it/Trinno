@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition, useRef, useCallback, useMemo, useContext } from "react";
+import { useState, useTransition, useRef, useCallback, useMemo, useContext, memo } from "react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/shallow";
 import { useSortable } from "@dnd-kit/sortable";
@@ -59,7 +59,7 @@ import { CardQuickView, type PatchInput } from "./card-quick-view";
 const EMPTY_STRING_ARRAY: string[] = [];
 const EMPTY_PROFILES_ARRAY: BoardProfile[] = [];
 
-export function CardTile({
+function CardTileImpl({
   card,
   boardId,
   workspaceId,
@@ -1001,3 +1001,12 @@ function CardMetaRow({
     </div>
   );
 }
+
+// Memoized so a tile re-renders only when its own props change — `card`
+// (a stable ref from ListColumn's useShallow selector), boardId, workspaceId,
+// or the showStatus/showDates flags. Default shallow compare is correct here:
+// all props are primitives or store-stable refs. Internal store subscriptions
+// and dnd-kit context (drag transforms) still drive re-renders as before;
+// memo only suppresses re-renders caused by the parent column re-rendering
+// with unchanged props for this card.
+export const CardTile = memo(CardTileImpl);
