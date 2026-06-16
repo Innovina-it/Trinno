@@ -9,7 +9,7 @@ import {
   DropdownMenuContent,
 } from "@/components/ui/dropdown-menu";
 import { markNotificationRead } from "@/actions/notifications";
-import { toast } from "sonner";
+import { errorBus } from "@/lib/errors/error-bus";
 import { EMAIL_KIND_LABELS, type NotificationKind } from "@/lib/notifications/email-labels";
 
 type N = {
@@ -126,6 +126,9 @@ export function NotificationBell({ userId }: { userId: string }) {
   }, [userId]);
 
   function markRead(id: string) {
+    // Only ever called on an unread item (see the row's onClick guard), so
+    // the pre-optimistic readAt is null and unread is >= 1 — rollback can
+    // restore both unconditionally.
     setItems((curr) =>
       curr.map((n) =>
         n.id === id ? { ...n, readAt: new Date().toISOString() } : n,
@@ -136,7 +139,20 @@ export function NotificationBell({ userId }: { userId: string }) {
       try {
         await markNotificationRead({ id, read: true });
       } catch (err) {
-        toast.error((err as Error).message);
+        // The write failed, so no CDC event fires and realtime won't
+        // self-correct. Roll the optimistic mark-read back (item returns to
+        // unread, count restored) and surface it on the persistent error bus
+        // with a retry, instead of a toast that fades in a few seconds.
+        setItems((curr) =>
+          curr.map((n) => (n.id === id ? { ...n, readAt: null } : n)),
+        );
+        setUnread((u) => u + 1);
+        errorBus.push({
+          message: (err as Error).message,
+          code: "ACTION_FAILED",
+          error: err,
+          retry: () => markRead(id),
+        });
       }
     });
   }
