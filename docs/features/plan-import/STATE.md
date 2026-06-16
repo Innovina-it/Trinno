@@ -25,6 +25,7 @@
 - Scope (production-ready, monochrome studio-console): 3-step stepper, real PDF drop-zone, collapsible WP cards (collapsed + mono-meta counts), calendar DatePicker (YYYY-MM-DD↔Date adapter), sticky summary footer, fix the em-dash CTA → "Build workspace".
 - Touches: components/import-plan/* (+ maybe a small stepper/footer component). Tier 1-2. Implement under a FRESH ai-dev-control run (decompose into ~5 units: stepper, drop-zone, review redesign, footer+summary, date adapter).
 - Resume with: "resume plan-import UI".
+- BUILT 2026-06-16 (commits be8443f→d2625b6): date adapter (unit-tested), monochrome stepper, PDF drop-zone, collapsible WP cards + DatePicker + mono-meta counts + sticky summary footer, CTA → "Build workspace". typecheck 0, lint clean, suite 19/19. Live visual check by user pending (no headless auth).
 
 ## Notes / decisions
 - WIP limit ≤2 unverified units; Gate 4 evidence before passing each Tier 2 unit.
