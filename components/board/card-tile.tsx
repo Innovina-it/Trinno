@@ -1,6 +1,6 @@
 "use client";
 import { useState, useTransition, useRef, useCallback, useMemo, useContext } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/shallow";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -63,23 +63,21 @@ export function CardTile({
   card,
   boardId,
   workspaceId,
+  showStatus,
+  showDates,
 }: {
   card: CardRow;
   boardId: string;
   workspaceId?: string;
+  showStatus: boolean;
+  showDates: boolean;
 }) {
   const router = useRouter();
-  const sp = useSearchParams();
-  // Status chip duplicates the list strip's color when the column itself is
-  // mapped to a status. Only meaningful when swimlanes detach the card from
-  // its column visual context (any laneMode != "none").
-  const laneMode = sp.get("lanes") ?? "none";
-  const showStatus = laneMode !== "none";
-
+  // `showStatus` (swimlane status chip) and `showDates` (schedule chip) are
+  // derived from the URL once in ListColumn and passed down as props, so the
+  // tile no longer subscribes to useSearchParams — a precondition for
+  // React.memo to skip re-renders that aren't about this card's data.
   const sortableId = `card:${card.id}`;
-  // Display-only filter — when `dates=show` is absent from the URL the
-  // schedule chip in CardMetaRow is hidden. Default OFF on the board.
-  const showDates = sp.get("dates") === "show";
   const parentCard = useBoardStore((s) =>
     card.parentCardId ? s.cards.find((c) => c.id === card.parentCardId) : null,
   );

@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { useShallow } from "zustand/shallow";
 import { useDroppable } from "@dnd-kit/core";
 import {
@@ -99,6 +100,14 @@ export function ListColumn({
     : filtered;
   const hiddenCount = filtered.length - visibleCards.length;
   const virtualizedBoardEnabled = useWorkspaceFlag("virtualized_board", true);
+
+  // Lifted from CardTile: read the lane/date URL toggles ONCE per column and
+  // pass them to each tile as props, so tiles don't each subscribe to
+  // useSearchParams (which would re-render every tile on any URL change and
+  // defeat React.memo).
+  const sp = useSearchParams();
+  const showStatus = (sp.get("lanes") ?? "none") !== "none";
+  const showDates = sp.get("dates") === "show";
 
   const sortableId = `list:${list.id}`;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -363,6 +372,8 @@ export function ListColumn({
                   card={card}
                   boardId={boardId}
                   workspaceId={workspaceId}
+                  showStatus={showStatus}
+                  showDates={showDates}
                 />
               )}
             />
@@ -392,6 +403,8 @@ export function ListColumn({
                 card={card}
                 boardId={boardId}
                 workspaceId={workspaceId}
+                showStatus={showStatus}
+                showDates={showDates}
               />
             ))}
           </SortableContext>
