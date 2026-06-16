@@ -7,7 +7,7 @@ vi.mock("server-only", () => ({}));
 const { generateStructured } = vi.hoisted(() => ({ generateStructured: vi.fn() }));
 vi.mock("@/lib/pma/clients/gemini", () => ({ generateStructured }));
 
-import { extractPlanFromPdf } from "@/lib/plan-import/extract";
+import { extractPlanFromFile } from "@/lib/plan-import/extract";
 
 const fixture = {
   workspaceName: "X — Project Plan",
@@ -29,10 +29,10 @@ const fixture = {
 
 beforeEach(() => generateStructured.mockReset());
 
-describe("extractPlanFromPdf", () => {
-  it("sends the PDF as a base64 file part and returns the parsed plan", async () => {
+describe("extractPlanFromFile", () => {
+  it("sends the file as a base64 part with the given mimeType and returns the parsed plan", async () => {
     generateStructured.mockResolvedValue(fixture);
-    const plan = await extractPlanFromPdf(Buffer.from("PDFBYTES"));
+    const plan = await extractPlanFromFile(Buffer.from("PDFBYTES"), "application/pdf");
     expect(plan.workspaceName).toBe("X — Project Plan");
     const arg = generateStructured.mock.calls[0][0];
     expect(arg.model).toBe("gemini-3.5-flash");
@@ -42,8 +42,14 @@ describe("extractPlanFromPdf", () => {
     });
   });
 
+  it("passes a non-PDF mimeType through (e.g. an image)", async () => {
+    generateStructured.mockResolvedValue(fixture);
+    await extractPlanFromFile(Buffer.from("PNGBYTES"), "image/png");
+    expect(generateStructured.mock.calls[0][0].files[0].mimeType).toBe("image/png");
+  });
+
   it("throws when the model returns a structurally invalid plan", async () => {
     generateStructured.mockResolvedValue({ workspaceName: "" });
-    await expect(extractPlanFromPdf(Buffer.from("x"))).rejects.toThrow();
+    await expect(extractPlanFromFile(Buffer.from("x"), "application/pdf")).rejects.toThrow();
   });
 });

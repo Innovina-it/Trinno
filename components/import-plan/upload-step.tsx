@@ -6,6 +6,11 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ProjectPlan } from "@/lib/plan-import/types";
+import {
+  UPLOAD_ACCEPT,
+  SUPPORTED_UPLOAD_LABEL,
+  isSupportedUpload,
+} from "@/lib/plan-import/supported-types";
 
 const MAX_MB = 15;
 
@@ -29,9 +34,10 @@ export function UploadStep({
   }
 
   async function onFile(file: File) {
-    if (file.type !== "application/pdf") return reject("That isn't a PDF. Drop a project-plan PDF.");
+    if (!isSupportedUpload(file.type))
+      return reject(`Unsupported file. Drop a ${SUPPORTED_UPLOAD_LABEL} (export Word/Excel as PDF first).`);
     if (file.size > MAX_MB * 1024 * 1024)
-      return reject(`That PDF is over ${MAX_MB} MB. Use a smaller export.`);
+      return reject(`That file is over ${MAX_MB} MB. Use a smaller export.`);
     setBusy(true);
     setError(null);
     try {
@@ -82,17 +88,19 @@ export function UploadStep({
           <FileText className="size-5 text-fg-muted" />
         )}
         <span className="text-sm text-fg">
-          {busy ? "Reading the plan. This can take up to a minute." : "Drop a project-plan PDF, or click to choose."}
+          {busy ? "Reading the plan. This can take up to a minute." : "Drop a project-plan file, or click to choose."}
         </span>
         {!busy && (
-          <span className="font-serif text-sm italic text-fg-faint">PDF up to {MAX_MB} MB</span>
+          <span className="font-serif text-sm italic text-fg-faint">
+            {SUPPORTED_UPLOAD_LABEL}, up to {MAX_MB} MB
+          </span>
         )}
       </button>
 
       <input
         ref={fileRef}
         type="file"
-        accept="application/pdf"
+        accept={UPLOAD_ACCEPT}
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];

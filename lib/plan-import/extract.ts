@@ -5,8 +5,8 @@ import { ProjectPlanSchema, type ProjectPlan } from "./types";
 import { PROJECT_PLAN_GENAI_SCHEMA } from "./genai-schema";
 
 const EXTRACTION_PROMPT = `You are reading a project-plan / grant document (a "bando",
-"Relazione tecnica" or "Piano di Lavoro"), often in Italian. Extract its structure as JSON
-matching the provided schema.
+"Relazione tecnica" or "Piano di Lavoro"), often in Italian. It may be a PDF, an image,
+or text. Extract its structure as JSON matching the provided schema.
 
 Rules:
 - Output English for all titles and descriptions, even if the source is Italian.
@@ -22,12 +22,15 @@ Rules:
 - Keep descriptions concise (2-4 sentences). Do not invent work packages, tasks or deliverables that
   are not in the document.`;
 
-export async function extractPlanFromPdf(pdfBytes: Buffer): Promise<ProjectPlan> {
+export async function extractPlanFromFile(
+  bytes: Buffer,
+  mimeType: string,
+): Promise<ProjectPlan> {
   const raw = await generateStructured<unknown>({
     model: "gemini-3.5-flash",
     prompt: EXTRACTION_PROMPT,
     responseSchema: PROJECT_PLAN_GENAI_SCHEMA,
-    files: [{ mimeType: "application/pdf", data: pdfBytes.toString("base64") }],
+    files: [{ mimeType, data: bytes.toString("base64") }],
     temperature: 0,
   });
   // The review UI lets the user fix anything; here we only guarantee a

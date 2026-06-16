@@ -45,12 +45,13 @@ async function main(): Promise<void> {
   }
 
   const path = process.argv[2];
-  if (!path) throw new Error('usage: extract-smoke.ts "<pdf-path>"');
+  if (!path) throw new Error('usage: extract-smoke.ts "<file-path>" [mimeType]');
+  const mimeType = process.argv[3] ?? "application/pdf";
 
-  const { extractPlanFromPdf } = await import("@/lib/plan-import/extract");
+  const { extractPlanFromFile } = await import("@/lib/plan-import/extract");
   const bytes = await readFile(path);
-  console.log(`[extract] ${(bytes.length / 1024).toFixed(0)} KB → gemini-3.5-flash …`);
-  const plan = await extractPlanFromPdf(bytes);
+  console.log(`[extract] ${(bytes.length / 1024).toFixed(0)} KB (${mimeType}) → gemini-3.5-flash …`);
+  const plan = await extractPlanFromFile(bytes, mimeType);
 
   console.log(JSON.stringify(plan, null, 2));
   const tasks = plan.workPackages.reduce((n, w) => n + w.tasks.length, 0);
