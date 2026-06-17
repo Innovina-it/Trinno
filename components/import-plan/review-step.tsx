@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronRight, Trash2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import { isoToDate, dateToIso } from "@/lib/plan-import/date-adapter";
 import { DurationControl } from "./duration-control";
+import { OwnerCombobox } from "./owner-combobox";
 import type { ProjectPlan, WorkPackage } from "@/lib/plan-import/types";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "S"}`;
@@ -68,6 +69,16 @@ export function ReviewStep({
 
   const totalTasks = plan.workPackages.reduce((n, wp) => n + wp.tasks.length, 0);
   const totalDels = plan.workPackages.reduce((n, wp) => n + wp.deliverables.length, 0);
+
+  // Distinct owners already used across the plan — the combobox suggestions.
+  const ownerOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const wp of plan.workPackages) {
+      if (wp.lead?.trim()) set.add(wp.lead.trim());
+      for (const t of wp.tasks) if (t.owner?.trim()) set.add(t.owner.trim());
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [plan]);
 
   return (
     <div className="space-y-6 pb-24">
@@ -196,15 +207,14 @@ export function ReviewStep({
                               patchWp(wi, { tasks });
                             }}
                           />
-                          <Input
-                            aria-label={`${wp.code} task ${ti} owner`}
-                            className="w-40 shrink-0"
-                            placeholder="Owner"
+                          <OwnerCombobox
+                            ariaLabel={`${wp.code} task ${ti} owner`}
                             value={t.owner ?? ""}
+                            options={ownerOptions}
                             disabled={!applyOwners}
-                            onChange={(e) => {
+                            onChange={(v) => {
                               const tasks = wp.tasks.map((x, i) =>
-                                i === ti ? { ...x, owner: e.target.value } : x,
+                                i === ti ? { ...x, owner: v } : x,
                               );
                               patchWp(wi, { tasks });
                             }}
