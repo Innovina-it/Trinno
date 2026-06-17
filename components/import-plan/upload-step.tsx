@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ProjectPlan } from "@/lib/plan-import/types";
 import {
@@ -12,16 +11,11 @@ import {
   SUPPORTED_UPLOAD_LABEL,
   isSupportedUpload,
 } from "@/lib/plan-import/supported-types";
+import { DriveModeControl } from "./drive-mode-control";
 
 const MAX_MB = 15;
 
 export type DriveMode = "auto" | "manual" | "off";
-
-const DRIVE_MODES: { key: DriveMode; label: string }[] = [
-  { key: "auto", label: "Auto" },
-  { key: "manual", label: "Manual" },
-  { key: "off", label: "Off" },
-];
 
 function sizeLabel(bytes: number): string {
   return bytes < 1024 * 1024
@@ -138,46 +132,21 @@ export function UploadStep({
 
       <div className="space-y-2">
         <Label>Deliverable docs</Label>
-        <div className="flex gap-2">
-          {DRIVE_MODES.map((m) => (
-            <Button
-              key={m.key}
-              type="button"
-              size="sm"
-              variant={driveMode === m.key ? "default" : "outline"}
-              aria-pressed={driveMode === m.key}
-              disabled={busy}
-              onClick={() => onDriveMode(m.key)}
-            >
-              {m.label}
-            </Button>
-          ))}
-        </div>
-        {driveMode === "auto" && (
-          <p className="text-xs text-fg-faint">
-            A folder named after the project is created in the shared Trinno drive, with a Google
-            Doc per deliverable.
-          </p>
-        )}
-        {driveMode === "manual" && (
-          <>
-            <Input
-              type="text"
-              value={driveFolderId}
-              disabled={busy}
-              onChange={(e) => onDriveFolderId(e.target.value)}
-              placeholder="Drive folder ID or link"
-            />
-            <p className="text-xs text-fg-faint">
-              Share the folder with the service account as Editor, then paste its link.
-            </p>
-          </>
-        )}
-        {driveMode === "off" && (
-          <p className="text-xs text-fg-faint">
-            No Google Docs; each deliverable gets a placeholder link you can edit later.
-          </p>
-        )}
+        <DriveModeControl
+          mode={driveMode}
+          onMode={onDriveMode}
+          folderId={driveFolderId}
+          onFolderId={onDriveFolderId}
+          disabled={busy}
+        />
+        <p className="text-xs text-fg-faint">
+          {driveMode === "auto" &&
+            "A folder named after the project is created in the shared Trinno drive, with a Google Doc per deliverable."}
+          {driveMode === "manual" &&
+            "Share the folder with the service account as Editor, then paste its link above."}
+          {driveMode === "off" &&
+            "No Google Docs; each deliverable gets a placeholder link you can edit later."}
+        </p>
       </div>
 
       <div className="flex items-center gap-3">
