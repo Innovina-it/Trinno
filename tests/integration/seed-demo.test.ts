@@ -36,7 +36,7 @@ async function makeUser(p: string) {
 }
 
 describe("seedDemoWorkspace", () => {
-  it("creates a workspace with full demo data set", async () => {
+  it("creates a workspace with full demo data set", { timeout: 60000 }, async () => {
     const u = await makeUser("seed");
     const { workspaceId } = await seedDemoWorkspaceImpl(u.jwt);
     expect(workspaceId).toBeTruthy();

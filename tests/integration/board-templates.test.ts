@@ -5,7 +5,7 @@ import { lists, labels } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { createWorkspaceImpl } from "@/actions/workspaces";
 import { createBoardFromTemplateImpl } from "@/actions/boards";
-import { BOARD_TEMPLATES } from "@/lib/board-templates";
+import { BOARD_TEMPLATES, DEFAULT_LIST_TEMPLATES } from "@/lib/board-templates";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -28,7 +28,7 @@ async function makeUser(p: string) {
 }
 
 describe("board templates", () => {
-  it("blank template seeds zero lists + zero labels", async () => {
+  it("blank template seeds the default lists (current behavior) + zero labels", async () => {
     const u = await makeUser("tpl-blank");
     const ws = await createWorkspaceImpl(u.jwt, { name: "WS" });
     const { board, listIds } = await createBoardFromTemplateImpl(u.jwt, {
@@ -38,11 +38,23 @@ describe("board templates", () => {
       backgroundValue: "#fafafa",
       templateId: "blank",
     });
+    // The "blank" template defines no lists of its own...
     expect(listIds).toHaveLength(0);
+    // ...but board creation still seeds the 3 DEFAULT_LIST_TEMPLATES columns.
+    // NOTE: the template's own description says "Empty board", so this is a
+    // KNOWN discrepancy the team chose to keep on 2026-06-16 (current behavior
+    // over the design intent) — see ai-dev-control harvest log. If a future
+    // change makes "blank" truly empty, revert this to expect zero lists.
     const ls = await dbAsUser(u.jwt, async (tx) =>
-      tx.select().from(lists).where(eq(lists.boardId, board.id)),
+      tx
+        .select()
+        .from(lists)
+        .where(eq(lists.boardId, board.id))
+        .orderBy(asc(lists.position)),
     );
-    expect(ls).toHaveLength(0);
+    expect(ls.map((l) => l.statusKind)).toEqual(
+      DEFAULT_LIST_TEMPLATES.map((t) => t.statusKind),
+    );
     const lbs = await dbAsUser(u.jwt, async (tx) =>
       tx.select().from(labels).where(eq(labels.boardId, board.id)),
     );

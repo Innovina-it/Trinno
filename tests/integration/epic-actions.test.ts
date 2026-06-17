@@ -33,6 +33,10 @@ describe("ensureStatusListImpl", () => {
     const b = await createBoardImpl(u.jwt, {
       workspaceId: ws.id, title: "B",
       backgroundKind: "color", backgroundValue: "#fafafa",
+      // Empty board: these tests manage their own status_kind columns, so the
+      // default Todo/In Progress/Done seed would collide with the
+      // (board_id, status_kind) unique index (migration 0054).
+      seedDefaultLists: false,
     });
     const l = await createListImpl(u.jwt, { boardId: b.id, title: "Done col" });
     await setListStatusKindImpl(u.jwt, { id: l.id, statusKind: "done" });
@@ -49,6 +53,10 @@ describe("ensureStatusListImpl", () => {
     const b = await createBoardImpl(u.jwt, {
       workspaceId: ws.id, title: "B",
       backgroundKind: "color", backgroundValue: "#fafafa",
+      // Empty board: these tests manage their own status_kind columns, so the
+      // default Todo/In Progress/Done seed would collide with the
+      // (board_id, status_kind) unique index (migration 0054).
+      seedDefaultLists: false,
     });
     const r = await ensureStatusListImpl(u.jwt, {
       boardId: b.id, statusKind: "in_progress",
@@ -78,6 +86,10 @@ describe("ensureStatusListImpl", () => {
     const b = await createBoardImpl(u.jwt, {
       workspaceId: ws.id, title: "B",
       backgroundKind: "color", backgroundValue: "#fafafa",
+      // Empty board: these tests manage their own status_kind columns, so the
+      // default Todo/In Progress/Done seed would collide with the
+      // (board_id, status_kind) unique index (migration 0054).
+      seedDefaultLists: false,
     });
     // Fire 5 concurrent calls for the same (board, status). They must
     // all return the same list id, and the DB must contain exactly one
@@ -107,6 +119,10 @@ describe("moveCardToStatusImpl", () => {
     const b = await createBoardImpl(u.jwt, {
       workspaceId: ws.id, title: "B",
       backgroundKind: "color", backgroundValue: "#fafafa",
+      // Empty board: these tests manage their own status_kind columns, so the
+      // default Todo/In Progress/Done seed would collide with the
+      // (board_id, status_kind) unique index (migration 0054).
+      seedDefaultLists: false,
     });
     const lTodo = await createListImpl(u.jwt, { boardId: b.id, title: "T" });
     await setListStatusKindImpl(u.jwt, { id: lTodo.id, statusKind: "todo" });
@@ -136,6 +152,10 @@ describe("moveCardToStatusImpl", () => {
     const b = await createBoardImpl(u.jwt, {
       workspaceId: ws.id, title: "B",
       backgroundKind: "color", backgroundValue: "#fafafa",
+      // Empty board: these tests manage their own status_kind columns, so the
+      // default Todo/In Progress/Done seed would collide with the
+      // (board_id, status_kind) unique index (migration 0054).
+      seedDefaultLists: false,
     });
     const l = await createListImpl(u.jwt, { boardId: b.id, title: "Done" });
     await setListStatusKindImpl(u.jwt, { id: l.id, statusKind: "done" });
@@ -153,6 +173,10 @@ describe("moveCardToStatusImpl", () => {
     const b = await createBoardImpl(u.jwt, {
       workspaceId: ws.id, title: "B",
       backgroundKind: "color", backgroundValue: "#fafafa",
+      // Empty board: these tests manage their own status_kind columns, so the
+      // default Todo/In Progress/Done seed would collide with the
+      // (board_id, status_kind) unique index (migration 0054).
+      seedDefaultLists: false,
     });
     const lTodo = await createListImpl(u.jwt, { boardId: b.id, title: "T" });
     await setListStatusKindImpl(u.jwt, { id: lTodo.id, statusKind: "todo" });

@@ -1,4 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// lib/queries/card-history.ts is tagged `import "server-only"`, which has no
+// resolvable export in the vitest node runner. Stub it so the import succeeds.
+vi.mock("server-only", () => ({}));
 import { createClient } from "@supabase/supabase-js";
 import { createWorkspaceImpl } from "@/actions/workspaces";
 import { createBoardImpl } from "@/actions/boards";

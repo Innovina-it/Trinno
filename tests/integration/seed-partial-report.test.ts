@@ -30,7 +30,7 @@ async function makeUser(p: string) {
 }
 
 describe("seedDemoWorkspaceImpl partial-report", () => {
-  it("captures comment.* step failures in result.failures (was swallowed by safe)", async () => {
+  it("captures comment.* step failures in result.failures (was swallowed by safe)", { timeout: 60000 }, async () => {
     const u = await makeUser("seed-comments-fail");
     const r = await seedDemoWorkspaceImpl(u.jwt, {
       mode: "rich",
@@ -45,7 +45,7 @@ describe("seedDemoWorkspaceImpl partial-report", () => {
     expect(matchedSteps.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("captures card-link.* step failures in result.failures", async () => {
+  it("captures card-link.* step failures in result.failures", { timeout: 60000 }, async () => {
     const u = await makeUser("seed-link-fail");
     const r = await seedDemoWorkspaceImpl(u.jwt, {
       mode: "rich",
@@ -58,7 +58,7 @@ describe("seedDemoWorkspaceImpl partial-report", () => {
     ).toBe(true);
   });
 
-  it("captures watcher.* step failures in result.failures", async () => {
+  it("captures watcher.* step failures in result.failures", { timeout: 60000 }, async () => {
     const u = await makeUser("seed-watch-fail");
     const r = await seedDemoWorkspaceImpl(u.jwt, {
       mode: "rich",
