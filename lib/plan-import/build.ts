@@ -17,7 +17,9 @@ import {
   probeFolder,
   resolveProjectFolder,
   type DriveDocsClient,
+  type ProjectIdentity,
 } from "./drive-docs";
+import { projectTitleFromWorkspaceName } from "./docx-template";
 
 const PLACEHOLDER_LINK_URL = "https://www.corriere.it";
 const LINK_COLOR = "#facc15";
@@ -96,13 +98,26 @@ export async function buildWorkspaceFromPlan(
   //  - manual: the user's pasted folder.
   //  - auto:   a "<project>" folder created under the shared Trinno root
   //            (PLAN_IMPORT_DRIVE_ROOT); zero pasting.
+  // Project identity stamped on every deliverable doc's header: the project name
+  // (template H1 / page header / "Project" cell) and the partners line. Partners
+  // = the distinct owners across the plan (WP leads + task owners).
+  const partnerSet = new Set<string>();
+  for (const wp of plan.workPackages) {
+    if (wp.lead) partnerSet.add(wp.lead);
+    for (const t of wp.tasks) if (t.owner) partnerSet.add(t.owner);
+  }
+  const project: ProjectIdentity = {
+    title: projectTitleFromWorkspaceName(plan.workspaceName),
+    partners: [...partnerSet].join(", "),
+  };
+
   let drive: DriveDocsClient | null = null;
   if (driveMode === "manual" && manualFolderId) {
     const ok = await step(failures, "drive-probe", async () => {
       await probeFolder(manualFolderId);
       return true;
     });
-    if (ok) drive = makeDriveDocsClient(manualFolderId);
+    if (ok) drive = makeDriveDocsClient(manualFolderId, project);
   } else if (driveMode === "auto") {
     const root = process.env.PLAN_IMPORT_DRIVE_ROOT?.trim();
     if (!root) {
@@ -115,7 +130,7 @@ export async function buildWorkspaceFromPlan(
         await probeFolder(root);
         return resolveProjectFolder(root, plan.workspaceName);
       });
-      if (projectFolderId) drive = makeDriveDocsClient(projectFolderId);
+      if (projectFolderId) drive = makeDriveDocsClient(projectFolderId, project);
     }
   }
 

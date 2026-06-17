@@ -1,6 +1,12 @@
 import "server-only";
 
-import { listFolder, createFolder, createDoc } from "@/lib/pma/clients/drive";
+import {
+  listFolder,
+  createFolder,
+  createDoc,
+  createDocFromDocx,
+} from "@/lib/pma/clients/drive";
+import { buildDeliverableDocx } from "./docx-template";
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -79,20 +85,46 @@ export type DriveDocsClient = {
   ): Promise<{ webViewLink: string }>;
 };
 
+// Identity stamped onto every deliverable doc's header (project name + partners
+// line). Computed once per import from the plan.
+export type ProjectIdentity = { title: string; partners?: string };
+
 // Build a per-import Drive client rooted at folderId. Layout:
 //   <folderId>/<WP title>/Deliverables/<deliverable doc>
-export function makeDriveDocsClient(folderId: string): DriveDocsClient {
+// Each doc is the real ARISE/AEGIS .docx skeleton, patched with the project's
+// identity + the deliverable's title/subtitle and converted to a native Doc. If
+// the template patch or upload fails (e.g. the asset is missing on a bad
+// deploy), it falls back to the rich HTML doc so the deliverable still gets one.
+export function makeDriveDocsClient(
+  folderId: string,
+  project: ProjectIdentity,
+): DriveDocsClient {
   const folderCache = new Map<string, string>();
   return {
     async createDeliverableDoc({ wpTitle, deliverableTitle, ...meta }) {
       const wpFolder = await ensureFolder(folderCache, folderId, wpTitle);
       const delFolder = await ensureFolder(folderCache, wpFolder, "Deliverables");
-      const { webViewLink } = await createDoc({
-        name: deliverableTitle,
-        parentId: delFolder,
-        content: deliverableDocHtml({ title: deliverableTitle, ...meta }),
-      });
-      return { webViewLink };
+      try {
+        const docx = await buildDeliverableDocx({
+          projectTitle: project.title,
+          partners: project.partners,
+          deliverableTitle,
+          subtitle: meta.subtitle ?? "",
+        });
+        const { webViewLink } = await createDocFromDocx({
+          name: deliverableTitle,
+          parentId: delFolder,
+          docx,
+        });
+        return { webViewLink };
+      } catch {
+        const { webViewLink } = await createDoc({
+          name: deliverableTitle,
+          parentId: delFolder,
+          content: deliverableDocHtml({ title: deliverableTitle, ...meta }),
+        });
+        return { webViewLink };
+      }
     },
   };
 }

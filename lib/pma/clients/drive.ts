@@ -400,6 +400,35 @@ export async function createDoc(
   return { id, webViewLink: res.data.webViewLink ?? "" };
 }
 
+// Create a native Google Doc from raw .docx bytes under `parentId`. Uploading
+// the Word file with the Google Doc target mimeType makes Drive convert it on
+// upload (no .DOCX badge), preserving the template's styling — the same path the
+// manual seeders use. Returns the new file id plus its webViewLink.
+export async function createDocFromDocx(input: {
+  name: string;
+  parentId: string;
+  docx: Buffer | Uint8Array;
+}): Promise<{ id: string; webViewLink: string }> {
+  const drive = await getDriveClient();
+  const res = await drive.files.create({
+    requestBody: {
+      name: input.name,
+      parents: [input.parentId],
+      mimeType: "application/vnd.google-apps.document",
+    },
+    media: {
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      body: Readable.from(Buffer.from(input.docx)),
+    },
+    fields: "id, webViewLink",
+    ...SHARED_DRIVE_WRITE,
+  });
+  const id = res.data.id;
+  if (!id) throw new Error("createDocFromDocx: Drive returned no file id.");
+  return { id, webViewLink: res.data.webViewLink ?? "" };
+}
+
 // Move a file to the trash (soft delete). Used to clean up temp/smoke files and
 // to reflect removed deliverables. Only ever call against the Output folder.
 export async function trashFile(fileId: string): Promise<void> {

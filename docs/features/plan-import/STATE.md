@@ -45,6 +45,14 @@
 - Uses the app's PMA Drive client (GOOGLE_APPLICATION_CREDENTIALS=.secrets/pma-sa.json locally). build opts: { driveMode, manualFolderId, applyOwners }.
 - **Deploy follow-up:** set PLAN_IMPORT_DRIVE_ROOT + GOOGLE_SERVICE_ACCOUNT_JSON in Vercel for auto-mode in hosted prod. Delete the "_import-smoke (delete me)" test folder left in Trinno.
 
+## Deliverable docs use the real ARISE/AEGIS .docx template (2026-06-17)
+- The HTML-skeleton doc was too bare. Deliverable docs are now the ACTUAL Word skeleton (branded header, metadata table, Parts I/II/III, annexes): `lib/plan-import/docx-template.ts` patches `scripts/seeds/templates/arise.docx` in-process per deliverable (fflate, no python / no Docs API) and Drive converts the .docx to a native Doc.
+- Runtime swaps the ARISE identity for the import: `ARISE`→project title (`projectTitleFromWorkspaceName` strips a trailing "— Project Plan"), ARISE subtitle→blank, ARISE partners→the plan's distinct owners (WP leads + task owners), keeps "Innovina" as Task lead/footer (capofila). Then fills `[DOCUMENT TITLE]`/`[Document subtitle]`. Same contiguous-string surgery as build-templates.py / the seeders.
+- New: `createDocFromDocx` in lib/pma/clients/drive.ts (upload .docx bytes + native-Doc target mime → convert). `makeDriveDocsClient(folderId, { title, partners })`. The rich HTML (`deliverableDocHtml`, metadata table + sections) is now the FALLBACK if the patch/upload throws.
+- **Dep added:** `fflate` (runtime). **Deploy:** next.config `outputFileTracingIncludes` bundles `scripts/seeds/templates/arise.docx` for `/import-plan` + `/api/import-plan/**` — verify the asset ships in the Vercel build (the build server action reads it at runtime).
+- Verified: 8 in-process XML assertions + valid OOXML zip + a live native Doc rendered from the patched template. Unit test: tests/unit/plan-import-docx-template.test.ts.
+- Left a "_template-docx-preview (delete me)" folder in Trinno (plus earlier "_import-smoke" / "_template-preview") for the user to delete (SA can't trash).
+
 ## Env / ops notes
 - Dev Supabase URL is a LAN IP now (192.168.68.58:54321), still the local dev DB. Cleanup/seed guards must treat 192.168.* as local (run.sh already does).
 - Cleanup after test/stuck-build runs: service-role delete of "Test Plan WS" + "ARISE Project — Project Plan" + planbuild-*@x.io users. Keep real imported workspaces (e.g. "AIWEPI High-Level Prototype — Project Plan").
