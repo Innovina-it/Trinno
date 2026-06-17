@@ -63,9 +63,13 @@ scripts/set-prod-env.sh
 # Prod seed/delete ops scripts — may carry prod keys, keep local only
 scripts/seeds/*-prod.sh
 
+# Prod→local DB clone tooling — operational, human-run only, keep local
+scripts/db/
+
 # Seed planning docs carry inline prod keys — keep local only, never push
 docs/features/collabora-innova-seed/
 docs/features/filse-spazio-wildfire-seed/
+docs/features/path-b-live-freshness/
 
 # DB backups + local artifacts
 backup-*.sql
