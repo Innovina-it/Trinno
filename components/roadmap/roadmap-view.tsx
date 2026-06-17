@@ -117,7 +117,6 @@ import {
   logWorkspaceTabSwitchLatency,
   useWorkspaceCacheQueryClient,
 } from "@/stores/workspace-cache-store";
-import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import {
   countMineHiddenRoadmapCards,
@@ -642,31 +641,23 @@ export function RoadmapView({
   const sharedSnapshot = useWorkspaceSnapshot(workspaceId);
   const sharedBoards = useBoards(workspaceId);
   const sharedMembers = useMembers(workspaceId);
-  // Default ON: the shared workspace cache is the standard behaviour for
-  // every workspace; write the flag `false` on a workspace to opt it out.
-  const sharedWorkspaceCacheEnabled = useWorkspaceFlag(
-    "shared_workspace_cache_v2",
-    true,
-  );
   const storeBoards =
-    sharedWorkspaceCacheEnabled && sharedBoards.length > 0
-      ? sharedBoards
-      : storeBoardsRaw;
+    sharedBoards.length > 0 ? sharedBoards : storeBoardsRaw;
   const storeProfiles = useMemo(
     () =>
-      sharedWorkspaceCacheEnabled && sharedMembers.length > 0
+      sharedMembers.length > 0
         ? sharedMembers.map((m) => ({
             id: m.userId,
             displayName: m.displayName,
           }))
         : storeProfilesRaw,
-    [sharedMembers, sharedWorkspaceCacheEnabled, storeProfilesRaw],
+    [sharedMembers, storeProfilesRaw],
   );
 
   useEffect(() => {
-    if (!sharedWorkspaceCacheEnabled || !sharedSnapshot) return;
+    if (!sharedSnapshot) return;
     setWorkspaceSnapshot(sharedSnapshot);
-  }, [setWorkspaceSnapshot, sharedSnapshot, sharedWorkspaceCacheEnabled]);
+  }, [setWorkspaceSnapshot, sharedSnapshot]);
 
   useEffect(() => {
     const supa = createSupabaseBrowser();
@@ -692,11 +683,9 @@ export function RoadmapView({
             filter: `workspace_id=eq.${workspaceId}`,
           },
           () => {
-            if (sharedWorkspaceCacheEnabled) {
-              void workspaceQueryClient.invalidateQueries({
-                queryKey: workspaceSnapshotKeys.workspace(workspaceId),
-              });
-            }
+            void workspaceQueryClient.invalidateQueries({
+              queryKey: workspaceSnapshotKeys.workspace(workspaceId),
+            });
             router.refresh();
           },
         )
@@ -708,7 +697,6 @@ export function RoadmapView({
     };
   }, [
     router,
-    sharedWorkspaceCacheEnabled,
     workspaceId,
     workspaceQueryClient,
   ]);

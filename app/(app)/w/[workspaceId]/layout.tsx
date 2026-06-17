@@ -3,7 +3,6 @@ import { getSessionToken, requireUser } from "@/lib/auth";
 import { assertUuidOrNotFound } from "@/lib/route-uuid";
 import { getWorkspace, listMembers } from "@/lib/queries/workspaces";
 import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
-import { hasFlag } from "@/lib/feature-flags/has-flag";
 import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
 import { WorkspaceVisitMarker } from "@/components/workspace/workspace-visit-marker";
 import { GuestReadonlyBanner } from "@/components/workspace/guest-readonly-banner";
@@ -30,34 +29,6 @@ export default async function WorkspaceLayout({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) redirect("/?notice=removed");
-  // Default ON: the shared workspace cache is the standard behaviour for
-  // every workspace; write the flag `false` on a workspace to opt it out.
-  const sharedWorkspaceCacheEnabled = await hasFlag(
-    workspaceId,
-    "shared_workspace_cache_v2",
-    true,
-  );
-  if (!sharedWorkspaceCacheEnabled) {
-    // Still mount a minimal WorkspaceStoreProvider here so the guest
-    // banner (and any other client component that reads viewerRole) can
-    // render. The shared-cache branch below already wraps in a richer
-    // provider via the HydrationBoundary path.
-    const minimalSnapshot = await getWorkspaceSnapshot(
-      token,
-      workspaceId,
-      "active",
-    );
-    return (
-      <>
-        <WorkspaceVisitMarker workspaceId={workspaceId} />
-        <WorkspaceStoreProvider initial={minimalSnapshot}>
-          <GuestReadonlyBanner />
-          {children}
-        </WorkspaceStoreProvider>
-      </>
-    );
-  }
-
   // "active" must match every getWorkspaceSnapshot call in the /w subtree
   // (this layout + roadmap + backlog pages): React cache dedupes by args,
   // so a mixed full/active pair would fetch the snapshot twice per request.

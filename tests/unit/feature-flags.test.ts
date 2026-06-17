@@ -85,11 +85,11 @@ afterEach(() => {
 
 describe("workspace feature flags", () => {
   it("hasFlag returns true when column has the flag set true", async () => {
-    const supabase = mockSupabaseRow({ shared_workspace_cache_v2: true });
+    const supabase = mockSupabaseRow({ subboards_enabled: true });
     mocks.createSupabaseServer.mockResolvedValue(supabase);
 
     await expect(
-      hasFlag(workspaceId, "shared_workspace_cache_v2"),
+      hasFlag(workspaceId, "subboards_enabled"),
     ).resolves.toBe(true);
     expect(supabase.from).toHaveBeenCalledWith("workspaces");
     expect(supabase.select).toHaveBeenCalledWith("feature_flags");
@@ -101,16 +101,16 @@ describe("workspace feature flags", () => {
     mocks.createSupabaseServer.mockResolvedValue(supabase);
 
     await expect(
-      hasFlag(workspaceId, "shared_workspace_cache_v2", true),
+      hasFlag(workspaceId, "subboards_enabled", true),
     ).resolves.toBe(true);
   });
 
   it("hasFlag returns false when flag is set false", async () => {
-    const supabase = mockSupabaseRow({ shared_workspace_cache_v2: false });
+    const supabase = mockSupabaseRow({ subboards_enabled: false });
     mocks.createSupabaseServer.mockResolvedValue(supabase);
 
     await expect(
-      hasFlag(workspaceId, "shared_workspace_cache_v2", true),
+      hasFlag(workspaceId, "subboards_enabled", true),
     ).resolves.toBe(false);
   });
 
@@ -118,7 +118,7 @@ describe("workspace feature flags", () => {
     const queryClient = createWorkspaceQueryClient();
     queryClient.setQueryData(
       workspaceSnapshotKeys.snapshot(workspaceId),
-      makeSnapshot({ shared_workspace_cache_v2: true }),
+      makeSnapshot({ subboards_enabled: true }),
     );
     const wrapper = ({ children }: { children: ReactNode }) =>
       React.createElement(
@@ -128,7 +128,7 @@ describe("workspace feature flags", () => {
       );
 
     const { result } = renderHook(
-      () => useWorkspaceFlag("shared_workspace_cache_v2"),
+      () => useWorkspaceFlag("subboards_enabled"),
       { wrapper },
     );
 

@@ -4,7 +4,6 @@ import { assertUuidOrNotFound } from "@/lib/route-uuid";
 import { getBoardSnapshot } from "@/lib/queries/board-snapshot";
 import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import { getWorkspace, listMembers } from "@/lib/queries/workspaces";
-import { hasFlag } from "@/lib/feature-flags/has-flag";
 import { BoardStoreProvider } from "@/stores/board-store";
 import { SubtaskParentSyncPrompt } from "@/components/board/card/subtask-parent-sync-prompt";
 import { BoardSyncMount } from "@/components/board/board-sync-mount";
@@ -39,47 +38,33 @@ export default async function BoardLayout({
     token,
     snap.board.workspaceId,
   );
-  // Default ON: the shared workspace cache is the standard behaviour for
-  // every workspace; write the flag `false` on a workspace to opt it out.
-  const sharedWorkspaceCacheEnabled = await hasFlag(
-    snap.board.workspaceId,
-    "shared_workspace_cache_v2",
-    true,
-  );
-  const [sharedWorkspace, sharedMembers] = sharedWorkspaceCacheEnabled
-    ? await Promise.all([
-        getWorkspace(token, snap.board.workspaceId),
-        listMembers(token, snap.board.workspaceId),
-      ])
-    : [null, []];
-  const sharedState: DehydratedWorkspaceCache | null =
-    sharedWorkspaceCacheEnabled
-      ? {
-          queries: [
-            {
-              queryKey: [
-                "workspace-snapshot",
-                snap.board.workspaceId,
-                "snapshot",
-              ] as const,
-              data: {
-                ...workspaceSnapshot,
-                workspace: sharedWorkspace ?? {
-                  id: snap.board.workspaceId,
-                  name: "",
-                  ownerId: "",
-                  createdAt: snap.board.createdAt,
-                },
-                members: sharedMembers,
-                featureFlags: sharedWorkspace?.featureFlags ?? {
-                  shared_workspace_cache_v2: true,
-                },
-              },
-              updatedAt: Date.now(),
-            },
-          ],
-        }
-      : null;
+  const [sharedWorkspace, sharedMembers] = await Promise.all([
+    getWorkspace(token, snap.board.workspaceId),
+    listMembers(token, snap.board.workspaceId),
+  ]);
+  const sharedState: DehydratedWorkspaceCache = {
+    queries: [
+      {
+        queryKey: [
+          "workspace-snapshot",
+          snap.board.workspaceId,
+          "snapshot",
+        ] as const,
+        data: {
+          ...workspaceSnapshot,
+          workspace: sharedWorkspace ?? {
+            id: snap.board.workspaceId,
+            name: "",
+            ownerId: "",
+            createdAt: snap.board.createdAt,
+          },
+          members: sharedMembers,
+          featureFlags: sharedWorkspace?.featureFlags ?? {},
+        },
+        updatedAt: Date.now(),
+      },
+    ],
+  };
 
   const body = (
     <WorkspaceStoreProvider initial={workspaceSnapshot}>
@@ -118,6 +103,5 @@ export default async function BoardLayout({
       </BoardStoreProvider>
     </WorkspaceStoreProvider>
   );
-  if (!sharedState) return body;
   return <HydrationBoundary state={sharedState}>{body}</HydrationBoundary>;
 }

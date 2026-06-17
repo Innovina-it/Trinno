@@ -26,7 +26,6 @@ import {
   useBoards,
   useWorkspaceSnapshot,
 } from "@/lib/queries/workspace-snapshot-shared";
-import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
 import { logWorkspaceTabSwitchLatency } from "@/stores/workspace-cache-store";
 import { errorBus } from "@/lib/errors/error-bus";
 import type { BoardRow } from "@/lib/queries/board-snapshot";
@@ -117,21 +116,12 @@ export function BoardView({
   const [, start] = useTransition();
   const sharedSnapshot = useWorkspaceSnapshot(board.workspaceId);
   const sharedBoards = useBoards(board.workspaceId);
-  // Default ON: the shared workspace cache is the standard behaviour for
-  // every workspace; write the flag `false` on a workspace to opt it out.
-  const sharedWorkspaceCacheEnabled = useWorkspaceFlag(
-    "shared_workspace_cache_v2",
-    true,
-  );
-  const displayBoard =
-    sharedWorkspaceCacheEnabled
-      ? (sharedBoards.find((b) => b.id === board.id) ?? board)
-      : board;
+  const displayBoard = sharedBoards.find((b) => b.id === board.id) ?? board;
 
   useEffect(() => {
-    if (!sharedWorkspaceCacheEnabled || !sharedSnapshot) return;
+    if (!sharedSnapshot) return;
     setWorkspaceSnapshot(sharedSnapshot);
-  }, [setWorkspaceSnapshot, sharedSnapshot, sharedWorkspaceCacheEnabled]);
+  }, [setWorkspaceSnapshot, sharedSnapshot]);
 
   useEffect(() => {
     logWorkspaceTabSwitchLatency("board", board.workspaceId);
