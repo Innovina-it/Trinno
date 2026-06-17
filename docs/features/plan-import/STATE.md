@@ -39,6 +39,12 @@
 - **Per-task owner + toggle**: each task has an editable owner, pre-filled at extraction from its WP `lead` (extract.ts inherit). A "Stamp owners" toggle (default on) appends the owner to task card titles ("T1.1 · BE-ST"); WP anchor stays clean. Owner is title text, not owner_id (org isn't an app user). buildWorkspaceFromPlan signature is now (token, plan, { driveFolderId?, applyOwners? }).
 - **Fixes**: hydration (steps mount client-only, import-wizard); build no longer hangs (dropped cancelled flag) + hard-navigates via window.location.assign (build-step); duration rescales without clicking out (debounce).
 
+## Drive docs: Auto / Manual / Off (built this session)
+- **Auto (default):** creates a workspace-named folder under the shared "Trinno" drive (`PLAN_IMPORT_DRIVE_ROOT`, set in .env.local to 1xIeVERA0fQjfXF3j29iUvJ7HKPXcOkng), then a Google Doc per deliverable. No pasting. Verified live: SA (959497083111-compute) reads Trinno; resolveProjectFolder is idempotent.
+- **Manual:** paste a folder id/link (link → id parsed in the action). **Off:** placeholder links.
+- Uses the app's PMA Drive client (GOOGLE_APPLICATION_CREDENTIALS=.secrets/pma-sa.json locally). build opts: { driveMode, manualFolderId, applyOwners }.
+- **Deploy follow-up:** set PLAN_IMPORT_DRIVE_ROOT + GOOGLE_SERVICE_ACCOUNT_JSON in Vercel for auto-mode in hosted prod. Delete the "_import-smoke (delete me)" test folder left in Trinno.
+
 ## Env / ops notes
 - Dev Supabase URL is a LAN IP now (192.168.68.58:54321), still the local dev DB. Cleanup/seed guards must treat 192.168.* as local (run.sh already does).
 - Cleanup after test/stuck-build runs: service-role delete of "Test Plan WS" + "ARISE Project — Project Plan" + planbuild-*@x.io users. Keep real imported workspaces (e.g. "AIWEPI High-Level Prototype — Project Plan").
