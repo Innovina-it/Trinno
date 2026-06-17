@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { dbAsUser } from "@/lib/db/client";
-import { workspaces, boards, cards, links, milestones } from "@/lib/db/schema";
+import { workspaces, boards, cards, links } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
 
 // build.ts carries `import "server-only"`; stub it for the node test env.
@@ -62,17 +62,17 @@ describe("buildWorkspaceFromPlan", () => {
 
       const boardIds = bs.map((b) => b.id);
       const allCards = await tx.select().from(cards).where(inArray(cards.boardId, boardIds));
-      // 2 anchors (task) + 3 tasks (task) + 2 deliverables (subtask) = 7.
-      // Milestones live in their own `milestones` table, not as cards.
-      expect(allCards.length).toBe(7);
+      // 2 anchors (task) + 3 tasks (task) + 2 deliverables (subtask) + 1 milestone card = 8.
+      // Milestones are cards now (type='milestone' on the parent board's hidden list).
+      expect(allCards.length).toBe(8);
       expect(allCards.filter((c) => c.type === "task").length).toBe(5);
       expect(allCards.filter((c) => c.type === "subtask").length).toBe(2);
 
-      // Milestones pinned to the parent board (milestones table).
-      const ms = await tx.select().from(milestones).where(eq(milestones.workspaceId, wsId));
-      expect(ms.length).toBe(1);
-      expect(ms[0].name).toBe("M6 — Baseline");
-      expect(ms[0].boardId).toBe(bs.find((b) => b.parentBoardId === null)!.id);
+      // The plan milestone, pinned to the parent board as a milestone-type card.
+      const milestoneCards = allCards.filter((c) => c.type === "milestone");
+      expect(milestoneCards.length).toBe(1);
+      expect(milestoneCards[0].title).toBe("M6 — Baseline");
+      expect(milestoneCards[0].boardId).toBe(bs.find((b) => b.parentBoardId === null)!.id);
 
       // Each deliverable got a card-scope URL link (placeholder here — no Drive folder).
       const ls = await tx.select().from(links).where(eq(links.workspaceId, wsId));
