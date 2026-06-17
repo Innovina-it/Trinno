@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import { isoToDate, dateToIso } from "@/lib/plan-import/date-adapter";
+import { DurationControl } from "./duration-control";
 import type { ProjectPlan, WorkPackage } from "@/lib/plan-import/types";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "S"}`;
@@ -66,14 +67,17 @@ export function ReviewStep({
 
   return (
     <div className="space-y-6 pb-24">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label>Workspace name</Label>
-          <Input
-            aria-label="Workspace name"
-            value={plan.workspaceName}
-            onChange={(e) => patch({ workspaceName: e.target.value })}
-          />
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="min-w-[14rem] flex-1 space-y-2">
+            <Label>Workspace name</Label>
+            <Input
+              aria-label="Workspace name"
+              value={plan.workspaceName}
+              onChange={(e) => patch({ workspaceName: e.target.value })}
+            />
+          </div>
+          <DurationControl plan={plan} onChange={onChange} />
         </div>
         <div className="space-y-2">
           <Label>Parent board title</Label>
