@@ -71,3 +71,16 @@ export function makeDriveDocsClient(folderId: string): DriveDocsClient {
 export async function probeFolder(folderId: string): Promise<void> {
   await listFolder(folderId);
 }
+
+// Auto mode: find-or-create a folder named after the project under the shared
+// root (the "Trinno" drive). Returns the project folder id, which then roots the
+// per-import doc client. Idempotent: re-importing the same project reuses it.
+export async function resolveProjectFolder(
+  rootFolderId: string,
+  projectName: string,
+): Promise<string> {
+  const existing = (await listFolder(rootFolderId)).find(
+    (f) => f.name === projectName && f.mimeType === FOLDER_MIME,
+  );
+  return existing ? existing.id : (await createFolder(projectName, rootFolderId)).id;
+}

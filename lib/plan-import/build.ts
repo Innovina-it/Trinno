@@ -12,7 +12,12 @@ import { upsertCardLinkImpl } from "@/actions/links";
 import { createMilestoneImpl } from "@/actions/milestones";
 
 import type { ProjectPlan } from "./types";
-import { makeDriveDocsClient, probeFolder, type DriveDocsClient } from "./drive-docs";
+import {
+  makeDriveDocsClient,
+  probeFolder,
+  resolveProjectFolder,
+  type DriveDocsClient,
+} from "./drive-docs";
 
 const PLACEHOLDER_LINK_URL = "https://www.corriere.it";
 const LINK_COLOR = "#facc15";
@@ -75,21 +80,43 @@ async function ensureStatusKinds(token: string, boardId: string): Promise<string
 export async function buildWorkspaceFromPlan(
   token: string,
   plan: ProjectPlan,
-  opts: { driveFolderId?: string; applyOwners?: boolean } = {},
+  opts: {
+    driveMode?: "auto" | "manual" | "off";
+    manualFolderId?: string;
+    applyOwners?: boolean;
+  } = {},
 ): Promise<BuildResult> {
-  const { driveFolderId, applyOwners = true } = opts;
+  const { driveMode = "off", manualFolderId, applyOwners = true } = opts;
   const failures: BuildFailure[] = [];
   const userId = decodeSub(token);
 
-  // Drive fail-fast: if a folder was given but the SA cannot read it, drop to
-  // placeholder links rather than aborting the whole import.
+  // Resolve where deliverable docs go. Any Drive failure drops to placeholder
+  // links rather than aborting the whole import.
+  //  - off:    no docs.
+  //  - manual: the user's pasted folder.
+  //  - auto:   a "<project>" folder created under the shared Trinno root
+  //            (PLAN_IMPORT_DRIVE_ROOT); zero pasting.
   let drive: DriveDocsClient | null = null;
-  if (driveFolderId) {
+  if (driveMode === "manual" && manualFolderId) {
     const ok = await step(failures, "drive-probe", async () => {
-      await probeFolder(driveFolderId);
+      await probeFolder(manualFolderId);
       return true;
     });
-    if (ok) drive = makeDriveDocsClient(driveFolderId);
+    if (ok) drive = makeDriveDocsClient(manualFolderId);
+  } else if (driveMode === "auto") {
+    const root = process.env.PLAN_IMPORT_DRIVE_ROOT?.trim();
+    if (!root) {
+      failures.push({
+        step: "drive-auto",
+        message: "Auto Drive folder not configured (set PLAN_IMPORT_DRIVE_ROOT).",
+      });
+    } else {
+      const projectFolderId = await step(failures, "drive-auto", async () => {
+        await probeFolder(root);
+        return resolveProjectFolder(root, plan.workspaceName);
+      });
+      if (projectFolderId) drive = makeDriveDocsClient(projectFolderId);
+    }
   }
 
   const ws = await step(failures, "workspace", () =>

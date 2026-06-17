@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ProjectPlan } from "@/lib/plan-import/types";
-import { UploadStep } from "./upload-step";
+import { UploadStep, type DriveMode } from "./upload-step";
 import { ReviewStep } from "./review-step";
 import { BuildStep } from "./build-step";
 import { WizardStepper, type WizardPhase } from "./wizard-stepper";
@@ -10,6 +10,7 @@ import { WizardStepper, type WizardPhase } from "./wizard-stepper";
 export function ImportWizard() {
   const [phase, setPhase] = useState<WizardPhase>("upload");
   const [plan, setPlan] = useState<ProjectPlan | null>(null);
+  const [driveMode, setDriveMode] = useState<DriveMode>("auto");
   const [driveFolderId, setDriveFolderId] = useState("");
   const [applyOwners, setApplyOwners] = useState(true);
 
@@ -25,6 +26,8 @@ export function ImportWizard() {
       <WizardStepper current={phase} />
       {mounted && phase === "upload" && (
         <UploadStep
+          driveMode={driveMode}
+          onDriveMode={setDriveMode}
           driveFolderId={driveFolderId}
           onDriveFolderId={setDriveFolderId}
           onExtracted={(p) => {
@@ -44,7 +47,12 @@ export function ImportWizard() {
         />
       )}
       {mounted && phase === "build" && plan && (
-        <BuildStep plan={plan} driveFolderId={driveFolderId} applyOwners={applyOwners} />
+        <BuildStep
+          plan={plan}
+          driveMode={driveMode}
+          driveFolderId={driveFolderId}
+          applyOwners={applyOwners}
+        />
       )}
     </div>
   );

@@ -15,6 +15,14 @@ import {
 
 const MAX_MB = 15;
 
+export type DriveMode = "auto" | "manual" | "off";
+
+const DRIVE_MODES: { key: DriveMode; label: string }[] = [
+  { key: "auto", label: "Auto" },
+  { key: "manual", label: "Manual" },
+  { key: "off", label: "Off" },
+];
+
 function sizeLabel(bytes: number): string {
   return bytes < 1024 * 1024
     ? `${Math.max(1, Math.round(bytes / 1024))} KB`
@@ -22,10 +30,14 @@ function sizeLabel(bytes: number): string {
 }
 
 export function UploadStep({
+  driveMode,
+  onDriveMode,
   driveFolderId,
   onDriveFolderId,
   onExtracted,
 }: {
+  driveMode: DriveMode;
+  onDriveMode: (m: DriveMode) => void;
   driveFolderId: string;
   onDriveFolderId: (v: string) => void;
   onExtracted: (plan: ProjectPlan) => void;
@@ -125,18 +137,47 @@ export function UploadStep({
       />
 
       <div className="space-y-2">
-        <Label>Google Drive folder for deliverable docs (optional)</Label>
-        <Input
-          type="text"
-          value={driveFolderId}
-          disabled={busy}
-          onChange={(e) => onDriveFolderId(e.target.value)}
-          placeholder="Drive folder ID or link"
-        />
-        <p className="text-xs text-fg-faint">
-          Share the folder with the service account as Editor, then paste its link. Leave blank
-          to skip Drive docs; deliverables get a placeholder link you can edit later.
-        </p>
+        <Label>Deliverable docs</Label>
+        <div className="flex gap-2">
+          {DRIVE_MODES.map((m) => (
+            <Button
+              key={m.key}
+              type="button"
+              size="sm"
+              variant={driveMode === m.key ? "default" : "outline"}
+              aria-pressed={driveMode === m.key}
+              disabled={busy}
+              onClick={() => onDriveMode(m.key)}
+            >
+              {m.label}
+            </Button>
+          ))}
+        </div>
+        {driveMode === "auto" && (
+          <p className="text-xs text-fg-faint">
+            A folder named after the project is created in the shared Trinno drive, with a Google
+            Doc per deliverable.
+          </p>
+        )}
+        {driveMode === "manual" && (
+          <>
+            <Input
+              type="text"
+              value={driveFolderId}
+              disabled={busy}
+              onChange={(e) => onDriveFolderId(e.target.value)}
+              placeholder="Drive folder ID or link"
+            />
+            <p className="text-xs text-fg-faint">
+              Share the folder with the service account as Editor, then paste its link.
+            </p>
+          </>
+        )}
+        {driveMode === "off" && (
+          <p className="text-xs text-fg-faint">
+            No Google Docs; each deliverable gets a placeholder link you can edit later.
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-3">

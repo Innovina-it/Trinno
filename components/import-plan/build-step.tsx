@@ -5,15 +5,18 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ProjectPlan } from "@/lib/plan-import/types";
 import { buildWorkspaceFromPlanAction } from "@/actions/plan-import";
+import type { DriveMode } from "./upload-step";
 
 type BuildFailure = { step: string; message: string };
 
 export function BuildStep({
   plan,
+  driveMode,
   driveFolderId,
   applyOwners,
 }: {
   plan: ProjectPlan;
+  driveMode: DriveMode;
   driveFolderId: string;
   applyOwners: boolean;
 }) {
@@ -33,7 +36,7 @@ export function BuildStep({
     started.current = true;
     (async () => {
       try {
-        const res = await buildWorkspaceFromPlanAction({ plan, driveFolderId, applyOwners });
+        const res = await buildWorkspaceFromPlanAction({ plan, driveMode, driveFolderId, applyOwners });
         if (res.ok && res.workspaceId) {
           // Hard navigation: a router.push here (in an effect, right after a
           // server action that called revalidatePath) gets swallowed by the
@@ -49,7 +52,7 @@ export function BuildStep({
         setStatus("error");
       }
     })();
-  }, [plan, driveFolderId, applyOwners]);
+  }, [plan, driveMode, driveFolderId, applyOwners]);
 
   if (status === "building") {
     return (
