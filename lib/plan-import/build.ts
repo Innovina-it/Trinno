@@ -221,6 +221,12 @@ export async function buildWorkspaceFromPlan(
             wpTitle: wp.title,
             deliverableTitle: d.title,
             subtitle: [wp.lead, `M${d.month}`].filter(Boolean).join(" · "),
+            project: plan.workspaceName,
+            workPackage: `${wp.code} · ${wp.title}`,
+            owner: wp.lead,
+            milestone: `M${d.month}`,
+            due: d.due,
+            description: d.description,
           });
           if (webViewLink) url = webViewLink;
         }

@@ -6,19 +6,52 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// HTML body uploaded as a native Google Doc (Drive converts text/html). Replaces
-// the CLI's .docx template + zipfile placeholder-patch entirely.
-export function deliverableDocHtml(input: { title: string; subtitle: string }): string {
-  const t = esc(input.title);
-  const s = esc(input.subtitle);
+export type DeliverableDocMeta = {
+  subtitle?: string;
+  project?: string;
+  workPackage?: string;
+  owner?: string;
+  milestone?: string;
+  due?: string;
+  description?: string;
+};
+
+// HTML body uploaded as a native Google Doc (Drive converts text/html). Mirrors
+// the manual seeders' .docx skeleton — a metadata table plus the standard
+// reporting sections — but filled with the deliverable's own data. No zip /
+// python / Docs API needed: createDoc converts text/html, tables included.
+export function deliverableDocHtml(input: { title: string } & DeliverableDocMeta): string {
+  const rows: [string, string | undefined][] = [
+    ["Project", input.project],
+    ["Work package", input.workPackage],
+    ["Owner", input.owner],
+    ["Milestone", input.milestone],
+    ["Due", input.due],
+  ];
+  const cells = rows
+    .filter(([, v]) => v && v.trim())
+    .map(
+      ([k, v]) =>
+        `<tr><td style="border:1px solid #ccc;padding:6px"><b>${esc(k)}</b></td>` +
+        `<td style="border:1px solid #ccc;padding:6px">${esc(v as string)}</td></tr>`,
+    )
+    .join("");
+  const table = cells
+    ? `<table style="border-collapse:collapse;width:100%">${cells}</table>`
+    : "";
+
   return [
-    `<h1>${t}</h1>`,
-    `<p><i>${s}</i></p>`,
-    `<h2>Executive summary</h2><p></p>`,
+    `<h1>${esc(input.title)}</h1>`,
+    input.subtitle ? `<p><i>${esc(input.subtitle)}</i></p>` : "",
+    table,
+    `<h2>Executive summary</h2><p>${esc(input.description ?? "")}</p>`,
     `<h2>Scope</h2><p></p>`,
-    `<h2>Content</h2><p></p>`,
+    `<h2>Approach</h2><p></p>`,
+    `<h2>Results</h2><p></p>`,
     `<h2>References</h2><p></p>`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -41,11 +74,9 @@ async function ensureFolder(
 }
 
 export type DriveDocsClient = {
-  createDeliverableDoc(input: {
-    wpTitle: string;
-    deliverableTitle: string;
-    subtitle: string;
-  }): Promise<{ webViewLink: string }>;
+  createDeliverableDoc(
+    input: { wpTitle: string; deliverableTitle: string } & DeliverableDocMeta,
+  ): Promise<{ webViewLink: string }>;
 };
 
 // Build a per-import Drive client rooted at folderId. Layout:
@@ -53,13 +84,13 @@ export type DriveDocsClient = {
 export function makeDriveDocsClient(folderId: string): DriveDocsClient {
   const folderCache = new Map<string, string>();
   return {
-    async createDeliverableDoc({ wpTitle, deliverableTitle, subtitle }) {
+    async createDeliverableDoc({ wpTitle, deliverableTitle, ...meta }) {
       const wpFolder = await ensureFolder(folderCache, folderId, wpTitle);
       const delFolder = await ensureFolder(folderCache, wpFolder, "Deliverables");
       const { webViewLink } = await createDoc({
         name: deliverableTitle,
         parentId: delFolder,
-        content: deliverableDocHtml({ title: deliverableTitle, subtitle }),
+        content: deliverableDocHtml({ title: deliverableTitle, ...meta }),
       });
       return { webViewLink };
     },

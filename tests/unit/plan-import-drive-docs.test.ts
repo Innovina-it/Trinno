@@ -21,4 +21,25 @@ describe("deliverableDocHtml", () => {
     expect(html).toContain("INNOVINA · M6");
     expect(html).toContain("Executive summary");
   });
+
+  it("renders a metadata table and the description when provided", () => {
+    const html = deliverableDocHtml({
+      title: "D1",
+      project: "AEGIS — Project Plan",
+      workPackage: "WP1 · Requirements",
+      owner: "BE-ST",
+      milestone: "M6",
+      due: "2026-06-30",
+      description: "What this deliverable covers.",
+    });
+    expect(html).toContain("<table");
+    expect(html).toContain("Project");
+    expect(html).toContain("AEGIS — Project Plan");
+    expect(html).toContain("BE-ST");
+    expect(html).toContain("What this deliverable covers.");
+  });
+
+  it("omits the table when there is no metadata", () => {
+    expect(deliverableDocHtml({ title: "D1" })).not.toContain("<table");
+  });
 });
