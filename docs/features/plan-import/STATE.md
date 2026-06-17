@@ -34,6 +34,15 @@
 - DEFERRED by decision: docx/xlsx auto-conversion. soffice (LibreOffice 24.2) IS on the dev box but NOT on Vercel serverless → an auto-converter would break in hosted prod. Revisit with a serverless converter / cloud API if prod needs Office support.
 - DEFERRED: large-file Gemini Files-API path (over the 15 MB inline cap). SDK surface: ai.files.upload + createPartFromUri.
 
+## Review-step features (built this session)
+- **Duration control** beside the workspace name: edits the project length (months); rescales every date proportionally from a fixed start (lib/plan-import/rescale.ts, unit-tested). Live/debounced commit.
+- **Per-task owner + toggle**: each task has an editable owner, pre-filled at extraction from its WP `lead` (extract.ts inherit). A "Stamp owners" toggle (default on) appends the owner to task card titles ("T1.1 · BE-ST"); WP anchor stays clean. Owner is title text, not owner_id (org isn't an app user). buildWorkspaceFromPlan signature is now (token, plan, { driveFolderId?, applyOwners? }).
+- **Fixes**: hydration (steps mount client-only, import-wizard); build no longer hangs (dropped cancelled flag) + hard-navigates via window.location.assign (build-step); duration rescales without clicking out (debounce).
+
+## Env / ops notes
+- Dev Supabase URL is a LAN IP now (192.168.68.58:54321), still the local dev DB. Cleanup/seed guards must treat 192.168.* as local (run.sh already does).
+- Cleanup after test/stuck-build runs: service-role delete of "Test Plan WS" + "ARISE Project — Project Plan" + planbuild-*@x.io users. Keep real imported workspaces (e.g. "AIWEPI High-Level Prototype — Project Plan").
+
 ## Notes / decisions
 - WIP limit ≤2 unverified units; Gate 4 evidence before passing each Tier 2 unit.
 - Integration test (U5) needs local Supabase (:54321).
