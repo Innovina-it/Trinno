@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ProjectPlan } from "@/lib/plan-import/types";
@@ -14,6 +15,12 @@ import {
 
 const MAX_MB = 15;
 
+function sizeLabel(bytes: number): string {
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export function UploadStep({
   driveFolderId,
   onDriveFolderId,
@@ -23,21 +30,30 @@ export function UploadStep({
   onDriveFolderId: (v: string) => void;
   onExtracted: (plan: ProjectPlan) => void;
 }) {
+  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function reject(msg: string) {
-    setError(msg);
+  // Stage a chosen file (validate only). Extraction does NOT start here — the
+  // user reviews the Drive folder, then presses Extract.
+  function pick(f: File) {
     setDragging(false);
+    if (!isSupportedUpload(f.type)) {
+      setError(`Unsupported file. Choose a ${SUPPORTED_UPLOAD_LABEL} (export Word/Excel as PDF first).`);
+      return;
+    }
+    if (f.size > MAX_MB * 1024 * 1024) {
+      setError(`That file is over ${MAX_MB} MB. Use a smaller export.`);
+      return;
+    }
+    setError(null);
+    setFile(f);
   }
 
-  async function onFile(file: File) {
-    if (!isSupportedUpload(file.type))
-      return reject(`Unsupported file. Drop a ${SUPPORTED_UPLOAD_LABEL} (export Word/Excel as PDF first).`);
-    if (file.size > MAX_MB * 1024 * 1024)
-      return reject(`That file is over ${MAX_MB} MB. Use a smaller export.`);
+  async function extract() {
+    if (!file || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -49,12 +65,10 @@ export function UploadStep({
       onExtracted(json.plan as ProjectPlan);
     } catch (e) {
       setError(
-        `Couldn't read that PDF: ${e instanceof Error ? e.message : "unknown error"}. Try again, or enter the plan by hand.`,
+        `Couldn't read that file: ${e instanceof Error ? e.message : "unknown error"}. Try again, or pick another file.`,
       );
     } finally {
       setBusy(false);
-      setDragging(false);
-      if (fileRef.current) fileRef.current.value = "";
     }
   }
 
@@ -72,7 +86,7 @@ export function UploadStep({
         onDrop={(e) => {
           e.preventDefault();
           const f = e.dataTransfer.files?.[0];
-          if (f) onFile(f);
+          if (f) pick(f);
         }}
         className={cn(
           "flex w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-6 py-12 text-center transition-[background-color,border-color] duration-200 ease-out outline-none",
@@ -82,18 +96,19 @@ export function UploadStep({
           busy && "pointer-events-none opacity-60",
         )}
       >
-        {busy ? (
-          <Loader2 className="size-5 animate-spin text-fg-muted" />
+        <FileText className="size-5 text-fg-muted" />
+        {file ? (
+          <>
+            <span className="text-sm text-fg">{file.name}</span>
+            <span className="mono-meta text-fg-faint">{sizeLabel(file.size)} · click to replace</span>
+          </>
         ) : (
-          <FileText className="size-5 text-fg-muted" />
-        )}
-        <span className="text-sm text-fg">
-          {busy ? "Reading the plan. This can take up to a minute." : "Drop a project-plan file, or click to choose."}
-        </span>
-        {!busy && (
-          <span className="font-serif text-sm italic text-fg-faint">
-            {SUPPORTED_UPLOAD_LABEL}, up to {MAX_MB} MB
-          </span>
+          <>
+            <span className="text-sm text-fg">Drop a project-plan file, or click to choose.</span>
+            <span className="font-serif text-sm italic text-fg-faint">
+              {SUPPORTED_UPLOAD_LABEL}, up to {MAX_MB} MB
+            </span>
+          </>
         )}
       </button>
 
@@ -104,7 +119,8 @@ export function UploadStep({
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) onFile(f);
+          if (f) pick(f);
+          if (fileRef.current) fileRef.current.value = "";
         }}
       />
 
@@ -121,6 +137,16 @@ export function UploadStep({
           Share the folder with the service account as Editor, then paste its link. Leave blank
           to skip Drive docs; deliverables get a placeholder link you can edit later.
         </p>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button type="button" onClick={extract} disabled={!file || busy} className="gap-2">
+          {busy && <Loader2 className="size-3.5 animate-spin" />}
+          {busy ? "Reading the plan…" : "Extract plan"}
+        </Button>
+        {busy && (
+          <span className="text-sm text-fg-muted">This can take up to a minute.</span>
+        )}
       </div>
 
       {error && <p className="text-sm text-[color:var(--accent-magenta)]">{error}</p>}
