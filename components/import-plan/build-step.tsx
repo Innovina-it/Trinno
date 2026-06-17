@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ProjectPlan } from "@/lib/plan-import/types";
@@ -16,40 +15,39 @@ export function BuildStep({
   plan: ProjectPlan;
   driveFolderId: string;
 }) {
-  const router = useRouter();
   const [status, setStatus] = useState<"building" | "partial" | "error">("building");
   const [failures, setFailures] = useState<BuildFailure[]>([]);
   const [wsId, setWsId] = useState<string | null>(null);
-  // One-shot guard: the build must fire exactly once. Without it, React
-  // StrictMode (dev) double-invokes this effect and builds two workspaces.
+  // One-shot guard: the build fires exactly once. React StrictMode (dev)
+  // mounts → unmounts → remounts; the ref persists across that, so the action
+  // runs a single time. We do NOT use a `cancelled` cleanup flag here: under
+  // StrictMode the first unmount would set it true, and since the remount hits
+  // this guard and returns early, the in-flight result would be discarded and
+  // the spinner would hang forever. The result must always be handled.
   const started = useRef(false);
 
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    let cancelled = false;
     (async () => {
       try {
         const res = await buildWorkspaceFromPlanAction({ plan, driveFolderId });
-        if (cancelled) return;
         if (res.ok && res.workspaceId) {
-          router.push(`/w/${res.workspaceId}/roadmap`);
+          // Hard navigation: a router.push here (in an effect, right after a
+          // server action that called revalidatePath) gets swallowed by the
+          // App Router. assign() reliably lands on the freshly built workspace.
+          window.location.assign(`/w/${res.workspaceId}/roadmap`);
           return;
         }
         setWsId(res.workspaceId);
         setFailures(res.failures);
         setStatus("partial");
       } catch (e) {
-        if (!cancelled) {
-          setFailures([{ step: "build", message: e instanceof Error ? e.message : "failed" }]);
-          setStatus("error");
-        }
+        setFailures([{ step: "build", message: e instanceof Error ? e.message : "failed" }]);
+        setStatus("error");
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [plan, driveFolderId, router]);
+  }, [plan, driveFolderId]);
 
   if (status === "building") {
     return (
@@ -73,7 +71,11 @@ export function BuildStep({
         ))}
       </ul>
       {wsId && (
-        <Button type="button" variant="outline" onClick={() => router.push(`/w/${wsId}/roadmap`)}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => window.location.assign(`/w/${wsId}/roadmap`)}
+        >
           Open the partial workspace
         </Button>
       )}
