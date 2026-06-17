@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ProjectPlan } from "@/lib/plan-import/types";
 import { UploadStep } from "./upload-step";
 import { ReviewStep } from "./review-step";
@@ -12,10 +12,17 @@ export function ImportWizard() {
   const [plan, setPlan] = useState<ProjectPlan | null>(null);
   const [driveFolderId, setDriveFolderId] = useState("");
 
+  // The steps carry interactive form inputs whose base-ui ids derive from
+  // React useId; server-rendering them desyncs the ids at hydration. The wizard
+  // is fully interactive and behind auth (no SSR value), so mount the steps
+  // client-side only. The stepper has no inputs and renders on the server fine.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   return (
     <div className="mt-6 space-y-6">
       <WizardStepper current={phase} />
-      {phase === "upload" && (
+      {mounted && phase === "upload" && (
         <UploadStep
           driveFolderId={driveFolderId}
           onDriveFolderId={setDriveFolderId}
@@ -25,7 +32,7 @@ export function ImportWizard() {
           }}
         />
       )}
-      {phase === "review" && plan && (
+      {mounted && phase === "review" && plan && (
         <ReviewStep
           plan={plan}
           onChange={setPlan}
@@ -33,7 +40,7 @@ export function ImportWizard() {
           onConfirm={() => setPhase("build")}
         />
       )}
-      {phase === "build" && plan && (
+      {mounted && phase === "build" && plan && (
         <BuildStep plan={plan} driveFolderId={driveFolderId} />
       )}
     </div>
