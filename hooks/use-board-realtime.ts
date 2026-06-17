@@ -29,6 +29,7 @@ function rowToList(r: Record<string, unknown>): ListRow {
     wipLimit: (r.wip_limit ?? null) as number | null,
     statusKind: (r.status_kind ?? null) as ListRow["statusKind"],
     color: (r.color ?? null) as string | null,
+    hidden: (r.hidden ?? false) as boolean,
   };
 }
 
@@ -56,6 +57,7 @@ function rowToCard(r: Record<string, unknown>): CardRow {
     priority: (r.priority ?? null) as CardRow["priority"],
     coverKind: ((r.cover_kind as string) ?? "none") as CardRow["coverKind"],
     coverValue: (r.cover_value ?? null) as string | null,
+    icon: (r.icon ?? null) as string | null,
     roadmapOrder: (r.roadmap_order ?? null) as number | null,
     ownerId: (r.owner_id ?? null) as string | null,
     completedAt: r.completed_at ? new Date(r.completed_at as string) : null,

@@ -68,6 +68,23 @@ export async function listCardHistory(
           .filter((id): id is string => id !== null),
       ),
     );
+    // User-valued fields store a raw profile UUID in old_value/new_value:
+    // owner changes (0091) and assignee add/remove (0139). Collect from
+    // BOTH sides so the read feed can show "Assigned Ada" instead of an
+    // opaque uuid — same treatment list_id already gets below.
+    const USER_VALUE_FIELDS = new Set([
+      "owner_id",
+      "assignee_add",
+      "assignee_remove",
+    ]);
+    const userValueIds = Array.from(
+      new Set(
+        fieldRows
+          .filter((r) => USER_VALUE_FIELDS.has(r.field))
+          .flatMap((r) => [r.oldValue, r.newValue])
+          .filter((id): id is string => id !== null && id !== ""),
+      ),
+    );
     const sprintIds = Array.from(
       new Set(
         sprintRows
@@ -87,13 +104,17 @@ export async function listCardHistory(
       ),
     );
 
-    const actorRows = actorIds.length
+    // One batched profile lookup covering both actors (who made the
+    // change) and user-valued fields (owner / assignee values).
+    const profileIds = Array.from(new Set([...actorIds, ...userValueIds]));
+    const profileRows = profileIds.length
       ? await tx
           .select({ id: profiles.id, displayName: profiles.displayName })
           .from(profiles)
-          .where(inArray(profiles.id, actorIds))
+          .where(inArray(profiles.id, profileIds))
       : [];
-    const actorById = new Map(actorRows.map((r) => [r.id, r.displayName]));
+    const nameById = new Map(profileRows.map((r) => [r.id, r.displayName]));
+    const actorById = nameById;
 
     const sprintNameRows = sprintIds.length
       ? await tx
@@ -116,17 +137,28 @@ export async function listCardHistory(
     // raw id still renders rather than collapsing to "—".
     const resolveListValue = (v: string | null): string | null =>
       v ? listTitleById.get(v) ?? v : v;
+    // Swap a profile UUID for its display name; leave a non-null value
+    // untouched if the profile was hard-deleted so the raw id still
+    // renders rather than collapsing to "—".
+    const resolveUserValue = (v: string | null): string | null =>
+      v ? nameById.get(v) ?? v : v;
 
     const out: CardHistoryRow[] = [];
     for (const r of fieldRows) {
       const isList = r.field === "list_id";
+      const isUser = USER_VALUE_FIELDS.has(r.field);
+      const resolve = isList
+        ? resolveListValue
+        : isUser
+          ? resolveUserValue
+          : (v: string | null) => v;
       out.push({
         kind: "field",
         id: r.id,
         cardId: r.cardId,
         field: r.field,
-        oldValue: isList ? resolveListValue(r.oldValue) : r.oldValue,
-        newValue: isList ? resolveListValue(r.newValue) : r.newValue,
+        oldValue: resolve(r.oldValue),
+        newValue: resolve(r.newValue),
         actorId: r.actorId,
         actorName: r.actorId ? actorById.get(r.actorId) ?? null : null,
         at: r.changedAt as Date,

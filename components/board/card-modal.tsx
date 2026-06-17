@@ -153,6 +153,9 @@ function AccordionGroup({
 }
 
 const FIELD_LABEL: Record<string, string> = {
+  created: "Created",
+  assignee_add: "Assigned",
+  assignee_remove: "Unassigned",
   title: "Title",
   priority: "Priority",
   owner_id: "Owner",
@@ -187,11 +190,10 @@ function shortHistoryValue(v: string | null): string {
 
 function fmtHistoryValue(field: string, v: string | null): string {
   if (v === null || v === "") return "-";
-  if (
-    field === "owner_id" ||
-    field === "parent_card_id" ||
-    field === "sprint_id"
-  ) {
+  // owner_id / assignee values arrive pre-resolved to display names from
+  // the read query, so they are NOT shortened here. parent_card_id and
+  // sprint_id stay raw uuids → shorten for legibility.
+  if (field === "parent_card_id" || field === "sprint_id") {
     return shortHistoryValue(v);
   }
   if (
@@ -286,7 +288,31 @@ function CardHistoryPanel({
               >
                 {fmtHistoryDate(r.at)}
               </span>
-              {r.kind === "field" ? (
+              {r.kind === "field" && r.field === "created" ? (
+                <>
+                  <span className="text-fg shrink-0">Created</span>
+                  {r.actorName && (
+                    <span className="ml-auto mono-meta-sm text-fg-faint truncate">
+                      by {r.actorName}
+                    </span>
+                  )}
+                </>
+              ) : r.kind === "field" &&
+                (r.field === "assignee_add" || r.field === "assignee_remove") ? (
+                <>
+                  <span className="text-fg-muted shrink-0">
+                    {r.field === "assignee_add" ? "Assigned" : "Unassigned"}
+                  </span>
+                  <span className="text-fg min-w-0 break-words">
+                    {r.field === "assignee_add" ? r.newValue : r.oldValue}
+                  </span>
+                  {r.actorName && (
+                    <span className="ml-auto mono-meta-sm text-fg-faint truncate">
+                      by {r.actorName}
+                    </span>
+                  )}
+                </>
+              ) : r.kind === "field" ? (
                 <>
                   <span className="text-fg-muted shrink-0">
                     {FIELD_LABEL[r.field] ?? r.field}

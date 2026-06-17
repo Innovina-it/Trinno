@@ -116,7 +116,15 @@ export function BulkActionBar({
   const overLimit = count > BULK_LIMIT;
   const buttonsDisabled = pending || count === 0 || overLimit;
 
-  const canBulk = useMemo(() => selectedIds.slice(0, BULK_LIMIT), [selectedIds]);
+  // Defensive: milestone-as-card cards live in a hidden list and must
+  // never be subject to bulk actions. Drop them from the resolved
+  // selection before the BULK_LIMIT cap.
+  const canBulk = useMemo(() => {
+    const milestoneIds = new Set(
+      cards.filter((c) => c.type === "milestone").map((c) => c.id),
+    );
+    return selectedIds.filter((id) => !milestoneIds.has(id)).slice(0, BULK_LIMIT);
+  }, [selectedIds, cards]);
   const memberAssignmentCounts = useMemo(() => {
     const selected = new Set(canBulk);
     const counts = new Map<string, number>();
@@ -644,7 +652,9 @@ export function BulkActionBar({
           </DropdownMenuTrigger>
           <DropdownMenuContent>
             <DropdownMenuLabel>To list</DropdownMenuLabel>
-            {lists.map((l) => (
+            {lists
+              .filter((l) => !l.hidden)
+              .map((l) => (
               <DropdownMenuItem
                 key={l.id}
                 onClick={() => onMoveToList(l.id)}

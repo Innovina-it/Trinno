@@ -143,6 +143,9 @@ export function MeTimelineView({
       }
     }
     for (const c of cards) {
+      // milestone-as-card cards live in a hidden list and must never
+      // surface on normal card surfaces like the cross-workspace timeline.
+      if (c.type === "milestone") continue;
       let ws = byWs.get(c.workspaceId);
       if (!ws) {
         ws = {

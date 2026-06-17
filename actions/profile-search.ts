@@ -268,6 +268,15 @@ export async function searchProfiles(
         if (/^\d{10,}$/.test(seg)) return true;
         if (seg.length >= 10 && /\d/.test(seg) && /[a-z]/i.test(seg))
           return true;
+        // Test fixtures use `${prefix}-${id.slice(0, 8)}` — an 8-char hex
+        // uuid slice. Flag a pure-hex 8-char segment that mixes a digit and
+        // a hex letter (a–f), which a human-picked handle suffix never is.
+        if (
+          /^[0-9a-f]{8}$/i.test(seg) &&
+          /\d/.test(seg) &&
+          /[a-f]/i.test(seg)
+        )
+          return true;
       }
       return false;
     };

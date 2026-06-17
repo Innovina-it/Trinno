@@ -103,6 +103,9 @@ export function MeOpenCards({ cards }: MeOpenCardsProps) {
     grouped.set(col.key, []);
   }
   for (const card of cards) {
+    // milestone-as-card cards live in a hidden list and must never
+    // surface on normal card surfaces like the open-cards board.
+    if (card.type === "milestone") continue;
     const key = columnKey(card.statusKind);
     grouped.get(key)?.push(card);
   }

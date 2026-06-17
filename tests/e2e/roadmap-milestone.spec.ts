@@ -40,6 +40,22 @@ async function signupOwner(page: Page, email: string): Promise<string> {
   return page.url().match(/\/w\/([0-9a-f-]{36})/)![1];
 }
 
+// milestone-as-card: a milestone is now a card with type="milestone" hosted in
+// a hidden list on a board, so the workspace needs at least one board before a
+// milestone can be created. Create one through the real UI.
+async function createBoard(page: Page) {
+  await page.getByTestId("nav-boards").click();
+  await expect(page).toHaveURL(/\/w\/[0-9a-f-]{36}\/boards/);
+  await page.getByRole("button", { name: /new board/i }).click();
+  await page.getByRole("button", { name: /^continue$/i }).click();
+  const title = page.getByLabel("Title");
+  await expect(title).toBeVisible();
+  await title.fill("Board");
+  await page.getByRole("button", { name: /create board/i }).click();
+  await expect(page).toHaveURL(/\/b\/[0-9a-f-]{36}/, { timeout: 30000 });
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+}
+
 async function addMilestone(page: Page, name: string, date: string) {
   await page.getByTestId("roadmap-add-milestone").click();
   const dialog = page.getByTestId("milestone-dialog");
@@ -65,6 +81,7 @@ test.describe("roadmap milestone view", () => {
     page,
   }) => {
     const wsId = await signupOwner(page, uniqEmail("ms-own"));
+    await createBoard(page); // milestones need a host board (milestone-as-card)
 
     await gotoWithRetry(page, `/w/${wsId}/roadmap`);
     await expect(page.getByTestId("roadmap-view")).toBeVisible();

@@ -80,8 +80,9 @@ export function InviteMemberForm({
     };
   }, []);
 
-  // Collaborator list (localStorage-cached) is used only for instant
-  // client-side matches as you type — no full list on empty focus.
+  // Collaborator list (localStorage-cached) gives an instant client-side
+  // render — both for the empty-focus preload and for matches as you type —
+  // while the server query resolves.
   const { people: cachedCollaborators } = usePeopleCache(viewerId);
 
   // Same set the new-workspace picker shows — everyone you collaborate with.
@@ -99,16 +100,28 @@ export function InviteMemberForm({
     async (q: string) => {
       const v = ++reqVersion.current;
       const keep = (p: PickerProfile) => !excludeSet.has(p.id);
-      // Nothing to suggest until the user types — no full list on focus.
       const needle = stripAt(q);
+      setSearching(true);
+      // Empty query → preload everyone (collaborators first, padded to 12 by
+      // searchProfiles). Show the cached collaborators instantly while the
+      // server preload resolves.
       if (!needle) {
-        if (v !== reqVersion.current) return;
-        setSuggestions([]);
-        setActiveIdx(0);
-        setSearching(false);
+        if (v === reqVersion.current && cachedCollaborators.length > 0) {
+          setSuggestions(cachedCollaborators.filter(keep));
+          setActiveIdx(0);
+        }
+        try {
+          const results = await searchProfiles("");
+          if (v !== reqVersion.current) return;
+          setSuggestions(results.filter(keep));
+          setActiveIdx(0);
+        } catch {
+          if (v === reqVersion.current) setSuggestions(cachedCollaborators.filter(keep));
+        } finally {
+          if (v === reqVersion.current) setSearching(false);
+        }
         return;
       }
-      setSearching(true);
       // Instant matches from the cached collaborators (handle prefix or name),
       // so "L" surfaces Luca immediately while the server query resolves.
       const cmp = needle.toLowerCase();
@@ -321,9 +334,12 @@ export function InviteMemberForm({
             value={email}
             onChange={(e) => handleInput(e.target.value)}
             onFocus={() => {
-              // No list on focus — suggestions only appear once you type.
+              // Open + preload the full people list immediately; typing then
+              // narrows it. Picking a person leaves `selected` set, so don't
+              // re-preload over their chosen name.
               if (blurTimer.current) clearTimeout(blurTimer.current);
               setOpen(true);
+              if (!selected) void loadSuggestions(email);
             }}
             onBlur={() => {
               // Delay so an option's mousedown/click registers before close.

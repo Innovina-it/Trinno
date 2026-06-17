@@ -8,7 +8,6 @@ import {
   cards,
   boards,
   cardMembers,
-  milestones,
   roadmapBaselines,
   roadmapBaselineEntries,
   roadmapBaselineAssignees,
@@ -141,10 +140,18 @@ export async function getRunInputs(
       .innerJoin(cards, eq(cards.id, cardMembers.cardId))
       .innerJoin(boards, eq(boards.id, cards.boardId))
       .where(and(eq(boards.workspaceId, workspaceId), eq(cards.archived, false)));
+    // milestone-as-card — live milestones are cards with type="milestone".
     const liveMsRows = await tx
-      .select({ milestoneId: milestones.id, name: milestones.name, date: milestones.date })
-      .from(milestones)
-      .where(eq(milestones.workspaceId, workspaceId));
+      .select({ milestoneId: cards.id, name: cards.title, date: cards.targetDate })
+      .from(cards)
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .where(
+        and(
+          eq(boards.workspaceId, workspaceId),
+          eq(cards.type, "milestone"),
+          eq(cards.archived, false),
+        ),
+      );
     const live = {
       entries: buildEntries(cardRows, cardAssignees),
       milestones: liveMsRows.map((m) => ({

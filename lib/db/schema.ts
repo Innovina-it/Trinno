@@ -145,6 +145,9 @@ export const lists = pgTable("lists", {
   wipLimit: integer("wip_limit"),
   statusKind: listStatusKind("status_kind"),
   color: text("color"),
+  // milestone-as-card — a hidden list never renders as a board column;
+  // hosts type="milestone" cards so they stay off the board (migration 0135).
+  hidden: boolean("hidden").notNull().default(false),
 });
 
 export const cardPriority = pgEnum("card_priority", [
@@ -184,6 +187,9 @@ export const cards = pgTable("cards", {
   priority: cardPriority("priority"),
   coverKind: text("cover_kind").notNull().default("none"),
   coverValue: text("cover_value"),
+  // milestone-as-card — emoji/icon shown on the roadmap marker label.
+  // Null for non-milestone cards (migration 0136).
+  icon: text("icon"),
   ownerId: uuid("owner_id"),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   // Roadmap completion sync: the list this card was in right before the
