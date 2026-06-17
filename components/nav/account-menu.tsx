@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { LogOut, Settings } from "lucide-react";
+import { FileUp, LogOut, Settings } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -32,13 +32,17 @@ function deriveInitials(email: string): string {
  * Identity-only menu. Navigation lives in the command palette (⌘K) and
  * the primary nav, not here. Avatar exposes signed-in email + log out;
  * any future profile / settings entries belong on the user-settings page.
+ * Exception: "Import plan" is a restricted tool with no other entry point, so
+ * it lives here gated behind `canImportPlan` (only shown to allowlisted users).
  */
 export function AccountMenu({
   userId,
   email,
+  canImportPlan,
 }: {
   userId: string;
   email: string;
+  canImportPlan?: boolean;
 }) {
   const initials = deriveInitials(email);
   const { flushPreferences } = useUserPreferences();
@@ -75,6 +79,18 @@ export function AccountMenu({
           <Settings className="size-3.5" />
           <span>Settings</span>
         </DropdownMenuItem>
+        {canImportPlan && (
+          <DropdownMenuItem
+            nativeButton={false}
+            render={
+              <Link href="/import-plan" data-testid="account-menu-import-plan" />
+            }
+            className="text-fg-muted"
+          >
+            <FileUp className="size-3.5" />
+            <span>Import plan</span>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <form
           onSubmit={async (e) => {

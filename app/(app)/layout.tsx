@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { and, eq } from "drizzle-orm";
 import { requireUser, getSessionToken } from "@/lib/auth";
+import { isImportPlanAllowed } from "@/lib/plan-import/access";
 import { TopNav } from "@/components/nav/top-nav";
 import { TourOverlay } from "@/components/onboarding/tour-overlay";
 import { ErrorPane } from "@/components/error-pane";
@@ -205,6 +206,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         activeWorkspaceId={activeWorkspaceId}
         activeWorkspaceLink={activeWorkspaceLink}
         canEditWorkspaceLink={canEditWorkspaceLink}
+        canImportPlan={isImportPlanAllowed(user.email)}
       />
       <main id="main" className="min-h-[calc(100dvh-3.5rem)]">{children}</main>
       {showTour && <TourOverlay />}

@@ -57,6 +57,7 @@ export function TopNav({
   activeWorkspaceId,
   activeWorkspaceLink,
   canEditWorkspaceLink,
+  canImportPlan,
 }: {
   email: string;
   userId: string;
@@ -64,6 +65,7 @@ export function TopNav({
   activeWorkspaceId?: string;
   activeWorkspaceLink?: { url: string } | null;
   canEditWorkspaceLink?: boolean;
+  canImportPlan?: boolean;
 }) {
   const pathname = usePathname() ?? "";
   useWorkspaceMembershipSync(userId);
@@ -298,7 +300,13 @@ export function TopNav({
               </div>
             )}
             {mounted && <NotificationBell userId={userId} />}
-            {mounted && <AccountMenu userId={userId} email={email} />}
+            {mounted && (
+              <AccountMenu
+                userId={userId}
+                email={email}
+                canImportPlan={canImportPlan}
+              />
+            )}
           </div>
         </div>
       </header>
