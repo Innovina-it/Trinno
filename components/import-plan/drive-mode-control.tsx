@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import type { DriveMode } from "./upload-step";
 
@@ -23,6 +24,13 @@ export function DriveModeControl({
   disabled?: boolean;
 }) {
   const manual = mode === "manual";
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Focus the folder input the moment Manual is selected, so the user can type
+  // immediately instead of clicking the field.
+  useEffect(() => {
+    if (manual) inputRef.current?.focus();
+  }, [manual]);
 
   const tab = (active: boolean) =>
     cn(
@@ -79,6 +87,7 @@ export function DriveModeControl({
           Manual
         </button>
         <input
+          ref={inputRef}
           type="text"
           aria-label="Drive folder ID or link"
           value={folderId}
