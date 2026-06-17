@@ -642,8 +642,11 @@ export function RoadmapView({
   const sharedSnapshot = useWorkspaceSnapshot(workspaceId);
   const sharedBoards = useBoards(workspaceId);
   const sharedMembers = useMembers(workspaceId);
+  // Default ON: the shared workspace cache is the standard behaviour for
+  // every workspace; write the flag `false` on a workspace to opt it out.
   const sharedWorkspaceCacheEnabled = useWorkspaceFlag(
     "shared_workspace_cache_v2",
+    true,
   );
   const storeBoards =
     sharedWorkspaceCacheEnabled && sharedBoards.length > 0

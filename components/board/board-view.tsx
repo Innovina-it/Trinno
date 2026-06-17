@@ -117,8 +117,11 @@ export function BoardView({
   const [, start] = useTransition();
   const sharedSnapshot = useWorkspaceSnapshot(board.workspaceId);
   const sharedBoards = useBoards(board.workspaceId);
+  // Default ON: the shared workspace cache is the standard behaviour for
+  // every workspace; write the flag `false` on a workspace to opt it out.
   const sharedWorkspaceCacheEnabled = useWorkspaceFlag(
     "shared_workspace_cache_v2",
+    true,
   );
   const displayBoard =
     sharedWorkspaceCacheEnabled

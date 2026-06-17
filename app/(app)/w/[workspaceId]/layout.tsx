@@ -30,9 +30,12 @@ export default async function WorkspaceLayout({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) redirect("/?notice=removed");
+  // Default ON: the shared workspace cache is the standard behaviour for
+  // every workspace; write the flag `false` on a workspace to opt it out.
   const sharedWorkspaceCacheEnabled = await hasFlag(
     workspaceId,
     "shared_workspace_cache_v2",
+    true,
   );
   if (!sharedWorkspaceCacheEnabled) {
     // Still mount a minimal WorkspaceStoreProvider here so the guest
