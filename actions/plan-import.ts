@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser, getSessionToken } from "@/lib/auth";
+import { isImportPlanAllowed } from "@/lib/plan-import/access";
 import { ProjectPlanSchema } from "@/lib/plan-import/types";
 import { buildWorkspaceFromPlan } from "@/lib/plan-import/build";
 
@@ -23,7 +24,12 @@ export async function buildWorkspaceFromPlanAction(input: {
   driveFolderId?: string;
   applyOwners?: boolean;
 }) {
-  await requireUser();
+  const user = await requireUser();
+  // Restricted feature: reject anyone off the allowlist (this action is callable
+  // directly, so the page 404 alone is not enough). See lib/plan-import/access.ts.
+  if (!isImportPlanAllowed(user.email)) {
+    throw new Error("You don't have access to plan import.");
+  }
   const token = (await getSessionToken())!;
   const plan = ProjectPlanSchema.parse(input.plan);
   const result = await buildWorkspaceFromPlan(token, plan, {

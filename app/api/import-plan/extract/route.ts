@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
+import { isImportPlanAllowed } from "@/lib/plan-import/access";
 import { extractPlanFromFile } from "@/lib/plan-import/extract";
 import { isSupportedUpload, SUPPORTED_UPLOAD_LABEL } from "@/lib/plan-import/supported-types";
 import { checkPdfSize } from "./size";
@@ -17,7 +18,15 @@ export async function POST(req: Request) {
   // requireUser() may redirect; keep it outside the catch so the redirect isn't
   // swallowed. Everything else is wrapped so any failure (form parse, read,
   // extraction) is logged and returned as a readable message, never a bare 500.
-  await requireUser();
+  const user = await requireUser();
+  // Restricted feature: reject anyone off the allowlist (this route is callable
+  // directly, so the page 404 alone is not enough). See lib/plan-import/access.ts.
+  if (!isImportPlanAllowed(user.email)) {
+    return NextResponse.json(
+      { error: "You don't have access to plan import." },
+      { status: 403 },
+    );
+  }
 
   try {
     const form = await req.formData();
