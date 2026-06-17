@@ -20,6 +20,7 @@ const fixture = {
       start: "2026-01-01",
       end: "2026-06-30",
       description: "d",
+      lead: "ACME",
       tasks: [{ title: "T1.1", description: "d" }],
       deliverables: [{ title: "D1.1", taskIndex: 0, due: "2026-06-30", month: 6, description: "d" }],
     },
@@ -46,6 +47,12 @@ describe("extractPlanFromFile", () => {
     generateStructured.mockResolvedValue(fixture);
     await extractPlanFromFile(Buffer.from("PNGBYTES"), "image/png");
     expect(generateStructured.mock.calls[0][0].files[0].mimeType).toBe("image/png");
+  });
+
+  it("pre-fills each task's owner from the work package's lead", async () => {
+    generateStructured.mockResolvedValue(fixture);
+    const plan = await extractPlanFromFile(Buffer.from("x"), "application/pdf");
+    expect(plan.workPackages[0].tasks[0].owner).toBe("ACME");
   });
 
   it("throws when the model returns a structurally invalid plan", async () => {

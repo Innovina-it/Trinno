@@ -30,7 +30,10 @@ const plan: ProjectPlan = {
     {
       code: "WP1", title: "WP1 — Reqs", option: "RI", start: "2026-01-01", end: "2026-06-30",
       description: "d", lead: "INNOVINA",
-      tasks: [{ title: "T1.1", description: "d" }, { title: "T1.2", description: "d" }],
+      tasks: [
+        { title: "T1.1", description: "d", owner: "INNOVINA" },
+        { title: "T1.2", description: "d", owner: "INNOVINA" },
+      ],
       deliverables: [{ title: "D1.1 — Reqs doc", taskIndex: 0, due: "2026-06-30", month: 6, description: "d" }],
     },
     {
@@ -73,6 +76,13 @@ describe("buildWorkspaceFromPlan", () => {
       expect(milestoneCards.length).toBe(1);
       expect(milestoneCards[0].title).toBe("M6 — Baseline");
       expect(milestoneCards[0].boardId).toBe(bs.find((b) => b.parentBoardId === null)!.id);
+
+      // Owner is stamped onto TASK card titles (not the WP anchor) when present.
+      // WP1's tasks carry owner "INNOVINA"; WP2's task has no owner.
+      const titles = allCards.map((c) => c.title);
+      expect(titles).toContain("WP1 — Reqs"); // anchor title stays clean
+      expect(titles).toContain("T1.1 · INNOVINA"); // task stamped with its owner
+      expect(titles).toContain("T2.1"); // no owner → no suffix
 
       // Each deliverable got a card-scope URL link (placeholder here — no Drive folder).
       const ls = await tx.select().from(links).where(eq(links.workspaceId, wsId));

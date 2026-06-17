@@ -11,6 +11,7 @@ export function ImportWizard() {
   const [phase, setPhase] = useState<WizardPhase>("upload");
   const [plan, setPlan] = useState<ProjectPlan | null>(null);
   const [driveFolderId, setDriveFolderId] = useState("");
+  const [applyOwners, setApplyOwners] = useState(true);
 
   // The steps carry interactive form inputs whose base-ui ids derive from
   // React useId; server-rendering them desyncs the ids at hydration. The wizard
@@ -36,12 +37,14 @@ export function ImportWizard() {
         <ReviewStep
           plan={plan}
           onChange={setPlan}
+          applyOwners={applyOwners}
+          onApplyOwners={setApplyOwners}
           onBack={() => setPhase("upload")}
           onConfirm={() => setPhase("build")}
         />
       )}
       {mounted && phase === "build" && plan && (
-        <BuildStep plan={plan} driveFolderId={driveFolderId} />
+        <BuildStep plan={plan} driveFolderId={driveFolderId} applyOwners={applyOwners} />
       )}
     </div>
   );

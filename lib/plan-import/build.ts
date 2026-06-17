@@ -75,8 +75,9 @@ async function ensureStatusKinds(token: string, boardId: string): Promise<string
 export async function buildWorkspaceFromPlan(
   token: string,
   plan: ProjectPlan,
-  driveFolderId?: string,
+  opts: { driveFolderId?: string; applyOwners?: boolean } = {},
 ): Promise<BuildResult> {
+  const { driveFolderId, applyOwners = true } = opts;
   const failures: BuildFailure[] = [];
   const userId = decodeSub(token);
 
@@ -110,6 +111,11 @@ export async function buildWorkspaceFromPlan(
   const parentTodo = await ensureStatusKinds(token, parent.id);
 
   for (const wp of plan.workPackages) {
+    // Owner = responsible partner/org (extracted, per task). Stamped onto each
+    // TASK card title when the owner toggle is on, like the manual seeders. The
+    // org is not an app user, so it lives in the title, not owner_id (cards stay
+    // unowned). The WP anchor (overview) title is left clean.
+
     // 1. WP anchor card on the parent board.
     const anchor = await step(failures, `anchor:${wp.code}`, async () => {
       const c = await createCardImpl(token, {
@@ -143,9 +149,10 @@ export async function buildWorkspaceFromPlan(
     const taskCards: { id: string }[] = [];
     for (const [i, t] of wp.tasks.entries()) {
       const tc = await step(failures, `task:${wp.code}.${i}`, async () => {
+        const taskSuffix = applyOwners && t.owner ? ` · ${t.owner}` : "";
         const c = await createCardImpl(token, {
           listId: subTodo,
-          title: t.title,
+          title: `${t.title}${taskSuffix}`,
           startDate: wp.start,
           targetDate: wp.end,
           ownerId: null,

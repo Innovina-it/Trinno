@@ -19,6 +19,10 @@ export const DeliverableSchema = z.object({
 export const TaskSchema = z.object({
   title: z.string().min(1),
   description: z.string().default(""),
+  // Responsible partner/org for this task. Pre-filled at extraction from the
+  // work package's lead; editable per task; stamped onto the card title when
+  // the owner toggle is on.
+  owner: z.string().optional(),
 });
 
 export const WorkPackageSchema = z.object({

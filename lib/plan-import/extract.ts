@@ -35,5 +35,18 @@ export async function extractPlanFromFile(
   });
   // The review UI lets the user fix anything; here we only guarantee a
   // structurally valid plan for the builder. Zod throws on a malformed shape.
-  return ProjectPlanSchema.parse(raw);
+  const plan = ProjectPlanSchema.parse(raw);
+  // Pre-fill each task's owner from its work package's lead (the extracted
+  // responsible partner), so the review shows it filled per task. The user can
+  // edit or clear any of them.
+  return {
+    ...plan,
+    workPackages: plan.workPackages.map((wp) => ({
+      ...wp,
+      tasks: wp.tasks.map((t) => ({
+        ...t,
+        owner: (t.owner?.trim() || wp.lead?.trim()) ?? "",
+      })),
+    })),
+  };
 }

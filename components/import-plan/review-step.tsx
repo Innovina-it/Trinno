@@ -37,11 +37,15 @@ function IsoDateField({
 export function ReviewStep({
   plan,
   onChange,
+  applyOwners,
+  onApplyOwners,
   onBack,
   onConfirm,
 }: {
   plan: ProjectPlan;
   onChange: (p: ProjectPlan) => void;
+  applyOwners: boolean;
+  onApplyOwners: (v: boolean) => void;
   onBack: () => void;
   onConfirm: () => void;
 }) {
@@ -78,6 +82,18 @@ export function ReviewStep({
             />
           </div>
           <DurationControl plan={plan} onChange={onChange} />
+          <div className="space-y-2">
+            <Label>Stamp owners</Label>
+            <Button
+              type="button"
+              variant={applyOwners ? "default" : "outline"}
+              aria-pressed={applyOwners}
+              className="h-10"
+              onClick={() => onApplyOwners(!applyOwners)}
+            >
+              {applyOwners ? "On" : "Off"}
+            </Button>
+          </div>
         </div>
         <div className="space-y-2">
           <Label>Parent board title</Label>
@@ -180,6 +196,19 @@ export function ReviewStep({
                               patchWp(wi, { tasks });
                             }}
                           />
+                          <Input
+                            aria-label={`${wp.code} task ${ti} owner`}
+                            className="w-40 shrink-0"
+                            placeholder="Owner"
+                            value={t.owner ?? ""}
+                            disabled={!applyOwners}
+                            onChange={(e) => {
+                              const tasks = wp.tasks.map((x, i) =>
+                                i === ti ? { ...x, owner: e.target.value } : x,
+                              );
+                              patchWp(wi, { tasks });
+                            }}
+                          />
                           <Button
                             type="button"
                             variant="ghost"
@@ -196,7 +225,11 @@ export function ReviewStep({
                         variant="ghost"
                         size="sm"
                         className="gap-1.5"
-                        onClick={() => patchWp(wi, { tasks: [...wp.tasks, { title: "New task", description: "" }] })}
+                        onClick={() =>
+                          patchWp(wi, {
+                            tasks: [...wp.tasks, { title: "New task", description: "", owner: wp.lead ?? "" }],
+                          })
+                        }
                       >
                         <Plus className="size-3.5" /> Task
                       </Button>

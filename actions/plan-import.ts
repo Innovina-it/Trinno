@@ -12,12 +12,15 @@ import { buildWorkspaceFromPlan } from "@/lib/plan-import/build";
 export async function buildWorkspaceFromPlanAction(input: {
   plan: unknown;
   driveFolderId?: string;
+  applyOwners?: boolean;
 }) {
   await requireUser();
   const token = (await getSessionToken())!;
   const plan = ProjectPlanSchema.parse(input.plan);
-  const folderId = input.driveFolderId?.trim() || undefined;
-  const result = await buildWorkspaceFromPlan(token, plan, folderId);
+  const result = await buildWorkspaceFromPlan(token, plan, {
+    driveFolderId: input.driveFolderId?.trim() || undefined,
+    applyOwners: input.applyOwners,
+  });
   revalidatePath("/");
   return result;
 }

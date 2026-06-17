@@ -11,9 +11,11 @@ type BuildFailure = { step: string; message: string };
 export function BuildStep({
   plan,
   driveFolderId,
+  applyOwners,
 }: {
   plan: ProjectPlan;
   driveFolderId: string;
+  applyOwners: boolean;
 }) {
   const [status, setStatus] = useState<"building" | "partial" | "error">("building");
   const [failures, setFailures] = useState<BuildFailure[]>([]);
@@ -31,7 +33,7 @@ export function BuildStep({
     started.current = true;
     (async () => {
       try {
-        const res = await buildWorkspaceFromPlanAction({ plan, driveFolderId });
+        const res = await buildWorkspaceFromPlanAction({ plan, driveFolderId, applyOwners });
         if (res.ok && res.workspaceId) {
           // Hard navigation: a router.push here (in an effect, right after a
           // server action that called revalidatePath) gets swallowed by the
@@ -47,7 +49,7 @@ export function BuildStep({
         setStatus("error");
       }
     })();
-  }, [plan, driveFolderId]);
+  }, [plan, driveFolderId, applyOwners]);
 
   if (status === "building") {
     return (
