@@ -4,7 +4,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { LINK_COLORS, DEFAULT_LINK_COLOR } from "@/lib/links/colors";
+import {
+  DELIVERY_STATUSES,
+  DELIVERY_STATUS_LABELS,
+  type DeliveryStatus,
+} from "@/lib/links/status";
 
 export function LinkEditDialog({
   open,
@@ -12,6 +18,7 @@ export function LinkEditDialog({
   scope,
   initialUrl,
   initialColor,
+  initialStatus,
   onSave,
   onRemove,
 }: {
@@ -20,11 +27,19 @@ export function LinkEditDialog({
   scope: "card" | "workspace";
   initialUrl: string;
   initialColor?: string;
-  onSave: (v: { url: string; color: string }) => Promise<void> | void;
+  initialStatus?: DeliveryStatus | null;
+  onSave: (v: {
+    url: string;
+    color: string;
+    status?: DeliveryStatus | null;
+  }) => Promise<void> | void;
   onRemove?: () => Promise<void> | void;
 }) {
   const [url, setUrl] = useState(initialUrl);
   const [color, setColor] = useState(initialColor || DEFAULT_LINK_COLOR);
+  const [status, setStatus] = useState<DeliveryStatus>(
+    initialStatus ?? "to_do",
+  );
   const [busy, setBusy] = useState(false);
   // Two-step confirm for the destructive Remove action. Inline (not a nested
   // AlertDialog) to mirror the repo's in-dialog confirm convention and dodge
@@ -35,20 +50,32 @@ export function LinkEditDialog({
     if (open) {
       setUrl(initialUrl);
       setColor(initialColor || DEFAULT_LINK_COLOR);
+      setStatus(initialStatus ?? "to_do");
       setConfirmingRemove(false);
     }
-  }, [open, initialUrl, initialColor]);
+  }, [open, initialUrl, initialColor, initialStatus]);
 
   const dirty = useMemo(
-    () => url.trim() !== initialUrl.trim() || (scope === "card" && color !== (initialColor || DEFAULT_LINK_COLOR)),
-    [url, color, initialUrl, initialColor, scope],
+    () =>
+      url.trim() !== initialUrl.trim() ||
+      (scope === "card" &&
+        (color !== (initialColor || DEFAULT_LINK_COLOR) ||
+          status !== (initialStatus ?? "to_do"))),
+    [url, color, status, initialUrl, initialColor, initialStatus, scope],
   );
   const hadLink = initialUrl.trim().length > 0;
 
   async function save() {
     setBusy(true);
-    try { await onSave({ url: url.trim(), color }); onOpenChange(false); }
-    finally { setBusy(false); }
+    try {
+      // status only travels for card-scope links; workspace links ignore it.
+      await onSave({
+        url: url.trim(),
+        color,
+        ...(scope === "card" ? { status } : {}),
+      });
+      onOpenChange(false);
+    } finally { setBusy(false); }
   }
   async function remove() {
     if (!onRemove) return;
@@ -100,6 +127,23 @@ export function LinkEditDialog({
                 className="size-6 cursor-pointer rounded border border-[color:var(--hairline)] bg-transparent p-0"
               />
             </div>
+          </div>
+        )}
+
+        {scope === "card" && (
+          <div className="mt-3">
+            <div className="text-xs text-fg-faint mb-1">Status</div>
+            <Select
+              value={status}
+              onValueChange={(v) => setStatus(v as DeliveryStatus)}
+              options={DELIVERY_STATUSES.map((s) => ({
+                value: s,
+                label: DELIVERY_STATUS_LABELS[s],
+              }))}
+              aria-label="Delivery status"
+              data-testid="link-status-select"
+              className="w-full"
+            />
           </div>
         )}
 

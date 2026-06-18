@@ -35,6 +35,8 @@ import {
 import { PRIORITY_TINT, type CardPriority } from "@/components/board/card/priority-picker";
 import { LinkIcon } from "@/components/links/link-icon";
 import { LinkEditDialog } from "@/components/links/link-edit-dialog";
+import { StatusBadge } from "@/components/links/status-badge";
+import type { DeliveryStatus } from "@/lib/links/status";
 import { DEFAULT_LINK_COLOR } from "@/lib/links/colors";
 import { upsertCardLink, removeCardLink } from "@/actions/links";
 import { undoBus } from "@/lib/undo-bus";
@@ -356,24 +358,35 @@ function RowLinkIcon({ cardId }: { cardId: string }) {
           onEdit={() => setOpen(true)}
         />
       </span>
+      <StatusBadge status={link.status} className="ml-1 shrink-0" />
       <LinkEditDialog
         open={open}
         onOpenChange={setOpen}
         scope="card"
         initialUrl={link.url}
         initialColor={link.color ?? DEFAULT_LINK_COLOR}
-        onSave={async ({ url, color }) => {
-          const prev = { url: link.url, color: link.color ?? DEFAULT_LINK_COLOR };
-          setCardLink({ id: link.id, cardId, url, color });
-          const res = await upsertCardLink({ cardId, url, color });
+        initialStatus={link.status ?? null}
+        onSave={async ({ url, color, status }) => {
+          const prev = {
+            url: link.url,
+            color: link.color ?? DEFAULT_LINK_COLOR,
+            status: link.status ?? null,
+          };
+          setCardLink({ id: link.id, cardId, url, color, status: status ?? null });
+          const res = await upsertCardLink({ cardId, url, color, status });
           if (res.ok) {
             setCardLink({
               id: res.data.id,
               cardId,
               url: res.data.url ?? url,
               color: res.data.color ?? color,
+              status: res.data.status ?? null,
             });
-            const write = async (vals: { url: string; color: string }) => {
+            const write = async (vals: {
+              url: string;
+              color: string;
+              status?: DeliveryStatus | null;
+            }) => {
               const r2 = await upsertCardLink({ cardId, ...vals });
               if (r2.ok)
                 setCardLink({
@@ -381,6 +394,7 @@ function RowLinkIcon({ cardId }: { cardId: string }) {
                   cardId,
                   url: r2.data.url ?? vals.url,
                   color: r2.data.color ?? vals.color,
+                  status: r2.data.status ?? null,
                 });
               else {
                 toast.error(r2.error.message);
@@ -390,12 +404,16 @@ function RowLinkIcon({ cardId }: { cardId: string }) {
             undoBus.push({
               message: "Card link updated",
               undo: () => write(prev),
-              redo: () => write({ url, color }),
+              redo: () => write({ url, color, status }),
             });
           } else toast.error(res.error.message);
         }}
         onRemove={async () => {
-          const prev = { url: link.url, color: link.color ?? DEFAULT_LINK_COLOR };
+          const prev = {
+            url: link.url,
+            color: link.color ?? DEFAULT_LINK_COLOR,
+            status: link.status ?? null,
+          };
           removeCardLinkLocal(cardId);
           const res = await removeCardLink({ cardId });
           if (!res.ok) toast.error(res.error.message);
@@ -410,6 +428,7 @@ function RowLinkIcon({ cardId }: { cardId: string }) {
                     cardId,
                     url: r2.data.url ?? prev.url,
                     color: r2.data.color ?? prev.color,
+                    status: r2.data.status ?? null,
                   });
                 else {
                   toast.error(r2.error.message);

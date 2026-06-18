@@ -46,6 +46,7 @@ import { LinkEditDialog } from "@/components/links/link-edit-dialog";
 import { upsertCardLink, removeCardLink } from "@/actions/links";
 import { undoBus } from "@/lib/undo-bus";
 import { DEFAULT_LINK_COLOR } from "@/lib/links/colors";
+import type { DeliveryStatus } from "@/lib/links/status";
 
 export type RoadmapBarAssignee = {
   id: string;
@@ -976,18 +977,28 @@ export function RoadmapBar({
           scope="card"
           initialUrl={link.url}
           initialColor={link.color ?? DEFAULT_LINK_COLOR}
-          onSave={async ({ url, color }) => {
-            const prev = { url: link.url, color: link.color ?? DEFAULT_LINK_COLOR };
-            setCardLink({ id: link.id, cardId: card.id, url, color });
-            const res = await upsertCardLink({ cardId: card.id, url, color });
+          initialStatus={link.status ?? null}
+          onSave={async ({ url, color, status }) => {
+            const prev = {
+              url: link.url,
+              color: link.color ?? DEFAULT_LINK_COLOR,
+              status: link.status ?? null,
+            };
+            setCardLink({ id: link.id, cardId: card.id, url, color, status: status ?? null });
+            const res = await upsertCardLink({ cardId: card.id, url, color, status });
             if (res.ok) {
               setCardLink({
                 id: res.data.id,
                 cardId: card.id,
                 url: res.data.url ?? url,
                 color: res.data.color ?? color,
+                status: res.data.status ?? null,
               });
-              const write = async (vals: { url: string; color: string }) => {
+              const write = async (vals: {
+                url: string;
+                color: string;
+                status?: DeliveryStatus | null;
+              }) => {
                 const r2 = await upsertCardLink({ cardId: card.id, ...vals });
                 if (r2.ok)
                   setCardLink({
@@ -995,6 +1006,7 @@ export function RoadmapBar({
                     cardId: card.id,
                     url: r2.data.url ?? vals.url,
                     color: r2.data.color ?? vals.color,
+                    status: r2.data.status ?? null,
                   });
                 else {
                   toast.error(r2.error.message);
@@ -1004,12 +1016,16 @@ export function RoadmapBar({
               undoBus.push({
                 message: "Card link updated",
                 undo: () => write(prev),
-                redo: () => write({ url, color }),
+                redo: () => write({ url, color, status }),
               });
             } else toast.error(res.error.message);
           }}
           onRemove={async () => {
-            const prev = { url: link.url, color: link.color ?? DEFAULT_LINK_COLOR };
+            const prev = {
+              url: link.url,
+              color: link.color ?? DEFAULT_LINK_COLOR,
+              status: link.status ?? null,
+            };
             removeCardLinkLocal(card.id);
             const res = await removeCardLink({ cardId: card.id });
             if (!res.ok) toast.error(res.error.message);
@@ -1024,6 +1040,7 @@ export function RoadmapBar({
                       cardId: card.id,
                       url: r2.data.url ?? prev.url,
                       color: r2.data.color ?? prev.color,
+                      status: r2.data.status ?? null,
                     });
                   else {
                     toast.error(r2.error.message);

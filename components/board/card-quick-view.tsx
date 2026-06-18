@@ -53,6 +53,7 @@ import { errorBus } from "@/lib/errors/error-bus";
 import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
 import { LinkIcon } from "@/components/links/link-icon";
 import { LinkEditDialog } from "@/components/links/link-edit-dialog";
+import { StatusBadge } from "@/components/links/status-badge";
 import { useQuickViewCardLink } from "@/components/board/use-quick-view-card-link";
 import { upsertCardLink, removeCardLink } from "@/actions/links";
 import { DEFAULT_LINK_COLOR } from "@/lib/links/colors";
@@ -900,6 +901,7 @@ function CardQuickViewBody({
               onEdit={() => setLinkOpen(true)}
             />
           </span>
+          {link?.url && <StatusBadge status={link.status} className="shrink-0" />}
         </DialogTitle>
       </DialogHeader>
 
@@ -1313,15 +1315,23 @@ function CardQuickViewBody({
         scope="card"
         initialUrl={link?.url ?? ""}
         initialColor={link?.color ?? DEFAULT_LINK_COLOR}
-        onSave={async ({ url, color }) => {
-          setCardLink({ id: link?.id ?? "optimistic", cardId: card.id, url, color });
-          const res = await upsertCardLink({ cardId: card.id, url, color });
+        initialStatus={link?.status ?? null}
+        onSave={async ({ url, color, status }) => {
+          setCardLink({
+            id: link?.id ?? "optimistic",
+            cardId: card.id,
+            url,
+            color,
+            status: status ?? null,
+          });
+          const res = await upsertCardLink({ cardId: card.id, url, color, status });
           if (res.ok) {
             setCardLink({
               id: res.data.id,
               cardId: card.id,
               url: res.data.url ?? url,
               color: res.data.color ?? color,
+              status: res.data.status ?? null,
             });
           } else {
             toast.error(res.error.message);

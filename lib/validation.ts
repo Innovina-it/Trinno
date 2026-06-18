@@ -306,10 +306,20 @@ export const LinkColor = z
   .string()
   .trim()
   .regex(/^#[0-9a-fA-F]{6}$/, "color must be a #rrggbb hex");
+// Delivery status tag on card deliverables (mirrors lib/links/status.ts).
+export const DeliveryStatus = z.enum([
+  "to_do",
+  "in_progress",
+  "delivered",
+  "approved",
+  "blocked",
+]);
 export const UpsertCardLinkInput = z.object({
   cardId: Uuid,
   url: z.string().trim().min(1).max(2048),
   color: LinkColor,
+  // Optional: omitted leaves status untouched, explicit null clears it.
+  status: DeliveryStatus.nullable().optional(),
 });
 export const LinkPurpose = z.enum(["source", "reports"]);
 export const UpsertWorkspaceLinkInput = z.object({

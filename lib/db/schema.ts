@@ -313,6 +313,16 @@ export const cardLinks = pgTable("card_links", {
 
 export const linkScope = pgEnum("link_scope", ["workspace", "card"]);
 export const linkPurpose = pgEnum("link_purpose", ["source", "reports"]);
+// Delivery status tag on card-scope links (deliverables). Separate from the
+// Open/Done completion logic; nullable so existing rows / workspace links stay
+// status-less. Values mirror lib/links/status.ts.
+export const deliveryStatus = pgEnum("delivery_status", [
+  "to_do",
+  "in_progress",
+  "delivered",
+  "approved",
+  "blocked",
+]);
 
 export const links = pgTable("links", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -325,6 +335,9 @@ export const links = pgTable("links", {
   cardId: uuid("card_id"),
   url: text("url").notNull(),
   color: text("color"),
+  // Delivery status — card-scope only; NULL on workspace links and on cards
+  // with no status set.
+  status: deliveryStatus("status"),
   createdBy: uuid("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

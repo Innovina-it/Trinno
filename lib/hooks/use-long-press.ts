@@ -18,13 +18,18 @@ export function useLongPress(opts: {
   const { onClick, onLongPress, threshold = 500 } = opts;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fired = useRef(false);
+  // Tracks whether the active press is the primary (left) button. A non-primary
+  // press (e.g. right-click) must NOT fire onClick on release — otherwise a
+  // right-click both opens the link AND triggers onContextMenu.
+  const primary = useRef(true);
 
   const clear = useCallback(() => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
   }, []);
 
   const onPointerDown = useCallback((e: { button?: number }) => {
-    if (e.button != null && e.button !== 0) return;
+    primary.current = e.button == null || e.button === 0;
+    if (!primary.current) return;
     fired.current = false;
     if (!onLongPress) return;
     timer.current = setTimeout(() => { fired.current = true; onLongPress(); }, threshold);
@@ -32,7 +37,7 @@ export function useLongPress(opts: {
 
   const onPointerUp = useCallback(() => {
     clear();
-    if (!fired.current) onClick();
+    if (primary.current && !fired.current) onClick();
     fired.current = false;
   }, [clear, onClick]);
 

@@ -410,6 +410,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
           cardId: links.cardId,
           url: links.url,
           color: links.color,
+          status: links.status,
         })
         .from(links)
         .where(and(eq(links.scope, "card"), eq(links.workspaceId, workspaceId))),
@@ -426,6 +427,7 @@ export const getWorkspaceSnapshot = cache(async function getWorkspaceSnapshot(
             cardId: r.cardId as string,
             url: r.url,
             color: r.color ?? DEFAULT_LINK_COLOR,
+            status: r.status ?? null,
           },
         ]),
     );
