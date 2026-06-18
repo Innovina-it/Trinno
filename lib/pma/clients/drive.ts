@@ -233,7 +233,9 @@ export async function listFolderTree(
     for (const file of await listFolder(current)) {
       if (file.mimeType === FOLDER_MIME) {
         if (!skip.has(file.name)) stack.push(file.id);
-      } else {
+      } else if (!file.name.startsWith("__pma_tmp_")) {
+        // Skip transient Office-conversion copies (normally trashed at once; this
+        // guards against a stray one lingering if a trash ever fails).
         out.push(file);
       }
     }
@@ -398,9 +400,18 @@ export async function copyAsGoogleAndExportText(
     );
   }
   const drive = await getDriveClient();
+  // Service accounts have NO personal Drive storage, so a copy into My Drive
+  // fails with "storage quota exceeded". Create the temp copy inside the Trinno
+  // Shared Drive (PLAN_IMPORT_DRIVE_ROOT), where files are owned by the drive,
+  // not the SA — regardless of where the source file lives.
+  const scratch = process.env.PLAN_IMPORT_DRIVE_ROOT?.trim();
   const copy = await drive.files.copy({
     fileId,
-    requestBody: { mimeType: target, name: `__pma_tmp_${fileId}` },
+    requestBody: {
+      mimeType: target,
+      name: `__pma_tmp_${fileId}`,
+      ...(scratch ? { parents: [scratch] } : {}),
+    },
     fields: "id",
     ...SHARED_DRIVE_WRITE,
   });
