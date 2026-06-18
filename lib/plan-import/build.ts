@@ -8,14 +8,14 @@ import { createWorkspaceImpl } from "@/actions/workspaces";
 import { createBoardImpl, createSubboardImpl } from "@/actions/boards";
 import { setListStatusKindImpl } from "@/actions/lists";
 import { createCardImpl, updateCardImpl } from "@/actions/cards";
-import { upsertCardLinkImpl } from "@/actions/links";
+import { upsertCardLinkImpl, upsertWorkspaceLinkImpl } from "@/actions/links";
 import { createMilestoneImpl } from "@/actions/milestones";
+import { provisionProjectFolders, ensureReportsChild } from "@/lib/pma/provision";
 
 import type { ProjectPlan } from "./types";
 import {
   makeDriveDocsClient,
   probeFolder,
-  resolveProjectFolder,
   type DriveDocsClient,
   type ProjectIdentity,
 } from "./drive-docs";
@@ -111,13 +111,24 @@ export async function buildWorkspaceFromPlan(
     partners: [...partnerSet].join(", "),
   };
 
+  // Documents = where deliverable Docs are written and analysis reads; Reports =
+  // the sibling analysis writes reports into. Captured here, linked to the
+  // workspace right after it's created (links need the workspace id).
+  let documentsFolderId: string | null = null;
+  let reportsFolderId: string | null = null;
   let drive: DriveDocsClient | null = null;
   if (driveMode === "manual" && manualFolderId) {
     const ok = await step(failures, "drive-probe", async () => {
       await probeFolder(manualFolderId);
       return true;
     });
-    if (ok) drive = makeDriveDocsClient(manualFolderId, project);
+    if (ok) {
+      documentsFolderId = manualFolderId;
+      reportsFolderId = await step(failures, "drive-reports", () =>
+        ensureReportsChild(manualFolderId),
+      );
+      drive = makeDriveDocsClient(manualFolderId, project);
+    }
   } else if (driveMode === "auto") {
     const root = process.env.PLAN_IMPORT_DRIVE_ROOT?.trim();
     if (!root) {
@@ -126,11 +137,15 @@ export async function buildWorkspaceFromPlan(
         message: "Auto Drive folder not configured (set PLAN_IMPORT_DRIVE_ROOT).",
       });
     } else {
-      const projectFolderId = await step(failures, "drive-auto", async () => {
+      const folders = await step(failures, "drive-auto", async () => {
         await probeFolder(root);
-        return resolveProjectFolder(root, plan.workspaceName);
+        return provisionProjectFolders(root, plan.workspaceName);
       });
-      if (projectFolderId) drive = makeDriveDocsClient(projectFolderId, project);
+      if (folders) {
+        documentsFolderId = folders.documentsFolderId;
+        reportsFolderId = folders.reportsFolderId;
+        drive = makeDriveDocsClient(folders.documentsFolderId, project);
+      }
     }
   }
 
@@ -138,6 +153,30 @@ export async function buildWorkspaceFromPlan(
     createWorkspaceImpl(token, { name: plan.workspaceName }),
   );
   if (!ws) return { workspaceId: null, ok: false, partial: false, failures };
+
+  // Link the provisioned folders so analysis runs with zero setup. source =
+  // Documents (read recursively), reports = Reports (written, never scanned).
+  const folderUrl = (id: string) => `https://drive.google.com/drive/folders/${id}`;
+  if (documentsFolderId) {
+    const docs = documentsFolderId;
+    await step(failures, "ws-source-link", () =>
+      upsertWorkspaceLinkImpl(token, {
+        workspaceId: ws.id,
+        url: folderUrl(docs),
+        purpose: "source",
+      }),
+    );
+  }
+  if (reportsFolderId) {
+    const reports = reportsFolderId;
+    await step(failures, "ws-reports-link", () =>
+      upsertWorkspaceLinkImpl(token, {
+        workspaceId: ws.id,
+        url: folderUrl(reports),
+        purpose: "reports",
+      }),
+    );
+  }
 
   const parent = await step(failures, "parent-board", () =>
     createBoardImpl(token, {

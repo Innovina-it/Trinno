@@ -2,10 +2,28 @@ import { describe, it, expect, vi } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { dbAsUser } from "@/lib/db/client";
 import { workspaces, boards, cards, links } from "@/lib/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, and } from "drizzle-orm";
 
 // build.ts carries `import "server-only"`; stub it for the node test env.
 vi.mock("server-only", () => ({}));
+
+// Mock the Drive boundary so the AUTO case provisions fake folder ids and writes
+// fake deliverable docs — no real Google Drive, no .docx work. The off-mode test
+// below never calls these (driveMode defaults to "off").
+vi.mock("@/lib/pma/provision", () => ({
+  provisionProjectFolders: async () => ({
+    projectFolderId: "fld-proj",
+    documentsFolderId: "fld-docs",
+    reportsFolderId: "fld-reports",
+  }),
+  ensureReportsChild: async () => "fld-reports",
+}));
+vi.mock("@/lib/plan-import/drive-docs", () => ({
+  probeFolder: async () => {},
+  makeDriveDocsClient: () => ({
+    createDeliverableDoc: async () => ({ webViewLink: "https://docs/fake" }),
+  }),
+}));
 
 import { buildWorkspaceFromPlan } from "@/lib/plan-import/build";
 import type { ProjectPlan } from "@/lib/plan-import/types";
@@ -87,6 +105,25 @@ describe("buildWorkspaceFromPlan", () => {
       // Each deliverable got a card-scope URL link (placeholder here — no Drive folder).
       const ls = await tx.select().from(links).where(eq(links.workspaceId, wsId));
       expect(ls.filter((l) => l.scope === "card").length).toBe(2);
+    });
+  });
+
+  it("auto Drive import provisions folders and links the workspace (source + reports)", async () => {
+    process.env.PLAN_IMPORT_DRIVE_ROOT = "ROOT";
+    const u = await makeUser("planbuild-auto");
+    const res = await buildWorkspaceFromPlan(u.jwt, plan, { driveMode: "auto" });
+    expect(res.workspaceId).toBeTruthy();
+    const wsId = res.workspaceId!;
+
+    await dbAsUser(u.jwt, async (tx) => {
+      const wl = await tx
+        .select()
+        .from(links)
+        .where(and(eq(links.workspaceId, wsId), eq(links.scope, "workspace")));
+      const source = wl.find((l) => l.purpose === "source");
+      const reports = wl.find((l) => l.purpose === "reports");
+      expect(source?.url).toContain("fld-docs");
+      expect(reports?.url).toContain("fld-reports");
     });
   });
 });

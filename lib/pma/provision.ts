@@ -25,3 +25,10 @@ export async function provisionProjectFolders(
   const reportsFolderId = await ensureChildFolder(projectFolderId, "Reports");
   return { projectFolderId, documentsFolderId, reportsFolderId };
 }
+
+// find-or-create a "Reports" child inside an existing documents folder (Manual
+// mode, where the user's pasted folder IS the documents folder). The recursive
+// analysis scan skips any folder named "Reports".
+export async function ensureReportsChild(documentsFolderId: string): Promise<string> {
+  return ensureChildFolder(documentsFolderId, "Reports");
+}
