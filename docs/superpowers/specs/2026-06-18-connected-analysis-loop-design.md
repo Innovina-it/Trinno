@@ -42,105 +42,135 @@ disconnected:
   the registry. Not needed once selection is dropped.
 - Surfacing recaps on cards / a "report card" per run.
 - Re-architecting the Gemini engine (detect / analyze / synthesize / reconcile).
+- Expanding analyzed file types beyond Google-native docs (see constraint below).
 
 ## Decisions (the converged model)
 
 1. **A run = a time range over the project's whole document set → one report,
    in context.** This is the existing window mode. No picking.
-2. **Recursive folder read.** The documents-folder scan walks subfolders, so
+2. **Recursive folder read.** The Documents-folder scan walks subfolders, so
    plan-import's nested deliverable Docs are included. This is the core connector.
-3. **One folder per workspace** (the "documents folder"). Reports are written to
-   a subfolder named **`auto analysis`** inside it. The recursive scan EXCLUDES
-   any folder named `auto analysis`, so analysis never re-analyzes its own
-   reports. The separate "Reports folder" config is removed.
+3. **Two sibling folders (option A).** Analysis uses a **`Documents/`** folder
+   (read recursively) and a **`Reports/`** folder (written to, never read). In
+   **Auto** mode trinno provisions both as siblings under the project —
+   `<project>/Documents` and `<project>/Reports` — so one Auto action sets up
+   both, with clean separation and NO exclude logic (Reports is not inside
+   Documents). In **Manual** mode the user pastes their Documents folder and
+   trinno creates a `Reports` folder for output; the recursive scan additionally
+   skips any folder named `Reports` as a safety net. Internally these map to the
+   EXISTING workspace `source` / `reports` links (no schema change) — but the
+   user sets them in ONE action; the separate manual "Reports folder" field is
+   removed. (Folder names `Documents` / `Reports` are easily changed; an earlier
+   note preferred `auto analysis` for the reports folder — confirm at review.)
 4. **Reused folder-setup control.** The import wizard's Drive-mode control
-   (`Auto | Manual`) is mounted on the Analysis page to set the documents folder.
-   `Auto` provisions/resolves the folder by name under the shared Trinno root
-   (find-or-create, idempotent); `Manual` pastes a link.
-5. **Import auto-wires the loop (single folder).** When plan-import runs with
-   Drive **Auto or Manual** (a folder is available), it sets the new workspace's
-   single documents folder to the `<project>` folder it creates — so the
-   workspace is born on the one-folder model and a future report lands in
-   `<project>/auto analysis/` with no setup. With Drive **Off** (no folder),
-   nothing is set; the user configures the documents folder later via the
-   Analysis-page `Auto | Manual` control. No separate Reports folder is ever
-   created or configured for imported workspaces.
+   (`Auto | Manual`) is mounted on the Analysis page. `Auto` provisions the
+   `<project>/{Documents, Reports}` pair by name under the shared Trinno root
+   (find-or-create, idempotent) and sets both workspace links; `Manual` pastes
+   the Documents folder link and trinno creates the `Reports` folder for output.
+5. **Import auto-wires the loop.** When plan-import runs with Drive **Auto or
+   Manual** (a folder is available), it provisions `<project>/{Documents,
+   Reports}` and sets both workspace links — so the workspace is born ready and a
+   future report lands in `<project>/Reports/` with no manual setup. With Drive
+   **Off** (no folder), nothing is set; the user configures it later via the
+   Analysis-page `Auto | Manual` control. The user never hand-configures the
+   Reports folder in any mode.
 6. **Recap stays internal plumbing** (never shown). No-op in the UI.
 7. **Config moves onto the Analysis page** (the folder control + the run control
    live together). The folder fields are REMOVED from manage-workspace Settings
-   so there is a single place to set the documents folder. (Reversible if review
+   so there is a single place to set the Documents folder. (Reversible if review
    prefers keeping a read-only pointer in Settings.)
+
+## Supported file types (current constraint)
+
+Only **Google-native editable docs** are content-analyzed: Google **Docs**,
+**Sheets**, **Slides** (exported as text/plain, text/csv, text/plain —
+`EDITABLE_MIME_TYPES` in [detect.ts](../../../lib/pma/detect.ts), `EXPORT_MIME`
+in [drive.ts](../../../lib/pma/clients/drive.ts)). Everything else — PDF,
+Word/Excel/PowerPoint, images, folders — is classified `non_mod`; its CONTENT is
+never read, only counted. The Drive client refuses to export a non-native type,
+so binary is never fed to the model.
+
+Implication: plan-import creates native Google Docs, so imported deliverables ARE
+analyzable and the loop works. But PDFs / Office files a team drops in the folder
+are NOT content-analyzed. Expanding to PDFs/images (e.g. via Gemini's native file
+input, as the import extractor already does) is a separate enhancement, OUT OF
+SCOPE here but recorded for visibility.
 
 ## Architecture
 
 ### Folder layout (per workspace / project)
 
 ```
-<project>/                     ← the documents folder (configured: Auto or Manual)
-├── <WP>/Deliverables/<doc>    ← plan-import output; read RECURSIVELY by analysis
-├── …any nested docs…          ← read RECURSIVELY
-└── auto analysis/             ← analysis OUTPUT (reports); EXCLUDED from the scan
+<project>/
+├── Documents/                  ← the documents folder (read RECURSIVELY)
+│   ├── <WP>/Deliverables/<doc>    ← plan-import output
+│   └── …any nested docs…
+└── Reports/                    ← analysis OUTPUT; a SIBLING of Documents, never scanned
     └── <report Google Doc>
 ```
 
-Changed invariant: previously "trinno writes only to a separate Output folder,
-never the Source." Now: trinno writes only to the `auto analysis/` subfolder of
-the documents folder, and the scan excludes that subfolder. One folder, controlled
-write location, no feedback loop.
+Invariant: trinno reads only `Documents/` and writes only `Reports/`. Because
+Reports is a sibling (not inside Documents), the recursive scan never sees it —
+no exclude logic needed in Auto. In Manual mode, where a user's pasted folder may
+hold the Reports folder as a child, the scan additionally skips any folder named
+`Reports` as a safety net. plan-import writes deliverable Docs under
+`<project>/Documents/<WP>/Deliverables/…` (one level deeper than today, so they
+sit under the read root).
 
 ### Entities
 
 Unchanged. `pma_file_registry` (the per-file recap/version/state) and
-`pma_analysis_runs` (run history → report link) stay as they are. Cards stay as
-they are — they remain the human-facing home for a deliverable's Doc link;
-analysis does not go through them. No new columns, no new tables.
+`pma_analysis_runs` (run history → report link) stay as they are, and the
+workspace `source` / `reports` link rows are reused. Cards stay as they are — the
+human-facing home for a deliverable's Doc link; analysis does not go through them.
+No new columns, no new tables.
 
 ### Flows
 
 **Import (plan-import):**
 1. Build workspace + deliverable cards + deliverable Google Docs under
-   `<project>/<WP>/Deliverables/…` (existing).
-2. If a Drive folder is available (Auto or Manual mode), set the new workspace's
-   single documents folder = `<project>` (new, small). Off mode: skip — the user
-   configures it later on the Analysis page. Reports for the workspace then land
-   in `<project>/auto analysis/` automatically; no Reports folder is created.
+   `<project>/Documents/<WP>/Deliverables/…`.
+2. If a Drive folder is available (Auto or Manual mode), provision
+   `<project>/{Documents, Reports}` and set both workspace links. Off mode: skip
+   — the user configures it later on the Analysis page.
 
 **Analyze (one page: configure + run):**
-1. User sets the documents folder via the `Auto | Manual` control (or it is
-   already set from import).
+1. User sets the Documents folder via the `Auto | Manual` control (or it is
+   already set from import); Auto/Manual also establishes the Reports folder.
 2. User picks a time range (or none = whole document) and runs (existing control).
-3. `detect` scans the documents folder RECURSIVELY, excluding `auto analysis/`,
-   for files changed in the range.
+3. `detect` scans the **Documents** folder RECURSIVELY for files changed in the
+   range (Reports is a sibling, not scanned).
 4. `analyze` (Flash recap, cached) → `synthesize` (Pro) → one report Doc written
-   to `<project>/auto analysis/` → `reconcile` records the run (existing).
+   to the **Reports** folder → `reconcile` records the run (existing).
 5. The Analysis page lists the run (time · period · summary · "Open report ↗").
 
 ## Concrete change list
 
-- **Recursive scan + exclude** (`lib/pma/clients/drive.ts` listFolder or a new
-  recursive lister; `lib/pma/detect.ts`): walk subfolders; skip any folder named
-  `auto analysis`.
-- **Rename the output subfolder** `analyses` → `auto analysis`
-  (`lib/pma/output.ts` `ANALYSES_FOLDER`).
-- **Single-folder config:** drop the separate reports-folder link; reports derive
-  as `<documents folder>/auto analysis/`. Update `getRunInputs`
-  (`lib/pma/inputs.ts`) and the run precondition.
+- **Recursive scan** (`lib/pma/clients/drive.ts` + `lib/pma/detect.ts`): walk
+  subfolders of the Documents folder. Add a safety-net skip for any folder named
+  `Reports` (covers Manual, where Reports may sit inside the pasted folder).
+- **Output goes to the Reports folder directly** (`lib/pma/output.ts`): write the
+  report Doc into the workspace's Reports folder; drop the `analyses/` subfolder
+  (Reports IS the output folder now).
+- **One-action folder setup, two links:** the Auto/Manual control sets BOTH the
+  `source` (Documents) and `reports` (Reports) workspace links. Reuse the existing
+  link rows — no schema change. `getRunInputs` (`lib/pma/inputs.ts`) already
+  reads both.
 - **Reuse the Drive-mode control** (`components/import-plan/drive-mode-control.tsx`)
-  on the Analysis page for the documents folder; wire `Auto` provisioning to the
-  same resolve-by-name helper plan-import uses.
-- **Import sets the single documents folder** for the workspace it creates, when
-  a Drive folder is available (Auto/Manual); skipped in Off mode
-  (`lib/plan-import/build.ts` + the workspace documents-folder link write). No
-  Reports folder is created or configured — reports derive as
-  `<project>/auto analysis/`.
-- **Settings:** remove both folder fields from manage-workspace Settings; the
-  documents-folder control now lives on the Analysis page (single home), labeled
+  on the Analysis page; `Auto` provisioning creates the `<project>/{Documents,
+  Reports}` pair via the same resolve-by-name helper plan-import uses.
+- **Import provisions + links both folders** for the workspace it creates
+  (Auto/Manual); skipped in Off mode (`lib/plan-import/build.ts`). Deliverable
+  Docs move under `Documents/`.
+- **Settings:** remove the manual folder fields (Reports is now auto-managed); the
+  Documents-folder control lives on the Analysis page (single home), labeled
   "Documents folder (subfolders included)".
 
 ## Consistency / error handling
 
-- The recursive scan must exclude `auto analysis` reliably (by exact folder
-  name) so reports are never treated as source documents.
+- Auto needs no exclude logic (Reports is a sibling of Documents). The Manual
+  safety-net skip of a `Reports` folder name keeps reports out of the scan if they
+  live inside the pasted folder.
 - Existing retry/version semantics are unchanged (errors leave `last_version`
   untouched so a file retries next run).
 - **Optional hardening (recommended, can defer):** a per-workspace advisory lock
@@ -150,26 +180,25 @@ analysis does not go through them. No new columns, no new tables.
 
 ## Testing
 
-- Unit: recursive lister includes nested files and EXCLUDES `auto analysis`;
-  output subfolder name is `auto analysis`; single-folder `getRunInputs`
-  resolves source = folder, reports = `<folder>/auto analysis/`.
-- Integration: a run over a folder tree (with a nested Deliverables doc and an
-  existing `auto analysis/` report) analyzes the nested doc and ignores the
-  prior report; import sets the workspace documents folder.
-- E2E (manual/live, per project norms — JSX is not render-tested): set folder via
-  the Auto control on the Analysis page, run, confirm one report in
-  `auto analysis/` and a row on the Analysis page.
+- Unit: recursive lister includes nested files; `getRunInputs` resolves source =
+  Documents, reports = Reports; the Manual safety-net excludes a `Reports` child.
+- Integration: a run over `<project>/Documents` (with a nested Deliverables doc)
+  analyzes it and writes the report to `<project>/Reports`, ignoring any existing
+  report; import provisions both folders + sets both links.
+- E2E (manual/live, per project norms — JSX is not render-tested): set the folder
+  via the Auto control on the Analysis page, run, confirm one report in
+  `Reports/` and a row on the Analysis page.
 
 ## Diagram
 
 ```
   PLAN IMPORT ──creates──► NEW WORKSPACE
        │                     ├─ deliverable CARDS (Doc links = human view)
-       │                     └─ sets "Documents folder" = <project> Drive folder
+       │                     └─ provisions <project>/{Documents, Reports} + links
        │
-       └── writes Docs ──► <project>/ … /WP/Deliverables/<doc>   (Drive, nested)
+       └── writes Docs ──► <project>/Documents/ … /WP/Deliverables/<doc>
                                    │
-                                   ▼   read RECURSIVELY (skip "auto analysis/")
+                                   ▼   read RECURSIVELY
                        ┌─────────────────────────────────────────┐
                        │   ANALYSIS PAGE (configure + run here)    │
                        │   folder via Auto|Manual control          │
@@ -181,11 +210,12 @@ analysis does not go through them. No new columns, no new tables.
                                              │  one report per run
                                              ▼
                        ┌─────────────────────────────────────────┐
-                       │  Report Doc → <project>/auto analysis/    │
+                       │  Report Doc → <project>/Reports/ (sibling)│
                        │  + listed on Analysis page                │
                        │  (time · period · summary · Open report ↗)│
                        └─────────────────────────────────────────┘
 
-  Import and analysis meet at the SHARED <project> Drive folder — same files in,
-  reports out to auto analysis/ (excluded from the scan).
+  Import and analysis meet at the SHARED <project> folder: docs in Documents/,
+  reports out to the sibling Reports/ (never scanned). Only Google-native docs
+  (Docs/Sheets/Slides) are content-analyzed.
 ```
