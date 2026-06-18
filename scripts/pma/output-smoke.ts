@@ -82,40 +82,12 @@ async function main(): Promise<void> {
 
   const out = await import("@/lib/pma/output");
 
-  const FOLDER_MIME = "application/vnd.google-apps.folder";
-  const countNamed = (entries: { name: string; mimeType: string }[], name: string) =>
-    entries.filter((e) => e.name === name && e.mimeType === FOLDER_MIME).length;
-
-  // ---- 1. ensureSubfolder idempotency (analyses/) --------------------------
-  console.log(`\n[OUTPUT] folder ${outputId}`);
-
-  console.log(`[ensureSubfolder] analyses/ — 1st call`);
-  const analyses1 = await out.ensureSubfolder(outputId, "analyses");
-  console.log(`  → ${analyses1}`);
-  console.log(`[ensureSubfolder] analyses/ — 2nd call (must be SAME id)`);
-  const analyses2 = await out.ensureSubfolder(outputId, "analyses");
-  console.log(`  → ${analyses2}`);
-  if (analyses1 !== analyses2) {
-    throw new Error(
-      `ensureSubfolder("analyses") NOT idempotent: ${analyses1} !== ${analyses2}`,
-    );
-  }
-
-  // Re-verify at the Drive level: exactly ONE analyses/ child.
-  const topAfterEnsure = await out.listOutput(outputId);
-  const analysesCount = countNamed(topAfterEnsure, "analyses");
-  console.log(
-    `[idempotency check] children named analyses=${analysesCount} (must be exactly 1)`,
-  );
-  if (analysesCount !== 1) {
-    throw new Error(`Duplicate analyses/ sub-folder(s) created: ${analysesCount}`);
-  }
-
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 
-  // ---- 2. createReport -----------------------------------------------------
+  // ---- 1. createReport writes directly into the Reports (output) folder -----
+  console.log(`\n[OUTPUT] folder ${outputId}`);
   const reportName = `pma-output-smoke-report-${stamp}`;
-  console.log(`\n[createReport] analyses/${reportName} (Google Doc)`);
+  console.log(`\n[createReport] ${reportName} (Google Doc, written directly into the folder)`);
   const report = await out.createReport(outputId, {
     name: reportName,
     content: `PMA output smoke report at ${new Date().toISOString()}. Safe to delete.`,
@@ -123,26 +95,21 @@ async function main(): Promise<void> {
   console.log(`  created report id=${report.id}`);
   console.log(`  webViewLink=${report.webViewLink}`);
 
-  // ---- 3. listOutput confirms the artifact appears -------------------------
-  console.log(`\n[listOutput] analyses/ (${analyses1})`);
-  const analysesList = await out.listOutput(analyses1);
-  for (const e of analysesList) console.log(`  - ${e.id}  ${e.name}  ${e.mimeType}`);
-  if (!analysesList.some((e) => e.id === report.id)) {
-    throw new Error("createReport Doc not found in analyses/ listing.");
+  // ---- 2. listOutput confirms the artifact appears -------------------------
+  console.log(`\n[listOutput] ${outputId}`);
+  const list = await out.listOutput(outputId);
+  for (const e of list) console.log(`  - ${e.id}  ${e.name}  ${e.mimeType}`);
+  if (!list.some((e) => e.id === report.id)) {
+    throw new Error("createReport Doc not found in the output folder listing.");
   }
 
-  // ---- 4. Cleanup: trash the temp report Doc -------------------------------
-  // Leave the analyses/ sub-folder in place — idempotency makes reuse safe and
-  // matches how the real pipeline behaves.
+  // ---- 3. Cleanup: trash the temp report Doc -------------------------------
   console.log(`\n[cleanup] trashing temp report Doc ${report.id}`);
   await out.trashFile(report.id);
   console.log("  trashed.");
 
   console.log("\nSMOKE OK");
-  console.log(
-    `  analyses/ folder id = ${analyses1}\n` +
-      `  report webViewLink  = ${report.webViewLink}`,
-  );
+  console.log(`  report webViewLink = ${report.webViewLink}`);
 }
 
 main().catch((err) => {

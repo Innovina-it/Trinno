@@ -2,7 +2,6 @@ import "server-only";
 
 import {
   createDoc,
-  createFolder,
   listFolder,
   trashFile,
   type DriveFile,
@@ -23,17 +22,10 @@ import {
 // (U4a). The output folder is the system of record; these helpers are what make
 // it rebuildable.
 //
-// Output-folder layout this module materializes (DESIGN §4.2, as amended by
-// U12.1 — recaps/ removed; recap bodies now live in Postgres):
-//   [Output Drive folder]/
-//     analyses/{name}                         the run report (Google Doc)
-// The analyses/ sub-folder is created idempotently via ensureSubfolder.
-
-const FOLDER_MIME = "application/vnd.google-apps.folder";
-
-// Sub-folder name under the output folder (DESIGN §4.2). recaps/ is gone as of
-// U12.1 — recap bodies now live in Postgres (pma_file_registry.recap_json).
-const ANALYSES_FOLDER = "analyses";
+// Output-folder layout this module materializes:
+//   [Reports Drive folder]/{name}             the run report (Google Doc)
+// The Reports folder is a SIBLING of the Documents folder (see the connected
+// analysis loop design), so reports are written directly into it — no subfolder.
 
 // A minimal child-entry shape for rebuild/inspection (DESIGN §4.2 — "the
 // registry [is] reconstructable by listing this folder").
@@ -47,47 +39,15 @@ function toEntry(f: DriveFile): OutputEntry {
   return { id: f.id, name: f.name, mimeType: f.mimeType };
 }
 
-// Find an existing immediate child folder of `parentFolderId` by exact name, or
-// `null` if none exists. Used to keep ensureSubfolder idempotent.
-async function findChildFolder(
-  parentFolderId: string,
-  name: string,
-): Promise<DriveFile | null> {
-  const children = await listFolder(parentFolderId);
-  for (const child of children) {
-    if (child.mimeType === FOLDER_MIME && child.name === name) return child;
-  }
-  return null;
-}
-
-// Idempotently ensure a sub-folder named `name` exists directly under
-// `parentFolderId`, returning its folder id. Finds an existing child folder by
-// name first and only creates one if it is missing — so calling this twice
-// never produces a duplicate folder.
-export async function ensureSubfolder(
-  parentFolderId: string,
-  name: string,
-): Promise<string> {
-  const existing = await findChildFolder(parentFolderId, name);
-  if (existing) return existing.id;
-  const created = await createFolder(name, parentFolderId);
-  return created.id;
-}
-
-// Create a run report as a native Google Doc under the output folder's
-// analyses/ sub-folder (DESIGN §4.2, §5.2). The analyses/ sub-folder is ensured
-// idempotently. Returns the new Doc id and its webViewLink (the link the
-// Analysis tab surfaces).
+// Create a run report as a native Google Doc directly in the workspace's Reports
+// (output) folder. Returns the new Doc id + webViewLink (the link the Analysis
+// tab surfaces). The Reports folder is a SIBLING of Documents and is never
+// scanned, so writing into it does not feed the analysis back its own output.
 export async function createReport(
   outputFolderId: string,
   input: { name: string; content: string },
 ): Promise<{ id: string; webViewLink: string }> {
-  const analysesFolderId = await ensureSubfolder(outputFolderId, ANALYSES_FOLDER);
-  return createDoc({
-    name: input.name,
-    parentId: analysesFolderId,
-    content: input.content,
-  });
+  return createDoc({ name: input.name, parentId: outputFolderId, content: input.content });
 }
 
 // List the immediate children of an output-tree folder (the output folder
