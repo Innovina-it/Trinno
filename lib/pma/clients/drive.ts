@@ -216,6 +216,31 @@ export async function listFolder(folderId: string): Promise<DriveFile[]> {
   return files;
 }
 
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+
+// Recursively list every NON-folder file under `folderId`, at any depth. Folders
+// whose name is in `skipNames` are not descended into (keeps the Reports output
+// folder out of the analysis scan). Folders themselves are not returned.
+export async function listFolderTree(
+  folderId: string,
+  opts: { skipNames?: string[] } = {},
+): Promise<DriveFile[]> {
+  const skip = new Set(opts.skipNames ?? []);
+  const out: DriveFile[] = [];
+  const stack: string[] = [folderId];
+  while (stack.length > 0) {
+    const current = stack.pop() as string;
+    for (const file of await listFolder(current)) {
+      if (file.mimeType === FOLDER_MIME) {
+        if (!skip.has(file.name)) stack.push(file.id);
+      } else {
+        out.push(file);
+      }
+    }
+  }
+  return out;
+}
+
 // Fetch a single file's metadata (id, name, mimeType, modifiedTime,
 // headRevisionId).
 export async function getFile(fileId: string): Promise<DriveFile> {
