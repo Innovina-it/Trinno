@@ -3,7 +3,7 @@ import "server-only";
 import {
   getStartPageToken,
   listChanges,
-  listFolder,
+  listFolderTree,
   listRevisions,
 } from "./clients/drive";
 import type { DriveFile, DriveRevision } from "./clients/drive";
@@ -169,7 +169,9 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
   }
 
   // Scope oracle — the authoritative current contents of the SOURCE folder.
-  const currentList = await listFolder(sourceFolderId);
+  // Recursive: plan-import nests deliverable Docs under Documents/<WP>/Deliverables/.
+  // Skip the Reports output folder so analysis never re-reads its own reports.
+  const currentList = await listFolderTree(sourceFolderId, { skipNames: ["Reports"] });
   const currentById = new Map<string, DriveFile>();
   for (const f of currentList) currentById.set(f.id, f);
 

@@ -12,12 +12,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const listFolder = vi.fn();
+// detect now reads the source recursively via listFolderTree (skipping Reports).
+// The spy delegates to the listFolder mock (ignoring opts) so existing tests that
+// stub listFolder keep working, while still capturing the (folderId, opts) call.
+const listFolderTree = vi.fn((...a: unknown[]) => listFolder(a[0]));
 const getStartPageToken = vi.fn();
 const listChanges = vi.fn();
 const listRevisions = vi.fn();
 
 vi.mock("@/lib/pma/clients/drive", () => ({
   listFolder: (...a: unknown[]) => listFolder(...a),
+  listFolderTree: (...a: unknown[]) => listFolderTree(...a),
   getStartPageToken: (...a: unknown[]) => getStartPageToken(...a),
   listChanges: (...a: unknown[]) => listChanges(...a),
   listRevisions: (...a: unknown[]) => listRevisions(...a),
@@ -65,11 +70,25 @@ const SOURCE = "SRC_FOLDER";
 
 beforeEach(() => {
   listFolder.mockReset();
+  listFolderTree.mockClear(); // keep the delegate impl; clear call history only
   getStartPageToken.mockReset();
   listChanges.mockReset();
   listRevisions.mockReset();
   // Default: no revision data → window mode falls back to modifiedTime membership.
   listRevisions.mockResolvedValue([]);
+});
+
+describe("detect — recursive source scan", () => {
+  it("reads the source folder recursively, skipping the Reports output folder", async () => {
+    listFolder.mockResolvedValue([doc("A")]);
+    await detect({
+      sourceFolderId: SOURCE,
+      pageToken: null,
+      deliverableLinks: [],
+      allFiles: true,
+    });
+    expect(listFolderTree).toHaveBeenCalledWith(SOURCE, { skipNames: ["Reports"] });
+  });
 });
 
 describe("categorize", () => {
