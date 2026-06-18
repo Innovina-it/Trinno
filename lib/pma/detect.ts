@@ -6,6 +6,7 @@ import {
   listFolderTree,
   listRevisions,
 } from "./clients/drive";
+import { isAnalyzable } from "./content";
 import type { DriveFile, DriveRevision } from "./clients/drive";
 
 // PMA U5 — DETECT (DESIGN §3 steps A + B).
@@ -89,17 +90,11 @@ export type DetectResult = {
   corpusRange?: { first: string | null; last: string | null };
 };
 
-// Google-native editable document types — the only files step D deep-analyses.
-const EDITABLE_MIME_TYPES = new Set<string>([
-  "application/vnd.google-apps.document",
-  "application/vnd.google-apps.spreadsheet",
-  "application/vnd.google-apps.presentation",
-]);
-
-// Runtime categorization (DESIGN §3 B). Everything that is not a Google-native
-// editable type is `non_mod` (pdf, images, Office files, folders, …).
+// Runtime categorization (DESIGN §3 B). "editable" = a type the analyzer can read
+// (Google-native, PDF/images, or Office — see lib/pma/content.ts). Everything
+// else (folders, archives, unknown binaries) is `non_mod` and is skipped.
 export function categorize(mimeType: string): FileKind {
-  return EDITABLE_MIME_TYPES.has(mimeType) ? "editable" : "non_mod";
+  return isAnalyzable(mimeType) ? "editable" : "non_mod";
 }
 
 // U12.11 — label for a revision whose author Drive does not expose (an

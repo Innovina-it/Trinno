@@ -3,7 +3,7 @@ import "server-only";
 import { Type } from "@google/genai";
 import type { Schema } from "@google/genai";
 
-import { exportText } from "./clients/drive";
+import { getAnalyzableContent } from "./content";
 import { generateStructured } from "./clients/gemini";
 import { getRegistryEntry } from "./registry";
 import type { DetectedFile } from "./detect";
@@ -160,14 +160,19 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         continue;
       }
 
-      // ── Step D: export → Flash recap → write recap JSON to OUTPUT.
-      const content = await exportText(file.fileId, file.mimeType ?? "");
+      // ── Step D: fetch content (text export, or a binary file part for
+      //    PDF/images/Office) → Flash recap. The recap body rides back in-memory.
+      const analyzable = await getAnalyzableContent(file.fileId, file.mimeType ?? "");
       const recap = await generateStructured<FileRecap>({
         model: "gemini-2.5-flash",
         systemInstruction: RECAP_SYSTEM,
-        prompt: buildPrompt(file, content),
+        prompt: buildPrompt(
+          file,
+          "text" in analyzable ? analyzable.text : "(binary document attached below)",
+        ),
         responseSchema: RECAP_SCHEMA,
         temperature: 0,
+        ...("file" in analyzable ? { files: [analyzable.file] } : {}),
       });
       // detect()'s links cross-ref is authoritative — not the model's guess.
       recap.is_deliverable = file.isDeliverable;

@@ -360,6 +360,59 @@ export async function exportText(
   return typeof res.data === "string" ? res.data : String(res.data ?? "");
 }
 
+// Download a file's raw bytes as base64 (for types Gemini reads natively — PDF,
+// images). Returns the bytes plus the file's own mimeType for the model part.
+export async function getFileBytes(
+  fileId: string,
+): Promise<{ data: string; mimeType: string }> {
+  const drive = await getDriveClient();
+  const meta = await drive.files.get({ fileId, fields: "mimeType", ...SHARED_DRIVE_READ });
+  const res = await drive.files.get(
+    { fileId, alt: "media", ...SHARED_DRIVE_READ },
+    { responseType: "arraybuffer" },
+  );
+  const data = Buffer.from(res.data as ArrayBuffer).toString("base64");
+  return { data, mimeType: meta.data.mimeType ?? "application/octet-stream" };
+}
+
+// Office (docx/xlsx/pptx) has no native Gemini reader. Convert via Drive: copy
+// the file into the matching Google-native type, export its text, then trash the
+// temporary copy (always, even on error). No local converter, no new dependency.
+const OFFICE_TO_GOOGLE: Record<string, string> = {
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "application/vnd.google-apps.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+    "application/vnd.google-apps.spreadsheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+    "application/vnd.google-apps.presentation",
+};
+
+export async function copyAsGoogleAndExportText(
+  fileId: string,
+  sourceMimeType: string,
+): Promise<string> {
+  const target = OFFICE_TO_GOOGLE[sourceMimeType];
+  if (!target) {
+    throw new Error(
+      `copyAsGoogleAndExportText: ${sourceMimeType} has no Google-native target.`,
+    );
+  }
+  const drive = await getDriveClient();
+  const copy = await drive.files.copy({
+    fileId,
+    requestBody: { mimeType: target, name: `__pma_tmp_${fileId}` },
+    fields: "id",
+    ...SHARED_DRIVE_WRITE,
+  });
+  const tmpId = copy.data.id;
+  if (!tmpId) throw new Error("copyAsGoogleAndExportText: copy returned no id.");
+  try {
+    return await exportText(tmpId, target);
+  } finally {
+    await trashFile(tmpId).catch(() => {});
+  }
+}
+
 // ---------------------------------------------------------------------------
 // WRITE  (callers must only target the OUTPUT folder — never the Source folder)
 // ---------------------------------------------------------------------------

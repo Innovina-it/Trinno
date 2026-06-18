@@ -7,11 +7,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // recap is returned in-memory (reconcile persists it) — analyze writes nothing.
 vi.mock("server-only", () => ({}));
 
-const exportText = vi.fn();
+const getAnalyzableContent = vi.fn();
 const generateStructured = vi.fn();
 const getRegistryEntry = vi.fn();
 
-vi.mock("@/lib/pma/clients/drive", () => ({ exportText: (...a: unknown[]) => exportText(...a) }));
+vi.mock("@/lib/pma/content", () => ({ getAnalyzableContent: (...a: unknown[]) => getAnalyzableContent(...a) }));
 vi.mock("@/lib/pma/clients/gemini", () => ({ generateStructured: (...a: unknown[]) => generateStructured(...a) }));
 vi.mock("@/lib/pma/registry", () => ({ getRegistryEntry: (...a: unknown[]) => getRegistryEntry(...a) }));
 
@@ -51,11 +51,11 @@ const RECAP = {
 };
 
 beforeEach(() => {
-  exportText.mockReset();
+  getAnalyzableContent.mockReset();
   generateStructured.mockReset();
   getRegistryEntry.mockReset();
   getRegistryEntry.mockResolvedValue(null);
-  exportText.mockResolvedValue("document body text");
+  getAnalyzableContent.mockResolvedValue({ text: "document body text" });
   generateStructured.mockResolvedValue({ ...RECAP });
 });
 
@@ -68,7 +68,7 @@ describe("analyze — version gate (C)", () => {
 
     expect(res).toHaveLength(1);
     expect(res[0].status).toBe("skipped");
-    expect(exportText).not.toHaveBeenCalled();
+    expect(getAnalyzableContent).not.toHaveBeenCalled();
     expect(generateStructured).not.toHaveBeenCalled();
     expect(res[0].recap).toBeNull();
   });
@@ -114,7 +114,7 @@ describe("analyze — recap (D)", () => {
   it("exports content, calls Flash, and returns the recap in-memory (no Drive write)", async () => {
     const res = await analyze({ workspaceId: WS, outputFolderId: OUT, files: [editable("A", "rev9")] });
 
-    expect(exportText).toHaveBeenCalledWith("A", "application/vnd.google-apps.document");
+    expect(getAnalyzableContent).toHaveBeenCalledWith("A", "application/vnd.google-apps.document");
 
     const gen = generateStructured.mock.calls[0][0];
     expect(gen.model).toBe("gemini-2.5-flash");
@@ -174,7 +174,7 @@ describe("analyze — resilience", () => {
   });
 
   it("errors (not skips) when export fails", async () => {
-    exportText.mockRejectedValue(new Error("export 403"));
+    getAnalyzableContent.mockRejectedValue(new Error("export 403"));
     const res = await analyze({ workspaceId: WS, outputFolderId: OUT, files: [editable("A", "rev1")] });
     expect(res[0].status).toBe("error");
     expect(res[0].error).toMatch(/403/);

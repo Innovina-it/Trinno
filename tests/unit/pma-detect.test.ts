@@ -97,11 +97,14 @@ describe("categorize", () => {
     expect(categorize("application/vnd.google-apps.spreadsheet")).toBe("editable");
     expect(categorize("application/vnd.google-apps.presentation")).toBe("editable");
   });
-  it("maps everything else to 'non_mod'", () => {
-    expect(categorize("application/pdf")).toBe("non_mod");
-    expect(categorize("image/png")).toBe("non_mod");
+  it("maps PDF, images and Office to 'editable' (now analyzable)", () => {
+    expect(categorize("application/pdf")).toBe("editable");
+    expect(categorize("image/png")).toBe("editable");
+    expect(categorize("application/vnd.openxmlformats-officedocument.wordprocessingml.document")).toBe("editable");
+  });
+  it("maps unsupported types (folders, archives, empty) to 'non_mod'", () => {
     expect(categorize("application/vnd.google-apps.folder")).toBe("non_mod");
-    expect(categorize("application/vnd.openxmlformats-officedocument.wordprocessingml.document")).toBe("non_mod");
+    expect(categorize("application/zip")).toBe("non_mod");
     expect(categorize("")).toBe("non_mod");
   });
 });
@@ -142,7 +145,7 @@ describe("detect — bootstrap (no page token)", () => {
     expect(a.kind).toBe("editable");
     expect(a.changeType).toBe("added_or_edited");
     expect(a.version).toBe("v1");
-    expect(b.kind).toBe("non_mod");
+    expect(b.kind).toBe("editable"); // PDF is analyzable now
   });
 });
 
@@ -270,8 +273,9 @@ describe("detect — window mode (U12.2)", () => {
 
   it("includes non_mod files in-window (analyze filters to editable later)", async () => {
     const editableIn = { ...doc("A"), modifiedTime: "2026-01-10T00:00:00Z" };
-    const pdfIn = { ...pdf("P"), modifiedTime: "2026-01-12T00:00:00Z" };
-    listFolder.mockResolvedValue([editableIn, pdfIn]);
+    // A zip is non-analyzable (folders/archives stay non_mod); still listed in-window.
+    const nonModIn = { ...doc("Z"), mimeType: "application/zip", modifiedTime: "2026-01-12T00:00:00Z" };
+    listFolder.mockResolvedValue([editableIn, nonModIn]);
 
     const res = await detect({
       sourceFolderId: SOURCE,
@@ -280,8 +284,8 @@ describe("detect — window mode (U12.2)", () => {
       window: WIN,
     });
 
-    expect(res.files.map((f) => f.fileId).sort()).toEqual(["A", "P"]);
-    expect(res.files.find((f) => f.fileId === "P")!.kind).toBe("non_mod");
+    expect(res.files.map((f) => f.fileId).sort()).toEqual(["A", "Z"]);
+    expect(res.files.find((f) => f.fileId === "Z")!.kind).toBe("non_mod");
   });
 
   it("includes a file last edited AFTER the window if it has a revision IN it, and attributes only the window's authors (U12.9)", async () => {
