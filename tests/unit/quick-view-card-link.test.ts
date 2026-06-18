@@ -23,7 +23,7 @@ import { useQuickViewCardLink } from "@/components/board/use-quick-view-card-lin
 const CARD_ID = "card-1";
 
 function link(url: string): CardUrlLink {
-  return { id: "link-1", cardId: CARD_ID, url, color: "#3b82f6" };
+  return { id: "link-1", cardId: CARD_ID, url, color: "#3b82f6", status: null };
 }
 
 // Minimal stand-in for the zustand StoreApi surface the hook uses. Cast at the

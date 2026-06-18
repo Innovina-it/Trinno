@@ -11,6 +11,7 @@ import { useBoardStore, BoardStoreContext } from "@/stores/board-store";
 import { useIsGuest, useGuestCanMoveCard } from "@/lib/permissions/use-is-guest";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { getCardStatusKind, STATUS_LABEL } from "@/lib/status";
+import { StatusBadge } from "@/components/links/status-badge";
 import { LabelStripes } from "./card/label-stripes";
 import { DuePill } from "./card/due-pill";
 import { TileIndicators } from "./card/tile-indicators";
@@ -788,6 +789,9 @@ function CardTileImpl({
                   style={{ background: link.color }}
                   className="ml-1 inline-block size-2.5 rotate-45 rounded-[2px] align-middle shrink-0"
                 />
+              )}
+              {link?.url && (
+                <StatusBadge status={link.status} className="ml-1 align-middle" />
               )}
             </>
           )}

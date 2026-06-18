@@ -55,7 +55,7 @@ export function LinkIcon({
   const label = !hasLink
     ? "Add link"
     : canEdit
-      ? "Open link (hold or press F2 to edit)"
+      ? "Open link (hold, right-click, or F2 to edit)"
       : "Open link";
 
   return (
@@ -74,6 +74,16 @@ export function LinkIcon({
         }
       }}
       {...press}
+      // After {...press}: overrides the hook's onContextMenu (which only
+      // suppresses the menu on touch long-press) so right-click on an existing
+      // link opens the edit dialog. Left-click still opens the URL; long-press
+      // / F2 still edit. Viewers (no edit rights) keep the default menu.
+      onContextMenu={(e) => {
+        if (hasLink && canEdit) {
+          e.preventDefault();
+          onEdit();
+        }
+      }}
       className="inline-flex items-center justify-center size-6 rounded hover:bg-fg/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg/40"
       data-testid={`link-icon-${variant}`}
       data-haslink={hasLink ? "1" : "0"}

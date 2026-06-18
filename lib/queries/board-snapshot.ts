@@ -256,6 +256,7 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
           cardId: links.cardId,
           url: links.url,
           color: links.color,
+          status: links.status,
         })
         .from(links)
         .where(
@@ -276,6 +277,7 @@ export const getBoardSnapshot = cache(async function getBoardSnapshot(
             cardId: r.cardId as string,
             url: r.url,
             color: r.color ?? DEFAULT_LINK_COLOR,
+            status: r.status ?? null,
           },
         ]),
     );

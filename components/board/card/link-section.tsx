@@ -2,6 +2,7 @@
 import { useCallback, useContext, useState, useSyncExternalStore } from "react";
 import { LinkIcon } from "@/components/links/link-icon";
 import { LinkEditDialog } from "@/components/links/link-edit-dialog";
+import { StatusBadge } from "@/components/links/status-badge";
 import { upsertCardLink, removeCardLink } from "@/actions/links";
 import { DEFAULT_LINK_COLOR } from "@/lib/links/colors";
 import { toast } from "sonner";
@@ -38,21 +39,30 @@ export function LinkSection({ cardId }: { cardId: string }) {
           {link.url}
         </span>
       )}
+      {link?.url && <StatusBadge status={link.status} />}
       <LinkEditDialog
         open={open}
         onOpenChange={setOpen}
         scope="card"
         initialUrl={link?.url ?? ""}
         initialColor={link?.color ?? DEFAULT_LINK_COLOR}
-        onSave={async ({ url, color }) => {
-          setCardLink({ id: link?.id ?? "optimistic", cardId, url, color });
-          const res = await upsertCardLink({ cardId, url, color });
+        initialStatus={link?.status ?? null}
+        onSave={async ({ url, color, status }) => {
+          setCardLink({
+            id: link?.id ?? "optimistic",
+            cardId,
+            url,
+            color,
+            status: status ?? null,
+          });
+          const res = await upsertCardLink({ cardId, url, color, status });
           if (res.ok) {
             setCardLink({
               id: res.data.id,
               cardId,
               url: res.data.url ?? url,
               color: res.data.color ?? color,
+              status: res.data.status ?? null,
             });
           } else {
             toast.error(res.error.message);

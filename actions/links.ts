@@ -11,6 +11,7 @@ import {
   RemoveWorkspaceLinkInput,
 } from "@/lib/validation";
 import { StructuredError, actionResult } from "@/lib/errors";
+import type { DeliveryStatus } from "@/lib/links/status";
 import { normalizeUrl } from "@/lib/links/normalize-url";
 import { assertWorkspaceWriter } from "@/lib/permissions/workspace-writer";
 import {
@@ -25,11 +26,20 @@ function decodeSub(jwt: string): string {
 
 export async function upsertCardLinkImpl(
   token: string,
-  input: { cardId: string; url: string; color: string },
+  input: { cardId: string; url: string; color: string; status?: DeliveryStatus | null },
 ) {
   const parsed = UpsertCardLinkInput.parse(input);
   const url = normalizeUrl(parsed.url);
   const createdBy = decodeSub(token);
+  // status is optional in the payload: when the caller omits it (e.g. a
+  // colour-only or URL-only edit from the roadmap) we leave the stored status
+  // untouched; an explicit null clears it. So only add it to the conflict
+  // UPDATE set when it was actually provided.
+  const setClause: { url: string; color: string; status?: DeliveryStatus | null } = {
+    url,
+    color: parsed.color,
+  };
+  if (parsed.status !== undefined) setClause.status = parsed.status;
   return dbAsUser(token, async (tx) => {
     assertWorkspaceWriter(
       await getWorkspaceRoleForCard(tx, parsed.cardId, createdBy),
@@ -50,12 +60,13 @@ export async function upsertCardLinkImpl(
         cardId: parsed.cardId,
         url,
         color: parsed.color,
+        status: parsed.status ?? null,
         createdBy,
       })
       .onConflictDoUpdate({
         target: links.cardId,
         targetWhere: sql`scope = 'card'`,
-        set: { url, color: parsed.color },
+        set: setClause,
       })
       .returning();
     if (!row) throw new StructuredError("ACCESS_DENIED", "Forbidden");
@@ -152,6 +163,7 @@ export async function upsertCardLink(input: {
   cardId: string;
   url: string;
   color: string;
+  status?: DeliveryStatus | null;
 }) {
   return actionResult(async () => {
     await requireUser();
