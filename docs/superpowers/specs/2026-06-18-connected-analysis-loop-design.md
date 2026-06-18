@@ -31,7 +31,9 @@ disconnected:
   analysis reads.
 - One consistent folder-setup UX, reused from the import wizard.
 - Configure-and-run in one place.
-- Keep the change small: no new tables, no engine rewrite, recap untouched.
+- Keep the change contained: no new tables; the recap / synthesis / reconcile
+  logic is untouched. (One deliberate addition: a per-type content adapter so
+  PDFs and Office files are analyzable too — see File-type support.)
 
 ## Non-goals (explicitly out of scope)
 
@@ -41,8 +43,8 @@ disconnected:
 - Making documents a first-class entity / a `documents` table / a `card_id` on
   the registry. Not needed once selection is dropped.
 - Surfacing recaps on cards / a "report card" per run.
-- Re-architecting the Gemini engine (detect / analyze / synthesize / reconcile).
-- Expanding analyzed file types beyond Google-native docs (see constraint below).
+- Re-architecting the Gemini engine's recap / synthesis / reconcile logic (only a
+  per-type content adapter is added — see File-type support).
 
 ## Decisions (the converged model)
 
@@ -60,8 +62,7 @@ disconnected:
    skips any folder named `Reports` as a safety net. Internally these map to the
    EXISTING workspace `source` / `reports` links (no schema change) — but the
    user sets them in ONE action; the separate manual "Reports folder" field is
-   removed. (Folder names `Documents` / `Reports` are easily changed; an earlier
-   note preferred `auto analysis` for the reports folder — confirm at review.)
+   removed. (Folder names `Documents` / `Reports` are easily changed later.)
 4. **Reused folder-setup control.** The import wizard's Drive-mode control
    (`Auto | Manual`) is mounted on the Analysis page. `Auto` provisions the
    `<project>/{Documents, Reports}` pair by name under the shared Trinno root
@@ -80,21 +81,33 @@ disconnected:
    so there is a single place to set the Documents folder. (Reversible if review
    prefers keeping a read-only pointer in Settings.)
 
-## Supported file types (current constraint)
+## File-type support (in scope)
 
-Only **Google-native editable docs** are content-analyzed: Google **Docs**,
-**Sheets**, **Slides** (exported as text/plain, text/csv, text/plain —
-`EDITABLE_MIME_TYPES` in [detect.ts](../../../lib/pma/detect.ts), `EXPORT_MIME`
-in [drive.ts](../../../lib/pma/clients/drive.ts)). Everything else — PDF,
-Word/Excel/PowerPoint, images, folders — is classified `non_mod`; its CONTENT is
-never read, only counted. The Drive client refuses to export a non-native type,
-so binary is never fed to the model.
+Today only **Google-native docs** (Docs/Sheets/Slides) are content-analyzed;
+PDF/Office/images are counted but unread (`EDITABLE_MIME_TYPES` in
+[detect.ts](../../../lib/pma/detect.ts), `EXPORT_MIME` in
+[drive.ts](../../../lib/pma/clients/drive.ts)). This work EXPANDS the analyzable
+set via a per-type **content adapter** that feeds the existing Flash recap:
 
-Implication: plan-import creates native Google Docs, so imported deliverables ARE
-analyzable and the loop works. But PDFs / Office files a team drops in the folder
-are NOT content-analyzed. Expanding to PDFs/images (e.g. via Gemini's native file
-input, as the import extractor already does) is a separate enhancement, OUT OF
-SCOPE here but recorded for visibility.
+- **Google Docs / Sheets / Slides:** export to text — today's path, unchanged.
+- **PDF / images:** download the file bytes and send them to Gemini as a native
+  file part (the import extractor already does this — reuse the `files` support
+  in [gemini.ts](../../../lib/pma/clients/gemini.ts)). No conversion.
+- **Office (.docx / .xlsx / .pptx):** convert via Drive `files.copy` into the
+  matching Google-native type (Doc/Sheet/Slides), export its text, then **trash
+  the temporary copy** (try/finally, even on error). Uses Drive's own conversion
+  — no local converter, no new dependency.
+
+Notes:
+- The recap / synthesis / reconcile logic is unchanged — the recap takes text OR a
+  file part; the report is built the same way.
+- The version gate still works (Drive `version` is populated for all file types),
+  so unchanged files are still skipped across runs.
+- Cost / latency: PDFs and images add Gemini file-input cost; Office adds a
+  copy-convert-export-trash round-trip per changed file. Acceptable for periodic
+  runs; flagged for the plan.
+- Cleanup is mandatory: every temporary Office conversion MUST be trashed even on
+  failure, so the folders never accumulate temp Docs.
 
 ## Architecture
 
@@ -149,6 +162,11 @@ No new columns, no new tables.
 - **Recursive scan** (`lib/pma/clients/drive.ts` + `lib/pma/detect.ts`): walk
   subfolders of the Documents folder. Add a safety-net skip for any folder named
   `Reports` (covers Manual, where Reports may sit inside the pasted folder).
+- **Content adapter by file type** (`lib/pma/detect.ts` categorize +
+  `lib/pma/analyze.ts` + `lib/pma/clients/drive.ts`): expand the analyzable set to
+  PDF, images, and Office. Google-native → export text (today); PDF/image →
+  download bytes → Gemini file part; Office (.docx/.xlsx/.pptx) → Drive
+  copy-convert → export text → trash the temp. Recap / synthesis prompts unchanged.
 - **Output goes to the Reports folder directly** (`lib/pma/output.ts`): write the
   report Doc into the workspace's Reports folder; drop the `analyses/` subfolder
   (Reports IS the output folder now).
@@ -188,6 +206,9 @@ No new columns, no new tables.
 - E2E (manual/live, per project norms — JSX is not render-tested): set the folder
   via the Auto control on the Analysis page, run, confirm one report in
   `Reports/` and a row on the Analysis page.
+- File types: each content-adapter branch — Google-native exports text; a
+  PDF/image is sent as a file part; an Office file is copy-converted, read, and its
+  temporary copy is trashed even when the read throws.
 
 ## Diagram
 
@@ -216,6 +237,6 @@ No new columns, no new tables.
                        └─────────────────────────────────────────┘
 
   Import and analysis meet at the SHARED <project> folder: docs in Documents/,
-  reports out to the sibling Reports/ (never scanned). Only Google-native docs
-  (Docs/Sheets/Slides) are content-analyzed.
+  reports out to the sibling Reports/ (never scanned). Docs/Sheets/Slides, PDFs,
+  images, and Office files are all content-analyzed via a per-type adapter.
 ```
