@@ -12,6 +12,11 @@ const synthesize = vi.fn();
 const reconcile = vi.fn();
 const findRunByWindow = vi.fn();
 
+// The per-workspace run lock reserves a real DB connection; in this unit test it
+// passes straight through to the run body (no DB).
+vi.mock("@/lib/db/client", () => ({
+  withWorkspaceRunLock: (_workspaceId: string, fn: () => unknown) => fn(),
+}));
 vi.mock("@/lib/pma/inputs", () => ({ getRunInputs: (...a: unknown[]) => getRunInputs(...a) }));
 vi.mock("@/lib/pma/detect", () => ({ detect: (...a: unknown[]) => detect(...a) }));
 vi.mock("@/lib/pma/analyze", () => ({ analyze: (...a: unknown[]) => analyze(...a) }));

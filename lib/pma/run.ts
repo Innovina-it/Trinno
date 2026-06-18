@@ -1,6 +1,7 @@
 import "server-only";
 
 import { StructuredError } from "@/lib/errors/structured-error";
+import { withWorkspaceRunLock } from "@/lib/db/client";
 import { detect, type DetectedFile } from "./detect";
 import { analyze } from "./analyze";
 import { synthesize } from "./synthesize";
@@ -91,7 +92,16 @@ function changedFiles(
   return names;
 }
 
+// Public entry: serialize runs per workspace so two concurrent runs can't both
+// produce a report (a second run is rejected with CONFLICT). The work itself is
+// runAnalysisInner.
 export async function runAnalysis(
+  input: RunAnalysisInput,
+): Promise<RunAnalysisResult> {
+  return withWorkspaceRunLock(input.workspaceId, () => runAnalysisInner(input));
+}
+
+async function runAnalysisInner(
   input: RunAnalysisInput,
 ): Promise<RunAnalysisResult> {
   const { token, workspaceId, actorId, now, runLabel, window } = input;

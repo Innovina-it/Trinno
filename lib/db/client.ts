@@ -88,3 +88,33 @@ export async function dbAsUser<T>(
     }
   });
 }
+
+// Per-workspace advisory lock for analysis runs. A run spans many short
+// queries/connections, so the lock is held on a RESERVED connection for the
+// whole run, then released. A second concurrent run for the same workspace
+// can't acquire the lock and is rejected with CONFLICT (409), so two runs never
+// produce duplicate reports. Keyed by hashtext(workspaceId) → a stable bigint.
+export async function withWorkspaceRunLock<T>(
+  workspaceId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const conn = await queryClient.reserve();
+  try {
+    const rows = await conn<{ locked: boolean }[]>`
+      select pg_try_advisory_lock(hashtext(${workspaceId})) as locked
+    `;
+    if (!rows[0]?.locked) {
+      throw new StructuredError(
+        "CONFLICT",
+        "An analysis is already running for this workspace. Try again in a moment.",
+      );
+    }
+    try {
+      return await fn();
+    } finally {
+      await conn`select pg_advisory_unlock(hashtext(${workspaceId}))`;
+    }
+  } finally {
+    conn.release();
+  }
+}
