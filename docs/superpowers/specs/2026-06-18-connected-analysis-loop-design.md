@@ -57,9 +57,14 @@ disconnected:
    (`Auto | Manual`) is mounted on the Analysis page to set the documents folder.
    `Auto` provisions/resolves the folder by name under the shared Trinno root
    (find-or-create, idempotent); `Manual` pastes a link.
-5. **Import auto-wires the loop.** plan-import sets the new workspace's documents
-   folder to the `<project>` folder it creates. Because `Auto` also resolves by
-   name, an imported workspace is analyzable immediately with no manual step.
+5. **Import auto-wires the loop (single folder).** When plan-import runs with
+   Drive **Auto or Manual** (a folder is available), it sets the new workspace's
+   single documents folder to the `<project>` folder it creates — so the
+   workspace is born on the one-folder model and a future report lands in
+   `<project>/auto analysis/` with no setup. With Drive **Off** (no folder),
+   nothing is set; the user configures the documents folder later via the
+   Analysis-page `Auto | Manual` control. No separate Reports folder is ever
+   created or configured for imported workspaces.
 6. **Recap stays internal plumbing** (never shown). No-op in the UI.
 7. **Config moves onto the Analysis page** (the folder control + the run control
    live together). The folder fields are REMOVED from manage-workspace Settings
@@ -95,7 +100,10 @@ analysis does not go through them. No new columns, no new tables.
 **Import (plan-import):**
 1. Build workspace + deliverable cards + deliverable Google Docs under
    `<project>/<WP>/Deliverables/…` (existing).
-2. Set the new workspace's documents folder = `<project>` (new, small).
+2. If a Drive folder is available (Auto or Manual mode), set the new workspace's
+   single documents folder = `<project>` (new, small). Off mode: skip — the user
+   configures it later on the Analysis page. Reports for the workspace then land
+   in `<project>/auto analysis/` automatically; no Reports folder is created.
 
 **Analyze (one page: configure + run):**
 1. User sets the documents folder via the `Auto | Manual` control (or it is
@@ -120,8 +128,11 @@ analysis does not go through them. No new columns, no new tables.
 - **Reuse the Drive-mode control** (`components/import-plan/drive-mode-control.tsx`)
   on the Analysis page for the documents folder; wire `Auto` provisioning to the
   same resolve-by-name helper plan-import uses.
-- **Import sets the documents folder** for the workspace it creates
-  (`lib/plan-import/build.ts` + the workspace link write).
+- **Import sets the single documents folder** for the workspace it creates, when
+  a Drive folder is available (Auto/Manual); skipped in Off mode
+  (`lib/plan-import/build.ts` + the workspace documents-folder link write). No
+  Reports folder is created or configured — reports derive as
+  `<project>/auto analysis/`.
 - **Settings:** remove both folder fields from manage-workspace Settings; the
   documents-folder control now lives on the Analysis page (single home), labeled
   "Documents folder (subfolders included)".
