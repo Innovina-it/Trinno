@@ -28,12 +28,10 @@ import { useIsGuest } from "@/lib/permissions/use-is-guest";
 export function WorkspaceSettingsForm({
   workspace,
   workspaceLink,
-  reportsLink,
   canDelete = false,
 }: {
   workspace: { id: string; name: string; autoAssignCreator: boolean };
   workspaceLink?: { url: string } | null;
-  reportsLink?: { url: string } | null;
   // Only owner/admin may delete. Members/guests get a Forbidden from the
   // server action anyway, so hide the entry point for them entirely.
   canDelete?: boolean;
@@ -43,7 +41,6 @@ export function WorkspaceSettingsForm({
   const [autoAssign, setAutoAssign] = useState(workspace.autoAssignCreator);
   const [pending, start] = useTransition();
   const [linkOpen, setLinkOpen] = useState(false);
-  const [reportsLinkOpen, setReportsLinkOpen] = useState(false);
   const isGuest = useIsGuest();
 
   function rename(e: React.FormEvent) {
@@ -179,58 +176,6 @@ export function WorkspaceSettingsForm({
               ? async () => {
                   const res = await removeWorkspaceLink({
                     workspaceId: workspace.id,
-                  });
-                  if (res.ok) router.refresh();
-                  else toast.error(res.error.message);
-                }
-              : undefined
-          }
-        />
-      </section>
-
-      <section id="reports-link" className="space-y-2 scroll-mt-20">
-        <Label htmlFor="ws-reports-link">Reports folder (link)</Label>
-        <p className="text-xs text-fg-faint">
-          The output/reports folder for this workspace. Visible to all members;
-          editable only by owners/admins.
-        </p>
-        <div className="flex items-center gap-2">
-          <Input
-            id="ws-reports-link"
-            readOnly
-            value={reportsLink?.url ?? "No link"}
-            className="max-w-xs"
-          />
-          {!isGuest && (
-            <Button
-              type="button"
-              onClick={() => setReportsLinkOpen(true)}
-              data-testid="ws-reports-link-manage"
-            >
-              Edit
-            </Button>
-          )}
-        </div>
-        <LinkEditDialog
-          open={reportsLinkOpen}
-          onOpenChange={setReportsLinkOpen}
-          scope="workspace"
-          initialUrl={reportsLink?.url ?? ""}
-          onSave={async ({ url }) => {
-            const res = await upsertWorkspaceLink({
-              workspaceId: workspace.id,
-              url,
-              purpose: "reports",
-            });
-            if (res.ok) router.refresh();
-            else toast.error(res.error.message);
-          }}
-          onRemove={
-            reportsLink?.url
-              ? async () => {
-                  const res = await removeWorkspaceLink({
-                    workspaceId: workspace.id,
-                    purpose: "reports",
                   });
                   if (res.ok) router.refresh();
                   else toast.error(res.error.message);

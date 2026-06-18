@@ -41,8 +41,6 @@ export default async function WorkspaceSettingsPage({
   ]);
   const workspaceLink =
     workspaceLinkRows.find((r) => r.purpose === "source") ?? null;
-  const reportsLink =
-    workspaceLinkRows.find((r) => r.purpose === "reports") ?? null;
   const canDelete = role === "owner" || role === "admin";
 
   return (
@@ -70,7 +68,6 @@ export default async function WorkspaceSettingsPage({
               autoAssignCreator: ws.autoAssignCreator,
             }}
             workspaceLink={workspaceLink}
-            reportsLink={reportsLink}
             canDelete={canDelete}
           />
         </div>
