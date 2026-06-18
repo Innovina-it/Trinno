@@ -183,6 +183,9 @@ No new columns, no new tables.
 - **Settings:** remove the manual folder fields (Reports is now auto-managed); the
   Documents-folder control lives on the Analysis page (single home), labeled
   "Documents folder (subfolders included)".
+- **Per-workspace run lock** (`lib/pma/run.ts` + route): a Postgres advisory lock
+  keyed by workspace, acquired at run start and released in a finally; a
+  concurrent run short-circuits to an "already running" status.
 
 ## Consistency / error handling
 
@@ -191,10 +194,11 @@ No new columns, no new tables.
   live inside the pasted folder.
 - Existing retry/version semantics are unchanged (errors leave `last_version`
   untouched so a file retries next run).
-- **Optional hardening (recommended, can defer):** a per-workspace advisory lock
-  around a run so two concurrent runs cannot both produce a report. Today there
-  is no lock; concurrent runs can duplicate reports. Cheap to add; flagged for
-  the implementation plan to accept or defer.
+- **Per-workspace run lock (in scope):** a per-workspace advisory lock around a
+  run so two concurrent runs cannot both produce a report. Today there is no lock,
+  so a double-submit or two admins can duplicate reports. Acquire at the start of
+  `runAnalysis`, release in a finally; a second concurrent run returns a "already
+  running" status instead of starting.
 
 ## Testing
 
