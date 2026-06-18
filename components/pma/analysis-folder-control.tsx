@@ -168,6 +168,7 @@ export function AnalysisFolderControl({
       >
         <ExternalLink className="size-3.5" />
       </a>
+      <span className="mx-0.5 h-4 w-px bg-[color:var(--hairline)]" aria-hidden />
       <Button type="button" variant="ghost" size="sm" onClick={openEditor}>
         Change
       </Button>
