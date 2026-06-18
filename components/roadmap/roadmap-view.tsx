@@ -10,13 +10,6 @@ import {
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useShallow } from "zustand/shallow";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { RoadmapCard, RoadmapLink } from "@/lib/queries/roadmap";
 import {
@@ -378,7 +371,6 @@ export function RoadmapView({
     cardId: string;
     boardId: string;
   } | null>(null);
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Plan #16b-α (#6 / #4) — flash an outline ring on the focused bar for
@@ -2166,7 +2158,7 @@ export function RoadmapView({
           e.preventDefault();
           return;
         }
-        if (newCardOpen || shortcutsOpen) {
+        if (newCardOpen) {
           // base-ui Dialog handles Esc itself; let it through.
           return;
         }
@@ -2182,11 +2174,6 @@ export function RoadmapView({
       if (e.key === "n" || e.key === "N") {
         e.preventDefault();
         setNewCardOpen(true);
-        return;
-      }
-      if (e.key === "?") {
-        e.preventDefault();
-        setShortcutsOpen(true);
         return;
       }
       if (e.key === "+" || e.key === "=") {
@@ -2222,7 +2209,7 @@ export function RoadmapView({
     return () => window.removeEventListener("keydown", onKey);
     // setZoom is a stable function defined in this scope.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryDraft, newCardOpen, shortcutsOpen, zoom, drag]);
+  }, [queryDraft, newCardOpen, zoom, drag]);
 
   return (
     <div
@@ -2255,7 +2242,12 @@ export function RoadmapView({
             queryDraft={queryDraft}
             onQueryDraftChange={setQueryDraft}
             searchInputRef={searchInputRef}
-            onOpenShortcuts={() => setShortcutsOpen(true)}
+            onOpenShortcuts={() =>
+              // Defer to the app-wide ShortcutsOverlay (layout.tsx), which
+              // opens on the "?" key. Re-emit it so the header button and the
+              // keyboard shortcut share one overlay.
+              window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))
+            }
             gridStart={gridStart}
             gridEnd={gridEnd}
             baselineSlot={
@@ -3370,10 +3362,6 @@ export function RoadmapView({
           + NEW CARD
         </div>
       )}
-      <RoadmapShortcutsDialog
-        open={shortcutsOpen}
-        onOpenChange={setShortcutsOpen}
-      />
       {/* === MILESTONE MARKERS START (dialog) === */}
       <MilestoneDialog
         open={milestoneDialogOpen}
@@ -3443,121 +3431,5 @@ export function RoadmapView({
         onCreateSubtask={onQuickCreateSubtask}
       />
     </div>
-  );
-}
-
-function RoadmapShortcutsDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (next: boolean) => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="roadmap-shortcuts-dialog">
-        <DialogHeader>
-          <DialogTitle>Keyboard shortcuts</DialogTitle>
-          <DialogDescription>ROADMAP</DialogDescription>
-        </DialogHeader>
-        <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
-          <dt className="mono-meta text-fg-faint">/</dt>
-          <dd className="text-fg">Focus search</dd>
-          <dt className="mono-meta text-fg-faint">Esc</dt>
-          <dd className="text-fg">
-            Cancel drag · clear search · close menus
-          </dd>
-          <dt className="mono-meta text-fg-faint">+ / −</dt>
-          <dd className="text-fg">Zoom in / out</dd>
-          <dt className="mono-meta text-fg-faint">← / →</dt>
-          <dd className="text-fg">Scroll the timeline</dd>
-          <dt className="mono-meta text-fg-faint">Shift + ← / →</dt>
-          <dd className="text-fg">Page the timeline by one viewport</dd>
-          <dt className="mono-meta text-fg-faint">Hold Space + drag</dt>
-          <dd className="text-fg">Pan the timeline with the mouse</dd>
-          <dt className="mono-meta text-fg-faint">n</dt>
-          <dd className="text-fg">New card</dd>
-          <dt className="mono-meta text-fg-faint">Right-click bar</dt>
-          <dd className="text-fg">Open card context menu</dd>
-          <dt className="mono-meta text-fg-faint">?</dt>
-          <dd className="text-fg">Show this list</dd>
-        </dl>
-        <section
-          className="mt-5 space-y-1.5"
-          data-testid="roadmap-bar-legend"
-        >
-          <h3 className="mono-meta-sm text-fg-faint tracking-[0.14em]">
-            BAR PATTERNS
-          </h3>
-          <dl className="rounded-md border border-hairline bg-[color:var(--surface)] divide-y divide-hairline overflow-hidden">
-            {[
-              {
-                label: "TODO",
-                desc: "Untriaged. Solid fill.",
-                pattern: {
-                  background:
-                    "color-mix(in oklab, var(--status-todo) 22%, transparent)",
-                },
-              },
-              {
-                label: "IN PROGRESS",
-                desc: "Pulses. Reduced-motion safe.",
-                pattern: {
-                  background:
-                    "color-mix(in oklab, var(--status-in-progress) 38%, transparent)",
-                  boxShadow:
-                    "inset 0 0 0 1px color-mix(in oklab, var(--status-in-progress) 55%, transparent)",
-                },
-              },
-              {
-                label: "REVIEW",
-                desc: "Diagonal stripes. Waiting on a human.",
-                pattern: {
-                  background:
-                    "color-mix(in oklab, var(--status-review) 22%, transparent)",
-                  backgroundImage:
-                    "repeating-linear-gradient(45deg, color-mix(in oklab, var(--status-review) 45%, transparent) 0 4px, transparent 4px 8px)",
-                },
-              },
-              {
-                label: "DONE",
-                desc: "Horizontal hatches. Closed and frozen.",
-                pattern: {
-                  background:
-                    "color-mix(in oklab, var(--status-done) 22%, transparent)",
-                  backgroundImage:
-                    "repeating-linear-gradient(0deg, color-mix(in oklab, var(--status-done) 50%, transparent) 0 2px, transparent 2px 6px)",
-                },
-              },
-              {
-                label: "BLOCKED",
-                desc: "Inset ring. Fenced off, needs a decision.",
-                pattern: {
-                  background:
-                    "color-mix(in oklab, var(--status-blocked) 12%, transparent)",
-                  boxShadow:
-                    "inset 0 0 0 2px color-mix(in oklab, var(--status-blocked) 60%, transparent)",
-                },
-              },
-            ].map((row) => (
-              <div
-                key={row.label}
-                className="grid grid-cols-[3rem_6rem_1fr] gap-3 px-3 py-2 items-center"
-              >
-                <span
-                  aria-hidden
-                  className="h-5 w-full rounded-md border border-hairline-hi"
-                  style={row.pattern as React.CSSProperties}
-                />
-                <dt className="mono-meta-sm tabular-nums text-fg">
-                  {row.label}
-                </dt>
-                <dd className="text-sm text-fg-muted">{row.desc}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      </DialogContent>
-    </Dialog>
   );
 }
