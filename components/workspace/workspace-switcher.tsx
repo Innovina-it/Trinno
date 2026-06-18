@@ -32,8 +32,11 @@ const SEARCH_THRESHOLD = 5;
 // workspace, so we drop to the section root or the workspace root.
 // `settings` is also deliberately excluded: switching workspaces from
 // the Manage-workspace page should drop INTO the chosen workspace's
-// content (its roadmap by default via `/w/{id}`), not pin you to the
-// new workspace's settings.
+// content (its roadmap), not pin you to the new workspace's settings.
+// It's handled explicitly in `targetFor` (→ `/w/{id}/roadmap`) rather
+// than falling through to the bare `/w/{id}` root, because that root is
+// a server-redirect bouncer (page.tsx) — routing through it costs an
+// extra round-trip and makes the switch feel sluggish.
 const PRESERVED_SUBSECTIONS = new Set([
   "backlog",
   "all-tasks",
@@ -103,6 +106,15 @@ export function WorkspaceSwitcher({
     const sub = m?.[1];
     if (sub && PRESERVED_SUBSECTIONS.has(sub)) {
       return `/w/${newId}/${sub}`;
+    }
+    // Manage-workspace (settings) page: jump straight to the new workspace's
+    // roadmap. The bare `/w/${newId}` root is a server-redirect bouncer
+    // (page.tsx reads prefs, then redirects to roadmap/board), so reaching it
+    // costs a second server round-trip + a re-run of the heavy /w layout —
+    // the switch feels slow vs. switching from roadmap/board. The end state is
+    // identical (roadmap); we just skip the bounce.
+    if (sub === "settings") {
+      return `/w/${newId}/roadmap`;
     }
     return `/w/${newId}`;
   }
