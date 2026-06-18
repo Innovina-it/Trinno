@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { and, eq } from "drizzle-orm";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace } from "@/lib/queries/workspaces";
+import { dbAsUser } from "@/lib/db/client";
+import { links } from "@/lib/db/schema";
 import { listRuns } from "@/lib/pma/registry";
 import { getAnalysisGate } from "@/lib/pma/gate";
 import { RunAnalysisPanel } from "@/components/pma/run-analysis-panel";
+import { AnalysisFolderControl } from "@/components/pma/analysis-folder-control";
 import type { PmaAnalysisRunRow } from "@/lib/db/schema";
 
 // PMA U10 — Analysis tab. Lists past "Run analysis" runs (readable by any
@@ -108,6 +112,24 @@ export default async function AnalysisPage({
     getAnalysisGate(token, workspaceId, user.id),
   ]);
 
+  // The workspace's current Documents folder link (source), so an owner/admin can
+  // (re)configure it inline. Best-effort: any RLS/transient failure → null.
+  const sourceRow = await dbAsUser(token, (tx) =>
+    tx
+      .select({ url: links.url })
+      .from(links)
+      .where(
+        and(
+          eq(links.workspaceId, workspaceId),
+          eq(links.scope, "workspace"),
+          eq(links.purpose, "source"),
+        ),
+      )
+      .limit(1),
+  )
+    .then((r) => r[0] ?? null)
+    .catch(() => null);
+
   const emptyHint = gate.canRun
     ? "Run one above to generate the first report."
     : gate.isOwnerAdmin
@@ -133,6 +155,12 @@ export default async function AnalysisPage({
             foldersConfigured={gate.foldersConfigured}
           />
         </div>
+        {gate.isOwnerAdmin && (
+          <AnalysisFolderControl
+            workspaceId={workspaceId}
+            currentFolderUrl={sourceRow?.url ?? null}
+          />
+        )}
       </header>
 
       {runs.length === 0 ? (
