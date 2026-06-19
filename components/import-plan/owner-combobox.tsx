@@ -22,8 +22,14 @@ export function OwnerCombobox({
   ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
+  // Only filter once the user types since focusing — a freshly focused field
+  // that already holds an owner should reveal the full list, not just the names
+  // matching the current value. Reset on focus, set on type.
+  const [dirty, setDirty] = useState(false);
   const q = value.trim().toLowerCase();
-  const matches = options.filter((o) => o.toLowerCase().includes(q));
+  const matches = dirty
+    ? options.filter((o) => o.toLowerCase().includes(q))
+    : options;
 
   function choose(v: string) {
     onChange(v);
@@ -40,8 +46,12 @@ export function OwnerCombobox({
         onChange={(e) => {
           onChange(e.target.value);
           setOpen(true);
+          setDirty(true);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          setOpen(true);
+          setDirty(false);
+        }}
         onBlur={() => setOpen(false)}
         onKeyDown={(e) => {
           if (e.key === "Escape" || e.key === "Enter") setOpen(false);
