@@ -13,9 +13,11 @@ const folderUrl = (id: string) => `https://drive.google.com/drive/folders/${id}`
 
 // Configure a workspace's analysis folders in one owner/admin action. Sets the
 // existing `source` (Documents) and `reports` (Reports) workspace links.
-//  - auto:   provision <root>/<project>/{Documents, Reports} under the Trinno root.
-//  - manual: the pasted folder IS the Documents folder; create a Reports child
-//            inside it (the recursive scan skips a folder named "Reports").
+//  - auto:   provision <root>/<project>/{Documents, Reports} under the Trinno root,
+//            plus a Documents/Context child for project-background docs.
+//  - manual: the pasted folder IS the Documents folder; create Reports + Context
+//            children inside it (the recursive scan skips folders named "Reports"
+//            and "Context"). Context is read by the analysis but never tracked.
 export async function setWorkspaceDriveFolderAction(input: {
   workspaceId: string;
   mode: "auto" | "manual";
@@ -43,10 +45,14 @@ export async function setWorkspaceDriveFolderAction(input: {
     const pasted = extractDriveFileId(input.folderLink ?? "");
     if (!pasted) return { ok: false, error: "Paste a Google Drive folder link." };
     documentsId = pasted;
-    const existing = (await listFolder(pasted)).find(
-      (f) => f.mimeType === FOLDER_MIME && f.name === "Reports",
-    );
-    reportsId = existing ? existing.id : (await createFolder("Reports", pasted)).id;
+    const children = await listFolder(pasted);
+    const findChild = (name: string) =>
+      children.find((f) => f.mimeType === FOLDER_MIME && f.name === name);
+    const existingReports = findChild("Reports");
+    reportsId = existingReports ? existingReports.id : (await createFolder("Reports", pasted)).id;
+    // Project-background folder: the analysis reads it but never tracks it (the
+    // recursive scan skips "Context"). Create it once if absent.
+    if (!findChild("Context")) await createFolder("Context", pasted);
   }
 
   await upsertWorkspaceLinkImpl(token, {

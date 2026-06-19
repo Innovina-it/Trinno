@@ -37,20 +37,29 @@ describe("provisionProjectFolders", () => {
       projectFolderId: "AEGIS-id",
       documentsFolderId: "Documents-id",
       reportsFolderId: "Reports-id",
+      contextFolderId: "Context-id",
     });
     expect(createFolder).toHaveBeenCalledWith("AEGIS", "root");
     expect(createFolder).toHaveBeenCalledWith("Documents", "AEGIS-id");
     expect(createFolder).toHaveBeenCalledWith("Reports", "AEGIS-id");
+    // Context is a child of Documents (so the run can find it by listing source).
+    expect(createFolder).toHaveBeenCalledWith("Context", "Documents-id");
   });
 
   it("reuses existing folders (idempotent)", async () => {
     listFolder.mockImplementation(async (id: string) => {
       if (id === "root") return [fold("p", "AEGIS")];
       if (id === "p") return [fold("d", "Documents"), fold("r", "Reports")];
+      if (id === "d") return [fold("c", "Context")];
       return [];
     });
     const r = await provisionProjectFolders("root", "AEGIS");
-    expect(r).toEqual({ projectFolderId: "p", documentsFolderId: "d", reportsFolderId: "r" });
+    expect(r).toEqual({
+      projectFolderId: "p",
+      documentsFolderId: "d",
+      reportsFolderId: "r",
+      contextFolderId: "c",
+    });
     expect(createFolder).not.toHaveBeenCalled();
   });
 });
