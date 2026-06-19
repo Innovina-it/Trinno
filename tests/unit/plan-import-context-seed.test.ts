@@ -46,12 +46,36 @@ beforeEach(() => {
 describe("renderProjectOverviewHtml", () => {
   it("renders the plan's name, partners, work packages, deliverables and milestones", () => {
     const html = renderProjectOverviewHtml(plan);
-    expect(html).toContain("ARISE &amp; Co — Project overview");
-    expect(html).toContain("<b>Partners:</b> INNOVINA, ACME"); // WP lead + task owners, distinct
-    expect(html).toContain("WP1 — Requirements"); // work package heading
+    expect(html).toContain("ARISE &amp; Co · Project overview"); // masthead title (middot, no em dash)
+    expect(html).toContain("PARTNERS"); // mono label
+    expect(html).toContain("INNOVINA · ACME"); // WP lead + task owners, distinct
+    expect(html).toContain("WP1 · Requirements"); // work package subheading
     expect(html).toContain("Gather &amp; define the system requirements."); // objective
-    expect(html).toContain("D1.1 — Reqs doc (M6, due 2026-06-30) — the spec"); // deliverable line
-    expect(html).toContain("<b>M6 — Baseline</b> — 2026-06-30 — first review"); // milestone
+    expect(html).toContain("D1.1 — Reqs doc (M6, due 2026-06-30) · the spec"); // deliverable line
+    expect(html).toContain("<b>M6 — Baseline</b> · 2026-06-30 · first review"); // milestone
+  });
+
+  it("uses no em dashes in generated copy (DESIGN rule)", () => {
+    // The fixture's own titles contain em dashes; our own separators must not add any.
+    const html = renderProjectOverviewHtml({
+      workspaceName: "Plain",
+      parentBoardTitle: "Plain",
+      workPackages: [
+        {
+          code: "WP1",
+          title: "Clean title",
+          option: "RI",
+          start: "2026-01-01",
+          end: "2026-06-30",
+          description: "desc",
+          lead: "INNOVINA",
+          tasks: [],
+          deliverables: [{ title: "D1", taskIndex: 0, due: "2026-06-30", month: 6, description: "x" }],
+        },
+      ],
+      milestones: [{ name: "M1", date: "2026-06-30", description: "y" }],
+    });
+    expect(html).not.toContain("—");
   });
 
   it("escapes HTML in plan text (no raw angle brackets leak through)", () => {
@@ -68,9 +92,9 @@ describe("renderProjectOverviewHtml", () => {
       milestones: [],
     };
     const html = renderProjectOverviewHtml(bare);
-    expect(html).toContain("Bare — Project overview");
-    expect(html).not.toContain("Partners:");
-    expect(html).not.toContain("<h2>Milestones</h2>");
+    expect(html).toContain("Bare · Project overview");
+    expect(html).not.toContain("PARTNERS");
+    expect(html).not.toContain("MILESTONES");
   });
 });
 
@@ -81,7 +105,7 @@ describe("seedProjectContext", () => {
     const arg = createDoc.mock.calls[0][0];
     expect(arg.name).toBe(PROJECT_OVERVIEW_DOC_NAME);
     expect(arg.parentId).toBe("ctx-folder");
-    expect(arg.content).toContain("ARISE &amp; Co — Project overview");
+    expect(arg.content).toContain("ARISE &amp; Co · Project overview");
     expect(res).toEqual({ id: "ctx-doc", webViewLink: "https://docs/ctx" });
   });
 });

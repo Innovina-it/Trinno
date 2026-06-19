@@ -12,6 +12,17 @@ import type {
 } from "@/lib/baselines/types";
 import { generateStructured } from "./clients/gemini";
 import { createReport } from "./output";
+import {
+  escapeHtml,
+  docShell,
+  section,
+  paragraph,
+  bullets,
+  metaTable,
+  table,
+  monoCell,
+  MONO,
+} from "./doc-style";
 import type { AnalyzeFileResult } from "./analyze";
 import type { DetectedFile } from "./detect";
 
@@ -73,6 +84,9 @@ export type SynthesizeInput = {
   // concatenated + capped by lib/pma/context.ts). Injected as grounding so the
   // report is framed against the project's goals/terminology; absent → unchanged.
   context?: string;
+  // Workspace name, for the report Doc masthead title ("<name> · Analysis").
+  // Optional: absent → the masthead reads just "Analysis".
+  workspaceName?: string | null;
   // Per-file recaps from analyze() (DESIGN §5.2 — in-memory).
   fileResults: AnalyzeFileResult[];
   // Files detected as removed this run (DESIGN §5.2 removed list).
@@ -244,78 +258,84 @@ function fmtPeriod(window: { start: string; end: string }): string {
   return `${f(window.start)} – ${f(window.end)}`;
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+// Render the structured report as a Trinno-branded Google Doc (lib/pma/doc-style
+// builds the import-safe HTML; createReport hands it to Drive, which converts it
+// to a native Doc). U12.6 — author names (the `authors` set, grounded in Drive's
+// lastModifyingUser) are wrapped in <b> wherever they appear, so the person who
+// made each change stands out. "non noto" is left unbolded.
+export function renderReportDoc(input: {
+  report: SynthesisReport;
+  runLabel: string;
+  period?: string | null;
+  authors?: string[];
+  workspaceName?: string | null;
+  counts?: { changed: number; missed: number; removed: number } | null;
+}): string {
+  const { report, runLabel, period, counts } = input;
 
-// Render the structured report as an HTML body. createReport imports text/html
-// → Drive converts it to a native Google Doc carrying formatting. U12.6 — author
-// names (the `authors` set, grounded in Drive's lastModifyingUser) are wrapped in
-// <b> wherever they appear, so the person who made each change stands out.
-export function renderReportDoc(
-  report: SynthesisReport,
-  runLabel: string,
-  period?: string | null,
-  authors: string[] = [],
-): string {
-  const lines: string[] = [];
-  const section = (title: string) => {
-    lines.push("", title.toUpperCase(), "");
-  };
-  const bullets = (items: string[]) => {
-    if (items.length === 0) lines.push("  (none)");
-    else for (const it of items) lines.push(`  • ${it}`);
-  };
-
-  lines.push(`PROJECT ANALYSIS — ${runLabel}`);
-  if (period) lines.push(`Reporting period: ${period}`);
-
-  section("Executive summary");
-  lines.push(report.executive_summary || "(none)");
-
-  section("Deliverables");
-  lines.push(report.deliverables_focus || "(none)");
-
-  section("Notable changes");
-  bullets(report.notable_changes);
-
-  section("New or changed files");
-  bullets(report.new_or_changed_files);
-
-  section("Missed updates");
-  bullets(report.missed_updates);
-
-  section("Deviations from the approved baseline");
-  if (report.deviations.length === 0) {
-    lines.push("  (none)");
-  } else {
-    for (const d of report.deviations) {
-      lines.push(
-        `  • [${d.type}/${d.severity}] ${d.item}: ${d.baseline_value} → ${d.current_value}`,
-      );
-    }
-  }
-
-  section("Progress notes");
-  bullets(report.progress_notes);
-
-  section("Difficulties");
-  bullets(report.difficulties);
-
-  // U12.6 — emit HTML. Escape every line first, then bold any author name within
-  // it (longest names first so overlapping names don't nest). Lines join with
-  // <br>; "non noto" is left unbolded (it is not a recognizable person).
-  const names = [...authors]
+  // Bold known author names within already-escaped text (longest first so
+  // overlapping names don't nest); fmt = escape then bold.
+  const names = [...(input.authors ?? [])]
     .filter(Boolean)
     .sort((a, b) => b.length - a.length)
     .map((n) => escapeHtml(n));
-  const bold = (escapedLine: string): string => {
-    let out = escapedLine;
+  const bold = (escaped: string): string => {
+    let out = escaped;
     for (const n of names) out = out.split(n).join(`<b>${n}</b>`);
     return out;
   };
-  const body = lines.map((l) => bold(escapeHtml(l))).join("<br>\n");
-  return `<html><body>${body}</body></html>`;
+  const fmt = (text: string): string => bold(escapeHtml(text));
+
+  const meta: [string, string][] = [
+    ["Run", runLabel],
+    ["Period", period ?? "Whole document"],
+  ];
+  if (counts) {
+    meta.push([
+      "Changes",
+      `${counts.changed} changed · ${counts.missed} missed · ${counts.removed} removed`,
+    ]);
+  }
+
+  const deviations =
+    report.deviations.length === 0
+      ? paragraph("(none)")
+      : table(
+          ["Item", "Type", "Severity", "Baseline → Now"],
+          report.deviations.map((d) => [
+            fmt(d.item),
+            monoCell(d.type),
+            monoCell(d.severity),
+            `<span style="font-family:${MONO};font-size:11px">${escapeHtml(d.baseline_value)} → ${escapeHtml(d.current_value)}</span>`,
+          ]),
+        );
+
+  const body =
+    `<div style="margin:0 0 22px">${metaTable(meta)}</div>` +
+    section("Executive summary") +
+    paragraph(fmt(report.executive_summary)) +
+    section("Deliverables") +
+    paragraph(fmt(report.deliverables_focus)) +
+    section("Notable changes") +
+    bullets(report.notable_changes.map(fmt)) +
+    section("New or changed files") +
+    bullets(report.new_or_changed_files.map(fmt)) +
+    section("Missed updates") +
+    bullets(report.missed_updates.map(fmt)) +
+    section("Deviations from the approved baseline") +
+    deviations +
+    section("Progress notes") +
+    bullets(report.progress_notes.map(fmt)) +
+    section("Difficulties") +
+    bullets(report.difficulties.map(fmt));
+
+  return docShell({
+    eyebrow: "Trinno · Project analysis",
+    title: input.workspaceName ? `${input.workspaceName} · Analysis` : "Analysis",
+    subLines: [{ text: period ? `Reporting period · ${period}` : "Whole document" }],
+    body,
+    footer: "Generated by Trinno · gemini-3.5-flash",
+  });
 }
 
 export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResult> {
@@ -345,11 +365,23 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
         .filter((n): n is string => !!n),
     ),
   );
-  const content = renderReportDoc(report, input.runLabel, period, authors);
+  const counts = {
+    changed: input.fileResults.filter((r) => r.status === "analyzed").length,
+    missed: input.fileResults.filter((r) => r.status === "error").length,
+    removed: input.removed.length,
+  };
+  const content = renderReportDoc({
+    report,
+    runLabel: input.runLabel,
+    period,
+    authors,
+    workspaceName: input.workspaceName,
+    counts,
+  });
   const { id, webViewLink } = await createReport(input.outputFolderId, {
     name: period
-      ? `Analysis ${period} — ${input.runLabel}`
-      : `Analysis — ${input.runLabel}`,
+      ? `Analysis ${period} · ${input.runLabel}`
+      : `Analysis · ${input.runLabel}`,
     content,
   });
 
@@ -357,10 +389,6 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
     report,
     reportFileId: id,
     reportWebViewLink: webViewLink,
-    counts: {
-      changed: input.fileResults.filter((r) => r.status === "analyzed").length,
-      missed: input.fileResults.filter((r) => r.status === "error").length,
-      removed: input.removed.length,
-    },
+    counts,
   };
 }

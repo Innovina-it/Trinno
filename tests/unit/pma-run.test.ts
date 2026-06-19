@@ -66,6 +66,7 @@ const okInputs = {
   deliverableLinks: [{ id: "l1", url: "https://drive.google.com/file/d/abc/view" }],
   live: { entries: [], milestones: [] },
   baseline: null,
+  workspaceName: "Test WS",
 };
 
 const run = (over: Record<string, unknown> = {}) =>
@@ -136,6 +137,7 @@ describe("runAnalysis — happy path wiring", () => {
     expect(synthArg.window).toEqual(WINDOW);
     expect(synthArg.baseline).toBeNull();
     expect(synthArg.context).toBe("PROJECT BACKGROUND");
+    expect(synthArg.workspaceName).toBe("Test WS"); // masthead title source
 
     // reconcile records the run with the report pointer + success status.
     const recArg = reconcile.mock.calls[0][0];

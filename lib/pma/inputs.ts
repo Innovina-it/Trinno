@@ -8,6 +8,7 @@ import {
   cards,
   boards,
   cardMembers,
+  workspaces,
   roadmapBaselines,
   roadmapBaselineEntries,
   roadmapBaselineAssignees,
@@ -39,6 +40,8 @@ export type RunInputs = {
   deliverableLinks: DeliverableLink[];
   live: { entries: LiveEntry[]; milestones: LiveMilestone[] };
   baseline: BaselineDetail | null;
+  // Workspace display name (for the report Doc masthead); null if not found.
+  workspaceName: string | null;
 };
 
 // timestamptz columns come back as Date from the pg driver; the baseline/live
@@ -101,6 +104,14 @@ export async function getRunInputs(
   workspaceId: string,
 ): Promise<RunInputs> {
   return dbAsUser(token, async (tx) => {
+    // ── Workspace display name (for the report masthead) ─────────────────────
+    const [wsRow] = await tx
+      .select({ name: workspaces.name })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .limit(1);
+    const workspaceName = wsRow?.name ?? null;
+
     // ── Drive folder links (workspace scope; one per purpose) ────────────────
     const wsLinks = await tx
       .select({ url: links.url, purpose: links.purpose })
@@ -227,6 +238,7 @@ export async function getRunInputs(
       deliverableLinks,
       live,
       baseline,
+      workspaceName,
     };
   });
 }

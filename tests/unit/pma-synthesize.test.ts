@@ -322,9 +322,9 @@ describe("synthesize — failure is terminal for the run", () => {
 });
 
 describe("renderReportDoc", () => {
-  it("renders every section as plain text with deviations formatted", () => {
-    const body = renderReportDoc(
-      {
+  it("renders the branded masthead, sections, and a deviations table", () => {
+    const body = renderReportDoc({
+      report: {
         ...REPORT,
         deliverables_focus: "Spec deliverable revised twice.",
         deviations: [
@@ -337,30 +337,41 @@ describe("renderReportDoc", () => {
           },
         ],
       },
-      LABEL,
-    );
-    expect(body).toContain(`PROJECT ANALYSIS — ${LABEL}`);
-    expect(body).toContain("EXECUTIVE SUMMARY");
+      runLabel: LABEL,
+      workspaceName: "SWICH",
+      counts: { changed: 2, missed: 1, removed: 0 },
+    });
+    expect(body).toContain("SWICH · Analysis"); // masthead title (workspace name)
+    expect(body).toContain(LABEL); // run label in the meta table
+    expect(body).toContain("EXECUTIVE SUMMARY"); // section label (uppercased literal)
     expect(body).toContain("DELIVERABLES");
     expect(body).toContain("Spec deliverable revised twice.");
-    expect(body).toContain("[delay/medium] Ship onboarding: 2026-06-01 → 2026-06-11");
+    // deviation rendered as a monochrome table row, type/severity uppercased
+    expect(body).toContain("Ship onboarding");
+    expect(body).toContain("DELAY");
+    expect(body).toContain("MEDIUM");
+    expect(body).toContain("2026-06-01 → 2026-06-11");
+  });
+
+  it("falls back to a plain 'Analysis' title when no workspace name is given", () => {
+    const body = renderReportDoc({ report: REPORT, runLabel: LABEL });
+    expect(body).toContain(">Analysis<"); // masthead title div text
   });
 
   it("bolds known author names in the HTML body (U12.6)", () => {
-    const body = renderReportDoc(
-      { ...REPORT, new_or_changed_files: ["spec.gdoc — Mario Rossi", "plan.gdoc — non noto"] },
-      LABEL,
-      null,
-      ["Mario Rossi"],
-    );
+    const body = renderReportDoc({
+      report: { ...REPORT, new_or_changed_files: ["spec.gdoc — Mario Rossi", "plan.gdoc — non noto"] },
+      runLabel: LABEL,
+      authors: ["Mario Rossi"],
+    });
     expect(body).toContain("<b>Mario Rossi</b>");
     expect(body).toContain("non noto"); // unknown author left unbolded
     expect(body).not.toContain("<b>non noto</b>");
   });
 
   it("shows (none) for empty sections", () => {
-    const body = renderReportDoc(
-      {
+    const body = renderReportDoc({
+      report: {
         executive_summary: "",
         deliverables_focus: "",
         notable_changes: [],
@@ -370,8 +381,8 @@ describe("renderReportDoc", () => {
         progress_notes: [],
         difficulties: [],
       },
-      LABEL,
-    );
+      runLabel: LABEL,
+    });
     expect(body).toContain("(none)");
   });
 });

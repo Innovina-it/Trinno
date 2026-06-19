@@ -1,6 +1,18 @@
 import "server-only";
 
 import { createDoc } from "@/lib/pma/clients/drive";
+import {
+  escapeHtml,
+  docShell,
+  section,
+  subheading,
+  metaLine,
+  bullets,
+  paragraph,
+  SANS,
+  MONO,
+  MUTED,
+} from "@/lib/pma/doc-style";
 import type { ProjectPlan } from "./types";
 
 // PLAN IMPORT — PROJECT CONTEXT SEED.
@@ -13,11 +25,8 @@ import type { ProjectPlan } from "./types";
 
 export const PROJECT_OVERVIEW_DOC_NAME = "Project overview";
 
-function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-// Pure: render the plan as an HTML body (createDoc converts it to a native Doc).
+// Pure: render the plan as a Trinno-branded Google Doc body (lib/pma/doc-style
+// builds the import-safe HTML; createDoc hands it to Drive for native conversion).
 export function renderProjectOverviewHtml(plan: ProjectPlan): string {
   // Partners = distinct WP leads + task owners (mirrors build.ts's identity).
   const partnerSet = new Set<string>();
@@ -28,44 +37,63 @@ export function renderProjectOverviewHtml(plan: ProjectPlan): string {
   const partners = [...partnerSet];
 
   const parts: string[] = [];
-  parts.push(`<h1>${esc(plan.workspaceName)} — Project overview</h1>`);
-  parts.push(
-    "<p><i>Auto-generated from the imported plan as background for analysis. " +
-      "Edit this document or add more context files (glossary, grant terms) to " +
-      "this folder.</i></p>",
-  );
   if (partners.length) {
-    parts.push(`<p><b>Partners:</b> ${esc(partners.join(", "))}</p>`);
+    parts.push(
+      `<p style="font-family:${SANS};font-size:12.5px;color:${MUTED};margin:0 0 24px">` +
+        `<b style="font-family:${MONO};font-size:10px;letter-spacing:.1em;color:${MUTED}">PARTNERS&nbsp;&nbsp;</b>` +
+        `${escapeHtml(partners.join(" · "))}</p>`,
+    );
   }
 
-  parts.push("<h2>Work packages &amp; objectives</h2>");
+  parts.push(section("Work packages & objectives"));
   for (const wp of plan.workPackages) {
+    parts.push(`<div style="margin:0 0 22px">`);
+    parts.push(subheading(`${wp.code} · ${wp.title}`));
     const meta = [wp.option, wp.lead ? `Lead ${wp.lead}` : null, `${wp.start} → ${wp.end}`]
       .filter(Boolean)
       .join(" · ");
-    parts.push(`<h3>${esc(wp.code)} — ${esc(wp.title)}</h3>`);
-    parts.push(`<p><i>${esc(meta)}</i></p>`);
-    if (wp.description.trim()) parts.push(`<p>${esc(wp.description)}</p>`);
+    parts.push(metaLine(meta));
+    if (wp.description.trim()) parts.push(paragraph(escapeHtml(wp.description)));
     if (wp.deliverables.length) {
-      parts.push("<p><b>Deliverables:</b></p><ul>");
-      for (const d of wp.deliverables) {
-        const tail = d.description.trim() ? ` — ${esc(d.description)}` : "";
-        parts.push(`<li>${esc(d.title)} (M${d.month}, due ${esc(d.due)})${tail}</li>`);
-      }
-      parts.push("</ul>");
+      parts.push(
+        `<p style="font-family:${SANS};font-size:12.5px;color:${MUTED};margin:8px 0 4px"><b>Deliverables</b></p>`,
+      );
+      parts.push(
+        bullets(
+          wp.deliverables.map((d) => {
+            const tail = d.description.trim() ? ` · ${escapeHtml(d.description)}` : "";
+            return `${escapeHtml(d.title)} (M${d.month}, due ${escapeHtml(d.due)})${tail}`;
+          }),
+        ),
+      );
     }
+    parts.push(`</div>`);
   }
 
   if (plan.milestones.length) {
-    parts.push("<h2>Milestones</h2><ul>");
-    for (const m of plan.milestones) {
-      const tail = m.description.trim() ? ` — ${esc(m.description)}` : "";
-      parts.push(`<li><b>${esc(m.name)}</b> — ${esc(m.date)}${tail}</li>`);
-    }
-    parts.push("</ul>");
+    parts.push(section("Milestones"));
+    parts.push(
+      bullets(
+        plan.milestones.map((m) => {
+          const tail = m.description.trim() ? ` · ${escapeHtml(m.description)}` : "";
+          return `<b>${escapeHtml(m.name)}</b> · ${escapeHtml(m.date)}${tail}`;
+        }),
+      ),
+    );
   }
 
-  return `<html><body>${parts.join("\n")}</body></html>`;
+  return docShell({
+    eyebrow: "Trinno · Project context",
+    title: `${plan.workspaceName} · Project overview`,
+    subLines: [
+      {
+        text: "Background for analysis. Edit this, or add more context files to this folder.",
+        variant: "serif",
+      },
+    ],
+    body: parts.join("\n"),
+    footer: "Auto-generated from the imported plan · Trinno",
+  });
 }
 
 // Write the overview into the Context folder. Returns the new Doc id + link.

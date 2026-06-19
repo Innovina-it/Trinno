@@ -232,6 +232,7 @@ async function runAnalysisInner(
       live: inputs.live,
       changedSince,
       context: context ?? undefined,
+      workspaceName: inputs.workspaceName,
     });
   } catch {
     runStatus = "error";
