@@ -7,9 +7,20 @@ vi.mock("server-only", () => ({}));
 
 const listFolder = vi.fn();
 const listFolderTree = vi.fn();
+const getFileBytes = vi.fn();
+const uploadFile = vi.fn();
+const trashFile = vi.fn();
 vi.mock("@/lib/pma/clients/drive", () => ({
   listFolder: (...a: unknown[]) => listFolder(...a),
   listFolderTree: (...a: unknown[]) => listFolderTree(...a),
+  getFileBytes: (...a: unknown[]) => getFileBytes(...a),
+  uploadFile: (...a: unknown[]) => uploadFile(...a),
+  trashFile: (...a: unknown[]) => trashFile(...a),
+}));
+
+const generateStructured = vi.fn();
+vi.mock("@/lib/pma/clients/gemini", () => ({
+  generateStructured: (...a: unknown[]) => generateStructured(...a),
 }));
 
 const getAnalyzableContent = vi.fn();
@@ -23,7 +34,14 @@ vi.mock("@/lib/pma/content", () => ({
     m.startsWith("image/"),
 }));
 
-import { getProjectContext, MAX_CONTEXT_CHARS } from "@/lib/pma/context";
+import { getProjectContext, getProjectBrief, MAX_CONTEXT_CHARS } from "@/lib/pma/context";
+
+const OUT = "out-folder";
+// base64 of a {fingerprint, brief} cache JSON.
+const cacheJson = (fingerprint: Record<string, string>, brief: string) => ({
+  data: Buffer.from(JSON.stringify({ fingerprint, brief })).toString("base64"),
+  mimeType: "application/json",
+});
 
 const FOLDER = "application/vnd.google-apps.folder";
 const DOC = "application/vnd.google-apps.document";
@@ -43,6 +61,10 @@ const file = (id: string, name: string, mimeType = DOC) => ({
 beforeEach(() => {
   listFolder.mockReset();
   listFolderTree.mockReset();
+  getFileBytes.mockReset();
+  uploadFile.mockReset();
+  trashFile.mockReset();
+  generateStructured.mockReset();
   getAnalyzableContent.mockReset();
 });
 
@@ -99,5 +121,83 @@ describe("getProjectContext", () => {
     getAnalyzableContent.mockResolvedValue({ text: "x".repeat(MAX_CONTEXT_CHARS) });
     const out = await getProjectContext(SOURCE);
     expect(out!.length).toBeLessThanOrEqual(MAX_CONTEXT_CHARS);
+  });
+});
+
+describe("getProjectBrief (cached distillation)", () => {
+  // gatherContext finds the Context folder under source, then lists its files.
+  // listFolder is called twice: once for the source (find Context), once for the
+  // output (find the cache). Route by folder id.
+  const wireContext = (briefDocText = "Project goals and glossary.") => {
+    listFolder.mockImplementation(async (id: string) =>
+      id === SOURCE ? [file("ctx", "Context", FOLDER)] : [],
+    );
+    listFolderTree.mockResolvedValue([{ ...file("a", "Brief"), version: "v1" }]);
+    getAnalyzableContent.mockResolvedValue({ text: briefDocText });
+  };
+
+  it("returns null when there is no Context folder", async () => {
+    listFolder.mockResolvedValue([]); // no Context child anywhere
+    expect(await getProjectBrief({ sourceFolderId: SOURCE, outputFolderId: OUT })).toBeNull();
+    expect(generateStructured).not.toHaveBeenCalled();
+  });
+
+  it("reuses the cached brief when the fingerprint matches (no distill, no write)", async () => {
+    wireContext();
+    // cache in the output folder with the SAME fingerprint {a: v1}
+    listFolder.mockImplementation(async (id: string) =>
+      id === SOURCE
+        ? [file("ctx", "Context", FOLDER)]
+        : [file("cache", "_context-brief.json", "application/json")],
+    );
+    getFileBytes.mockResolvedValue(cacheJson({ a: "v1" }, "CACHED BRIEF"));
+
+    const out = await getProjectBrief({ sourceFolderId: SOURCE, outputFolderId: OUT });
+    expect(out).toBe("CACHED BRIEF");
+    expect(generateStructured).not.toHaveBeenCalled();
+    expect(uploadFile).not.toHaveBeenCalled();
+  });
+
+  it("distills and writes the cache when Context changed (fingerprint miss)", async () => {
+    wireContext();
+    listFolder.mockImplementation(async (id: string) =>
+      id === SOURCE
+        ? [file("ctx", "Context", FOLDER)]
+        : [file("cache", "_context-brief.json", "application/json")],
+    );
+    getFileBytes.mockResolvedValue(cacheJson({ a: "v0" }, "STALE BRIEF")); // old version
+    generateStructured.mockResolvedValue({ brief: "FRESH BRIEF" });
+    uploadFile.mockResolvedValue(file("new", "_context-brief.json", "application/json"));
+
+    const out = await getProjectBrief({ sourceFolderId: SOURCE, outputFolderId: OUT });
+    expect(out).toBe("FRESH BRIEF");
+    expect(generateStructured).toHaveBeenCalledTimes(1);
+    expect(generateStructured.mock.calls[0][0].model).toBe("gemini-3.5-flash");
+    // wrote the refreshed cache and trashed the stale one
+    const up = uploadFile.mock.calls[0][0];
+    expect(up.name).toBe("_context-brief.json");
+    expect(up.parentId).toBe(OUT);
+    expect(JSON.parse(up.body)).toEqual({ fingerprint: { a: "v1" }, brief: "FRESH BRIEF" });
+    expect(trashFile).toHaveBeenCalledWith("cache");
+  });
+
+  it("distills when there is no cache yet, and writes one", async () => {
+    wireContext();
+    generateStructured.mockResolvedValue({ brief: "FIRST BRIEF" });
+    uploadFile.mockResolvedValue(file("new", "_context-brief.json", "application/json"));
+
+    const out = await getProjectBrief({ sourceFolderId: SOURCE, outputFolderId: OUT });
+    expect(out).toBe("FIRST BRIEF");
+    expect(uploadFile).toHaveBeenCalledTimes(1);
+    expect(trashFile).not.toHaveBeenCalled(); // nothing to replace
+  });
+
+  it("falls back to the raw text when distillation fails (run never breaks)", async () => {
+    wireContext("Raw context text.");
+    generateStructured.mockRejectedValue(new Error("Gemini down"));
+
+    const out = await getProjectBrief({ sourceFolderId: SOURCE, outputFolderId: OUT });
+    expect(out).toBe("### Brief\nRaw context text."); // the raw concatenated section
+    expect(uploadFile).not.toHaveBeenCalled(); // no cache written on failure
   });
 });

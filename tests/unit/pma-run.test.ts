@@ -11,7 +11,7 @@ const analyze = vi.fn();
 const synthesize = vi.fn();
 const reconcile = vi.fn();
 const findRunByWindow = vi.fn();
-const getProjectContext = vi.fn();
+const getProjectBrief = vi.fn();
 
 // The per-workspace run lock reserves a real DB connection; in this unit test it
 // passes straight through to the run body (no DB).
@@ -27,7 +27,7 @@ vi.mock("@/lib/pma/registry", () => ({
   findRunByWindow: (...a: unknown[]) => findRunByWindow(...a),
 }));
 vi.mock("@/lib/pma/context", () => ({
-  getProjectContext: (...a: unknown[]) => getProjectContext(...a),
+  getProjectBrief: (...a: unknown[]) => getProjectBrief(...a),
 }));
 
 import { runAnalysis } from "@/lib/pma/run";
@@ -80,8 +80,8 @@ beforeEach(() => {
   reconcile.mockReset();
   findRunByWindow.mockReset();
   findRunByWindow.mockResolvedValue(null); // no prior run for the window by default
-  getProjectContext.mockReset();
-  getProjectContext.mockResolvedValue("PROJECT BACKGROUND"); // Context folder text
+  getProjectBrief.mockReset();
+  getProjectBrief.mockResolvedValue("PROJECT BACKGROUND"); // distilled context brief
 
   getRunInputs.mockResolvedValue({ ...okInputs });
   detect.mockResolvedValue({
@@ -129,8 +129,11 @@ describe("runAnalysis — happy path wiring", () => {
     });
 
     // synthesize gets the analysis results + removed files + baseline/live + the
-    // project context read from the Source folder's Context child.
-    expect(getProjectContext).toHaveBeenCalledWith("src-folder");
+    // distilled, cached project brief (read from the Context child, cached in Output).
+    expect(getProjectBrief).toHaveBeenCalledWith({
+      sourceFolderId: "src-folder",
+      outputFolderId: "out-folder",
+    });
     const synthArg = synthesize.mock.calls[0][0];
     expect(synthArg.removed).toEqual([expect.objectContaining({ fileId: "R", changeType: "removed" })]);
     expect(synthArg.runLabel).toBe(LABEL);

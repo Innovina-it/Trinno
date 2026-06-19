@@ -8,7 +8,7 @@ import { synthesize } from "./synthesize";
 import { reconcile } from "./reconcile";
 import { findRunByWindow } from "./registry";
 import { getRunInputs } from "./inputs";
-import { getProjectContext } from "./context";
+import { getProjectBrief } from "./context";
 
 // PMA U9 — RUN ORCHESTRATION (DESIGN §3, the A→G pipeline). Windowed as of U12.2.
 //
@@ -207,12 +207,15 @@ async function runAnalysisInner(
     };
   }
 
-  // 4c. Project context — the workspace's Context folder, read as background to
-  //     ground the synthesis. Best-effort: a Drive hiccup reading it must never
-  //     fail the run, and absent/empty context leaves synthesis unchanged.
+  // 4c. Project context — a distilled, cached brief of the workspace's Context
+  //     folder, used as background to ground the synthesis (the cache lives in the
+  //     Output folder, keyed by the Context files' version fingerprint, so the
+  //     per-run cost stops scaling with Context size). Best-effort: a Drive/Gemini
+  //     hiccup must never fail the run, and absent/empty context leaves synthesis
+  //     unchanged.
   let context: string | null = null;
   try {
-    context = await getProjectContext(sourceFolderId);
+    context = await getProjectBrief({ sourceFolderId, outputFolderId });
   } catch {
     context = null;
   }
