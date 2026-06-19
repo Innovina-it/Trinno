@@ -45,6 +45,13 @@ const PRESERVED_SUBSECTIONS = new Set([
   "roadmap",
   "sprints",
   "versions",
+  // `analysis` is a stable section root (no workspace-scoped detail id),
+  // so it's safe to preserve like backlog/roadmap. Without it, switching
+  // workspaces from /w/{id}/analysis fell through to the bare `/w/{id}`
+  // server-redirect bouncer, which showed the workspace OfficeLoadingScreen
+  // and — racing router.refresh() against the server redirect() — left the
+  // spinner hung. Direct `/w/{newId}/analysis` skips the bounce.
+  "analysis",
 ]);
 
 const PERSONAL_ROUTES = [
