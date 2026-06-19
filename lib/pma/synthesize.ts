@@ -69,6 +69,10 @@ export type SynthesizeInput = {
   window?: { start: string; end: string };
   // U12.12 — files changed since the previous report of this same window (names).
   changedSince?: string[];
+  // Project background gathered from the workspace's Context folder (text, already
+  // concatenated + capped by lib/pma/context.ts). Injected as grounding so the
+  // report is framed against the project's goals/terminology; absent → unchanged.
+  context?: string;
   // Per-file recaps from analyze() (DESIGN §5.2 — in-memory).
   fileResults: AnalyzeFileResult[];
   // Files detected as removed this run (DESIGN §5.2 removed list).
@@ -130,6 +134,9 @@ const SYNTHESIS_SYSTEM =
   "(date/scope/order deltas already computed for you). Synthesise a factual " +
   "report. Give deliverable files a dedicated focus paragraph. For deviations, " +
   "use ONLY the supplied baseline-vs-live deltas — never invent dates or slips. " +
+  "You may also be given PROJECT CONTEXT — background on the project's goals, " +
+  "scope, terminology, and stakeholders. Use it to interpret and frame the report " +
+  "accurately; treat it as background only, never as recent activity to report. " +
   "When a reporting period is given, cover ONLY work within that period and do " +
   "not discuss activity outside it. Each changed file carries `modified_by` — " +
   "the person who last modified it (or 'non noto'); name that person as the one " +
@@ -215,6 +222,11 @@ function buildPrompt(
     (variance
       ? "An Approved baseline exists — compare against the grounded variance below.\n"
       : "No Approved roadmap baseline is set for this workspace — omit deviations.\n") +
+    (input.context
+      ? `--- PROJECT CONTEXT START ---\n${input.context}\n--- PROJECT CONTEXT END ---\n` +
+        "Use the project context above only as background to interpret and frame " +
+        "the report; it is not itself recent activity to report.\n"
+      : "") +
     `--- DATA START ---\n${JSON.stringify(payload, null, 2)}\n--- DATA END ---`
   );
 }

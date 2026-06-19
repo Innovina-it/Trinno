@@ -133,6 +133,37 @@ describe("synthesize — aggregate + report", () => {
     expect(res.counts).toEqual({ changed: 1, missed: 1, removed: 1 });
   });
 
+  it("injects the PROJECT CONTEXT block into the prompt when context is given", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [analyzed("A")],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+      context: "Project goal: ship the grant deliverables by Q3.",
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain("--- PROJECT CONTEXT START ---");
+    expect(prompt).toContain("Project goal: ship the grant deliverables by Q3.");
+    expect(prompt).toContain("--- PROJECT CONTEXT END ---");
+  });
+
+  it("omits the PROJECT CONTEXT block when no context is given", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [analyzed("A")],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).not.toContain("PROJECT CONTEXT");
+  });
+
   it("credits all window revision authors in modified_by (U12.9)", async () => {
     await synthesize({
       workspaceId: WS,
