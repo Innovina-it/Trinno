@@ -79,7 +79,7 @@ beforeEach(() => {
 });
 
 describe("detect — recursive source scan", () => {
-  it("reads the source folder recursively, skipping the Reports output folder", async () => {
+  it("reads the source folder recursively, skipping the Reports and Context folders", async () => {
     listFolder.mockResolvedValue([doc("A")]);
     await detect({
       sourceFolderId: SOURCE,
@@ -87,7 +87,9 @@ describe("detect — recursive source scan", () => {
       deliverableLinks: [],
       allFiles: true,
     });
-    expect(listFolderTree).toHaveBeenCalledWith(SOURCE, { skipNames: ["Reports"] });
+    expect(listFolderTree).toHaveBeenCalledWith(SOURCE, {
+      skipNames: ["Reports", "Context"],
+    });
   });
 });
 

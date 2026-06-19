@@ -165,8 +165,12 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
 
   // Scope oracle — the authoritative current contents of the SOURCE folder.
   // Recursive: plan-import nests deliverable Docs under Documents/<WP>/Deliverables/.
-  // Skip the Reports output folder so analysis never re-reads its own reports.
-  const currentList = await listFolderTree(sourceFolderId, { skipNames: ["Reports"] });
+  // Skip the Reports output folder so analysis never re-reads its own reports, and
+  // skip the Context folder so project-background docs are never tracked/analyzed
+  // (they are read separately by lib/pma/context.ts and fed to the synthesis).
+  const currentList = await listFolderTree(sourceFolderId, {
+    skipNames: ["Reports", "Context"],
+  });
   const currentById = new Map<string, DriveFile>();
   for (const f of currentList) currentById.set(f.id, f);
 
