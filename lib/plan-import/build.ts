@@ -10,9 +10,14 @@ import { setListStatusKindImpl } from "@/actions/lists";
 import { createCardImpl, updateCardImpl } from "@/actions/cards";
 import { upsertCardLinkImpl, upsertWorkspaceLinkImpl } from "@/actions/links";
 import { createMilestoneImpl } from "@/actions/milestones";
-import { provisionProjectFolders, ensureReportsChild } from "@/lib/pma/provision";
+import {
+  provisionProjectFolders,
+  ensureReportsChild,
+  ensureContextChild,
+} from "@/lib/pma/provision";
 
 import type { ProjectPlan } from "./types";
+import { seedProjectContext } from "./context-seed";
 import {
   makeDriveDocsClient,
   probeFolder,
@@ -116,6 +121,7 @@ export async function buildWorkspaceFromPlan(
   // workspace right after it's created (links need the workspace id).
   let documentsFolderId: string | null = null;
   let reportsFolderId: string | null = null;
+  let contextFolderId: string | null = null;
   let drive: DriveDocsClient | null = null;
   if (driveMode === "manual" && manualFolderId) {
     const ok = await step(failures, "drive-probe", async () => {
@@ -126,6 +132,9 @@ export async function buildWorkspaceFromPlan(
       documentsFolderId = manualFolderId;
       reportsFolderId = await step(failures, "drive-reports", () =>
         ensureReportsChild(manualFolderId),
+      );
+      contextFolderId = await step(failures, "drive-context", () =>
+        ensureContextChild(manualFolderId),
       );
       drive = makeDriveDocsClient(manualFolderId, project);
     }
@@ -144,6 +153,7 @@ export async function buildWorkspaceFromPlan(
       if (folders) {
         documentsFolderId = folders.documentsFolderId;
         reportsFolderId = folders.reportsFolderId;
+        contextFolderId = folders.contextFolderId;
         drive = makeDriveDocsClient(folders.documentsFolderId, project);
       }
     }
@@ -176,6 +186,14 @@ export async function buildWorkspaceFromPlan(
         purpose: "reports",
       }),
     );
+  }
+
+  // Seed the Context folder with a deterministic "Project overview" so the first
+  // analysis run is grounded in the plan. Best-effort: a failure is recorded but
+  // never aborts the import (the folder still works; a human can fill it).
+  if (contextFolderId) {
+    const ctx = contextFolderId;
+    await step(failures, "ctx-overview", () => seedProjectContext(ctx, plan));
   }
 
   const parent = await step(failures, "parent-board", () =>

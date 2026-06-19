@@ -15,14 +15,21 @@ vi.mock("@/lib/pma/provision", () => ({
     projectFolderId: "fld-proj",
     documentsFolderId: "fld-docs",
     reportsFolderId: "fld-reports",
+    contextFolderId: "fld-context",
   }),
   ensureReportsChild: async () => "fld-reports",
+  ensureContextChild: async () => "fld-context",
 }));
 vi.mock("@/lib/plan-import/drive-docs", () => ({
   probeFolder: async () => {},
   makeDriveDocsClient: () => ({
     createDeliverableDoc: async () => ({ webViewLink: "https://docs/fake" }),
   }),
+}));
+// The Context overview seed writes via createDoc; stub it so the auto case never
+// touches real Drive.
+vi.mock("@/lib/pma/clients/drive", () => ({
+  createDoc: async () => ({ id: "ctx-doc", webViewLink: "https://docs/ctx" }),
 }));
 
 import { buildWorkspaceFromPlan } from "@/lib/plan-import/build";
