@@ -6,8 +6,8 @@ import type { Schema } from "@google/genai";
 // Server-only Google Gemini client for the PM Assistant (PMA).
 //
 // Scope (U1b): a typed wrapper over @google/genai that returns STRUCTURED JSON.
-// Two model tiers are used downstream — Flash for the per-file recaps (U6) and
-// Pro for the workspace synthesis (U7) — but this unit only exposes the generic
+// Both the per-file recaps (U6) and the workspace synthesis (U7) run on Flash
+// (gemini-3.5-flash) downstream — but this unit only exposes the generic
 // `generateStructured` seam; prompt/schema construction belongs to U6/U7.
 //
 // SECRET IS SERVER-ONLY. The `import "server-only"` guard makes this module

@@ -116,9 +116,9 @@ describe("synthesize — aggregate + report", () => {
       live: emptyLive,
     });
 
-    // Pro tier (synthesis), not Flash.
+    // Synthesis runs on Flash (gemini-3.5-flash), unified with the recap tier.
     expect(generateStructured).toHaveBeenCalledTimes(1);
-    expect(generateStructured.mock.calls[0][0].model).toBe("gemini-2.5-pro");
+    expect(generateStructured.mock.calls[0][0].model).toBe("gemini-3.5-flash");
 
     // Wrote a Google Doc into the OUTPUT folder, name carries the run label.
     expect(createReport).toHaveBeenCalledTimes(1);

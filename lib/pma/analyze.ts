@@ -164,7 +164,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
       //    PDF/images/Office) → Flash recap. The recap body rides back in-memory.
       const analyzable = await getAnalyzableContent(file.fileId, file.mimeType ?? "");
       const recap = await generateStructured<FileRecap>({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.5-flash",
         systemInstruction: RECAP_SYSTEM,
         prompt: buildPrompt(
           file,

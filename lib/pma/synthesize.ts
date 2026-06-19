@@ -18,7 +18,7 @@ import type { DetectedFile } from "./detect";
 // PMA U7 — AGGREGATE + DEVIATION + REPORT (DESIGN §3 step E, §5.2).
 //
 // Takes the per-file recaps from analyze() (U6), the removed/missed lists, and
-// the Approved roadmap baseline vs the LIVE roadmap, then asks Gemini Pro to
+// the Approved roadmap baseline vs the LIVE roadmap, then asks Gemini (Flash) to
 // synthesise a single workspace report and writes it as a native Google Doc in
 // the OUTPUT folder's analyses/ sub-folder.
 //
@@ -316,7 +316,7 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
   const period = input.window ? fmtPeriod(input.window) : null;
 
   const report = await generateStructured<SynthesisReport>({
-    model: "gemini-2.5-pro",
+    model: "gemini-3.5-flash",
     systemInstruction: SYNTHESIS_SYSTEM,
     prompt: buildPrompt(input, variance, period),
     responseSchema: REPORT_SCHEMA,

@@ -202,7 +202,7 @@ async function main(): Promise<void> {
   console.log(`[synthesize] runLabel = ${runLabel}`);
   console.log(`[synthesize] inputs: ${fileResults.filter((r) => r.status === "analyzed").length} analyzed, ` +
     `${fileResults.filter((r) => r.status === "error").length} missed, ${removed.length} removed, baseline=Approved`);
-  console.log(`[synthesize] calling Gemini Pro (gemini-2.5-pro) — this can take 10-30s...\n`);
+  console.log(`[synthesize] calling Gemini Flash (gemini-3.5-flash) — this can take 10-30s...\n`);
 
   const res = await synthesize({
     workspaceId: "ws-smoke",

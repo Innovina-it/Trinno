@@ -60,9 +60,9 @@ async function main(): Promise<void> {
     required: ["ok", "note"],
   };
 
-  console.log("\n[GEMINI] gemini-2.5-flash structured call …");
+  console.log("\n[GEMINI] gemini-3.5-flash structured call …");
   const out = await generateStructured<{ ok: boolean; note: string }>({
-    model: "gemini-2.5-flash",
+    model: "gemini-3.5-flash",
     systemInstruction: "You are a terse health check. Always set ok=true.",
     prompt: 'Reply with ok=true and a 3-word note confirming you are reachable.',
     responseSchema: schema,

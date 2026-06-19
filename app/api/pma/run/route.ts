@@ -9,7 +9,7 @@ import { runAnalysis } from "@/lib/pma/run";
 
 // PMA U9 — "Run analysis" route (DESIGN §3, §6). Owner/admin only. Thin: auth +
 // role gate + parse → delegate to runAnalysis (the A→G pipeline). A run can take
-// tens of seconds (Gemini Pro synthesis), so allow the platform max duration.
+// tens of seconds (Gemini Flash synthesis), so allow the platform max duration.
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
