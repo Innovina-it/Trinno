@@ -2,6 +2,12 @@
 // and the client hook (`use-card-history.ts`). No runtime imports
 // here — safe for the browser bundle.
 
+// Safety ceiling on how many history events one card surfaces. The feed
+// pages through these client-side; beyond the ceiling the UI discloses
+// the cap explicitly rather than dropping rows silently. Shared so the
+// server fetch, the page slicer, and the modal's end-note all agree.
+export const HISTORY_CEILING = 1000;
+
 export type CardHistoryRow =
   | {
       kind: "field";

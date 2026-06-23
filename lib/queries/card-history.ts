@@ -8,7 +8,7 @@ import {
   profiles,
   sprints,
 } from "@/lib/db/schema";
-import type { CardHistoryRow } from "./card-history-types";
+import { HISTORY_CEILING, type CardHistoryRow } from "./card-history-types";
 
 export type { CardHistoryRow };
 
@@ -25,7 +25,10 @@ export type { CardHistoryRow };
 // `./use-card-history.ts` so that client components don't pull
 // drizzle / postgres into the browser bundle via this file.
 
-const MAX_HISTORY_ROWS = 200;
+// Was a silent 200-row wall; raised to the shared ceiling and disclosed in
+// the UI when hit. The field query, the merge slice, and the page helper all
+// use this so the "more exists" signal stays consistent.
+const MAX_HISTORY_ROWS = HISTORY_CEILING;
 const DEFAULT_HISTORY_PAGE_SIZE = 20;
 
 export async function listCardHistory(

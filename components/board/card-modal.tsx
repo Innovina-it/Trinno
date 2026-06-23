@@ -81,6 +81,7 @@ import {
   useCardHistoryPaginated,
   type CardHistoryRow,
 } from "@/lib/queries/use-card-history";
+import { HISTORY_CEILING } from "@/lib/queries/card-history-types";
 import { useWorkspaceFlag } from "@/lib/feature-flags/use-workspace-flag";
 import { consumeRoadmapCardOrigin } from "@/lib/roadmap/back-nav";
 
@@ -355,6 +356,15 @@ function CardHistoryPanel({
         >
           Load more
         </Button>
+      )}
+
+      {!hasMore && rows.length >= HISTORY_CEILING && (
+        <p
+          className="mono-meta-sm text-fg-faint"
+          data-testid="history-capped"
+        >
+          Showing the most recent {HISTORY_CEILING} changes
+        </p>
       )}
     </section>
   );
