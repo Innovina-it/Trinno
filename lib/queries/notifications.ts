@@ -67,6 +67,29 @@ export async function listNotifications(
   });
 }
 
+// Total notifications matching a filter (NOT capped by the list's page
+// limit) so the Inbox can show "X of Y" and decide whether more exist.
+// Mirrors listNotifications' WHERE exactly; RLS scopes visibility the same.
+export async function countNotifications(
+  token: string,
+  opts: { unreadOnly?: boolean; kinds?: string[] } = {},
+): Promise<number> {
+  const { unreadOnly, kinds } = opts;
+  return dbAsUser(token, async (tx) => {
+    const where = and(
+      unreadOnly ? isNull(notifications.readAt) : sql`true`,
+      kinds && kinds.length
+        ? inArray(notifications.kind, kinds)
+        : sql`true`,
+    );
+    const [row] = await tx
+      .select({ c: sql<number>`count(*)::int` })
+      .from(notifications)
+      .where(where);
+    return row?.c ?? 0;
+  });
+}
+
 export async function unreadCount(token: string): Promise<number> {
   return dbAsUser(token, async (tx) => {
     const [row] = await tx
