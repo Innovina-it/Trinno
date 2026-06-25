@@ -6,9 +6,10 @@ import { detect, type DetectedFile } from "./detect";
 import { analyze } from "./analyze";
 import { synthesize } from "./synthesize";
 import { reconcile } from "./reconcile";
-import { findRunByWindow } from "./registry";
+import { findRunByWindow, setWorkspaceReportSections } from "./registry";
 import { getRunInputs } from "./inputs";
 import { getProjectBrief } from "./context";
+import type { ReportSections } from "./report-sections";
 
 // PMA U9 — RUN ORCHESTRATION (DESIGN §3, the A→G pipeline). Windowed as of U12.2.
 //
@@ -37,6 +38,10 @@ export type RunAnalysisInput = {
   // U12.2 — the reporting window (ISO timestamps, inclusive) the run is scoped to.
   // U12.10 — OPTIONAL: omitted → whole-document report (all files, no date filter).
   window?: { start: string; end: string };
+  // U3 — the per-workspace report-section selection chosen in the run panel.
+  // Saved at run start (remembered for next time) and applied to the rendered
+  // report. Absent → leaves the saved combination untouched + all sections on.
+  sections?: ReportSections;
 };
 
 export type RunAnalysisResult = {
@@ -105,7 +110,7 @@ export async function runAnalysis(
 async function runAnalysisInner(
   input: RunAnalysisInput,
 ): Promise<RunAnalysisResult> {
-  const { token, workspaceId, actorId, now, runLabel, window } = input;
+  const { token, workspaceId, actorId, now, runLabel, window, sections } = input;
 
   // 1. Gather user-scoped inputs (links, deliverables, live roadmap, baseline).
   const inputs = await getRunInputs(token, workspaceId);
@@ -119,6 +124,13 @@ async function runAnalysisInner(
     );
   }
   const { sourceFolderId, outputFolderId } = inputs;
+
+  // U3 — remember the chosen report-section combination for this workspace.
+  // Saved at run start (not run end) so the choice persists even when the run
+  // produces no new report (empty period / no changes). Absent → leave it as-is.
+  if (sections) {
+    await setWorkspaceReportSections(workspaceId, sections);
+  }
 
   // 3. Detect (WINDOW mode) → files modified in [start,end]; split added vs
   //    removed (window mode yields no removed — there is no change feed).
@@ -239,6 +251,8 @@ async function runAnalysisInner(
       // U12.x — surface "history unavailable for N files" in the report when a
       // Drive error blocked the revisions read (set by detect; absent/0 → silent).
       revisionErrorCount: detected.revisionErrorCount,
+      // U3 — render only the sections this workspace selected (all on if absent).
+      sections,
     });
   } catch {
     runStatus = "error";

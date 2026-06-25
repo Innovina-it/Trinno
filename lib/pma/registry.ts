@@ -5,6 +5,10 @@ import type {
   PmaFileRegistryRow,
   PmaAnalysisRunRow,
 } from "@/lib/db/schema";
+import {
+  sanitizeReportSections,
+  type ReportSections,
+} from "./report-sections";
 
 // PMA Postgres data layer — registry CRUD + run-index (DESIGN §4.3, §4.4).
 // KEYS / KIND / POINTERS ONLY — NO bulk content: recap and report TEXT live in
@@ -277,6 +281,28 @@ export async function setWorkspacePageToken(
     {
       workspace_id: workspaceId,
       changes_page_token: token,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "workspace_id" },
+  );
+  if (error) throw error;
+}
+
+// U3 — persist the per-workspace report-section selection. Called at the START
+// of a run so the chosen combination is remembered even when the run yields no
+// new report (e.g. empty period). The upsert sets only report_sections (+
+// updated_at), so an existing changes_page_token checkpoint is preserved on
+// conflict and a brand-new row simply leaves it null (detect bootstraps it).
+// Input is sanitized to known keys/booleans before it touches the database.
+export async function setWorkspaceReportSections(
+  workspaceId: string,
+  sections: ReportSections,
+): Promise<void> {
+  const sb = getServiceSupabase();
+  const { error } = await sb.from("pma_workspace_state").upsert(
+    {
+      workspace_id: workspaceId,
+      report_sections: sanitizeReportSections(sections),
       updated_at: new Date().toISOString(),
     },
     { onConflict: "workspace_id" },

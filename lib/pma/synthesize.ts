@@ -25,6 +25,12 @@ import {
 } from "./doc-style";
 import type { AnalyzeFileResult } from "./analyze";
 import type { DetectedFile } from "./detect";
+import {
+  REPORT_SECTION_KEYS,
+  isSectionEnabled,
+  type ReportSectionKey,
+  type ReportSections,
+} from "./report-sections";
 
 // PMA U7 — AGGREGATE + DEVIATION + REPORT (DESIGN §3 step E, §5.2).
 //
@@ -99,6 +105,8 @@ export type SynthesizeInput = {
   // The Approved baseline (null if the workspace has none) + the LIVE roadmap.
   baseline: BaselineDetail | null;
   live: { entries: LiveEntry[]; milestones: LiveMilestone[] };
+  // Per-workspace report-section selection (U3); null/absent → all sections on.
+  sections?: ReportSections | null;
 };
 
 export type SynthesizeResult = {
@@ -279,6 +287,9 @@ export function renderReportDoc(input: {
   // not be read (a Drive error, not absence). Absent/0 → no notice (the doc is
   // byte-identical to before this field existed).
   revisionErrorCount?: number;
+  // Per-workspace section selection (U3). A section renders unless explicitly
+  // false; null/absent → all 8 on, byte-identical to before this field existed.
+  sections?: ReportSections | null;
 }): string {
   const { report, runLabel, period, counts, revisionErrorCount } = input;
 
@@ -333,25 +344,32 @@ export function renderReportDoc(input: {
         )
       : "";
 
+  // Each toggleable section's HTML, keyed by the shared registry. Order comes
+  // from REPORT_SECTION_KEYS (same as before this refactor), so an all-on
+  // selection renders byte-identically to the previous fixed concatenation.
+  const sectionHtml: Record<ReportSectionKey, string> = {
+    executive_summary:
+      section("Executive summary") + paragraph(fmt(report.executive_summary)),
+    deliverables:
+      section("Deliverables") + paragraph(fmt(report.deliverables_focus)),
+    notable_changes:
+      section("Notable changes") + bullets(report.notable_changes.map(fmt)),
+    new_or_changed_files:
+      section("New or changed files") + bullets(report.new_or_changed_files.map(fmt)),
+    missed_updates:
+      section("Missed updates") + bullets(report.missed_updates.map(fmt)),
+    deviations: section("Deviations from the approved baseline") + deviations,
+    progress_notes:
+      section("Progress notes") + bullets(report.progress_notes.map(fmt)),
+    difficulties: section("Difficulties") + bullets(report.difficulties.map(fmt)),
+  };
+
   const body =
     historyNotice +
     `<div style="margin:0 0 22px">${metaTable(meta)}</div>` +
-    section("Executive summary") +
-    paragraph(fmt(report.executive_summary)) +
-    section("Deliverables") +
-    paragraph(fmt(report.deliverables_focus)) +
-    section("Notable changes") +
-    bullets(report.notable_changes.map(fmt)) +
-    section("New or changed files") +
-    bullets(report.new_or_changed_files.map(fmt)) +
-    section("Missed updates") +
-    bullets(report.missed_updates.map(fmt)) +
-    section("Deviations from the approved baseline") +
-    deviations +
-    section("Progress notes") +
-    bullets(report.progress_notes.map(fmt)) +
-    section("Difficulties") +
-    bullets(report.difficulties.map(fmt));
+    REPORT_SECTION_KEYS.filter((k) => isSectionEnabled(input.sections, k))
+      .map((k) => sectionHtml[k])
+      .join("");
 
   return docShell({
     eyebrow: "Trinno · Project analysis",
@@ -402,6 +420,7 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
     workspaceName: input.workspaceName,
     counts,
     revisionErrorCount: input.revisionErrorCount,
+    sections: input.sections,
   });
   const { id, webViewLink } = await createReport(input.outputFolderId, {
     name: period
