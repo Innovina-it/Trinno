@@ -13,6 +13,8 @@ import {
   sanitizeReportSections,
 } from "@/lib/pma/report-sections";
 import { RunAnalysisPanel } from "@/components/pma/run-analysis-panel";
+import { ReportSectionsProvider } from "@/components/pma/report-sections-context";
+import { ReportSectionsFieldset } from "@/components/pma/report-sections-fieldset";
 import { AnalysisFolderControl } from "@/components/pma/analysis-folder-control";
 import type { PmaAnalysisRunRow } from "@/lib/db/schema";
 
@@ -160,29 +162,33 @@ export default async function AnalysisPage({
   return (
     <div className="mx-auto max-w-4xl px-3 py-6 sm:px-4 md:px-6 md:py-10 space-y-10">
       <header className="space-y-3 border-b border-hairline pb-6">
-        <span className="chip">{ws.name.toUpperCase()} / ANALYSIS</span>
-        <h1 className="serif-display text-5xl">Analysis</h1>
-        <div className="flex items-end justify-between gap-3">
-          <Link
-            href={`/w/${workspaceId}`}
-            className="mono-meta-sm text-fg-muted hover:text-fg"
-          >
-            ← Back to workspace
-          </Link>
-          <RunAnalysisPanel
-            workspaceId={workspaceId}
-            canRun={gate.canRun}
-            isOwnerAdmin={gate.isOwnerAdmin}
-            foldersConfigured={gate.foldersConfigured}
-            initialSections={initialSections}
-          />
-        </div>
-        {gate.isOwnerAdmin && (
-          <AnalysisFolderControl
-            workspaceId={workspaceId}
-            currentFolderUrl={sourceRow?.url ?? null}
-          />
-        )}
+        <ReportSectionsProvider initialSections={initialSections}>
+          <span className="chip">{ws.name.toUpperCase()} / ANALYSIS</span>
+          <h1 className="serif-display text-5xl">Analysis</h1>
+          <div className="flex items-end justify-between gap-3">
+            <Link
+              href={`/w/${workspaceId}`}
+              className="mono-meta-sm text-fg-muted hover:text-fg"
+            >
+              ← Back to workspace
+            </Link>
+            <RunAnalysisPanel
+              workspaceId={workspaceId}
+              canRun={gate.canRun}
+              isOwnerAdmin={gate.isOwnerAdmin}
+              foldersConfigured={gate.foldersConfigured}
+            />
+          </div>
+          {gate.isOwnerAdmin && (
+            <AnalysisFolderControl
+              workspaceId={workspaceId}
+              currentFolderUrl={sourceRow?.url ?? null}
+            />
+          )}
+          {gate.isOwnerAdmin && (
+            <ReportSectionsFieldset canRun={gate.canRun} />
+          )}
+        </ReportSectionsProvider>
       </header>
 
       {runs.length === 0 ? (
