@@ -290,6 +290,10 @@ export function renderReportDoc(input: {
   // Per-workspace section selection (U3). A section renders unless explicitly
   // false; null/absent → all 8 on, byte-identical to before this field existed.
   sections?: ReportSections | null;
+  // Per-file quality + risk signal for the deterministic "Quality & risks"
+  // section. Surfaced verbatim from each file's recap (never re-narrated by the
+  // model). Absent/empty → the section renders "(none)".
+  qualityRisks?: Array<{ file: string; quality: string; risks: string[] }> | null;
 }): string {
   const { report, runLabel, period, counts, revisionErrorCount } = input;
 
@@ -330,6 +334,21 @@ export function renderReportDoc(input: {
           ]),
         );
 
+  // Per-file quality + risk table (deterministic — straight from each file's
+  // recap, never re-narrated). Empty risks → "—"; no analyzed files → "(none)".
+  const qr = input.qualityRisks ?? [];
+  const qualityRisks =
+    qr.length === 0
+      ? paragraph("(none)")
+      : table(
+          ["File", "Quality", "Risks"],
+          qr.map((r) => [
+            fmt(r.file),
+            r.quality ? escapeHtml(r.quality) : "—",
+            r.risks.length > 0 ? r.risks.map(escapeHtml).join("<br>") : "—",
+          ]),
+        );
+
   // Deterministic disclosure (NOT model-generated, so it can't be omitted or
   // reworded): when revisions for some files could not be read, say so at the top
   // of the report rather than letting a Drive error read as "nothing changed".
@@ -359,6 +378,7 @@ export function renderReportDoc(input: {
     missed_updates:
       section("Missed updates") + bullets(report.missed_updates.map(fmt)),
     deviations: section("Deviations from the approved baseline") + deviations,
+    quality_risks: section("Quality and risks") + qualityRisks,
     progress_notes:
       section("Progress notes") + bullets(report.progress_notes.map(fmt)),
     difficulties: section("Difficulties") + bullets(report.difficulties.map(fmt)),
@@ -412,6 +432,15 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
     missed: input.fileResults.filter((r) => r.status === "error").length,
     removed: input.removed.length,
   };
+  // Per-file quality + risk signal for the "Quality & risks" section. Surfaced
+  // verbatim from each analyzed file's recap — the model never re-narrates it.
+  const qualityRisks = input.fileResults
+    .filter((r) => r.status === "analyzed" && r.recap)
+    .map((r) => ({
+      file: r.name ?? r.fileId,
+      quality: r.recap!.quality_judgment,
+      risks: r.recap!.risk_flags,
+    }));
   const content = renderReportDoc({
     report,
     runLabel: input.runLabel,
@@ -421,6 +450,7 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
     counts,
     revisionErrorCount: input.revisionErrorCount,
     sections: input.sections,
+    qualityRisks,
   });
   const { id, webViewLink } = await createReport(input.outputFolderId, {
     name: period

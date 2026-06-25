@@ -7,7 +7,7 @@
 // this list later default ON for every workspace without touching the
 // combinations already saved.
 
-// The 8 toggleable sections, in render order (mirrors renderReportDoc's body).
+// The toggleable sections, in render order (mirrors renderReportDoc's body).
 export const REPORT_SECTION_KEYS = [
   "executive_summary",
   "deliverables",
@@ -15,6 +15,7 @@ export const REPORT_SECTION_KEYS = [
   "new_or_changed_files",
   "missed_updates",
   "deviations",
+  "quality_risks",
   "progress_notes",
   "difficulties",
 ] as const;
@@ -29,6 +30,7 @@ export const REPORT_SECTION_LABELS: Record<ReportSectionKey, string> = {
   new_or_changed_files: "New or changed files",
   missed_updates: "Missed updates",
   deviations: "Deviations from the approved baseline",
+  quality_risks: "Quality and risks",
   progress_notes: "Progress notes",
   difficulties: "Difficulties",
 };
@@ -53,6 +55,7 @@ export const ALL_SECTIONS_ON: Record<ReportSectionKey, boolean> = {
   new_or_changed_files: true,
   missed_updates: true,
   deviations: true,
+  quality_risks: true,
   progress_notes: true,
   difficulties: true,
 };

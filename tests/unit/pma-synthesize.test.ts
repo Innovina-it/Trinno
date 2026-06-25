@@ -400,7 +400,7 @@ describe("renderReportDoc", () => {
     expect(body).toContain("(none)");
   });
 
-  it("renders all 8 sections by default, byte-identical with sections absent vs all-on (U3)", () => {
+  it("renders all sections by default, byte-identical with sections absent vs all-on (U3)", () => {
     const absent = renderReportDoc({ report: REPORT, runLabel: LABEL });
     const allOn = renderReportDoc({
       report: REPORT,
@@ -415,11 +415,49 @@ describe("renderReportDoc", () => {
       "NEW OR CHANGED FILES",
       "MISSED UPDATES",
       "DEVIATIONS FROM THE APPROVED BASELINE",
+      "QUALITY AND RISKS",
       "PROGRESS NOTES",
       "DIFFICULTIES",
     ]) {
       expect(absent).toContain(heading);
     }
+  });
+
+  it("surfaces per-file quality_judgment + risk_flags in the Quality and risks table (#3)", () => {
+    const body = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      qualityRisks: [
+        { file: "spec.gdoc", quality: "thorough, well-sourced", risks: ["scope creep", "no owner"] },
+        { file: "plan.gdoc", quality: "skeletal", risks: [] },
+      ],
+    });
+    expect(body).toContain("QUALITY AND RISKS");
+    expect(body).toContain("thorough, well-sourced");
+    expect(body).toContain("scope creep");
+    expect(body).toContain("no owner");
+    expect(body).toContain("skeletal");
+    // a file with no risk flags shows the em-dash placeholder, not an empty cell
+    expect(body).toContain("—");
+  });
+
+  it("renders '(none)' for Quality and risks when no files were analyzed (#3)", () => {
+    const body = renderReportDoc({ report: REPORT, runLabel: LABEL, qualityRisks: [] });
+    expect(body).toContain("QUALITY AND RISKS");
+    // the section heading is present but its body is the empty placeholder
+    expect(body).toContain("(none)");
+  });
+
+  it("omits Quality and risks entirely when the section is disabled (#3)", () => {
+    const body = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      qualityRisks: [{ file: "spec.gdoc", quality: "good", risks: ["late"] }],
+      sections: { ...ALL_SECTIONS_ON, quality_risks: false },
+    });
+    expect(body).not.toContain("QUALITY AND RISKS");
+    expect(body).not.toContain("late");
+    expect(body).toContain("EXECUTIVE SUMMARY"); // others unaffected
   });
 
   it("omits exactly the sections disabled via the sections map (U3)", () => {
