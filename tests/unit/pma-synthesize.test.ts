@@ -369,6 +369,19 @@ describe("renderReportDoc", () => {
     expect(body).not.toContain("<b>non noto</b>");
   });
 
+  it("renders a deterministic 'history unavailable' notice when revisionErrorCount > 0, and nothing when 0/absent", () => {
+    const withErr = renderReportDoc({ report: REPORT, runLabel: LABEL, revisionErrorCount: 2 });
+    expect(withErr).toContain("HISTORY UNAVAILABLE"); // uppercased section label
+    expect(withErr).toContain("per 2 file"); // the count, surfaced to the reader
+
+    // Byte-level guard: absent or 0 → no notice (report unchanged vs before the field).
+    const absent = renderReportDoc({ report: REPORT, runLabel: LABEL });
+    const zero = renderReportDoc({ report: REPORT, runLabel: LABEL, revisionErrorCount: 0 });
+    expect(absent).not.toContain("HISTORY UNAVAILABLE");
+    expect(zero).not.toContain("HISTORY UNAVAILABLE");
+    expect(zero).toEqual(absent); // 0 renders identically to absent
+  });
+
   it("shows (none) for empty sections", () => {
     const body = renderReportDoc({
       report: {

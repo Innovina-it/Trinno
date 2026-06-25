@@ -236,6 +236,9 @@ async function runAnalysisInner(
       changedSince,
       context: context ?? undefined,
       workspaceName: inputs.workspaceName,
+      // U12.x — surface "history unavailable for N files" in the report when a
+      // Drive error blocked the revisions read (set by detect; absent/0 → silent).
+      revisionErrorCount: detected.revisionErrorCount,
     });
   } catch {
     runStatus = "error";

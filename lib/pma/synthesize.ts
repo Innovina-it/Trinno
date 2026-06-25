@@ -91,6 +91,11 @@ export type SynthesizeInput = {
   fileResults: AnalyzeFileResult[];
   // Files detected as removed this run (DESIGN §5.2 removed list).
   removed: DetectedFile[];
+  // Count of files whose Drive revision history could not be read this run (a
+  // Drive error, NOT genuine emptiness — set by detect). > 0 → the report carries
+  // a deterministic "history unavailable" notice so the reader knows attribution
+  // and period coverage for that many files may be incomplete. Absent/0 → silent.
+  revisionErrorCount?: number;
   // The Approved baseline (null if the workspace has none) + the LIVE roadmap.
   baseline: BaselineDetail | null;
   live: { entries: LiveEntry[]; milestones: LiveMilestone[] };
@@ -270,8 +275,12 @@ export function renderReportDoc(input: {
   authors?: string[];
   workspaceName?: string | null;
   counts?: { changed: number; missed: number; removed: number } | null;
+  // > 0 → render a deterministic notice that history for that many files could
+  // not be read (a Drive error, not absence). Absent/0 → no notice (the doc is
+  // byte-identical to before this field existed).
+  revisionErrorCount?: number;
 }): string {
-  const { report, runLabel, period, counts } = input;
+  const { report, runLabel, period, counts, revisionErrorCount } = input;
 
   // Bold known author names within already-escaped text (longest first so
   // overlapping names don't nest); fmt = escape then bold.
@@ -310,7 +319,22 @@ export function renderReportDoc(input: {
           ]),
         );
 
+  // Deterministic disclosure (NOT model-generated, so it can't be omitted or
+  // reworded): when revisions for some files could not be read, say so at the top
+  // of the report rather than letting a Drive error read as "nothing changed".
+  // Rendered only when > 0 → the doc stays byte-identical when every read succeeded.
+  const historyNotice =
+    revisionErrorCount && revisionErrorCount > 0
+      ? section("History unavailable") +
+        paragraph(
+          escapeHtml(
+            `Cronologia non disponibile per ${revisionErrorCount} file: un errore di Google Drive ne ha impedito la lettura delle revisioni. Attribuzione e copertura del periodo per quei file potrebbero essere incomplete.`,
+          ),
+        )
+      : "";
+
   const body =
+    historyNotice +
     `<div style="margin:0 0 22px">${metaTable(meta)}</div>` +
     section("Executive summary") +
     paragraph(fmt(report.executive_summary)) +
@@ -377,6 +401,7 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
     authors,
     workspaceName: input.workspaceName,
     counts,
+    revisionErrorCount: input.revisionErrorCount,
   });
   const { id, webViewLink } = await createReport(input.outputFolderId, {
     name: period
