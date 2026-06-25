@@ -5,9 +5,13 @@ import { and, eq } from "drizzle-orm";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace } from "@/lib/queries/workspaces";
 import { dbAsUser } from "@/lib/db/client";
-import { links } from "@/lib/db/schema";
+import { links, pmaWorkspaceState } from "@/lib/db/schema";
 import { listRuns } from "@/lib/pma/registry";
 import { getAnalysisGate } from "@/lib/pma/gate";
+import {
+  ALL_SECTIONS_ON,
+  sanitizeReportSections,
+} from "@/lib/pma/report-sections";
 import { RunAnalysisPanel } from "@/components/pma/run-analysis-panel";
 import { AnalysisFolderControl } from "@/components/pma/analysis-folder-control";
 import type { PmaAnalysisRunRow } from "@/lib/db/schema";
@@ -130,6 +134,23 @@ export default async function AnalysisPage({
     .then((r) => r[0] ?? null)
     .catch(() => null);
 
+  // The saved report-section combination, so the panel's checkboxes open the way
+  // they were last left for this workspace. Absent row/column → all sections on.
+  // Best-effort: any RLS/transient failure → default (all on).
+  const savedSections = await dbAsUser(token, (tx) =>
+    tx
+      .select({ reportSections: pmaWorkspaceState.reportSections })
+      .from(pmaWorkspaceState)
+      .where(eq(pmaWorkspaceState.workspaceId, workspaceId))
+      .limit(1),
+  )
+    .then((r) => r[0]?.reportSections ?? null)
+    .catch(() => null);
+  const initialSections = {
+    ...ALL_SECTIONS_ON,
+    ...sanitizeReportSections(savedSections),
+  };
+
   const emptyHint = gate.canRun
     ? "Run one above to generate the first report."
     : gate.isOwnerAdmin
@@ -153,6 +174,7 @@ export default async function AnalysisPage({
             canRun={gate.canRun}
             isOwnerAdmin={gate.isOwnerAdmin}
             foldersConfigured={gate.foldersConfigured}
+            initialSections={initialSections}
           />
         </div>
         {gate.isOwnerAdmin && (

@@ -6,6 +6,7 @@ import { getWorkspaceRole } from "@/lib/permissions/guest-guard";
 import { assertWorkspaceWriter } from "@/lib/permissions/workspace-writer";
 import { StructuredError } from "@/lib/errors/structured-error";
 import { runAnalysis } from "@/lib/pma/run";
+import { sanitizeReportSections } from "@/lib/pma/report-sections";
 
 // PMA U9 — "Run analysis" route (DESIGN §3, §6). Owner/admin only. Thin: auth +
 // role gate + parse → delegate to runAnalysis (the A→G pipeline). A run can take
@@ -38,15 +39,20 @@ export async function POST(req: Request) {
   let workspaceId: string | undefined;
   let startDate: string | undefined;
   let endDate: string | undefined;
+  // U3 — the report-section selection from the run panel. Sanitized to known
+  // keys/booleans; absent → leave the saved combination + all sections on.
+  let sections: ReturnType<typeof sanitizeReportSections> | undefined;
   try {
     const body = (await req.json()) as {
       workspaceId?: unknown;
       startDate?: unknown;
       endDate?: unknown;
+      sections?: unknown;
     };
     if (typeof body?.workspaceId === "string") workspaceId = body.workspaceId;
     if (typeof body?.startDate === "string") startDate = body.startDate;
     if (typeof body?.endDate === "string") endDate = body.endDate;
+    if (body?.sections != null) sections = sanitizeReportSections(body.sections);
   } catch {
     // malformed/absent body → handled by the guard below
   }
@@ -110,6 +116,7 @@ export async function POST(req: Request) {
       now: now.toISOString(),
       runLabel,
       window,
+      sections,
     });
     return NextResponse.json({ result });
   } catch (err) {

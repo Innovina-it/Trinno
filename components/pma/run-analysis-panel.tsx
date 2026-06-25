@@ -8,6 +8,11 @@ import {
   DateRangePopover,
   type DateRange,
 } from "@/components/ui/date-range-popover";
+import {
+  REPORT_SECTION_KEYS,
+  REPORT_SECTION_LABELS,
+  type ReportSectionKey,
+} from "@/lib/pma/report-sections";
 
 // PMA U10 — the "Run analysis" control. Owner/admin only, disabled until both
 // Drive folders are configured (the route enforces the same; this is the
@@ -71,11 +76,15 @@ export function RunAnalysisPanel({
   canRun,
   isOwnerAdmin,
   foldersConfigured,
+  initialSections,
 }: {
   workspaceId: string;
   canRun: boolean;
   isOwnerAdmin: boolean;
   foldersConfigured: boolean;
+  // U3 — the last-saved report-section combination for this workspace (a full
+  // 8-key map; all true on first use). Seeds the checkboxes below.
+  initialSections: Record<ReportSectionKey, boolean>;
 }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
@@ -84,6 +93,13 @@ export function RunAnalysisPanel({
   const [notice, setNotice] = useState<string | null>(null);
   // U12.10 — empty by default: no date = whole-document report.
   const [range, setRange] = useState<DateRange>({ start: null, target: null });
+  // U3 — which report sections to render; seeded from the saved combination and
+  // posted with the run (which also persists it for next time).
+  const [sections, setSections] =
+    useState<Record<ReportSectionKey, boolean>>(initialSections);
+  function toggleSection(key: ReportSectionKey) {
+    setSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
   // Quick windows computed once per mount (relative to today).
   const presets = useMemo(() => buildPresets(new Date()), []);
 
@@ -118,6 +134,8 @@ export function RunAnalysisPanel({
           // U12.3 — the chosen window; absent ends default to last-7-days route-side.
           startDate: range.start ? range.start.toISOString() : undefined,
           endDate: range.target ? range.target.toISOString() : undefined,
+          // U3 — which sections to render; the run also persists this combination.
+          sections,
         }),
       });
       const json = (await res.json().catch(() => null)) as
@@ -217,6 +235,34 @@ export function RunAnalysisPanel({
           );
         })}
       </div>
+      {isOwnerAdmin && (
+        <fieldset
+          className="self-stretch rounded-md border border-hairline px-2.5 py-2"
+          data-testid="pma-sections"
+        >
+          <legend className="mono-meta-sm px-1 text-fg-faint">
+            Report sections
+          </legend>
+          <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+            {REPORT_SECTION_KEYS.map((key) => (
+              <label
+                key={key}
+                className="mono-meta-sm flex items-center gap-1.5 text-fg-muted hover:text-fg"
+              >
+                <input
+                  type="checkbox"
+                  checked={sections[key]}
+                  onChange={() => toggleSection(key)}
+                  disabled={!canRun || busy}
+                  className="h-3.5 w-3.5 accent-fg disabled:opacity-50"
+                  data-testid={`pma-section-${key}`}
+                />
+                {REPORT_SECTION_LABELS[key]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
       {disabledReason && (
         <span className="mono-meta-sm text-fg-faint">{disabledReason}</span>
       )}

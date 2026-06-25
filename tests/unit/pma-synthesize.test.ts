@@ -19,6 +19,7 @@ vi.mock("@/lib/pma/output", () => ({
 
 import { synthesize, renderReportDoc } from "@/lib/pma/synthesize";
 import type { SynthesisReport } from "@/lib/pma/synthesize";
+import { ALL_SECTIONS_ON } from "@/lib/pma/report-sections";
 import type { AnalyzeFileResult, FileRecap } from "@/lib/pma/analyze";
 import type { DetectedFile } from "@/lib/pma/detect";
 import type { BaselineDetail } from "@/lib/baselines/types";
@@ -397,5 +398,53 @@ describe("renderReportDoc", () => {
       runLabel: LABEL,
     });
     expect(body).toContain("(none)");
+  });
+
+  it("renders all 8 sections by default, byte-identical with sections absent vs all-on (U3)", () => {
+    const absent = renderReportDoc({ report: REPORT, runLabel: LABEL });
+    const allOn = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      sections: ALL_SECTIONS_ON,
+    });
+    expect(allOn).toEqual(absent); // all-on must not change a single byte
+    for (const heading of [
+      "EXECUTIVE SUMMARY",
+      "DELIVERABLES",
+      "NOTABLE CHANGES",
+      "NEW OR CHANGED FILES",
+      "MISSED UPDATES",
+      "DEVIATIONS FROM THE APPROVED BASELINE",
+      "PROGRESS NOTES",
+      "DIFFICULTIES",
+    ]) {
+      expect(absent).toContain(heading);
+    }
+  });
+
+  it("omits exactly the sections disabled via the sections map (U3)", () => {
+    const body = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      sections: { ...ALL_SECTIONS_ON, difficulties: false, missed_updates: false },
+    });
+    expect(body).not.toContain("DIFFICULTIES");
+    expect(body).not.toContain("MISSED UPDATES");
+    // Untouched sections still render.
+    expect(body).toContain("EXECUTIVE SUMMARY");
+    expect(body).toContain("PROGRESS NOTES");
+    expect(body).toContain("DEVIATIONS FROM THE APPROVED BASELINE");
+  });
+
+  it("treats an empty/partial sections map as all-on (absent key → enabled) (U3)", () => {
+    const empty = renderReportDoc({ report: REPORT, runLabel: LABEL, sections: {} });
+    const partial = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      sections: { executive_summary: true },
+    });
+    const absent = renderReportDoc({ report: REPORT, runLabel: LABEL });
+    expect(empty).toEqual(absent);
+    expect(partial).toEqual(absent); // a lone known key still leaves the rest on
   });
 });
