@@ -206,7 +206,7 @@ describe("synthesize — aggregate + report", () => {
     const prompt = generateStructured.mock.calls[0][0].prompt as string;
     expect(prompt).toContain('"modified_by"');
     expect(prompt).toContain("Mario Rossi"); // attributed author
-    expect(prompt).toContain("non noto"); // unknown author fallback
+    expect(prompt).toContain("unknown"); // unknown author fallback
   });
 
   it("feeds analyzed recaps (not skipped ones) to the model", async () => {
@@ -360,19 +360,19 @@ describe("renderReportDoc", () => {
 
   it("bolds known author names in the HTML body (U12.6)", () => {
     const body = renderReportDoc({
-      report: { ...REPORT, new_or_changed_files: ["spec.gdoc — Mario Rossi", "plan.gdoc — non noto"] },
+      report: { ...REPORT, new_or_changed_files: ["spec.gdoc — Mario Rossi", "plan.gdoc — unknown"] },
       runLabel: LABEL,
       authors: ["Mario Rossi"],
     });
     expect(body).toContain("<b>Mario Rossi</b>");
-    expect(body).toContain("non noto"); // unknown author left unbolded
-    expect(body).not.toContain("<b>non noto</b>");
+    expect(body).toContain("unknown"); // unknown author left unbolded
+    expect(body).not.toContain("<b>unknown</b>");
   });
 
   it("renders a deterministic 'history unavailable' notice when revisionErrorCount > 0, and nothing when 0/absent", () => {
     const withErr = renderReportDoc({ report: REPORT, runLabel: LABEL, revisionErrorCount: 2 });
     expect(withErr).toContain("HISTORY UNAVAILABLE"); // uppercased section label
-    expect(withErr).toContain("per 2 file"); // the count, surfaced to the reader
+    expect(withErr).toContain("for 2 files"); // the count, surfaced to the reader
 
     // Byte-level guard: absent or 0 → no notice (report unchanged vs before the field).
     const absent = renderReportDoc({ report: REPORT, runLabel: LABEL });

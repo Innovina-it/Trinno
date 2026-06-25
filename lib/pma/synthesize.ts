@@ -158,7 +158,7 @@ const SYNTHESIS_SYSTEM =
   "accurately; treat it as background only, never as recent activity to report. " +
   "When a reporting period is given, cover ONLY work within that period and do " +
   "not discuss activity outside it. Each changed file carries `modified_by` — " +
-  "the person who last modified it (or 'non noto'); name that person as the one " +
+  "the person who last modified it (or 'unknown'); name that person as the one " +
   "who made the file's changes (e.g. in new_or_changed_files), and use the " +
   "`modified_by` value EXACTLY as given (verbatim — do not reformat or rewrite " +
   "the name). Refer to files by the `file` value given (a human name), never by " +
@@ -199,7 +199,7 @@ function buildPayload(
       risk_flags: r.recap!.risk_flags,
       // U12.9 — who revised the file within the period (or "non noto"); the report
       // names them. Falls back to the single last modifier when no window authors.
-      modified_by: whoChanged(r).join(", ") || "non noto",
+      modified_by: whoChanged(r).join(", ") || "unknown",
     })),
     missed_files: missed.map((r) => ({ file: r.name ?? r.fileId, error: r.error })),
     removed_files: input.removed.map((f) => ({
@@ -328,7 +328,7 @@ export function renderReportDoc(input: {
       ? section("History unavailable") +
         paragraph(
           escapeHtml(
-            `Cronologia non disponibile per ${revisionErrorCount} file: un errore di Google Drive ne ha impedito la lettura delle revisioni. Attribuzione e copertura del periodo per quei file potrebbero essere incomplete.`,
+            `History unavailable for ${revisionErrorCount} file${revisionErrorCount === 1 ? "" : "s"}: a Google Drive error prevented ${revisionErrorCount === 1 ? "its" : "their"} revisions from being read. Attribution and period coverage for those files may be incomplete.`,
           ),
         )
       : "";
