@@ -310,6 +310,48 @@ describe("detect — window mode (U12.2)", () => {
     expect(res.files.map((x) => x.fileId)).toEqual(["A"]); // included despite later edit
     expect(res.files[0].windowAuthors).toEqual(["Luca"]); // ONLY the Jan reviser, not Paolo
   });
+
+  it("treats a Drive revisions ERROR as 'history unavailable', not 'no history': includes + flags + counts the file (even with modifiedTime OUTSIDE the window)", async () => {
+    // File last edited in March (outside the Jan window). The OLD code swallowed
+    // the Drive error to revs=[] → modifiedTime fallback → since March is out of
+    // window the file was SILENTLY DROPPED. Now the error is distinguished from a
+    // genuine empty list: the file is included, flagged, and counted.
+    const f = { ...doc("A"), modifiedTime: "2026-03-10T00:00:00Z" };
+    listFolder.mockResolvedValue([f]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    listRevisions.mockRejectedValue(new Error("rate limited"));
+
+    const res = await detect({
+      sourceFolderId: SOURCE,
+      pageToken: null,
+      deliverableLinks: [],
+      window: WIN,
+    });
+
+    expect(res.files.map((x) => x.fileId)).toEqual(["A"]); // NOT silently dropped
+    expect(res.files[0].revisionsUnavailable).toBe(true);
+    expect(res.files[0].windowAuthors).toEqual([]); // no FALSE attribution asserted
+    expect(res.revisionErrorCount).toBe(1);
+    warn.mockRestore();
+  });
+
+  it("a genuinely EMPTY revision list stays 'no history' — no flag, no error count (only Drive errors are flagged)", async () => {
+    // Guards the must-not-change: the legit-empty branch behaves exactly as before.
+    const f = { ...doc("A"), modifiedTime: "2026-01-15T10:00:00Z" };
+    listFolder.mockResolvedValue([f]);
+    listRevisions.mockResolvedValue([]); // genuine empty (Drive succeeded)
+
+    const res = await detect({
+      sourceFolderId: SOURCE,
+      pageToken: null,
+      deliverableLinks: [],
+      window: WIN,
+    });
+
+    expect(res.files.map((x) => x.fileId)).toEqual(["A"]); // in-window via modifiedTime
+    expect(res.files[0].revisionsUnavailable).toBeUndefined();
+    expect(res.revisionErrorCount).toBeUndefined();
+  });
 });
 
 describe("detect — all-files mode (U12.10/U12.11)", () => {
@@ -348,6 +390,37 @@ describe("detect — all-files mode (U12.10/U12.11)", () => {
       first: "2026-01-01T00:00:00Z",
       last: "2026-06-01T00:00:00Z",
     });
+  });
+
+  it("flags a Drive revisions ERROR (history unavailable) instead of reading the file as authorless", async () => {
+    // File A's revisions error; B's succeed. OLD code → A.windowAuthors=[] with no
+    // way to tell it apart from a genuinely authorless file, so the report could
+    // quietly say "non noto" for a transient Google error. Now A is flagged + counted.
+    listFolder.mockResolvedValue([doc("A"), doc("B")]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    listRevisions.mockImplementation((id: string) =>
+      id === "A"
+        ? Promise.reject(new Error("permission denied"))
+        : Promise.resolve([
+            { id: "r1", modifiedTime: "2026-06-01T00:00:00Z", authorName: "Luca" },
+          ]),
+    );
+
+    const res = await detect({
+      sourceFolderId: SOURCE,
+      pageToken: null,
+      deliverableLinks: [],
+      allFiles: true,
+    });
+
+    const a = res.files.find((f) => f.fileId === "A")!;
+    expect(a.revisionsUnavailable).toBe(true);
+    expect(a.windowAuthors).toEqual([]); // not asserted as a known-empty author set
+    const b = res.files.find((f) => f.fileId === "B")!;
+    expect(b.revisionsUnavailable).toBeUndefined(); // success path untouched
+    expect(b.windowAuthors).toEqual(["Luca"]);
+    expect(res.revisionErrorCount).toBe(1);
+    warn.mockRestore();
   });
 });
 

@@ -46,6 +46,11 @@ export type DetectedFile = {
   // U12.9 — display names of users who made a revision WITHIN the run's window
   // (window mode only; undefined otherwise). Drives per-period attribution.
   windowAuthors?: string[];
+  // Set true when listing this file's revisions FAILED (Drive error: rate limit,
+  // permission denied, network) — as opposed to the file genuinely having no
+  // revisions. Lets downstream tell "history unavailable" apart from "no history"
+  // so a transient Google error is never silently reported as "nothing changed".
+  revisionsUnavailable?: boolean;
   // null only for removed files (no mimeType to classify).
   kind: FileKind | null;
   isDeliverable: boolean;
@@ -88,6 +93,11 @@ export type DetectResult = {
   // modifiedTime across the Source folder), computed in WINDOW mode so the caller
   // can tell the user where to look when a chosen window matched nothing.
   corpusRange?: { first: string | null; last: string | null };
+  // Count of files whose revision history could not be loaded due to a Drive
+  // error (NOT genuine emptiness). Absent/0 = every history read succeeded; > 0
+  // means attribution/membership for that many files is best-effort and the
+  // report may be incomplete — surface it rather than treating it as "no history".
+  revisionErrorCount?: number;
 };
 
 // Runtime categorization (DESIGN §3 B). "editable" = a type the analyzer can read
@@ -202,6 +212,7 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
       return !Number.isNaN(t) && t >= startMs && t <= endMs;
     };
     const files: DetectedFile[] = [];
+    let revisionErrorCount = 0;
     for (const f of currentList) {
       // Prune: a file last modified before the window can't have a revision in
       // it (modifiedTime is the LAST edit). Skips the revisions call for most.
@@ -210,24 +221,44 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
         if (!Number.isNaN(mt) && mt < startMs) continue;
       }
       let revs: DriveRevision[] = [];
+      let revisionsUnavailable = false;
       try {
         revs = await listRevisions(f.id);
-      } catch {
-        revs = [];
+      } catch (err) {
+        // Drive error (rate limit / permission / network) — NOT proof the file
+        // has no history. Flag + count it instead of silently treating it as
+        // empty, and include the file below rather than risk dropping one that
+        // was revised in-window.
+        revisionsUnavailable = true;
+        revisionErrorCount += 1;
+        console.warn(
+          `[pma/detect] revisions unavailable for file ${f.id}; including it as flagged rather than treating as no-history`,
+          err,
+        );
       }
       const windowRevs = revs.filter((r) => inWin(r.modifiedTime));
-      // Membership: a revision in the window. If Drive returned NO revisions at
-      // all (unavailable), fall back to the file's modifiedTime being in-window.
-      const member =
-        revs.length > 0 ? windowRevs.length > 0 : inWin(f.modifiedTime);
+      // Membership: a revision in the window. If the revisions call FAILED we can
+      // neither confirm nor deny window membership → INCLUDE the file (flagged)
+      // so a possibly-in-window revision is never silently lost. If Drive returned
+      // a genuinely empty list, fall back to the file's modifiedTime as before.
+      const member = revisionsUnavailable
+        ? true
+        : revs.length > 0
+          ? windowRevs.length > 0
+          : inWin(f.modifiedTime);
       if (!member) continue;
-      files.push({ ...tag(f), windowAuthors: authorsFromRevisions(windowRevs) });
+      files.push({
+        ...tag(f),
+        windowAuthors: authorsFromRevisions(windowRevs),
+        ...(revisionsUnavailable ? { revisionsUnavailable: true } : {}),
+      });
     }
     return {
       files,
       newPageToken: null,
       bootstrapped: false,
       corpusRange: corpusRangeOf(currentList),
+      ...(revisionErrorCount > 0 ? { revisionErrorCount } : {}),
     };
   }
 
@@ -237,20 +268,35 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
   //    (Drive exposes no displayName) are dropped → "non noto" only if NONE named.
   if (input.allFiles) {
     const files: DetectedFile[] = [];
+    let revisionErrorCount = 0;
     for (const f of currentList) {
       let revs: DriveRevision[] = [];
+      let revisionsUnavailable = false;
       try {
         revs = await listRevisions(f.id);
-      } catch {
-        revs = [];
+      } catch (err) {
+        // Drive error — NOT an authorless file. Flag + count it so attribution
+        // degrades to the last modifier honestly instead of falsely reading as
+        // "non noto" (no known author).
+        revisionsUnavailable = true;
+        revisionErrorCount += 1;
+        console.warn(
+          `[pma/detect] revisions unavailable for file ${f.id}; attribution may be incomplete`,
+          err,
+        );
       }
-      files.push({ ...tag(f), windowAuthors: authorsFromRevisions(revs) });
+      files.push({
+        ...tag(f),
+        windowAuthors: authorsFromRevisions(revs),
+        ...(revisionsUnavailable ? { revisionsUnavailable: true } : {}),
+      });
     }
     return {
       files,
       newPageToken: null,
       bootstrapped: false,
       corpusRange: corpusRangeOf(currentList),
+      ...(revisionErrorCount > 0 ? { revisionErrorCount } : {}),
     };
   }
 
