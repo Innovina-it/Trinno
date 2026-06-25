@@ -52,21 +52,38 @@ export async function processPendingEmails(opts: {
   if (error) throw error;
   const pending = (rows ?? []) as Notif[];
 
+  // Batch the opt-in pref read ONCE for the whole batch (was one query per row,
+  // the N+1).  Keyed `${user_id}::${kind}` for channel='email'.  An ABSENT key
+  // OR enabled=false means "skip" in the loop — identical to the old
+  // `!pref || !pref.enabled`.
+  const recipientIds = [...new Set(pending.map((n) => n.recipient_user_id))];
+  const kinds = [...new Set(pending.map((n) => n.kind))];
+  const prefMap = new Map<string, boolean>();
+  if (recipientIds.length > 0 && kinds.length > 0) {
+    const { data: prefRows, error: prefErr } = await sb
+      .from("user_notification_prefs")
+      .select("user_id, kind, enabled")
+      .in("user_id", recipientIds)
+      .in("kind", kinds)
+      .eq("channel", "email");
+    if (prefErr) throw prefErr;
+    for (const p of prefRows ?? []) {
+      prefMap.set(
+        `${p.user_id as string}::${p.kind as string}`,
+        p.enabled as boolean,
+      );
+    }
+  }
+
   let sent = 0;
   let skipped = 0;
   let errors = 0;
 
   for (const n of pending) {
     try {
-      // Opt-in check.  If no row OR enabled=false, skip.
-      const { data: pref } = await sb
-        .from("user_notification_prefs")
-        .select("enabled")
-        .eq("user_id", n.recipient_user_id)
-        .eq("kind", n.kind)
-        .eq("channel", "email")
-        .maybeSingle();
-      if (!pref || !pref.enabled) {
+      // Opt-in check (from the prefetched map).  Absent OR enabled=false → skip.
+      const enabled = prefMap.get(`${n.recipient_user_id}::${n.kind}`);
+      if (!enabled) {
         skipped++;
         await sb
           .from("notifications")
