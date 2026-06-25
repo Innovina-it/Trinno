@@ -25,41 +25,23 @@ type Notif = NotificationRow;
 
 const CHANNEL = "telegram" as const;
 
-// Mirror lib/notifications/channels/email resolveEventCopy: actor display
-// name + card/board titles.  Replicated minimally (the email resolver is not
-// exported) so telegram renderEvent receives real titles instead of the
-// "Someone" / empty fallbacks.
-async function resolveEventCopy(
-  sb: ReturnType<typeof getServiceSupabase>,
+// Per-event display copy (actor name + card/board titles) assembled from
+// batch-prefetched maps — see the prefetch block in dispatchTelegramNotifications.
+// Mirrors the old per-row resolver's fallbacks: actor "Someone" when absent or
+// unnamed, empty card/board title when absent.  Pure (no DB) so the send loop
+// does ZERO name lookups per row.
+function eventCopyFromMaps(
   n: Notif,
-): Promise<{ actorName: string; cardTitle: string; boardTitle: string }> {
-  let actorName = "Someone";
-  if (n.actor_user_id) {
-    const { data: ap } = await sb
-      .from("profiles")
-      .select("display_name")
-      .eq("id", n.actor_user_id)
-      .maybeSingle();
-    if (ap?.display_name) actorName = ap.display_name;
-  }
-  let cardTitle = "";
-  if (n.related_card_id) {
-    const { data: c } = await sb
-      .from("cards")
-      .select("title")
-      .eq("id", n.related_card_id)
-      .maybeSingle();
-    if (c?.title) cardTitle = c.title;
-  }
-  let boardTitle = "";
-  if (n.related_board_id) {
-    const { data: b } = await sb
-      .from("boards")
-      .select("title")
-      .eq("id", n.related_board_id)
-      .maybeSingle();
-    if (b?.title) boardTitle = b.title;
-  }
+  actorNames: Map<string, string>,
+  cardTitles: Map<string, string>,
+  boardTitles: Map<string, string>,
+): { actorName: string; cardTitle: string; boardTitle: string } {
+  const actorName =
+    (n.actor_user_id && actorNames.get(n.actor_user_id)) || "Someone";
+  const cardTitle =
+    (n.related_card_id && cardTitles.get(n.related_card_id)) || "";
+  const boardTitle =
+    (n.related_board_id && boardTitles.get(n.related_board_id)) || "";
   return { actorName, cardTitle, boardTitle };
 }
 
@@ -176,6 +158,101 @@ export async function dispatchTelegramNotifications(
     }
   }
 
+  // Batch-load the remaining per-row reads ONCE for the whole batch, replacing
+  // the old per-iteration isLinked / pref / name lookups (the N+1).  Mirrors the
+  // masterOn batch above: one query per concern, keyed maps the loop reads from.
+
+  // Linked telegram chats: a user is linked iff a user_channel_links row exists
+  // with status='linked' and a non-empty external_id (chat id) — the same
+  // predicate resolveChatId enforces inside the channel.
+  const linkedIds = new Set<string>();
+  if (recipientIds.length > 0) {
+    const { data: linkRows, error: linkErr } = await sb
+      .from("user_channel_links")
+      .select("user_id, external_id")
+      .in("user_id", recipientIds)
+      .eq("channel", CHANNEL)
+      .eq("status", "linked");
+    if (linkErr) throw linkErr;
+    for (const r of linkRows ?? []) {
+      if (typeof r.external_id === "string" && r.external_id) {
+        linkedIds.add(r.user_id as string);
+      }
+    }
+  }
+
+  // Per-(kind, channel='telegram') opt-in prefs, keyed `${user_id}::${kind}`.
+  // An ABSENT key falls back to defaultExternalOn(kind) at read time in the loop;
+  // an explicit row (true OR false) wins — identical to the old `pref?.enabled ??`.
+  const kinds = [...new Set(pending.map((n) => n.kind))];
+  const prefMap = new Map<string, boolean>();
+  if (recipientIds.length > 0 && kinds.length > 0) {
+    const { data: prefRows, error: prefErr } = await sb
+      .from("user_notification_prefs")
+      .select("user_id, kind, enabled")
+      .in("user_id", recipientIds)
+      .in("kind", kinds)
+      .eq("channel", CHANNEL);
+    if (prefErr) throw prefErr;
+    for (const p of prefRows ?? []) {
+      prefMap.set(
+        `${p.user_id as string}::${p.kind as string}`,
+        p.enabled as boolean,
+      );
+    }
+  }
+
+  // Display-copy maps.  Only TRUTHY values are stored so eventCopyFromMaps'
+  // "Someone"/"" fallbacks fire for absent OR empty rows (matches the old code).
+  const actorIds = [
+    ...new Set(
+      pending.map((n) => n.actor_user_id).filter((v): v is string => !!v),
+    ),
+  ];
+  const cardIds = [
+    ...new Set(
+      pending.map((n) => n.related_card_id).filter((v): v is string => !!v),
+    ),
+  ];
+  const boardIds = [
+    ...new Set(
+      pending.map((n) => n.related_board_id).filter((v): v is string => !!v),
+    ),
+  ];
+  const actorNames = new Map<string, string>();
+  if (actorIds.length > 0) {
+    const { data: profileRows, error: pErr } = await sb
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", actorIds);
+    if (pErr) throw pErr;
+    for (const p of profileRows ?? []) {
+      if (p.display_name) actorNames.set(p.id as string, p.display_name as string);
+    }
+  }
+  const cardTitles = new Map<string, string>();
+  if (cardIds.length > 0) {
+    const { data: cardRows, error: cErr } = await sb
+      .from("cards")
+      .select("id, title")
+      .in("id", cardIds);
+    if (cErr) throw cErr;
+    for (const c of cardRows ?? []) {
+      if (c.title) cardTitles.set(c.id as string, c.title as string);
+    }
+  }
+  const boardTitles = new Map<string, string>();
+  if (boardIds.length > 0) {
+    const { data: boardRows, error: bErr } = await sb
+      .from("boards")
+      .select("id, title")
+      .in("id", boardIds);
+    if (bErr) throw bErr;
+    for (const b of boardRows ?? []) {
+      if (b.title) boardTitles.set(b.id as string, b.title as string);
+    }
+  }
+
   let sent = 0;
   let skipped = 0;
   let failed = 0;
@@ -195,9 +272,8 @@ export async function dispatchTelegramNotifications(
         continue;
       }
 
-      // Gate 1: user must have a linked telegram chat.
-      const linked = await telegramChannel.isLinked(n.recipient_user_id);
-      if (!linked) {
+      // Gate 1: user must have a linked telegram chat (from the prefetched set).
+      if (!linkedIds.has(n.recipient_user_id)) {
         skipped++;
         await upsertLedger(sb, { notification_id: n.id, status: "skipped" });
         continue;
@@ -212,23 +288,22 @@ export async function dispatchTelegramNotifications(
       // master `notify_per_event` toggle (Gate 0) and isLinked (Gate 1) have
       // already run above, so reaching here means the recipient opted into
       // per-event delivery AND has a linked chat.
-      const { data: pref } = await sb
-        .from("user_notification_prefs")
-        .select("enabled")
-        .eq("user_id", n.recipient_user_id)
-        .eq("kind", n.kind)
-        .eq("channel", CHANNEL)
-        .maybeSingle();
-      const enabled = pref?.enabled ?? defaultExternalOn(n.kind);
+      const prefEnabled = prefMap.get(`${n.recipient_user_id}::${n.kind}`);
+      const enabled = prefEnabled ?? defaultExternalOn(n.kind);
       if (!enabled) {
         skipped++;
         await upsertLedger(sb, { notification_id: n.id, status: "skipped" });
         continue;
       }
 
-      // Seam: resolve display names and inject into payload so telegram
-      // renderEvent shows real actor/card/board copy.
-      const { actorName, cardTitle, boardTitle } = await resolveEventCopy(sb, n);
+      // Seam: resolve display names (from the prefetched maps) and inject into
+      // payload so telegram renderEvent shows real actor/card/board copy.
+      const { actorName, cardTitle, boardTitle } = eventCopyFromMaps(
+        n,
+        actorNames,
+        cardTitles,
+        boardTitles,
+      );
       const enriched: Notif = {
         ...n,
         payload: {
@@ -299,6 +374,25 @@ export async function dispatchTelegramDigests(): Promise<DispatchResult> {
     .eq("status", "linked");
   if (error) throw error;
 
+  // Batch the digest opt-in gate: ONE query for every linked user's explicit
+  // enabled=true digest.daily/telegram pref (was one query per user, the N+1).
+  // Membership in the set == opted in; absent OR enabled=false == out, matching
+  // the old per-row `!pref || !pref.enabled`.
+  const userIds = [...new Set((links ?? []).map((l) => l.user_id as string))];
+  const digestEnabled = new Set<string>();
+  if (userIds.length > 0) {
+    const { data: prefRows, error: prefErr } = await sb
+      .from("user_notification_prefs")
+      .select("user_id, enabled")
+      .in("user_id", userIds)
+      .eq("kind", "digest.daily")
+      .eq("channel", CHANNEL);
+    if (prefErr) throw prefErr;
+    for (const p of prefRows ?? []) {
+      if (p.enabled) digestEnabled.add(p.user_id as string);
+    }
+  }
+
   let sent = 0;
   let skipped = 0;
   let failed = 0;
@@ -306,15 +400,9 @@ export async function dispatchTelegramDigests(): Promise<DispatchResult> {
   for (const link of links ?? []) {
     const userId = link.user_id as string;
     try {
-      // Opt-in gate: explicit enabled=true digest.daily/telegram row required.
-      const { data: pref } = await sb
-        .from("user_notification_prefs")
-        .select("enabled")
-        .eq("user_id", userId)
-        .eq("kind", "digest.daily")
-        .eq("channel", CHANNEL)
-        .maybeSingle();
-      if (!pref || !pref.enabled) {
+      // Opt-in gate: explicit enabled=true digest.daily/telegram row required
+      // (from the prefetched set above).
+      if (!digestEnabled.has(userId)) {
         skipped++;
         continue;
       }
