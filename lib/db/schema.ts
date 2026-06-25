@@ -824,6 +824,10 @@ export type PmaAnalysisRunRow = typeof pmaAnalysisRuns.$inferSelect;
 export const pmaWorkspaceState = pgTable("pma_workspace_state", {
   workspaceId: uuid("workspace_id").primaryKey(),
   changesPageToken: text("changes_page_token"),
+  // Per-workspace report-section selection (migration 0141): a {key: bool} map
+  // of which synthesis-report sections to render. null → all on. See
+  // lib/pma/report-sections.ts.
+  reportSections: jsonb("report_sections"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
