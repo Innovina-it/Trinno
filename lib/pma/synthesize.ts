@@ -73,6 +73,13 @@ export type SynthesisReport = {
   deviations: Deviation[];
   progress_notes: string[];
   difficulties: string[];
+  // Forward-looking narrated sections (#2). All grounded ONLY in the reported
+  // changes/deviations/risks/context; empty when nothing in the inputs supports
+  // them (budget_notes: empty unless the documents actually mention budget).
+  next_steps: string[];
+  recommendations: string[];
+  risk_outlook: string;
+  budget_notes: string[];
 };
 
 export type SynthesizeInput = {
@@ -140,6 +147,10 @@ const REPORT_SCHEMA: Schema = {
     deviations: { type: Type.ARRAY, items: DEVIATION_SCHEMA },
     progress_notes: { type: Type.ARRAY, items: { type: Type.STRING } },
     difficulties: { type: Type.ARRAY, items: { type: Type.STRING } },
+    next_steps: { type: Type.ARRAY, items: { type: Type.STRING } },
+    recommendations: { type: Type.ARRAY, items: { type: Type.STRING } },
+    risk_outlook: { type: Type.STRING },
+    budget_notes: { type: Type.ARRAY, items: { type: Type.STRING } },
   },
   required: [
     "executive_summary",
@@ -150,6 +161,10 @@ const REPORT_SCHEMA: Schema = {
     "deviations",
     "progress_notes",
     "difficulties",
+    "next_steps",
+    "recommendations",
+    "risk_outlook",
+    "budget_notes",
   ],
 };
 
@@ -170,8 +185,17 @@ const SYNTHESIS_SYSTEM =
   "who made the file's changes (e.g. in new_or_changed_files), and use the " +
   "`modified_by` value EXACTLY as given (verbatim — do not reformat or rewrite " +
   "the name). Refer to files by the `file` value given (a human name), never by " +
-  "any id. Be specific and terse; do not invent content. Respond only as JSON " +
-  "matching the provided schema.";
+  "any id. Be specific and terse; do not invent content. " +
+  "Also produce four forward-looking sections, grounded ONLY in the reported " +
+  "changes, deviations, risks and context — never invented: `next_steps` " +
+  "(concrete actions that clearly follow from what was reported), " +
+  "`recommendations` (analyst advice to the team), `risk_outlook` (a short " +
+  "forward-looking paragraph on where the project is exposed, based on the " +
+  "deviations, risk flags and missed updates), and `budget_notes` " +
+  "(budget/effort observations ONLY if the documents or PROJECT CONTEXT " +
+  "actually mention them — never fabricate figures or estimates). Leave any of " +
+  "these empty ([] or \"\") when nothing in the inputs supports it. " +
+  "Respond only as JSON matching the provided schema.";
 
 // The compact, model-facing payload. Kept small and structured: only the signal
 // (one-line summaries, importance, risk flags, non-trivial variance) is sent —
@@ -382,6 +406,11 @@ export function renderReportDoc(input: {
     progress_notes:
       section("Progress notes") + bullets(report.progress_notes.map(fmt)),
     difficulties: section("Difficulties") + bullets(report.difficulties.map(fmt)),
+    next_steps: section("Next steps") + bullets(report.next_steps.map(fmt)),
+    recommendations:
+      section("Recommendations") + bullets(report.recommendations.map(fmt)),
+    risk_outlook: section("Risk outlook") + paragraph(fmt(report.risk_outlook)),
+    budget_notes: section("Budget notes") + bullets(report.budget_notes.map(fmt)),
   };
 
   const body =

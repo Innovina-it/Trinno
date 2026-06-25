@@ -18,6 +18,10 @@ export const REPORT_SECTION_KEYS = [
   "quality_risks",
   "progress_notes",
   "difficulties",
+  "next_steps",
+  "recommendations",
+  "risk_outlook",
+  "budget_notes",
 ] as const;
 
 export type ReportSectionKey = (typeof REPORT_SECTION_KEYS)[number];
@@ -33,6 +37,10 @@ export const REPORT_SECTION_LABELS: Record<ReportSectionKey, string> = {
   quality_risks: "Quality and risks",
   progress_notes: "Progress notes",
   difficulties: "Difficulties",
+  next_steps: "Next steps",
+  recommendations: "Recommendations",
+  risk_outlook: "Risk outlook",
+  budget_notes: "Budget notes",
 };
 
 // The stored shape: a partial map of section → enabled. Absent/null → all on.
@@ -58,6 +66,10 @@ export const ALL_SECTIONS_ON: Record<ReportSectionKey, boolean> = {
   quality_risks: true,
   progress_notes: true,
   difficulties: true,
+  next_steps: true,
+  recommendations: true,
+  risk_outlook: true,
+  budget_notes: true,
 };
 
 // Coerce arbitrary input (request body / DB jsonb) to a clean ReportSections:

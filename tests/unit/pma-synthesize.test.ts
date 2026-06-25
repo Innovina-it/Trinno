@@ -94,6 +94,10 @@ const REPORT: SynthesisReport = {
   deviations: [],
   progress_notes: ["on track overall"],
   difficulties: [],
+  next_steps: ["finalize the spec"],
+  recommendations: ["lock the baseline before prototyping"],
+  risk_outlook: "Schedule risk is moderate; the spec slip could cascade.",
+  budget_notes: [],
 };
 
 const emptyLive = { entries: [], milestones: [] };
@@ -394,6 +398,10 @@ describe("renderReportDoc", () => {
         deviations: [],
         progress_notes: [],
         difficulties: [],
+        next_steps: [],
+        recommendations: [],
+        risk_outlook: "",
+        budget_notes: [],
       },
       runLabel: LABEL,
     });
@@ -418,9 +426,44 @@ describe("renderReportDoc", () => {
       "QUALITY AND RISKS",
       "PROGRESS NOTES",
       "DIFFICULTIES",
+      "NEXT STEPS",
+      "RECOMMENDATIONS",
+      "RISK OUTLOOK",
+      "BUDGET NOTES",
     ]) {
       expect(absent).toContain(heading);
     }
+  });
+
+  it("renders the forward-looking narrated sections from the report (#2)", () => {
+    const body = renderReportDoc({ report: REPORT, runLabel: LABEL });
+    expect(body).toContain("finalize the spec"); // next_steps bullet
+    expect(body).toContain("lock the baseline before prototyping"); // recommendations
+    expect(body).toContain("Schedule risk is moderate"); // risk_outlook paragraph
+  });
+
+  it("omits the narrated sections when disabled, and shows '(none)' when the model left them empty (#2)", () => {
+    const off = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      sections: {
+        ...ALL_SECTIONS_ON,
+        next_steps: false,
+        recommendations: false,
+        risk_outlook: false,
+        budget_notes: false,
+      },
+    });
+    expect(off).not.toContain("NEXT STEPS");
+    expect(off).not.toContain("RECOMMENDATIONS");
+    expect(off).not.toContain("RISK OUTLOOK");
+    expect(off).not.toContain("BUDGET NOTES");
+    expect(off).toContain("EXECUTIVE SUMMARY"); // others unaffected
+
+    // budget_notes is [] in REPORT → its section heading shows but body is "(none)".
+    const on = renderReportDoc({ report: REPORT, runLabel: LABEL });
+    expect(on).toContain("BUDGET NOTES");
+    expect(on).toContain("(none)");
   });
 
   it("surfaces per-file quality_judgment + risk_flags in the Quality and risks table (#3)", () => {
