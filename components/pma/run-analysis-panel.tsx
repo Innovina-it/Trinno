@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,44 @@ function fmtDay(iso: string): string {
     year: "numeric",
   });
 }
+
+// U12.x — analysis-only quick windows below the picker. Unlike the shared
+// DateRangePopover's in-popover presets (which count FORWARD from today), these
+// are BACKWARD calendar windows — the natural shape for scoping a report over
+// documents that already exist. UTC, start-of-day, to match the picker.
+function startOfDayUTC(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+type PresetChip = { label: string; start: Date; target: Date };
+function buildPresets(now: Date): PresetChip[] {
+  const today = startOfDayUTC(now);
+  const y = today.getUTCFullYear();
+  const m = today.getUTCMonth();
+  return [
+    { label: "This month", start: new Date(Date.UTC(y, m, 1)), target: today },
+    {
+      label: "Last month",
+      start: new Date(Date.UTC(y, m - 1, 1)),
+      // Day 0 of the current month = last day of the previous month.
+      target: new Date(Date.UTC(y, m, 0)),
+    },
+    {
+      label: "Quarter",
+      // Quarter-to-date: first day of the current calendar quarter → today.
+      start: new Date(Date.UTC(y, Math.floor(m / 3) * 3, 1)),
+      target: today,
+    },
+    { label: "YTD", start: new Date(Date.UTC(y, 0, 1)), target: today },
+  ];
+}
+function rangeMatches(value: DateRange, p: PresetChip): boolean {
+  return (
+    !!value.start &&
+    !!value.target &&
+    value.start.getTime() === p.start.getTime() &&
+    value.target.getTime() === p.target.getTime()
+  );
+}
 export function RunAnalysisPanel({
   workspaceId,
   canRun,
@@ -46,6 +84,18 @@ export function RunAnalysisPanel({
   const [notice, setNotice] = useState<string | null>(null);
   // U12.10 — empty by default: no date = whole-document report.
   const [range, setRange] = useState<DateRange>({ start: null, target: null });
+  // Quick windows computed once per mount (relative to today).
+  const presets = useMemo(() => buildPresets(new Date()), []);
+
+  // Clicking a chip fills the range; clicking the active one toggles back to
+  // whole-document (empty).
+  function applyPreset(p: PresetChip) {
+    setRange(
+      rangeMatches(range, p)
+        ? { start: null, target: null }
+        : { start: p.start, target: p.target },
+    );
+  }
 
   const disabledReason = !isOwnerAdmin
     ? "Owner or admin only"
@@ -141,6 +191,31 @@ export function RunAnalysisPanel({
         >
           {running ? "Running…" : refreshing ? "Loading…" : "Run analysis"}
         </Button>
+      </div>
+      <div
+        className="flex flex-wrap items-center justify-center gap-1.5 self-stretch"
+        data-testid="pma-presets"
+      >
+        {presets.map((p) => {
+          const active = rangeMatches(range, p);
+          return (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => applyPreset(p)}
+              disabled={!canRun || busy}
+              aria-pressed={active}
+              className={
+                "chip mono-meta-sm px-2 py-1 transition-colors disabled:opacity-50 " +
+                (active
+                  ? "border-transparent bg-fg text-[#0a0a0a] hover:bg-fg"
+                  : "hover:bg-[color:var(--surface-hi)] hover:text-fg")
+              }
+            >
+              {p.label}
+            </button>
+          );
+        })}
       </div>
       {disabledReason && (
         <span className="mono-meta-sm text-fg-faint">{disabledReason}</span>
