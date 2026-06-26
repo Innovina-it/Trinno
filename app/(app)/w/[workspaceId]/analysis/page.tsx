@@ -68,12 +68,26 @@ function RunRow({ run }: { run: PmaAnalysisRunRow }) {
   const noChanges = run.status === "no_changes";
   const emptyPeriod = run.status === "empty_period";
   const counts = run.counts ?? {};
+  const fileN = counts.changed ?? 0;
+  // #5b — "6 deliverables · 18 files": prefix the deliverable count when it
+  // collapses copies (D < N). missed/removed are noise at 0, so they show ONLY
+  // when non-zero — a real read failure / deletion still surfaces.
+  const deliverableN = counts.deliverables;
   const summary = emptyPeriod
     ? "No documents in the selected period"
     : noChanges
       ? "No new changes in the selected period"
       : ok
-        ? `${counts.changed ?? 0} changed · ${counts.missed ?? 0} missed · ${counts.removed ?? 0} removed`
+        ? [
+            deliverableN != null && deliverableN < fileN
+              ? `${deliverableN} deliverable${deliverableN === 1 ? "" : "s"}`
+              : null,
+            `${fileN} ${fileN === 1 ? "file" : "files"}`,
+            counts.missed ? `${counts.missed} missed` : null,
+            counts.removed ? `${counts.removed} removed` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
         : "Run failed — no report produced";
 
   return (
