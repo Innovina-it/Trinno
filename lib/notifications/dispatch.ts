@@ -110,34 +110,44 @@ export async function dispatchTelegramNotifications(
 ): Promise<DispatchResult> {
   const sb = getServiceSupabase();
 
-  // Terminal = a notification_deliveries row (channel='telegram') with status
-  // IN ('sent','skipped').  Supabase JS has no NOT EXISTS, so we fetch the set
-  // of terminal notification_ids and exclude them from the candidate select.
-  // (Both queries are bounded; the ledger is sparse and the batch is <= limit.)
-  const { data: terminalRows, error: termErr } = await sb
-    .from("notification_deliveries")
-    .select("notification_id")
-    .eq("channel", CHANNEL)
-    .in("status", ["sent", "skipped"]);
-  if (termErr) throw termErr;
-  const terminal = new Set(
-    (terminalRows ?? []).map((r) => r.notification_id as string),
-  );
-
-  // Pull recent pending notifications (oldest first) and drop any already
-  // terminal for telegram.  We over-fetch then filter so the terminal set
-  // doesn't have to be embedded in the query.
+  // Candidate selection.  Pull the `limit` MOST RECENT notifications, then look
+  // up terminal telegram ledger rows for ONLY those candidates.  Both queries
+  // are bounded by `limit` (<= 200), so neither can hit the PostgREST 1000-row
+  // cap that previously hid freshly-created notifications: the old code fetched
+  // the GLOBAL terminal set (capped at 1000) and sized an oldest-first window
+  // from it (`limit + terminal.size`), so once the table held more than
+  // limit+1000 rows the newest notifications fell outside the window and were
+  // never sent.  We reverse the newest batch to oldest-first to preserve the
+  // prior in-batch processing order.
   const { data: rows, error } = await sb
     .from("notifications")
     .select(
       "id, recipient_user_id, kind, related_card_id, related_board_id, actor_user_id, payload, created_at",
     )
-    .order("created_at", { ascending: true })
-    .limit(limit + terminal.size);
+    .order("created_at", { ascending: false })
+    .limit(limit);
   if (error) throw error;
-  const pending = ((rows ?? []) as Notif[])
-    .filter((n) => !terminal.has(n.id))
-    .slice(0, limit);
+  const candidates = ((rows ?? []) as Notif[]).slice().reverse();
+
+  // Terminal = a notification_deliveries row (channel='telegram') with status
+  // IN ('sent','skipped') for one of THESE candidates.  Scoping the lookup to
+  // the candidate ids keeps it bounded (<= limit) and cap-proof — Supabase JS
+  // has no NOT EXISTS, so we fetch the terminal subset and exclude it.
+  const candidateIds = candidates.map((n) => n.id);
+  const terminal = new Set<string>();
+  if (candidateIds.length > 0) {
+    const { data: terminalRows, error: termErr } = await sb
+      .from("notification_deliveries")
+      .select("notification_id")
+      .eq("channel", CHANNEL)
+      .in("status", ["sent", "skipped"])
+      .in("notification_id", candidateIds);
+    if (termErr) throw termErr;
+    for (const r of terminalRows ?? []) {
+      terminal.add(r.notification_id as string);
+    }
+  }
+  const pending = candidates.filter((n) => !terminal.has(n.id));
 
   // Gate 0 data: resolve the master "Notify me on every event" toggle
   // (profiles.notify_per_event, default FALSE) for every DISTINCT recipient in
