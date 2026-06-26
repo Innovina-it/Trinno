@@ -43,6 +43,7 @@ type DriveFile = {
   version: string | null;
   lastModifiedBy: string | null;
   createdTime: string | null;
+  folderPath?: string[];
 };
 
 const doc = (id: string, name = id): DriveFile => ({
@@ -90,6 +91,22 @@ describe("detect — recursive source scan", () => {
     expect(listFolderTree).toHaveBeenCalledWith(SOURCE, {
       skipNames: ["Reports", "Context"],
     });
+  });
+
+  it("propagates each file's folderPath from the tree to the DetectedFile (#4)", async () => {
+    listFolder.mockResolvedValue([
+      { ...doc("A"), folderPath: ["First Output (old)"] },
+      { ...doc("B"), folderPath: [] },
+    ]);
+    const res = await detect({
+      sourceFolderId: SOURCE,
+      pageToken: null,
+      deliverableLinks: [],
+      allFiles: true,
+    });
+    const byId = Object.fromEntries(res.files.map((f) => [f.fileId, f.folderPath]));
+    expect(byId["A"]).toEqual(["First Output (old)"]);
+    expect(byId["B"]).toEqual([]);
   });
 });
 

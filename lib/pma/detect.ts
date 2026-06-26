@@ -56,6 +56,10 @@ export type DetectedFile = {
   isDeliverable: boolean;
   cardLinkId: string | null;
   changeType: "added_or_edited" | "removed";
+  // #4 — source-relative ancestor folder names (from listFolderTree). Lets the
+  // report flag files under a superseded folder (e.g. "First Output (old)").
+  // undefined for removed files (no folder context) and bare-listFolder paths.
+  folderPath?: string[];
 };
 
 export type DeliverableLink = { id: string; url: string };
@@ -196,6 +200,7 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
     isDeliverable: deliverableByFileId.has(file.id),
     cardLinkId: deliverableByFileId.get(file.id) ?? null,
     changeType: "added_or_edited",
+    folderPath: file.folderPath,
   });
 
   // ── Window mode (U12.2, revisions as of U12.9): scope BY REVISION within

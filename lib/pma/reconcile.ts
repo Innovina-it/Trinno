@@ -51,7 +51,7 @@ export type ReconcileInput = {
   report: {
     reportFileId: string;
     reportWebViewLink: string;
-    counts: { changed: number; missed: number; removed: number };
+    counts: { changed: number; missed: number; removed: number; deliverables?: number };
   } | null;
   // U12.5/U12.7 — "no_changes" (files unchanged) and "empty_period" (no docs in
   // the window) are recorded for runs that produce no report Doc. The

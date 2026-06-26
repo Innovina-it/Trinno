@@ -48,6 +48,7 @@ const RECAP = {
   importance: "medium",
   risk_flags: [],
   is_deliverable: false,
+  file_status: "draft",
 };
 
 beforeEach(() => {
@@ -146,6 +147,26 @@ describe("analyze — recap (D)", () => {
       files: [editable("A", "rev1", { isDeliverable: true })], // detect says true (authoritative)
     });
     expect(res[0].recap?.is_deliverable).toBe(true);
+  });
+
+  it("passes the model's file_status through unchanged (not overridden by detect)", async () => {
+    generateStructured.mockResolvedValue({ ...RECAP, file_status: "approved" });
+    const res = await analyze({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      files: [editable("A", "rev1")],
+    });
+    expect(res[0].recap?.file_status).toBe("approved");
+  });
+
+  it("carries the file's folderPath through to the AnalyzeFileResult (#4)", async () => {
+    generateStructured.mockResolvedValue({ ...RECAP });
+    const res = await analyze({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      files: [editable("A", "rev1", { folderPath: ["First Output (old)"] })],
+    });
+    expect(res[0].folderPath).toEqual(["First Output (old)"]);
   });
 });
 

@@ -56,4 +56,17 @@ describe("listFolderTree", () => {
     const out = await listFolderTree("root", { skipNames: ["Reports"] });
     expect(out.map((x) => x.id)).toEqual(["a"]);
   });
+
+  it("records each file's source-relative ancestor folder path (#4)", async () => {
+    serve({
+      root: [f("a", "a.doc"), f("sub", "First Output (old)", FOLDER)],
+      sub: [f("b", "b.doc"), f("subsub", "Presentazioni", FOLDER)],
+      subsub: [f("c", "c.doc")],
+    });
+    const out = await listFolderTree("root");
+    const byId = Object.fromEntries(out.map((x) => [x.id, x.folderPath]));
+    expect(byId["a"]).toEqual([]); // direct child of the source root
+    expect(byId["b"]).toEqual(["First Output (old)"]);
+    expect(byId["c"]).toEqual(["First Output (old)", "Presentazioni"]);
+  });
 });

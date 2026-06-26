@@ -17,7 +17,13 @@ vi.mock("@/lib/pma/output", () => ({
   createReport: (...a: unknown[]) => createReport(...a),
 }));
 
-import { synthesize, renderReportDoc } from "@/lib/pma/synthesize";
+import {
+  synthesize,
+  renderReportDoc,
+  looksSuperseded,
+  deliverableKey,
+  groupByDeliverable,
+} from "@/lib/pma/synthesize";
 import type { SynthesisReport } from "@/lib/pma/synthesize";
 import { ALL_SECTIONS_ON } from "@/lib/pma/report-sections";
 import type { AnalyzeFileResult, FileRecap } from "@/lib/pma/analyze";
@@ -38,6 +44,7 @@ const recap = (over: Partial<FileRecap> = {}): FileRecap => ({
   importance: "medium",
   risk_flags: [],
   is_deliverable: false,
+  file_status: "draft",
   ...over,
 });
 
@@ -135,7 +142,66 @@ describe("synthesize — aggregate + report", () => {
     expect(res.reportFileId).toBe("doc-1");
     expect(res.reportWebViewLink).toBe("https://docs/doc-1");
     // changed = analyzed only; skipped does NOT count as changed.
-    expect(res.counts).toEqual({ changed: 1, missed: 1, removed: 1 });
+    // #5b — deliverables = distinct deliverables behind the analysed files (1 here).
+    expect(res.counts).toEqual({ changed: 1, missed: 1, removed: 1, deliverables: 1 });
+  });
+
+  it("flags an older-generation file by name (looks_superseded) without dropping it (#4)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [{ ...analyzed("A"), name: "First Output (old).gdoc" }, analyzed("B")],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"looks_superseded": true'); // the old file is flagged
+    expect(prompt).toContain('"file": "First Output (old).gdoc"'); // still present — never dropped
+    const doc = createReport.mock.calls[0][1];
+    expect(doc.content).toContain("(likely superseded draft)"); // visible label in the report
+  });
+
+  it("flags a clean-named file by its ancestor folder, without dropping it (#4)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      // clean filename, but sits under the superseded folder
+      fileResults: [
+        { ...analyzed("A"), name: "AIWEPI T2.1 Ingegneria dei Requisiti.docx", folderPath: ["First Output (old)"] },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"looks_superseded": true'); // flagged by folder, not name
+    const doc = createReport.mock.calls[0][1];
+    expect(doc.content).toContain("(likely superseded draft)");
+  });
+
+  it("collapses the EN/IT/pptx copies of one deliverable into a single row (#5b)", async () => {
+    const res = await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [
+        { ...analyzed("a"), name: "AIWEPI_T2.1_Requirements_Engineering.docx" },
+        { ...analyzed("b"), name: "AIWEPI_T2.1_Ingegneria_dei_Requisiti.docx" },
+        { ...analyzed("c"), name: "AIWEPI T2.1 Requirements Engineering.pptx" },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const doc = createReport.mock.calls[0][1];
+    expect(doc.content).toContain("(+2 more versions: same deliverable)"); // one collapsed row
+    expect(doc.content).toContain("1 deliverable · 3 files"); // header reconciles 1 vs 3
+    // counts: 3 source files, but 1 deliverable — persisted so the UI can show it
+    expect(res.counts.changed).toBe(3);
+    expect(res.counts.deliverables).toBe(1);
   });
 
   it("injects the PROJECT CONTEXT block into the prompt when context is given", async () => {
@@ -471,8 +537,8 @@ describe("renderReportDoc", () => {
       report: REPORT,
       runLabel: LABEL,
       qualityRisks: [
-        { file: "spec.gdoc", quality: "thorough, well-sourced", risks: ["scope creep", "no owner"] },
-        { file: "plan.gdoc", quality: "skeletal", risks: [] },
+        { file: "spec.gdoc", status: "approved", quality: "thorough, well-sourced", risks: ["scope creep", "no owner"] },
+        { file: "plan.gdoc", status: "draft", quality: "skeletal", risks: [] },
       ],
     });
     expect(body).toContain("QUALITY AND RISKS");
@@ -480,6 +546,9 @@ describe("renderReportDoc", () => {
     expect(body).toContain("scope creep");
     expect(body).toContain("no owner");
     expect(body).toContain("skeletal");
+    // per-file status surfaces as a mono uppercased badge in the Status column
+    expect(body).toContain("APPROVED");
+    expect(body).toContain("DRAFT");
     // a file with no risk flags shows the em-dash placeholder, not an empty cell
     expect(body).toContain("—");
   });
@@ -495,7 +564,7 @@ describe("renderReportDoc", () => {
     const body = renderReportDoc({
       report: REPORT,
       runLabel: LABEL,
-      qualityRisks: [{ file: "spec.gdoc", quality: "good", risks: ["late"] }],
+      qualityRisks: [{ file: "spec.gdoc", status: "final", quality: "good", risks: ["late"] }],
       sections: { ...ALL_SECTIONS_ON, quality_risks: false },
     });
     expect(body).not.toContain("QUALITY AND RISKS");
@@ -527,5 +596,178 @@ describe("renderReportDoc", () => {
     const absent = renderReportDoc({ report: REPORT, runLabel: LABEL });
     expect(empty).toEqual(absent);
     expect(partial).toEqual(absent); // a lone known key still leaves the rest on
+  });
+
+  it("shows a neutral source-file count, never a 'changed'/'analysed' verb (#3)", () => {
+    const counts = { changed: 3, missed: 0, removed: 1 };
+    const wholeDoc = renderReportDoc({ report: REPORT, runLabel: LABEL, counts });
+    const windowed = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      period: "01/05/2026 – 31/05/2026",
+      counts,
+    });
+    // the count is SOURCE files consulted, not files we edited — framed neutrally
+    // and identically whether or not a period scopes the run
+    for (const body of [wholeDoc, windowed]) {
+      expect(body).toContain("3 files");
+      expect(body).not.toContain("files changed"); // must not read as "we modified them"
+      expect(body).not.toContain("files analysed");
+    }
+  });
+
+  it("prefixes the deliverable count only when copies actually collapse (#5b)", () => {
+    const grouped = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      counts: { changed: 18, missed: 0, removed: 0 },
+      deliverableCount: 6,
+    });
+    expect(grouped).toContain("6 deliverables · 18 files"); // D < N → prefix
+
+    const noCollapse = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      counts: { changed: 6, missed: 0, removed: 0 },
+      deliverableCount: 6,
+    });
+    expect(noCollapse).toContain("6 files");
+    expect(noCollapse).not.toContain("deliverables · "); // D == N → no prefix
+
+    const absent = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      counts: { changed: 6, missed: 0, removed: 0 },
+    });
+    expect(absent).not.toContain("deliverables · "); // absent → legacy label
+  });
+
+  it("substantiates an empty Deviations section when a baseline exists (#7)", () => {
+    const body = renderReportDoc({
+      report: REPORT, // deviations: []
+      runLabel: LABEL,
+      baselineName: "T2.1",
+      comparedCount: 33,
+    });
+    expect(body).toContain(
+      'Compared 33 roadmap items against the approved baseline "T2.1" — no deviations found.',
+    );
+  });
+
+  it("explains an empty Deviations section when no baseline is set (#7)", () => {
+    const body = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      baselineName: null, // no approved baseline
+      comparedCount: null,
+    });
+    expect(body).toContain(
+      "No approved baseline is set for this workspace, so deviations were not checked.",
+    );
+  });
+
+  it("falls back to '(none)' for empty Deviations when no grounding is passed (legacy)", () => {
+    const body = renderReportDoc({ report: REPORT, runLabel: LABEL });
+    // baselineName undefined → byte-identical legacy behaviour
+    expect(body).toContain("(none)");
+    expect(body).not.toContain("no deviations found");
+  });
+
+  it("substantiates an empty Missed-updates section with the analysed count (#7)", () => {
+    const body = renderReportDoc({
+      report: REPORT, // missed_updates: []
+      runLabel: LABEL,
+      counts: { changed: 5, missed: 0, removed: 0 },
+    });
+    expect(body).toContain(
+      "All 5 analysed files were read successfully — no missed updates.",
+    );
+  });
+
+  it("says no files were analysed when the analysed count is zero (#7)", () => {
+    const body = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      counts: { changed: 0, missed: 0, removed: 0 },
+    });
+    expect(body).toContain("No files were analysed this run.");
+  });
+
+  it("renders Difficulties with a grounded severity badge (#8)", () => {
+    const body = renderReportDoc({
+      report: {
+        ...REPORT,
+        difficulties: [{ description: "sensor latency is tight", severity: "high" }],
+      },
+      runLabel: LABEL,
+    });
+    expect(body).toContain("DIFFICULTIES");
+    expect(body).toContain("sensor latency is tight");
+    expect(body).toContain("HIGH"); // severity, mono uppercased badge
+  });
+
+  it("shows '(none)' for Difficulties when there are none (#8)", () => {
+    const body = renderReportDoc({ report: REPORT, runLabel: LABEL }); // difficulties: []
+    expect(body).toContain("DIFFICULTIES");
+    expect(body).toContain("(none)");
+  });
+});
+
+describe("looksSuperseded (#4)", () => {
+  it("flags names that mark an older generation, leaves current ones", () => {
+    expect(looksSuperseded("First Output (old).gdoc")).toBe(true);
+    expect(looksSuperseded("D2.1 OLD draft")).toBe(true);
+    expect(looksSuperseded("Deliverable superseded v1")).toBe(true);
+    expect(looksSuperseded("Bozza vecchia")).toBe(true);
+    expect(looksSuperseded("D2.1 Final.gdoc")).toBe(false);
+    expect(looksSuperseded("Gold standard.gdoc")).toBe(false); // 'old' inside 'Gold' must not match
+    expect(looksSuperseded(null)).toBe(false);
+  });
+
+  it("flags a clean-named file when an ANCESTOR FOLDER is superseded (#4)", () => {
+    // the real welding case: "(old)" lives in the folder, not the filename
+    expect(looksSuperseded("AIWEPI T2.1 Ingegneria dei Requisiti.docx", ["First Output (old)"])).toBe(true);
+    expect(looksSuperseded("clean.docx", ["First Output (old)", "Presentazioni"])).toBe(true);
+    expect(looksSuperseded("clean.docx", ["Deliverables"])).toBe(false);
+    expect(looksSuperseded("clean.docx", [])).toBe(false);
+    expect(looksSuperseded("clean.docx", undefined)).toBe(false);
+  });
+});
+
+describe("deliverableKey + groupByDeliverable (#5b)", () => {
+  it("maps the EN/IT/pptx copies of one deliverable to the same key", () => {
+    expect(deliverableKey("AIWEPI_T2.1_Requirements_Engineering.docx")).toBe("T2.1");
+    expect(deliverableKey("AIWEPI_T2.1_Ingegneria_dei_Requisiti.docx")).toBe("T2.1");
+    expect(deliverableKey("AIWEPI T2.1 Requirements Engineering.pptx")).toBe("T2.1");
+    // no task code → its own key, so unrelated files never merge
+    expect(deliverableKey("Existing Resources for AIWEPI.docx")).toBe(
+      "Existing Resources for AIWEPI.docx",
+    );
+  });
+
+  it("collapses the copies into one row and counts deliverables", () => {
+    const raw = [
+      { rawName: "AIWEPI_T2.1_Requirements_Engineering.docx", superseded: false, status: "draft", quality: "qEN", risks: ["rEN"] },
+      { rawName: "AIWEPI_T2.1_Ingegneria_dei_Requisiti.docx", superseded: false, status: "draft", quality: "qIT", risks: [] },
+      { rawName: "AIWEPI T2.1 Requirements Engineering.pptx", superseded: false, status: "draft", quality: "qPPT", risks: [] },
+      { rawName: "AIWEPI_T3.2_Algorithm_Design_EN.docx", superseded: false, status: "final", quality: "q32", risks: [] },
+    ];
+    const { rows, deliverableCount } = groupByDeliverable(raw);
+    expect(deliverableCount).toBe(2); // T2.1 + T3.2
+    const t21 = rows.find((r) => r.file.includes("T2.1"))!;
+    expect(t21.file).toContain("(+2 more versions: same deliverable)");
+    expect(t21.file).toContain(".docx"); // representative = a non-pptx copy
+    expect(t21.quality).toBe("qEN"); // and its quality, not the pptx's
+  });
+
+  it("never merges a superseded copy into the deliverable group (5a boundary)", () => {
+    const raw = [
+      { rawName: "AIWEPI_T2.1_Requirements_Engineering.docx", superseded: false, status: "draft", quality: "current", risks: [] },
+      { rawName: "AIWEPI T2.1 Ingegneria dei Requisiti.docx", superseded: true, status: "unknown", quality: "old", risks: [] },
+    ];
+    const { rows, deliverableCount } = groupByDeliverable(raw);
+    expect(deliverableCount).toBe(2); // current T2.1 + the superseded copy, separate
+    expect(rows.some((r) => r.file.includes("(likely superseded draft)"))).toBe(true);
+    expect(rows.some((r) => r.quality === "current" && !r.file.includes("superseded"))).toBe(true);
   });
 });

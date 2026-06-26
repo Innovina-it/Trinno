@@ -58,6 +58,11 @@ export type DriveFile = {
   // U12.10 — when the file was created / last modified (ISO). Used to report the
   // documents' available date range when a chosen window matches nothing.
   createdTime: string | null;
+  // #4 — the names of the source-relative ancestor folders, root → file's parent
+  // (e.g. ["First Output (old)", "Presentazioni"]); [] for a direct child of the
+  // source root. Populated only by listFolderTree (which walks the tree); a bare
+  // listFolder leaves it undefined. Lets the report flag superseded-folder files.
+  folderPath?: string[];
 };
 
 // Result of listChanges: the changed/removed files since a page token plus the
@@ -227,16 +232,18 @@ export async function listFolderTree(
 ): Promise<DriveFile[]> {
   const skip = new Set(opts.skipNames ?? []);
   const out: DriveFile[] = [];
-  const stack: string[] = [folderId];
+  // Carry each folder's source-relative path of ancestor names alongside its id,
+  // so every file out can record which folders it sits under (#4 superseded flag).
+  const stack: { id: string; path: string[] }[] = [{ id: folderId, path: [] }];
   while (stack.length > 0) {
-    const current = stack.pop() as string;
+    const { id: current, path } = stack.pop() as { id: string; path: string[] };
     for (const file of await listFolder(current)) {
       if (file.mimeType === FOLDER_MIME) {
-        if (!skip.has(file.name)) stack.push(file.id);
+        if (!skip.has(file.name)) stack.push({ id: file.id, path: [...path, file.name] });
       } else if (!file.name.startsWith("__pma_tmp_")) {
         // Skip transient Office-conversion copies (normally trashed at once; this
         // guards against a stray one lingering if a trash ever fails).
-        out.push(file);
+        out.push({ ...file, folderPath: path });
       }
     }
   }

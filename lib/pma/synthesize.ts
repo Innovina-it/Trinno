@@ -62,6 +62,13 @@ export type Deviation = {
   severity: "low" | "medium" | "high";
 };
 
+// One difficulty, with a severity grounded in how the source frames its impact
+// (#8) — never the model's own weighting.
+export type Difficulty = {
+  description: string;
+  severity: "low" | "medium" | "high";
+};
+
 // Structured workspace synthesis (DESIGN §5.2).
 export type SynthesisReport = {
   executive_summary: string;
@@ -72,7 +79,7 @@ export type SynthesisReport = {
   missed_updates: string[];
   deviations: Deviation[];
   progress_notes: string[];
-  difficulties: string[];
+  difficulties: Difficulty[];
   // Forward-looking narrated sections (#2). All grounded ONLY in the reported
   // changes/deviations/risks/context; empty when nothing in the inputs supports
   // them (budget_notes: empty unless the documents actually mention budget).
@@ -121,7 +128,14 @@ export type SynthesizeResult = {
   reportFileId: string;
   reportWebViewLink: string;
   // Small summary persisted on the run row by U9 (DESIGN §4.4 counts).
-  counts: { changed: number; missed: number; removed: number };
+  // #5b — `deliverables` = distinct deliverables behind the analysed files
+  // (EN/IT/pptx copies count once); optional so old persisted runs stay valid.
+  counts: {
+    changed: number;
+    missed: number;
+    removed: number;
+    deliverables?: number;
+  };
 };
 
 const DEVIATION_SCHEMA: Schema = {
@@ -136,6 +150,15 @@ const DEVIATION_SCHEMA: Schema = {
   required: ["item", "baseline_value", "current_value", "type", "severity"],
 };
 
+const DIFFICULTY_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    description: { type: Type.STRING },
+    severity: { type: Type.STRING, enum: ["low", "medium", "high"] },
+  },
+  required: ["description", "severity"],
+};
+
 const REPORT_SCHEMA: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -146,7 +169,7 @@ const REPORT_SCHEMA: Schema = {
     missed_updates: { type: Type.ARRAY, items: { type: Type.STRING } },
     deviations: { type: Type.ARRAY, items: DEVIATION_SCHEMA },
     progress_notes: { type: Type.ARRAY, items: { type: Type.STRING } },
-    difficulties: { type: Type.ARRAY, items: { type: Type.STRING } },
+    difficulties: { type: Type.ARRAY, items: DIFFICULTY_SCHEMA },
     next_steps: { type: Type.ARRAY, items: { type: Type.STRING } },
     recommendations: { type: Type.ARRAY, items: { type: Type.STRING } },
     risk_outlook: { type: Type.STRING },
@@ -185,7 +208,22 @@ const SYNTHESIS_SYSTEM =
   "who made the file's changes (e.g. in new_or_changed_files), and use the " +
   "`modified_by` value EXACTLY as given (verbatim — do not reformat or rewrite " +
   "the name). Refer to files by the `file` value given (a human name), never by " +
-  "any id. Be specific and terse; do not invent content. " +
+  "any id. In `new_or_changed_files`, each entry must state WHAT changed in that " +
+  "file (drawn from its additions/edits/summary), not merely name the file. A " +
+  "changed file with `looks_superseded` true is an OLDER or superseded generation " +
+  "of a deliverable: describe it as such and never blend its figures with the " +
+  "current (non-superseded) deliverables — when an old and a current version " +
+  "disagree, the current one governs. Be specific and terse; do not invent content. " +
+  "Never state a number, measurement, duration, percentage or standard/" +
+  "regulation code (e.g. an IEC/ISO/EN number, a GDPR or AI Act article) that " +
+  "is not present in the supplied data above; do not import figures from prior " +
+  "reports or background knowledge. In `difficulties`, list ONLY what a source " +
+  "explicitly frames as a problem, limitation or risk — never something the " +
+  "source calls adequate, sufficient or acceptable — and give each a `severity` " +
+  "(low/medium/high) grounded in how the source frames its impact, not your own " +
+  "weighting. When the inputs cite a set " +
+  "of regulations together (e.g. GDPR + AI Act Reg. 2024/1689 + Workers' " +
+  "Statute Art. 4), name every member, never a subset. " +
   "Also produce four forward-looking sections, grounded ONLY in the reported " +
   "changes, deviations, risks and context — never invented: `next_steps` " +
   "(concrete actions that clearly follow from what was reported), " +
@@ -205,6 +243,84 @@ const SYNTHESIS_SYSTEM =
 function whoChanged(r: AnalyzeFileResult): string[] {
   if (r.authors && r.authors.length > 0) return r.authors;
   return r.modifiedBy ? [r.modifiedBy] : [];
+}
+
+// #4 — a file that belongs to an older/superseded generation, recognised either
+// by its own NAME or by an ancestor FOLDER name (e.g. a file inside "First Output
+// (old)"). Conservative pattern. Used ONLY to FLAG — never to exclude — so the
+// model never blends an old draft's committed figures with the current,
+// deliberately-prudent deliverables.
+const SUPERSEDED_RX = /\(old\)|\bold\b|supersed|obsolet|vecchi|deprecat/i;
+
+export function looksSuperseded(
+  name: string | null | undefined,
+  folderPath?: string[],
+): boolean {
+  if (name && SUPERSEDED_RX.test(name)) return true;
+  return (folderPath ?? []).some((segment) => SUPERSEDED_RX.test(segment));
+}
+
+// #5b — the deliverable a file belongs to: its task code (T2.1, T3.2, …) when the
+// name carries one, else the file's own name (so files without a code never merge
+// with anything). Lets the report show one row per deliverable instead of one per
+// EN/IT/pptx copy of the same document.
+export function deliverableKey(name: string | null | undefined): string {
+  const n = name ?? "";
+  const m = n.match(/T\d+\.\d+/i);
+  return m ? m[0].toUpperCase() : n;
+}
+
+type QualityRiskRow = { file: string; status: string; quality: string; risks: string[] };
+type RawQualityRisk = Omit<QualityRiskRow, "file"> & {
+  rawName: string;
+  superseded: boolean;
+};
+
+// #5b — collapse the EN/IT/pptx copies of one deliverable into a SINGLE row
+// (representative = a non-pptx copy when available, else the first), noting how
+// many versions were folded. NEVER merges across the superseded boundary (5a): a
+// flagged old-generation file always stays its own row, so an old draft is never
+// folded into the current deliverable. Returns the display rows (current
+// deliverables first, then any superseded rows) + the deliverable count.
+export function groupByDeliverable(
+  entries: RawQualityRisk[],
+): { rows: QualityRiskRow[]; deliverableCount: number } {
+  const groups = new Map<string, RawQualityRisk[]>();
+  const supersededRows: QualityRiskRow[] = [];
+  for (const e of entries) {
+    if (e.superseded) {
+      supersededRows.push({
+        file: `${e.rawName} (likely superseded draft)`,
+        status: e.status,
+        quality: e.quality,
+        risks: e.risks,
+      });
+      continue;
+    }
+    const key = deliverableKey(e.rawName);
+    let g = groups.get(key);
+    if (!g) {
+      g = [];
+      groups.set(key, g);
+    }
+    g.push(e);
+  }
+  const groupRows: QualityRiskRow[] = [];
+  for (const g of groups.values()) {
+    const rep = g.find((e) => !/\.pptx$/i.test(e.rawName)) ?? g[0];
+    const extra = g.length - 1;
+    groupRows.push({
+      file:
+        extra > 0
+          ? `${rep.rawName} (+${extra} more version${extra === 1 ? "" : "s"}: same deliverable)`
+          : rep.rawName,
+      status: rep.status,
+      quality: rep.quality,
+      risks: rep.risks,
+    });
+  }
+  const rows = [...groupRows, ...supersededRows];
+  return { rows, deliverableCount: rows.length };
 }
 
 function buildPayload(
@@ -232,6 +348,10 @@ function buildPayload(
       // U12.9 — who revised the file within the period (or "non noto"); the report
       // names them. Falls back to the single last modifier when no window authors.
       modified_by: whoChanged(r).join(", ") || "unknown",
+      // #4 — older/superseded generation (by name OR ancestor folder). The model
+      // is told not to blend its figures with the current deliverables; never
+      // used to drop the file.
+      looks_superseded: looksSuperseded(r.name, r.folderPath),
     })),
     missed_files: missed.map((r) => ({ file: r.name ?? r.fileId, error: r.error })),
     removed_files: input.removed.map((f) => ({
@@ -317,9 +437,26 @@ export function renderReportDoc(input: {
   // Per-file quality + risk signal for the deterministic "Quality & risks"
   // section. Surfaced verbatim from each file's recap (never re-narrated by the
   // model). Absent/empty → the section renders "(none)".
-  qualityRisks?: Array<{ file: string; quality: string; risks: string[] }> | null;
+  qualityRisks?: Array<{
+    file: string;
+    status: string;
+    quality: string;
+    risks: string[];
+  }> | null;
+  // Grounded substantiation for an EMPTY Deviations section (#7): the approved
+  // baseline's name (or null when none is set) and how many roadmap items were
+  // compared against it. Provided by synthesize() from input.baseline + variance.
+  // When `baselineName` is undefined (legacy callers/tests), an empty Deviations
+  // section falls back to "(none)" — byte-identical to before these fields existed.
+  baselineName?: string | null;
+  comparedCount?: number | null;
+  // #5b — number of distinct deliverables behind the analysed files (EN/IT/pptx
+  // copies of one document count once). When present AND fewer than counts.changed,
+  // the header reads "D deliverables · N changed …"; absent → the legacy label.
+  deliverableCount?: number | null;
 }): string {
   const { report, runLabel, period, counts, revisionErrorCount } = input;
+  const { baselineName, comparedCount, deliverableCount } = input;
 
   // Bold known author names within already-escaped text (longest first so
   // overlapping names don't nest); fmt = escape then bold.
@@ -339,16 +476,30 @@ export function renderReportDoc(input: {
     ["Period", period ?? "Whole document"],
   ];
   if (counts) {
+    // The count is SOURCE files consulted this run, not files we edited — so the
+    // label says a neutral "N files", never "changed"/"analysed", which read as if
+    // the analysis modified them (#3). #5b — when several files are copies of one
+    // deliverable, prefix the deliverable count: "6 deliverables · 18 files". Only
+    // when grouping actually collapses something (D < N); absent/equal → just files.
+    const showGroups =
+      deliverableCount != null && deliverableCount < counts.changed;
+    const fileWord = counts.changed === 1 ? "file" : "files";
     meta.push([
       "Changes",
-      `${counts.changed} changed · ${counts.missed} missed · ${counts.removed} removed`,
+      (showGroups
+        ? `${deliverableCount} deliverable${deliverableCount === 1 ? "" : "s"} · `
+        : "") +
+        `${counts.changed} ${fileWord} · ${counts.missed} missed · ${counts.removed} removed`,
     ]);
   }
 
+  // Substantiate an empty Deviations section (#7): say what was checked instead of
+  // a bare "(none)". Grounded only — N comes from the deterministic variance and
+  // the baseline name from the registry; the model never produces this line. When
+  // baselineName is undefined (legacy/tests) → "(none)", byte-identical to before.
   const deviations =
-    report.deviations.length === 0
-      ? paragraph("(none)")
-      : table(
+    report.deviations.length > 0
+      ? table(
           ["Item", "Type", "Severity", "Baseline → Now"],
           report.deviations.map((d) => [
             fmt(d.item),
@@ -356,6 +507,39 @@ export function renderReportDoc(input: {
             monoCell(d.severity),
             `<span style="font-family:${MONO};font-size:11px">${escapeHtml(d.baseline_value)} → ${escapeHtml(d.current_value)}</span>`,
           ]),
+        )
+      : baselineName === undefined
+        ? paragraph("(none)")
+        : baselineName
+          ? paragraph(
+              `Compared ${comparedCount ?? 0} roadmap item${comparedCount === 1 ? "" : "s"} against the approved baseline "${escapeHtml(baselineName)}" — no deviations found.`,
+            )
+          : paragraph(
+              "No approved baseline is set for this workspace, so deviations were not checked.",
+            );
+
+  // Substantiate an empty Missed-updates section (#7): every analysed file parsed
+  // cleanly, so say so (with the count) rather than "(none)". Uses the already-
+  // passed `counts`; absent → bullets([]) keeps the legacy "(none)".
+  const missedUpdates =
+    report.missed_updates.length > 0
+      ? bullets(report.missed_updates.map(fmt))
+      : counts
+        ? paragraph(
+            counts.changed === 0
+              ? "No files were analysed this run."
+              : `All ${counts.changed} analysed file${counts.changed === 1 ? "" : "s"} were read successfully — no missed updates.`,
+          )
+        : bullets([]);
+
+  // Difficulties as a table carrying a grounded severity badge (#8). Empty →
+  // "(none)", byte-identical to the previous bullet rendering when there are none.
+  const difficulties =
+    report.difficulties.length === 0
+      ? paragraph("(none)")
+      : table(
+          ["Difficulty", "Severity"],
+          report.difficulties.map((d) => [fmt(d.description), monoCell(d.severity)]),
         );
 
   // Per-file quality + risk table (deterministic — straight from each file's
@@ -365,9 +549,10 @@ export function renderReportDoc(input: {
     qr.length === 0
       ? paragraph("(none)")
       : table(
-          ["File", "Quality", "Risks"],
+          ["File", "Status", "Quality", "Risks"],
           qr.map((r) => [
             fmt(r.file),
+            monoCell(r.status || "unknown"),
             r.quality ? escapeHtml(r.quality) : "—",
             r.risks.length > 0 ? r.risks.map(escapeHtml).join("<br>") : "—",
           ]),
@@ -399,13 +584,12 @@ export function renderReportDoc(input: {
       section("Notable changes") + bullets(report.notable_changes.map(fmt)),
     new_or_changed_files:
       section("New or changed files") + bullets(report.new_or_changed_files.map(fmt)),
-    missed_updates:
-      section("Missed updates") + bullets(report.missed_updates.map(fmt)),
+    missed_updates: section("Missed updates") + missedUpdates,
     deviations: section("Deviations from the approved baseline") + deviations,
     quality_risks: section("Quality and risks") + qualityRisks,
     progress_notes:
       section("Progress notes") + bullets(report.progress_notes.map(fmt)),
-    difficulties: section("Difficulties") + bullets(report.difficulties.map(fmt)),
+    difficulties: section("Difficulties") + difficulties,
     next_steps: section("Next steps") + bullets(report.next_steps.map(fmt)),
     recommendations:
       section("Recommendations") + bullets(report.recommendations.map(fmt)),
@@ -463,13 +647,20 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
   };
   // Per-file quality + risk signal for the "Quality & risks" section. Surfaced
   // verbatim from each analyzed file's recap — the model never re-narrates it.
-  const qualityRisks = input.fileResults
+  // #5b — one raw row per analysed file, tagged with whether it is a superseded
+  // (5a) copy, then grouped: EN/IT/pptx copies of one deliverable collapse to a
+  // single row; superseded files stay their own (flagged) rows, never merged.
+  const rawQualityRisks = input.fileResults
     .filter((r) => r.status === "analyzed" && r.recap)
     .map((r) => ({
-      file: r.name ?? r.fileId,
+      rawName: r.name ?? r.fileId,
+      superseded: looksSuperseded(r.name, r.folderPath),
+      status: r.recap!.file_status,
       quality: r.recap!.quality_judgment,
       risks: r.recap!.risk_flags,
     }));
+  const { rows: qualityRisks, deliverableCount } =
+    groupByDeliverable(rawQualityRisks);
   const content = renderReportDoc({
     report,
     runLabel: input.runLabel,
@@ -480,6 +671,13 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
     revisionErrorCount: input.revisionErrorCount,
     sections: input.sections,
     qualityRisks,
+    // Grounded substantiation for an empty Deviations section (#7).
+    baselineName: input.baseline ? input.baseline.meta.name : null,
+    comparedCount: variance
+      ? variance.cards.length + variance.milestones.length
+      : null,
+    // #5b — distinct deliverables behind the analysed files (EN/IT/pptx → 1).
+    deliverableCount,
   });
   const { id, webViewLink } = await createReport(input.outputFolderId, {
     name: period
@@ -492,6 +690,8 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
     report,
     reportFileId: id,
     reportWebViewLink: webViewLink,
-    counts,
+    // #5b — persist the deliverable count so the analysis page can show
+    // "6 deliverables · 18 files" without re-deriving it from file names.
+    counts: { ...counts, deliverables: deliverableCount },
   };
 }

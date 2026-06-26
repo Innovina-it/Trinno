@@ -54,7 +54,12 @@ export type RunAnalysisResult = {
   status: "success" | "error" | "no_changes" | "empty_period" | "already_reported";
   reportFileId: string | null;
   reportWebViewLink: string | null;
-  counts: { changed: number; missed: number; removed: number } | null;
+  counts: {
+    changed: number;
+    missed: number;
+    removed: number;
+    deliverables?: number;
+  } | null;
   registered: number;
   errored: number;
   removedApplied: number;

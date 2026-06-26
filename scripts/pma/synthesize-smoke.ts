@@ -47,6 +47,7 @@ const recap = (over: Partial<FileRecap>): FileRecap => ({
   importance: "medium",
   risk_flags: [],
   is_deliverable: false,
+  file_status: "draft",
   ...over,
 });
 

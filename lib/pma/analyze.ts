@@ -41,6 +41,9 @@ export type FileRecap = {
   importance: "low" | "medium" | "high";
   risk_flags: string[];
   is_deliverable: boolean;
+  // Maturity of the document, inferred from its own content/labels (never the
+  // model's guess): "unknown" when the document does not state it.
+  file_status: "draft" | "final" | "approved" | "unknown";
 };
 
 export type AnalyzeFileResult = {
@@ -59,6 +62,9 @@ export type AnalyzeFileResult = {
   // U12.9 — the people who revised the file within the run's window (per-period
   // attribution). Supersedes the single modifiedBy when present.
   authors?: string[];
+  // #4 — source-relative ancestor folder names, carried from detect so synthesize
+  // can flag files under a superseded folder (e.g. "First Output (old)").
+  folderPath?: string[];
 };
 
 export type AnalyzeInput = {
@@ -91,6 +97,10 @@ const RECAP_SCHEMA: Schema = {
     importance: { type: Type.STRING, enum: ["low", "medium", "high"] },
     risk_flags: { type: Type.ARRAY, items: { type: Type.STRING } },
     is_deliverable: { type: Type.BOOLEAN },
+    file_status: {
+      type: Type.STRING,
+      enum: ["draft", "final", "approved", "unknown"],
+    },
   },
   required: [
     "additions",
@@ -102,6 +112,7 @@ const RECAP_SCHEMA: Schema = {
     "importance",
     "risk_flags",
     "is_deliverable",
+    "file_status",
   ],
 };
 
@@ -109,7 +120,16 @@ const RECAP_SYSTEM =
   "You are a project-management analyst. Given the current text of a project " +
   "document, produce a concise, factual recap of what the document covers and " +
   "what appears to have changed. Be specific and terse; do not invent content " +
-  "that is not present. Respond only as JSON matching the provided schema.";
+  "that is not present. Never state a number, measurement, duration, percentage " +
+  "or standard/regulation code (e.g. an IEC/ISO/EN number, a GDPR or AI Act " +
+  "article) that does not appear verbatim in this document; do not import figures " +
+  "from prior knowledge or other reports. When the document names a regulation or " +
+  "standard, keep its identifier exact and complete, and never drop a member of a " +
+  "set the document cites together (e.g. GDPR + AI Act + Workers' Statute Art. 4). " +
+  "Set `file_status` to the document's own declared maturity — draft, final or " +
+  "approved — read from its content or labels; use \"unknown\" when the document " +
+  "does not state it. Never guess the status. " +
+  "Respond only as JSON matching the provided schema.";
 
 function buildPrompt(file: DetectedFile, content: string): string {
   const header =
@@ -156,6 +176,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
           modifiedBy: file.lastModifiedBy,
           name: file.name,
           authors: authorsOf(file),
+          folderPath: file.folderPath,
         });
         continue;
       }
@@ -189,6 +210,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         modifiedBy: file.lastModifiedBy,
         name: file.name,
         authors: authorsOf(file),
+        folderPath: file.folderPath,
       });
     } catch (err) {
       results.push({
@@ -201,6 +223,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         modifiedBy: file.lastModifiedBy,
         name: file.name,
         authors: authorsOf(file),
+        folderPath: file.folderPath,
       });
     }
   }
