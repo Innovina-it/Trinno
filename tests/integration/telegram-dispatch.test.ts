@@ -455,4 +455,59 @@ describe("telegram dispatch", () => {
     expect(second?.sent_at).toBe(first?.sent_at);
     void before;
   });
+
+  // Regression guard (cap-proof).  The dispatcher must reach a freshly-created
+  // notification even when the table holds more rows than the OLD oldest-first
+  // window (limit + capped-terminal-set, <= limit + 1000).  We seed 1201
+  // back-dated PENDING notifications so they occupy the entire oldest end: the
+  // old code (oldest-first, terminal set capped at 1000) would scan only those
+  // and never reach the newest target; the cap-proof selection (newest `limit`
+  // + candidate-scoped terminal lookup) always sends it.  The seed is one batch
+  // insert + one batch delete so it neither slows the suite nor leaves bloat.
+  it("cap-proof: newest notification still sends past the old limit+1000 window", async () => {
+    installTelegramMock();
+
+    // One throwaway recipient owns all 1201 seed rows so cleanup is a single
+    // delete; back-dated so they are unambiguously the oldest rows in the table.
+    const seedUser = await makeUser("disp-cap-seed");
+    const SEED = 1201; // > limit(200) + PostgREST cap(1000)
+    const seedRows = Array.from({ length: SEED }, () => ({
+      recipient_user_id: seedUser,
+      kind: "card.assigned",
+      payload: {},
+      created_at: "2000-01-01T00:00:00Z",
+    }));
+    const { error: seedErr } = await service
+      .from("notifications")
+      .insert(seedRows);
+    if (seedErr) throw seedErr;
+
+    try {
+      const recipient = await makeUser("disp-cap-recip");
+      const actor = await makeUser("disp-cap-actor");
+      await linkTelegram(recipient);
+      await setMaster(recipient, true);
+      await setPref(recipient, "card.assigned", true);
+      const { cardId, boardId } = await makeCard();
+      const nId = await makeNotification({
+        recipientUserId: recipient,
+        actorUserId: actor,
+        kind: "card.assigned",
+        cardId,
+        boardId,
+      });
+
+      const res = await dispatchTelegramNotifications({ limit: 200 });
+      expect(res.sent).toBeGreaterThanOrEqual(1);
+      const row = await ledger(nId);
+      expect(row?.status).toBe("sent");
+      expect(row?.sent_at).toBeTruthy();
+    } finally {
+      // Remove the seed so the table doesn't carry permanent bloat.
+      await service
+        .from("notifications")
+        .delete()
+        .eq("recipient_user_id", seedUser);
+    }
+  });
 });
