@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { publishStateSync } from "@/lib/auth/broadcast";
 import {
@@ -31,12 +31,6 @@ import { search } from "@/actions/search";
 import { logout } from "@/actions/auth";
 import { useCommandPalette } from "@/lib/use-command-palette";
 import { useUserPreferences } from "@/lib/preferences/provider";
-import { shouldSuppressQuickAddShortcut } from "@/lib/command-palette/shortcut-guard";
-export {
-  isEditableShortcutTarget,
-  isBoardRoute,
-  shouldSuppressQuickAddShortcut,
-} from "@/lib/command-palette/shortcut-guard";
 
 export type PaletteFavorite = {
   boardId: string;
@@ -85,7 +79,6 @@ export function CommandPalette({
   recents: PaletteRecent[];
 }) {
   const router = useRouter();
-  const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   // Open state lives in a shared store so the nav's ⌘K trigger button
   // and the `useNavChords` hook can both flip it. Esc closes locally.
@@ -105,17 +98,6 @@ export function CommandPalette({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, setOpen]);
-
-  useEffect(() => {
-    function onKeyCapture(e: KeyboardEvent) {
-      if (!shouldSuppressQuickAddShortcut(e, pathname)) return;
-      e.stopImmediatePropagation();
-    }
-    window.addEventListener("keydown", onKeyCapture, { capture: true });
-    return () => {
-      window.removeEventListener("keydown", onKeyCapture, { capture: true });
-    };
-  }, [pathname]);
 
   // Reset state on close.
   useEffect(() => {

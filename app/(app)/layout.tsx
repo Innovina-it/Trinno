@@ -10,7 +10,6 @@ import { UndoBanner } from "@/components/undo-banner";
 import { UndoHotkeys } from "@/components/undo-hotkeys";
 import { ShortcutsOverlay } from "@/components/shortcuts-overlay";
 import { AccessNotice } from "@/components/access-notice";
-import { QuickAddCardMount } from "@/components/quick-add-card-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import { VersionWatcher } from "@/components/system/version-watcher";
 import { getUserPreferences } from "@/actions/profile-preferences";
@@ -217,7 +216,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <ShortcutsOverlay />
       <AccessNotice />
       <VersionWatcher />
-      <QuickAddCardMount hasWorkspaces={ws.length > 0} />
       <CommandPalette
         workspaces={ws.map((w) => ({ id: w.id, name: w.name }))}
         activeWorkspaceId={activeWorkspaceId}
