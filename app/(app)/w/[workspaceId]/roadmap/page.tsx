@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace } from "@/lib/queries/workspaces";
-import { listRoadmapCards } from "@/lib/queries/roadmap";
 import { getWorkspaceSnapshot } from "@/lib/queries/workspace-snapshot";
 import { listEffectiveWorkspaceHolidays } from "@/lib/queries/workspace-holidays";
 import { WorkspaceStoreProvider } from "@/components/workspace/workspace-store-provider";
@@ -19,12 +18,21 @@ export default async function RoadmapPage({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
-  const [cards, snapshot, holidays] = await Promise.all([
-    listRoadmapCards(token, workspaceId),
+  const [snapshot, holidays] = await Promise.all([
     // "active" matches the /w layout's call — same args, one deduped fetch.
     getWorkspaceSnapshot(token, workspaceId, "active"),
     listEffectiveWorkspaceHolidays(token, workspaceId),
   ]);
+  // Crumb count: derive from the snapshot we already loaded instead of a
+  // separate listRoadmapCards query. Replicates that query's predicate —
+  // non-archived (the "active" snapshot already drops archived cards),
+  // non-milestone, both dates set — capped at its same 200 ceiling.
+  const roadmapCardCount = Math.min(
+    snapshot.cards.filter(
+      (c) => c.type !== "milestone" && c.startDate && c.targetDate,
+    ).length,
+    200,
+  );
 
   return (
     <WorkspaceStoreProvider initial={snapshot}>
@@ -56,7 +64,7 @@ export default async function RoadmapPage({
             className="mono-meta-sm tracking-[0.14em] text-fg-muted tabular-nums"
             data-testid="roadmap-card-count"
           >
-            {cards.length} CARDS
+            {roadmapCardCount} CARDS
           </span>
         </header>
         <RoadmapView
