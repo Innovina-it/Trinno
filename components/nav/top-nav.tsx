@@ -109,7 +109,12 @@ export function TopNav({
 
   function isActive(href: string): boolean {
     if (!pathname) return false;
-    return pathname === href || pathname.startsWith(href + "/");
+    if (pathname === href || pathname.startsWith(href + "/")) return true;
+    // A single board lives under /b/[boardId] (and its card at
+    // /b/[boardId]/c/[cardId]) — a separate route tree from
+    // /w/{id}/boards. Keep the Boards tab lit while viewing a board.
+    if (href.endsWith("/boards") && pathname.startsWith("/b/")) return true;
+    return false;
   }
 
   const moreActive = secondary.some((s) => isActive(s.href));
