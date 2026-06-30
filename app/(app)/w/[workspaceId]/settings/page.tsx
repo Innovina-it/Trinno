@@ -49,22 +49,26 @@ export default async function WorkspaceSettingsPage({
       getWorkspaceRole(token, workspaceId, user.id),
       listContributorOrgs(token, workspaceId).catch(() => []),
       // Org names already in the roadmap: the "· Partner" suffix the plan import
-      // stamps onto task-card titles. Offered as org autocomplete hints.
+      // stamps onto task-card titles. Offered as org autocomplete hints. A real
+      // partner is stamped on MANY task cards, whereas a stray "·" inside a single
+      // task name yields a one-off fragment — so keep only suffixes that REPEAT
+      // (≥2 cards), which filters task fragments out of the org suggestions.
       dbAsUser(token, async (tx) => {
         const rows = await tx
           .select({ title: cards.title })
           .from(cards)
           .innerJoin(boards, eq(cards.boardId, boards.id))
           .where(eq(boards.workspaceId, workspaceId));
-        const set = new Set<string>();
+        const counts = new Map<string, number>();
         for (const r of rows) {
           const parts = r.title.split(" · ");
-          if (parts.length > 1) {
-            const owner = parts[parts.length - 1].trim();
-            if (owner) set.add(owner);
-          }
+          if (parts.length < 2) continue;
+          const owner = parts[parts.length - 1].trim();
+          if (owner) counts.set(owner, (counts.get(owner) ?? 0) + 1);
         }
-        return Array.from(set);
+        return Array.from(counts.entries())
+          .filter(([, n]) => n >= 2)
+          .map(([owner]) => owner);
       }).catch(() => [] as string[]),
     ]);
   const workspaceLink =
