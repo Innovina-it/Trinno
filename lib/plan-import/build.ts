@@ -11,6 +11,10 @@ import { createCardImpl, updateCardImpl } from "@/actions/cards";
 import { upsertCardLinkImpl, upsertWorkspaceLinkImpl } from "@/actions/links";
 import { createMilestoneImpl } from "@/actions/milestones";
 import {
+  createRoadmapBaselineImpl,
+  setApprovedBaselineImpl,
+} from "@/actions/roadmap-baselines";
+import {
   provisionProjectFolders,
   ensureReportsChild,
   ensureContextChild,
@@ -25,6 +29,7 @@ import {
   type ProjectIdentity,
 } from "./drive-docs";
 import { projectTitleFromWorkspaceName } from "./docx-template";
+import { wpDisplayTitle } from "./wp-title";
 
 const PLACEHOLDER_LINK_URL = "https://www.corriere.it";
 const LINK_COLOR = "#facc15";
@@ -219,7 +224,7 @@ export async function buildWorkspaceFromPlan(
     const anchor = await step(failures, `anchor:${wp.code}`, async () => {
       const c = await createCardImpl(token, {
         listId: parentTodo,
-        title: wp.title,
+        title: wpDisplayTitle(wp.code, wp.title),
         startDate: wp.start,
         targetDate: wp.end,
         ownerId: null,
@@ -238,7 +243,7 @@ export async function buildWorkspaceFromPlan(
       createSubboardImpl(token, {
         parentBoardId: parent.id,
         parentCardId: anchor.id,
-        title: wp.title,
+        title: wpDisplayTitle(wp.code, wp.title),
       }),
     );
     if (!sub) continue;
@@ -290,7 +295,7 @@ export async function buildWorkspaceFromPlan(
         let url = PLACEHOLDER_LINK_URL;
         if (drive) {
           const { webViewLink } = await drive.createDeliverableDoc({
-            wpTitle: wp.title,
+            wpTitle: wpDisplayTitle(wp.code, wp.title),
             deliverableTitle: d.title,
             subtitle: [wp.lead, `M${d.month}`].filter(Boolean).join(" · "),
             project: plan.workspaceName,
@@ -320,6 +325,20 @@ export async function buildWorkspaceFromPlan(
       }),
     );
   }
+
+  // 6. Snapshot the imported plan as the workspace's Approved baseline, so the
+  //    first analysis can report schedule/scope deviations against the plan.
+  //    Without it the report's Deviations section stays empty ("no baseline").
+  //    Runs last (snapshots the just-created cards + milestones). Best-effort: a
+  //    failure is recorded but never aborts the import.
+  await step(failures, "baseline", async () => {
+    const b = await createRoadmapBaselineImpl(token, {
+      workspaceId: ws.id,
+      name: "Imported plan",
+      note: "Auto-created from the imported plan as the approved baseline.",
+    });
+    await setApprovedBaselineImpl(token, { id: b.id });
+  });
 
   return {
     workspaceId: ws.id,
