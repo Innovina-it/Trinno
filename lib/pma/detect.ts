@@ -8,6 +8,7 @@ import {
 } from "./clients/drive";
 import { isAnalyzable } from "./content";
 import type { DriveFile, DriveRevision } from "./clients/drive";
+import type { ContributorIdentity } from "./contributor-orgs";
 
 // PMA U5 — DETECT (DESIGN §3 steps A + B).
 //
@@ -46,6 +47,12 @@ export type DetectedFile = {
   // U12.9 — display names of users who made a revision WITHIN the run's window
   // (window mode only; undefined otherwise). Drives per-period attribution.
   windowAuthors?: string[];
+  // Name+email identities of the file's contributors — window revision authors in
+  // window mode, all revision authors in all-files mode, else the last modifier.
+  // The org resolver (contributor-orgs.ts) matches these to organizations for the
+  // report; undefined for removed files. Parallel to windowAuthors/lastModifiedBy,
+  // which stay for any consumer still keyed on the raw display name.
+  contributors?: ContributorIdentity[];
   // Set true when listing this file's revisions FAILED (Drive error: rate limit,
   // permission denied, network) — as opposed to the file genuinely having no
   // revisions. Lets downstream tell "history unavailable" apart from "no history"
@@ -123,6 +130,25 @@ function authorsFromRevisions(revs: DriveRevision[]): string[] {
   return Array.from(new Set(revs.map((r) => r.authorName ?? ANON_AUTHOR)));
 }
 
+// Distinct name+email identities for a set of revisions (for org attribution).
+// Deduped by email when present, else display name. A revision with neither →
+// the anonymous identity, so an anonymous edit is surfaced, never dropped.
+function identitiesFromRevisions(revs: DriveRevision[]): ContributorIdentity[] {
+  const seen = new Set<string>();
+  const out: ContributorIdentity[] = [];
+  for (const r of revs) {
+    const id: ContributorIdentity =
+      r.authorName || r.authorEmail
+        ? { name: r.authorName, email: r.authorEmail }
+        : { name: ANON_AUTHOR, email: null };
+    const key = (id.email ?? id.name ?? ANON_AUTHOR).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(id);
+  }
+  return out;
+}
+
 // Pull the Drive fileId out of a Drive/Docs URL. Handles the shapes deliverable
 // links take: /folders/{id}, /file/d/{id}, /document|spreadsheets|presentation/
 // d/{id}, and ?id={id}. Returns null for any non-Drive or unparseable URL.
@@ -196,6 +222,13 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
     headRevisionId: file.headRevisionId,
     version: file.version,
     lastModifiedBy: file.lastModifiedBy,
+    // Base attribution = the last modifier (used by bootstrap + incremental
+    // modes, which have no revision list). Window/all-files modes override this
+    // with the full set of revision-author identities below.
+    contributors:
+      file.lastModifiedBy || file.lastModifiedByEmail
+        ? [{ name: file.lastModifiedBy, email: file.lastModifiedByEmail }]
+        : [],
     kind: categorize(file.mimeType),
     isDeliverable: deliverableByFileId.has(file.id),
     cardLinkId: deliverableByFileId.get(file.id) ?? null,
@@ -252,9 +285,14 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
           ? windowRevs.length > 0
           : inWin(f.modifiedTime);
       if (!member) continue;
+      const tagged = tag(f);
+      const winIds = identitiesFromRevisions(windowRevs);
       files.push({
-        ...tag(f),
+        ...tagged,
         windowAuthors: authorsFromRevisions(windowRevs),
+        // Mirror authorsOf's fallback: no in-window revision authors (or revisions
+        // unavailable) → keep the last-modifier identity from tag().
+        contributors: winIds.length > 0 ? winIds : tagged.contributors,
         ...(revisionsUnavailable ? { revisionsUnavailable: true } : {}),
       });
     }
@@ -290,9 +328,13 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
           err,
         );
       }
+      const tagged = tag(f);
+      const allIds = identitiesFromRevisions(revs);
       files.push({
-        ...tag(f),
+        ...tagged,
         windowAuthors: authorsFromRevisions(revs),
+        // No revision authors (or revisions unavailable) → keep last-modifier.
+        contributors: allIds.length > 0 ? allIds : tagged.contributors,
         ...(revisionsUnavailable ? { revisionsUnavailable: true } : {}),
       });
     }

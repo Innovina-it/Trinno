@@ -7,6 +7,7 @@ import { getAnalyzableContent } from "./content";
 import { generateStructured } from "./clients/gemini";
 import { getRegistryEntry } from "./registry";
 import type { DetectedFile } from "./detect";
+import type { ContributorIdentity } from "./contributor-orgs";
 
 // PMA U6 — VERSION GATE (DESIGN §3 C) + ANALYZE (D).
 //
@@ -62,6 +63,10 @@ export type AnalyzeFileResult = {
   // U12.9 — the people who revised the file within the run's window (per-period
   // attribution). Supersedes the single modifiedBy when present.
   authors?: string[];
+  // Name+email identities for the same contributors, carried from detect. The
+  // synthesis org resolver matches these to organizations; parallel to authors,
+  // which stays as the raw display-name list.
+  contributors?: ContributorIdentity[];
   // #4 — source-relative ancestor folder names, carried from detect so synthesize
   // can flag files under a superseded folder (e.g. "First Output (old)").
   folderPath?: string[];
@@ -83,6 +88,14 @@ export type AnalyzeInput = {
 function authorsOf(file: DetectedFile): string[] {
   if (file.windowAuthors && file.windowAuthors.length > 0) return file.windowAuthors;
   return file.lastModifiedBy ? [file.lastModifiedBy] : [];
+}
+
+// Same set as authorsOf, but as name+email identities for org resolution. detect
+// populates contributors in every mode; fall back to the last modifier (no email)
+// for any DetectedFile built without it.
+function contributorsOf(file: DetectedFile): ContributorIdentity[] {
+  if (file.contributors && file.contributors.length > 0) return file.contributors;
+  return file.lastModifiedBy ? [{ name: file.lastModifiedBy, email: null }] : [];
 }
 
 const RECAP_SCHEMA: Schema = {
@@ -176,6 +189,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
           modifiedBy: file.lastModifiedBy,
           name: file.name,
           authors: authorsOf(file),
+          contributors: contributorsOf(file),
           folderPath: file.folderPath,
         });
         continue;
@@ -210,6 +224,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         modifiedBy: file.lastModifiedBy,
         name: file.name,
         authors: authorsOf(file),
+        contributors: contributorsOf(file),
         folderPath: file.folderPath,
       });
     } catch (err) {
@@ -223,6 +238,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         modifiedBy: file.lastModifiedBy,
         name: file.name,
         authors: authorsOf(file),
+        contributors: contributorsOf(file),
         folderPath: file.folderPath,
       });
     }

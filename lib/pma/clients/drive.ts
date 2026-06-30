@@ -55,6 +55,10 @@ export type DriveFile = {
   // U12.4 — displayName of the file's last modifier (Drive lastModifyingUser),
   // or null when Drive does not expose it. Surfaced in the report as attribution.
   lastModifiedBy: string | null;
+  // emailAddress of the file's last modifier (Drive often exposes it within the
+  // same workspace/domain), or null. The stable identity key the org map matches
+  // on first, falling back to the displayName.
+  lastModifiedByEmail: string | null;
   // U12.10 — when the file was created / last modified (ISO). Used to report the
   // documents' available date range when a chosen window matches nothing.
   createdTime: string | null;
@@ -94,7 +98,7 @@ export type CreateDocInput = {
 
 // Fields requested for every file lookup so DriveFile is always fully hydrated.
 const FILE_FIELDS =
-  "id, name, mimeType, modifiedTime, createdTime, headRevisionId, version, lastModifyingUser(displayName)";
+  "id, name, mimeType, modifiedTime, createdTime, headRevisionId, version, lastModifyingUser(displayName, emailAddress)";
 
 function toDriveFile(f: drive_v3.Schema$File): DriveFile {
   return {
@@ -107,6 +111,7 @@ function toDriveFile(f: drive_v3.Schema$File): DriveFile {
     // `|| null` (not `?? null`) so an empty/blank displayName — Drive's shape for
     // an anonymous editor — collapses to null, not "".
     lastModifiedBy: f.lastModifyingUser?.displayName?.trim() || null,
+    lastModifiedByEmail: f.lastModifyingUser?.emailAddress?.trim().toLowerCase() || null,
     createdTime: f.createdTime ?? null,
   };
 }
@@ -269,6 +274,9 @@ export type DriveRevision = {
   id: string;
   modifiedTime: string | null;
   authorName: string | null;
+  // emailAddress of the revision's author (lowercased), or null when Drive does
+  // not expose it. The stable identity key for org attribution.
+  authorEmail: string | null;
 };
 
 // List a file's revisions (paginated). Read-only. Google COALESCES minor edits,
@@ -282,7 +290,7 @@ export async function listRevisions(fileId: string): Promise<DriveRevision[]> {
     const res = await drive.revisions.list({
       fileId,
       fields:
-        "nextPageToken, revisions(id, modifiedTime, lastModifyingUser(displayName))",
+        "nextPageToken, revisions(id, modifiedTime, lastModifyingUser(displayName, emailAddress))",
       pageSize: 1000,
       pageToken,
     });
@@ -293,6 +301,7 @@ export async function listRevisions(fileId: string): Promise<DriveRevision[]> {
         // `|| null` (not `?? null`): an anonymous edit comes back with an empty
         // displayName "", which must become null so it's labelled "anonymous user".
         authorName: r.lastModifyingUser?.displayName?.trim() || null,
+        authorEmail: r.lastModifyingUser?.emailAddress?.trim().toLowerCase() || null,
       });
     }
     pageToken = res.data.nextPageToken ?? undefined;
