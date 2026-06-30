@@ -122,6 +122,13 @@ export function categorize(mimeType: string): FileKind {
 // "anonymous" edit, shown as "Tutti gli utenti anonimi" in Drive's history). We
 // surface it explicitly instead of dropping it, so the report says an anonymous
 // person made the change rather than silently omitting it.
+// Office lock/owner files (e.g. "~$ SEOL_Modulo.docx") are transient artifacts
+// Word/Excel create while a doc is open — not real content. Excluded from the
+// scan so they never surface as analyzed or as false "missed updates".
+function isTempFile(name: string | null | undefined): boolean {
+  return /^~\$/.test((name ?? "").trim());
+}
+
 const ANON_AUTHOR = "anonymous user";
 
 // Distinct attribution labels for a set of revisions: each named author once,
@@ -208,9 +215,11 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
   // Skip the Reports output folder so analysis never re-reads its own reports, and
   // skip the Context folder so project-background docs are never tracked/analyzed
   // (they are read separately by lib/pma/context.ts and fed to the synthesis).
-  const currentList = await listFolderTree(sourceFolderId, {
-    skipNames: ["Reports", "Context"],
-  });
+  const currentList = (
+    await listFolderTree(sourceFolderId, {
+      skipNames: ["Reports", "Context"],
+    })
+  ).filter((f) => !isTempFile(f.name));
   const currentById = new Map<string, DriveFile>();
   for (const f of currentList) currentById.set(f.id, f);
 

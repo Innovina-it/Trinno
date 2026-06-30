@@ -93,6 +93,24 @@ describe("detect — recursive source scan", () => {
     });
   });
 
+  it("excludes Office lock/temp files (~$…) from the scan", async () => {
+    listFolder.mockResolvedValue([
+      doc("A", "Real Document.docx"),
+      doc("B", "~$ SEOL_Modulo Consenso.docx"), // Word lock file
+      doc("C", "~$Real Document.docx"),
+    ]);
+    const res = await detect({
+      sourceFolderId: SOURCE,
+      pageToken: null,
+      deliverableLinks: [],
+      allFiles: true,
+    });
+    const ids = res.files.map((f) => f.fileId);
+    expect(ids).toContain("A");
+    expect(ids).not.toContain("B"); // temp files never analyzed → no false "missed"
+    expect(ids).not.toContain("C");
+  });
+
   it("propagates each file's folderPath from the tree to the DetectedFile (#4)", async () => {
     listFolder.mockResolvedValue([
       { ...doc("A"), folderPath: ["First Output (old)"] },
