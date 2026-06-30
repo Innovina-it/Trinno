@@ -210,9 +210,9 @@ export function AnalysisWorkbench({
   }
 
   return (
-    <div className="grid min-h-[520px] grid-cols-1 overflow-hidden rounded-2xl border border-[color:var(--hairline)] bg-[#0d0d0e] md:grid-cols-[186px_1fr]">
+    <div className="grid min-h-[600px] grid-cols-1 overflow-hidden rounded-2xl border border-[color:var(--hairline)] bg-[#0d0d0e] md:grid-cols-[248px_1fr]">
       {/* ── ledger ── */}
-      <div className="overflow-y-auto border-b border-[color:var(--hairline)] p-3 md:border-b-0">
+      <div className="overflow-y-auto border-b border-[color:var(--hairline)] p-4 md:border-b-0">
         <div className="mono-meta-sm px-1.5 pb-2 text-fg-faint">Runs · {runs.length}</div>
         {canRun && (
           <button
@@ -269,10 +269,10 @@ export function AnalysisWorkbench({
       </div>
 
       {/* ── detail card (config + preview) floating on the history field ── */}
-      <div className="flex p-3 md:py-3.5 md:pl-1 md:pr-3.5">
-        <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-gradient-to-b from-[#0c0c0c] to-[#080808] md:grid md:grid-cols-[1fr_0.96fr]">
+      <div className="flex p-4 md:py-5 md:pl-2 md:pr-5">
+        <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-gradient-to-b from-[#0c0c0c] to-[#080808] md:grid md:grid-cols-[1.06fr_1fr]">
           {/* CONFIG */}
-          <div className="flex flex-col px-5 pb-3 pt-1">
+          <div className="flex flex-col px-7 pb-5 pt-3">
             {run ? (
               <ReadOnlyConfig run={run} onLoad={() => loadFrom(run)} />
             ) : (
@@ -318,7 +318,7 @@ export function AnalysisWorkbench({
           </div>
 
           {/* PREVIEW / REPORT */}
-          <div className="flex flex-col border-t border-[color:var(--hairline)] bg-[#0b0b0c] px-5 py-4 md:border-l md:border-t-0">
+          <div className="flex flex-col border-t border-[color:var(--hairline)] bg-[#0b0b0c] px-7 py-6 md:border-l md:border-t-0">
             {run ? (
               <RunView run={run} />
             ) : (
@@ -344,7 +344,7 @@ export function AnalysisWorkbench({
                     const focused = !!focus && FOCUSABLE.has(k) && on;
                     const lines = (focused ? LEN_LINES[reportLength] + 1 : LEN_LINES[reportLength]);
                     return (
-                      <div key={k} className={cn("mb-2.5", !on && "opacity-[0.16]")}>
+                      <div key={k} className={cn("mb-3.5", !on && "opacity-[0.16]")}>
                         <div className={cn("mb-1.5 flex items-center gap-1.5 text-[0.72rem]", focused ? "text-[color:var(--accent-cyan)]" : "text-fg-muted")}>
                           <span className={cn("size-[5px] rounded-full", focused ? "bg-[color:var(--accent-cyan)]" : "bg-[color:var(--hairline-hi)]")} />
                           {REPORT_SECTION_LABELS[k]}

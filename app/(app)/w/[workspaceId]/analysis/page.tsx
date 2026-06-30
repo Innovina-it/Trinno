@@ -229,7 +229,7 @@ export default async function AnalysisPage({
   }));
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-3 py-6 sm:px-4 md:px-6 md:py-10">
+    <div className="mx-auto max-w-[1440px] space-y-7 px-4 py-6 sm:px-6 md:px-10 md:py-12">
       <header className="space-y-2">
         <Link
           href={`/w/${workspaceId}`}

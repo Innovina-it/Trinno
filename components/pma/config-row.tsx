@@ -22,7 +22,7 @@ export function ConfigRow({
   return (
     <div
       className={cn(
-        "grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-5 py-3.5 sm:grid-cols-[6.5rem_minmax(0,1fr)]",
+        "grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-6 py-4 sm:grid-cols-[7rem_minmax(0,1fr)]",
         align === "center" ? "items-center" : "items-start",
         className,
       )}
