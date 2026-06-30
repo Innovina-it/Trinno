@@ -26,6 +26,13 @@ import {
 import type { AnalyzeFileResult } from "./analyze";
 import type { DetectedFile } from "./detect";
 import {
+  buildOrgMap,
+  resolveContributorLabels,
+  type ContributorIdentity,
+  type ContributorOrgEntry,
+  type OrgMap,
+} from "./contributor-orgs";
+import {
   REPORT_SECTION_KEYS,
   isSectionEnabled,
   type ReportSectionKey,
@@ -104,6 +111,11 @@ export type SynthesizeInput = {
   // concatenated + capped by lib/pma/context.ts). Injected as grounding so the
   // report is framed against the project's goals/terminology; absent → unchanged.
   context?: string;
+  // Per-workspace contributor → organization map (maintained by hand in Settings,
+  // fetched by run.ts). Each file's contributors are resolved to org labels here,
+  // before anything reaches Gemini: mapped → the org, unmapped → the person's name
+  // verbatim. Absent/empty → name attribution, identical to before this feature.
+  contributorOrgs?: ContributorOrgEntry[];
   // Workspace name, for the report Doc masthead title ("<name> · Analysis").
   // Optional: absent → the masthead reads just "Analysis".
   workspaceName?: string | null;
@@ -204,10 +216,11 @@ const SYNTHESIS_SYSTEM =
   "accurately; treat it as background only, never as recent activity to report. " +
   "When a reporting period is given, cover ONLY work within that period and do " +
   "not discuss activity outside it. Each changed file carries `modified_by` — " +
-  "the person who last modified it (or 'unknown'); name that person as the one " +
-  "who made the file's changes (e.g. in new_or_changed_files), and use the " +
-  "`modified_by` value EXACTLY as given (verbatim — do not reformat or rewrite " +
-  "the name). Refer to files by the `file` value given (a human name), never by " +
+  "who is responsible for its changes (or 'unknown'). This value may be an " +
+  "ORGANIZATION or a person; credit it as the one who made the file's changes " +
+  "(e.g. in new_or_changed_files), and use the `modified_by` value EXACTLY as " +
+  "given (verbatim — do not reformat, rewrite, expand, or convert between a " +
+  "person and an organization). Refer to files by the `file` value given (a human name), never by " +
   "any id. In `new_or_changed_files`, each entry must state WHAT changed in that " +
   "file (drawn from its additions/edits/summary), not merely name the file. A " +
   "changed file with `looks_superseded` true is an OLDER or superseded generation " +
@@ -238,11 +251,24 @@ const SYNTHESIS_SYSTEM =
 // The compact, model-facing payload. Kept small and structured: only the signal
 // (one-line summaries, importance, risk flags, non-trivial variance) is sent —
 // not the full recap bodies (those already live in the Output folder).
-// U12.9 — the people to credit for a file's changes: window revision authors if
-// present, else the single last modifier, else none (→ "non noto").
-function whoChanged(r: AnalyzeFileResult): string[] {
-  if (r.authors && r.authors.length > 0) return r.authors;
-  return r.modifiedBy ? [r.modifiedBy] : [];
+// U12.9 — the contributors to credit for a file's changes, as name+email
+// identities: detect's window/all-files revision authors when present, else the
+// last modifier. Falls back to the legacy name-only fields (authors/modifiedBy)
+// for any AnalyzeFileResult built without `contributors`, so older callers and
+// fixtures keep working.
+function contributorIdentitiesOf(r: AnalyzeFileResult): ContributorIdentity[] {
+  if (r.contributors && r.contributors.length > 0) return r.contributors;
+  if (r.authors && r.authors.length > 0)
+    return r.authors.map((n) => ({ name: n, email: null }));
+  return r.modifiedBy ? [{ name: r.modifiedBy, email: null }] : [];
+}
+
+// The labels to credit for a file's changes: each contributor resolved to their
+// ORG (mapped) or their name (unmapped), with same-org people collapsed to one.
+// An empty map → every contributor resolves to their own name, i.e. exactly the
+// previous behaviour.
+function labelsFor(r: AnalyzeFileResult, orgMap: OrgMap): string[] {
+  return resolveContributorLabels(contributorIdentitiesOf(r), orgMap);
 }
 
 // #4 — a file that belongs to an older/superseded generation, recognised either
@@ -327,6 +353,7 @@ function buildPayload(
   input: SynthesizeInput,
   variance: VarianceResult | null,
   period: string | null,
+  orgMap: OrgMap,
 ) {
   const analyzed = input.fileResults.filter((r) => r.status === "analyzed" && r.recap);
   const missed = input.fileResults.filter((r) => r.status === "error");
@@ -345,9 +372,11 @@ function buildPayload(
       edits: r.recap!.edits,
       structural_changes: r.recap!.structural_changes,
       risk_flags: r.recap!.risk_flags,
-      // U12.9 — who revised the file within the period (or "non noto"); the report
-      // names them. Falls back to the single last modifier when no window authors.
-      modified_by: whoChanged(r).join(", ") || "unknown",
+      // U12.9 — who to credit for the file's changes within the period: the
+      // contributors resolved to their ORGANIZATION (mapped) or name (unmapped),
+      // deduped per org. Empty map → names, as before. Never a raw person's name
+      // once mapped — the resolution happens here, not in the model.
+      modified_by: labelsFor(r, orgMap).join(", ") || "unknown",
       // #4 — older/superseded generation (by name OR ancestor folder). The model
       // is told not to blend its figures with the current deliverables; never
       // used to drop the file.
@@ -380,8 +409,9 @@ function buildPrompt(
   input: SynthesizeInput,
   variance: VarianceResult | null,
   period: string | null,
+  orgMap: OrgMap,
 ): string {
-  const payload = buildPayload(input, variance, period);
+  const payload = buildPayload(input, variance, period, orgMap);
   return (
     `Workspace analysis run: ${input.runLabel}\n` +
     (period
@@ -622,21 +652,26 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
   // U12.2 — human period label for the title/header/prompt (null if unwindowed).
   const period = input.window ? fmtPeriod(input.window) : null;
 
+  // Compile the contributor → org lookup once for the whole run. Empty map →
+  // every contributor resolves to their own name (pre-feature behaviour).
+  const orgMap = buildOrgMap(input.contributorOrgs ?? []);
+
   const report = await generateStructured<SynthesisReport>({
     model: "gemini-3.5-flash",
     systemInstruction: SYNTHESIS_SYSTEM,
-    prompt: buildPrompt(input, variance, period),
+    prompt: buildPrompt(input, variance, period, orgMap),
     responseSchema: REPORT_SCHEMA,
     temperature: 0,
   });
 
-  // U12.6/U12.9 — the grounded set of author names to bold in the rendered
-  // report: every person who revised any analyzed file within the period.
+  // U12.6/U12.9 — the grounded set of labels to bold in the rendered report:
+  // every contributor to an analyzed file, resolved to their org (mapped) or name
+  // (unmapped). Bolding the resolved label keeps it consistent with the payload.
   const authors = Array.from(
     new Set(
       input.fileResults
         .filter((r) => r.status === "analyzed")
-        .flatMap((r) => whoChanged(r))
+        .flatMap((r) => labelsFor(r, orgMap))
         .filter((n): n is string => !!n),
     ),
   );

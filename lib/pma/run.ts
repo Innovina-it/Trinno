@@ -9,6 +9,7 @@ import { reconcile } from "./reconcile";
 import { findRunByWindow, setWorkspaceReportSections } from "./registry";
 import { getRunInputs } from "./inputs";
 import { getProjectBrief } from "./context";
+import { listContributorOrgs } from "./contributor-orgs-store";
 import type { ReportSections } from "./report-sections";
 
 // PMA U9 — RUN ORCHESTRATION (DESIGN §3, the A→G pipeline). Windowed as of U12.2.
@@ -237,6 +238,17 @@ async function runAnalysisInner(
     context = null;
   }
 
+  // 4d. Contributor → organization map (per-workspace, maintained by hand in
+  //     Settings). Best-effort: a read failure falls back to an empty map, which
+  //     yields today's name-based attribution. The org resolution happens inside
+  //     synthesize, before any contributor reaches Gemini.
+  let contributorOrgs: Awaited<ReturnType<typeof listContributorOrgs>> = [];
+  try {
+    contributorOrgs = await listContributorOrgs(token, workspaceId);
+  } catch {
+    contributorOrgs = [];
+  }
+
   // 5. Synthesize — terminal on failure (the report is the whole-run product).
   let report: Awaited<ReturnType<typeof synthesize>> | null = null;
   let runStatus: "success" | "error" = "success";
@@ -252,6 +264,7 @@ async function runAnalysisInner(
       live: inputs.live,
       changedSince,
       context: context ?? undefined,
+      contributorOrgs,
       workspaceName: inputs.workspaceName,
       // U12.x — surface "history unavailable for N files" in the report when a
       // Drive error blocked the revisions read (set by detect; absent/0 → silent).

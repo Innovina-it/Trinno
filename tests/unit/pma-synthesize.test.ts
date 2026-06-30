@@ -280,6 +280,129 @@ describe("synthesize — aggregate + report", () => {
     expect(prompt).toContain("unknown"); // unknown author fallback
   });
 
+  // Org attribution: contributors are resolved to their ORGANIZATION before the
+  // payload is built, so a mapped person's name never reaches the model.
+  it("resolves a mapped contributor to their org (by name) — name absent from payload", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [{ ...analyzed("A"), contributors: [{ name: "Amir", email: null }] }],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+      contributorOrgs: [{ identityKind: "name", identityKey: "Amir", org: "Innovina" }],
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"modified_by": "Innovina"'); // org, not the person
+    expect(prompt).not.toContain("Amir"); // the person's name never reaches Gemini
+  });
+
+  it("resolves a mapped contributor by EMAIL (case-insensitive)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [
+        { ...analyzed("A"), contributors: [{ name: "A. Hosseini", email: "Amir@Innovina.IT" }] },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+      contributorOrgs: [
+        { identityKind: "email", identityKey: "amir@innovina.it", org: "Innovina" },
+      ],
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"modified_by": "Innovina"');
+    expect(prompt).not.toContain("A. Hosseini");
+  });
+
+  it("collapses two people from the same org into one label", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [
+        {
+          ...analyzed("A"),
+          contributors: [
+            { name: "Amir", email: null },
+            { name: "Sara", email: null },
+          ],
+        },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+      contributorOrgs: [
+        { identityKind: "name", identityKey: "Amir", org: "Innovina" },
+        { identityKind: "name", identityKey: "Sara", org: "Innovina" },
+      ],
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"modified_by": "Innovina"'); // collapsed, not "Innovina, Innovina"
+  });
+
+  it("falls back to the person's name verbatim when unmapped", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [
+        {
+          ...analyzed("A"),
+          contributors: [
+            { name: "Amir", email: null },
+            { name: "Giulia", email: null },
+          ],
+        },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+      // only Amir mapped; Giulia is unmapped → her name stays
+      contributorOrgs: [{ identityKind: "name", identityKey: "Amir", org: "Innovina" }],
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"modified_by": "Innovina, Giulia"');
+  });
+
+  it("bolds the resolved org label in the rendered report", async () => {
+    generateStructured.mockResolvedValue({
+      ...REPORT,
+      new_or_changed_files: ["A.gdoc — Innovina updated the scope"],
+    });
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [{ ...analyzed("A"), contributors: [{ name: "Amir", email: null }] }],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+      contributorOrgs: [{ identityKind: "name", identityKey: "Amir", org: "Innovina" }],
+    });
+    const body = createReport.mock.calls[0][1].content as string;
+    expect(body).toContain("<b>Innovina</b>"); // org bolded, not the person
+    expect(body).not.toContain("Amir");
+  });
+
+  it("empty map → contributors resolve to their names (unchanged behaviour)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [{ ...analyzed("A"), contributors: [{ name: "Amir", email: null }] }],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+      contributorOrgs: [], // no mappings
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"modified_by": "Amir"'); // name, exactly as before
+  });
+
   it("feeds analyzed recaps (not skipped ones) to the model", async () => {
     await synthesize({
       workspaceId: WS,
