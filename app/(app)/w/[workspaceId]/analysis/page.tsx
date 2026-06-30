@@ -17,6 +17,7 @@ import { RunAnalysisPanel } from "@/components/pma/run-analysis-panel";
 import { ReportSectionsProvider } from "@/components/pma/report-sections-context";
 import { ReportSectionsFieldset } from "@/components/pma/report-sections-fieldset";
 import { ReportSettingsControls } from "@/components/pma/report-settings-controls";
+import { ConfigRow } from "@/components/pma/config-row";
 import {
   sanitizeReportLength,
   sanitizeCustomPrompt,
@@ -242,33 +243,25 @@ export default async function AnalysisPage({
             />
           </div>
           {gate.isOwnerAdmin && (
-            <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface)] p-4">
-              <div className="flex flex-wrap items-start gap-x-4 gap-y-1.5">
-                <span className="mono-meta-sm shrink-0 pt-1.5 tracking-[0.14em] text-fg-faint">
-                  Source
-                </span>
-                <div className="min-w-0 flex-1">
-                  <AnalysisFolderControl
-                    bare
-                    workspaceId={workspaceId}
-                    currentFolderUrl={sourceRow?.url ?? null}
-                  />
-                </div>
-              </div>
-              <div className="h-px bg-[color:var(--hairline)]" aria-hidden />
+            // The run "manifest": a flush, hairline-ruled spec of the report the
+            // run will generate. No card, one label-rail grammar per row.
+            <div className="mt-1 divide-y divide-[color:var(--hairline)] border-y border-[color:var(--hairline)]">
+              <ConfigRow label="Source" align="start">
+                <AnalysisFolderControl
+                  bare
+                  workspaceId={workspaceId}
+                  currentFolderUrl={sourceRow?.url ?? null}
+                />
+              </ConfigRow>
               <ReportSectionsFieldset canRun={gate.canRun} />
-              <div className="h-px bg-[color:var(--hairline)]" aria-hidden />
               <ReportSettingsControls canRun={gate.canRun} />
               {gate.isOwner && (
-                <>
-                  <div className="h-px bg-[color:var(--hairline)]" aria-hidden />
-                  <ContributorOrgsSection
-                    workspaceId={workspaceId}
-                    initialRows={contributorOrgRows}
-                    canEdit={gate.isOwner}
-                    orgHints={orgHints}
-                  />
-                </>
+                <ContributorOrgsSection
+                  workspaceId={workspaceId}
+                  initialRows={contributorOrgRows}
+                  canEdit={gate.isOwner}
+                  orgHints={orgHints}
+                />
               )}
             </div>
           )}

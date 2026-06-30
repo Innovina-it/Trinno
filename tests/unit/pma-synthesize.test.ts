@@ -477,7 +477,7 @@ describe("synthesize — aggregate + report", () => {
       removed: [],
       baseline: null,
       live: emptyLive,
-    } as const;
+    };
 
     await synthesize({ ...base, reportLength: "short" });
     expect(generateStructured.mock.calls[0][0].prompt).toContain("REPORT LENGTH: SHORT");
