@@ -89,6 +89,7 @@ describe("mapRunRow", () => {
       windowStart: "2026-06-07T00:00:00Z",
       windowEnd: "2026-06-08T23:59:59Z",
       fingerprint: { A: "v9" },
+      settings: null,
     });
   });
 });

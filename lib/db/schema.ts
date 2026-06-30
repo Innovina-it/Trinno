@@ -815,6 +815,9 @@ export const pmaAnalysisRuns = pgTable("pma_analysis_runs", {
   windowStart: timestamp("window_start", { withTimezone: true }),
   windowEnd: timestamp("window_end", { withTimezone: true }),
   fingerprint: jsonb("fingerprint").$type<Record<string, string>>(),
+  // 0144 — the run's config snapshot: { sections, length, customPrompt }. Lets
+  // the history restore the settings that produced a run. null → pre-0144 run.
+  settings: jsonb("settings").$type<Record<string, unknown>>(),
 });
 
 export type PmaAnalysisRunRow = typeof pmaAnalysisRuns.$inferSelect;

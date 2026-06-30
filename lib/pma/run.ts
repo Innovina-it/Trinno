@@ -164,6 +164,13 @@ async function runAnalysisInner(
   const effReportLength = reportLength ?? savedSettings.reportLength;
   const effCustomPrompt =
     customPrompt !== undefined ? customPrompt : savedSettings.customPrompt;
+  // 0144 — the config snapshot recorded on every run row, so the history can show
+  // and restore what produced it. sections null → all on; period is on the row.
+  const settingsSnapshot = {
+    sections: sections ?? null,
+    length: effReportLength,
+    customPrompt: effCustomPrompt ?? null,
+  };
 
   // 3. Detect (WINDOW mode) → files modified in [start,end]; split added vs
   //    removed (window mode yields no removed — there is no change feed).
@@ -236,6 +243,7 @@ async function runAnalysisInner(
       windowStart,
       windowEnd,
       fingerprint,
+      settings: settingsSnapshot,
     });
     return {
       runId: rec.run.id,
@@ -325,6 +333,7 @@ async function runAnalysisInner(
     windowStart,
     windowEnd,
     fingerprint,
+    settings: settingsSnapshot,
   });
 
   return {

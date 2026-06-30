@@ -243,6 +243,7 @@ describe("reconcile — run record", () => {
       windowStart: "2026-06-07T00:00:00.000Z",
       windowEnd: "2026-06-08T23:59:59.999Z",
       fingerprint: { A: "v1" },
+      settings: null,
     });
     expect(res.run).toEqual({ id: "run-9" });
     expect(res.registered).toBe(2); // analyzed A + non_mod P

@@ -71,6 +71,7 @@ export function mapRunRow(raw: Record<string, unknown>): PmaAnalysisRunRow {
     windowStart: raw.window_start ?? null,
     windowEnd: raw.window_end ?? null,
     fingerprint: raw.fingerprint ?? null,
+    settings: raw.settings ?? null,
   } as unknown as PmaAnalysisRunRow;
 }
 
@@ -188,6 +189,8 @@ export type RunRecord = {
   windowStart?: string | null;
   windowEnd?: string | null;
   fingerprint?: Record<string, string> | null;
+  // 0144 — config snapshot { sections, length, customPrompt } for history restore.
+  settings?: Record<string, unknown> | null;
 };
 
 // Insert one analysis-run history row and return it. Each call appends a new
@@ -207,6 +210,7 @@ export async function recordRun(run: RunRecord): Promise<PmaAnalysisRunRow> {
   if (run.windowStart !== undefined) row.window_start = run.windowStart;
   if (run.windowEnd !== undefined) row.window_end = run.windowEnd;
   if (run.fingerprint !== undefined) row.fingerprint = run.fingerprint;
+  if (run.settings !== undefined) row.settings = run.settings;
 
   const { data, error } = await sb
     .from("pma_analysis_runs")

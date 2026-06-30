@@ -66,6 +66,8 @@ export type ReconcileInput = {
   windowStart?: string | null;
   windowEnd?: string | null;
   fingerprint?: Record<string, string> | null;
+  // 0144 — config snapshot { sections, length, customPrompt } for history restore.
+  settings?: Record<string, unknown> | null;
 };
 
 export type ReconcileResult = {
@@ -162,6 +164,7 @@ export async function reconcile(input: ReconcileInput): Promise<ReconcileResult>
     windowStart: input.windowStart ?? null,
     windowEnd: input.windowEnd ?? null,
     fingerprint: input.fingerprint ?? null,
+    settings: input.settings ?? null,
   });
 
   return { registered, errored, removedApplied, run };
