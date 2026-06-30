@@ -306,9 +306,10 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
   }
 
   // ── All-files mode (U12.10/U12.11): the whole document — every current Source
-  //    file, no date filter. Attribution = ALL named revision authors (so every
+  //    file, no date filter. Attribution = ALL revision authors (so every
   //    contributor is credited, not just the last modifier). Anonymous edits
-  //    (Drive exposes no displayName) are dropped → "non noto" only if NONE named.
+  //    (Drive exposes no displayName) are surfaced as the "anonymous user"
+  //    identity, never dropped; "unknown" only when a file has NO authors at all.
   if (input.allFiles) {
     const files: DetectedFile[] = [];
     let revisionErrorCount = 0;

@@ -388,6 +388,39 @@ describe("synthesize — aggregate + report", () => {
     expect(body).not.toContain("Amir");
   });
 
+  it("email-mapped contributor with a name-only revision → org in payload, name absent (leak regression)", async () => {
+    generateStructured.mockResolvedValue({
+      ...REPORT,
+      new_or_changed_files: ["A.gdoc — Innovina revised the scope"],
+    });
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      // Drive returned this revision name-only (no email), the common case.
+      fileResults: [
+        { ...analyzed("A"), contributors: [{ name: "Amir Hosseini", email: null }] },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+      // mapped by EMAIL (the default Scan flow), with the name stored alongside
+      contributorOrgs: [
+        {
+          identityKind: "email",
+          identityKey: "amir@innovina.it",
+          org: "Innovina",
+          displayName: "Amir Hosseini",
+        },
+      ],
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"modified_by": "Innovina"');
+    expect(prompt).not.toContain("Amir Hosseini"); // name must NOT reach Gemini
+    const body = createReport.mock.calls[0][1].content as string;
+    expect(body).not.toContain("Amir Hosseini"); // nor the rendered report
+  });
+
   it("empty map → contributors resolve to their names (unchanged behaviour)", async () => {
     await synthesize({
       workspaceId: WS,

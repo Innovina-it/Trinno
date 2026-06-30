@@ -42,6 +42,34 @@ describe("buildOrgMap + resolveContributorLabel", () => {
     expect(resolveContributorLabel({ name: "Giulia", email: null }, map)).toBe("Giulia");
   });
 
+  it("email-mapped contributor resolves via stored displayName when a revision is name-only", () => {
+    // The default flow maps by email; Drive's revisions.list frequently returns a
+    // revision's displayName with NO email. The stored displayName must still map.
+    const m = buildOrgMap([
+      {
+        identityKind: "email",
+        identityKey: "amir@innovina.it",
+        org: "Innovina",
+        displayName: "Amir Hosseini",
+      },
+    ]);
+    // name-only revision (email omitted) → org, NOT the leaked name
+    expect(resolveContributorLabel({ name: "Amir Hosseini", email: null }, m)).toBe(
+      "Innovina",
+    );
+    // email-bearing revision → org
+    expect(
+      resolveContributorLabel({ name: "Amir Hosseini", email: "amir@innovina.it" }, m),
+    ).toBe("Innovina");
+  });
+
+  it("matches display names case-insensitively", () => {
+    const m = buildOrgMap([{ identityKind: "name", identityKey: "Sara Bianchi", org: "Innovina" }]);
+    expect(resolveContributorLabel({ name: "sara bianchi", email: null }, m)).toBe(
+      "Innovina",
+    );
+  });
+
   it("returns null when neither name nor a mapped email is present", () => {
     expect(resolveContributorLabel({ name: null, email: null }, map)).toBeNull();
     expect(resolveContributorLabel({ name: null, email: "nobody@x.io" }, map)).toBeNull();
@@ -77,6 +105,27 @@ describe("resolveContributorLabels", () => {
       map,
     );
     expect(labels).toEqual(["Acme", "Giulia"]);
+  });
+
+  it("collapses an email-mapped person's mixed revisions (email + name-only) to one org", () => {
+    // Regression: a person with one revision carrying email and one name-only must
+    // NOT produce ["Innovina", "Amir Hosseini"] — the name must never leak.
+    const m = buildOrgMap([
+      {
+        identityKind: "email",
+        identityKey: "amir@innovina.it",
+        org: "Innovina",
+        displayName: "Amir Hosseini",
+      },
+    ]);
+    const labels = resolveContributorLabels(
+      [
+        { name: "Amir Hosseini", email: "amir@innovina.it" },
+        { name: "Amir Hosseini", email: null },
+      ],
+      m,
+    );
+    expect(labels).toEqual(["Innovina"]);
   });
 
   it("empty map → every contributor resolves to their own name", () => {
