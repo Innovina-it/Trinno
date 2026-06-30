@@ -3,6 +3,7 @@ import {
   buildOrgMap,
   resolveContributorLabel,
   resolveContributorLabels,
+  isServiceAccountEmail,
   type ContributorOrgEntry,
 } from "@/lib/pma/contributor-orgs";
 
@@ -68,6 +69,27 @@ describe("buildOrgMap + resolveContributorLabel", () => {
     expect(resolveContributorLabel({ name: "sara bianchi", email: null }, m)).toBe(
       "Innovina",
     );
+  });
+
+  it("never credits a service account — dropped even when mapped", () => {
+    const sa = "959497083111-compute@developer.gserviceaccount.com";
+    expect(isServiceAccountEmail(sa)).toBe(true);
+    expect(isServiceAccountEmail("amir@innovina.it")).toBe(false);
+    // even if someone explicitly mapped the SA, it must not surface in a report
+    const m = buildOrgMap([
+      { identityKind: "email", identityKey: sa, org: "Innovina", displayName: "Compute Engine" },
+    ]);
+    expect(resolveContributorLabel({ name: "Compute Engine", email: sa }, m)).toBeNull();
+    // and it's dropped from a set, leaving only the real human
+    expect(
+      resolveContributorLabels(
+        [
+          { name: "Compute Engine", email: sa },
+          { name: "Amir", email: null },
+        ],
+        m,
+      ),
+    ).toEqual(["Amir"]);
   });
 
   it("returns null when neither name nor a mapped email is present", () => {

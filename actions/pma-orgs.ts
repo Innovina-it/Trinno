@@ -12,6 +12,7 @@ import {
   deleteContributorOrg,
   type ContributorOrgRow,
 } from "@/lib/pma/contributor-orgs-store";
+import { isServiceAccountEmail } from "@/lib/pma/contributor-orgs";
 import { extractDriveFileId } from "@/lib/pma/detect";
 import { listFolderTree } from "@/lib/pma/clients/drive";
 
@@ -120,6 +121,8 @@ export async function scanContributorsAction(
       const name = f.lastModifiedBy;
       const email = f.lastModifiedByEmail;
       if (!name && !email) continue;
+      // Drop the doc-generator service account — it's a bot, not a contributor.
+      if (isServiceAccountEmail(email)) continue;
       const key = (email ?? name ?? "").toLowerCase();
       if (!key || seen.has(key)) continue;
       seen.add(key);

@@ -15,6 +15,16 @@
 // expose an email, and an anonymous revision exposes neither).
 export type ContributorIdentity = { name: string | null; email: string | null };
 
+// A Google service account (e.g. the *-compute@developer.gserviceaccount.com that
+// Trinno uses to generate/edit deliverable docs) is a bot, not a contributor.
+// Filtered from the contributor scan AND from report attribution so a report
+// never credits the doc-generator, and the org list isn't cluttered with it.
+export function isServiceAccountEmail(
+  email: string | null | undefined,
+): boolean {
+  return !!email && email.trim().toLowerCase().endsWith(".gserviceaccount.com");
+}
+
 // One row of the per-workspace map, reduced to what the resolver needs.
 // `displayName` is the last-seen name stored alongside an email-keyed mapping; we
 // also index by it so an email-mapped contributor still resolves when a Drive
@@ -64,6 +74,8 @@ export function resolveContributorLabel(
   id: ContributorIdentity,
   map: OrgMap,
 ): string | null {
+  // Never credit a service account — drop it before any mapping/name fallback.
+  if (isServiceAccountEmail(id.email)) return null;
   const email = id.email?.trim().toLowerCase();
   if (email && map.byEmail.has(email)) return map.byEmail.get(email)!;
   const name = id.name?.trim();
