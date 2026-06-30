@@ -9,6 +9,11 @@ import {
   sanitizeReportSections,
   type ReportSections,
 } from "./report-sections";
+import {
+  sanitizeReportLength,
+  sanitizeCustomPrompt,
+  type ReportLength,
+} from "./report-settings";
 
 // PMA Postgres data layer — registry CRUD + run-index (DESIGN §4.3, §4.4).
 // KEYS / KIND / POINTERS ONLY — NO bulk content: recap and report TEXT live in
@@ -308,4 +313,47 @@ export async function setWorkspaceReportSections(
     { onConflict: "workspace_id" },
   );
   if (error) throw error;
+}
+
+// 0143 — persist the per-workspace report length + custom focus prompt, saved at
+// run start (like report_sections). Only the provided columns are written, so the
+// other pma_workspace_state columns (sections, page token) are preserved on
+// conflict. Values are sanitized before they touch the database.
+export async function setWorkspaceReportSettings(
+  workspaceId: string,
+  input: { reportLength?: ReportLength; customPrompt?: string | null },
+): Promise<void> {
+  const patch: Record<string, unknown> = {
+    workspace_id: workspaceId,
+    updated_at: new Date().toISOString(),
+  };
+  if (input.reportLength !== undefined)
+    patch.report_length = sanitizeReportLength(input.reportLength);
+  if (input.customPrompt !== undefined)
+    patch.custom_prompt = sanitizeCustomPrompt(input.customPrompt);
+  const sb = getServiceSupabase();
+  const { error } = await sb
+    .from("pma_workspace_state")
+    .upsert(patch, { onConflict: "workspace_id" });
+  if (error) throw error;
+}
+
+// Effective report settings for a workspace (sanitized; defaults when unset).
+// Read at run start so a run that doesn't carry them (e.g. a scheduled run) still
+// honours the workspace's standing length + focus.
+export async function getWorkspaceReportSettings(
+  workspaceId: string,
+): Promise<{ reportLength: ReportLength; customPrompt: string | null }> {
+  const sb = getServiceSupabase();
+  const { data, error } = await sb
+    .from("pma_workspace_state")
+    .select("report_length, custom_prompt")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (error) throw error;
+  const row = data as Record<string, unknown> | null;
+  return {
+    reportLength: sanitizeReportLength(row?.report_length),
+    customPrompt: sanitizeCustomPrompt(row?.custom_prompt),
+  };
 }

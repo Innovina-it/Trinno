@@ -6,7 +6,13 @@ import { detect, type DetectedFile } from "./detect";
 import { analyze } from "./analyze";
 import { synthesize } from "./synthesize";
 import { reconcile } from "./reconcile";
-import { findRunByWindow, setWorkspaceReportSections } from "./registry";
+import {
+  findRunByWindow,
+  setWorkspaceReportSections,
+  setWorkspaceReportSettings,
+  getWorkspaceReportSettings,
+} from "./registry";
+import type { ReportLength } from "./report-settings";
 import { getRunInputs } from "./inputs";
 import { getProjectBrief } from "./context";
 import { listContributorOrgs } from "./contributor-orgs-store";
@@ -43,6 +49,12 @@ export type RunAnalysisInput = {
   // Saved at run start (remembered for next time) and applied to the rendered
   // report. Absent → leaves the saved combination untouched + all sections on.
   sections?: ReportSections;
+  // 0143 — per-workspace report length + custom focus from the run panel. Saved
+  // at run start and applied to the synthesis prompt. Absent → the workspace's
+  // saved value (or 'medium' / no focus) is used, so a non-panel run still
+  // honours a standing focus.
+  reportLength?: ReportLength;
+  customPrompt?: string | null;
 };
 
 export type RunAnalysisResult = {
@@ -117,6 +129,7 @@ async function runAnalysisInner(
   input: RunAnalysisInput,
 ): Promise<RunAnalysisResult> {
   const { token, workspaceId, actorId, now, runLabel, window, sections } = input;
+  const { reportLength, customPrompt } = input;
 
   // 1. Gather user-scoped inputs (links, deliverables, live roadmap, baseline).
   const inputs = await getRunInputs(token, workspaceId);
@@ -137,6 +150,20 @@ async function runAnalysisInner(
   if (sections) {
     await setWorkspaceReportSections(workspaceId, sections);
   }
+
+  // 0143 — effective report length + custom focus. The panel passes the current
+  // values (saved here so they persist + apply to non-panel runs); when absent we
+  // fall back to the workspace's saved settings ('medium' / no focus by default).
+  const savedSettings = await getWorkspaceReportSettings(workspaceId).catch(() => ({
+    reportLength: "medium" as ReportLength,
+    customPrompt: null as string | null,
+  }));
+  if (reportLength !== undefined || customPrompt !== undefined) {
+    await setWorkspaceReportSettings(workspaceId, { reportLength, customPrompt });
+  }
+  const effReportLength = reportLength ?? savedSettings.reportLength;
+  const effCustomPrompt =
+    customPrompt !== undefined ? customPrompt : savedSettings.customPrompt;
 
   // 3. Detect (WINDOW mode) → files modified in [start,end]; split added vs
   //    removed (window mode yields no removed — there is no change feed).
@@ -271,6 +298,9 @@ async function runAnalysisInner(
       revisionErrorCount: detected.revisionErrorCount,
       // U3 — render only the sections this workspace selected (all on if absent).
       sections,
+      // 0143 — synthesis verbosity + the workspace's standing custom focus.
+      reportLength: effReportLength,
+      customPrompt: effCustomPrompt,
     });
   } catch {
     runStatus = "error";

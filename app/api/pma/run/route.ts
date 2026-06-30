@@ -7,6 +7,11 @@ import { assertWorkspaceWriter } from "@/lib/permissions/workspace-writer";
 import { StructuredError } from "@/lib/errors/structured-error";
 import { runAnalysis } from "@/lib/pma/run";
 import { sanitizeReportSections } from "@/lib/pma/report-sections";
+import {
+  sanitizeReportLength,
+  sanitizeCustomPrompt,
+  type ReportLength,
+} from "@/lib/pma/report-settings";
 
 // PMA U9 — "Run analysis" route (DESIGN §3, §6). Owner/admin only. Thin: auth +
 // role gate + parse → delegate to runAnalysis (the A→G pipeline). A run can take
@@ -42,17 +47,26 @@ export async function POST(req: Request) {
   // U3 — the report-section selection from the run panel. Sanitized to known
   // keys/booleans; absent → leave the saved combination + all sections on.
   let sections: ReturnType<typeof sanitizeReportSections> | undefined;
+  // 0143 — report length + custom focus from the run panel.
+  let reportLength: ReportLength | undefined;
+  let customPrompt: string | null | undefined;
   try {
     const body = (await req.json()) as {
       workspaceId?: unknown;
       startDate?: unknown;
       endDate?: unknown;
       sections?: unknown;
+      reportLength?: unknown;
+      customPrompt?: unknown;
     };
     if (typeof body?.workspaceId === "string") workspaceId = body.workspaceId;
     if (typeof body?.startDate === "string") startDate = body.startDate;
     if (typeof body?.endDate === "string") endDate = body.endDate;
     if (body?.sections != null) sections = sanitizeReportSections(body.sections);
+    if (body?.reportLength != null)
+      reportLength = sanitizeReportLength(body.reportLength);
+    if (body?.customPrompt !== undefined)
+      customPrompt = sanitizeCustomPrompt(body.customPrompt);
   } catch {
     // malformed/absent body → handled by the guard below
   }
@@ -117,6 +131,8 @@ export async function POST(req: Request) {
       runLabel,
       window,
       sections,
+      reportLength,
+      customPrompt,
     });
     return NextResponse.json({ result });
   } catch (err) {

@@ -5,9 +5,10 @@ import { and, eq } from "drizzle-orm";
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace } from "@/lib/queries/workspaces";
 import { dbAsUser } from "@/lib/db/client";
-import { links, pmaWorkspaceState } from "@/lib/db/schema";
+import { links, cards, boards, pmaWorkspaceState } from "@/lib/db/schema";
 import { listRuns } from "@/lib/pma/registry";
 import { getAnalysisGate } from "@/lib/pma/gate";
+import { listContributorOrgs } from "@/lib/pma/contributor-orgs-store";
 import {
   ALL_SECTIONS_ON,
   sanitizeReportSections,
@@ -15,6 +16,12 @@ import {
 import { RunAnalysisPanel } from "@/components/pma/run-analysis-panel";
 import { ReportSectionsProvider } from "@/components/pma/report-sections-context";
 import { ReportSectionsFieldset } from "@/components/pma/report-sections-fieldset";
+import { ReportSettingsControls } from "@/components/pma/report-settings-controls";
+import {
+  sanitizeReportLength,
+  sanitizeCustomPrompt,
+} from "@/lib/pma/report-settings";
+import { ContributorOrgsSection } from "@/components/pma/contributor-orgs-section";
 import { AnalysisFolderControl } from "@/components/pma/analysis-folder-control";
 import type { PmaAnalysisRunRow } from "@/lib/db/schema";
 
@@ -153,19 +160,56 @@ export default async function AnalysisPage({
   // The saved report-section combination, so the panel's checkboxes open the way
   // they were last left for this workspace. Absent row/column → all sections on.
   // Best-effort: any RLS/transient failure → default (all on).
-  const savedSections = await dbAsUser(token, (tx) =>
+  const savedState = await dbAsUser(token, (tx) =>
     tx
-      .select({ reportSections: pmaWorkspaceState.reportSections })
+      .select({
+        reportSections: pmaWorkspaceState.reportSections,
+        reportLength: pmaWorkspaceState.reportLength,
+        customPrompt: pmaWorkspaceState.customPrompt,
+      })
       .from(pmaWorkspaceState)
       .where(eq(pmaWorkspaceState.workspaceId, workspaceId))
       .limit(1),
   )
-    .then((r) => r[0]?.reportSections ?? null)
+    .then((r) => r[0] ?? null)
     .catch(() => null);
   const initialSections = {
     ...ALL_SECTIONS_ON,
-    ...sanitizeReportSections(savedSections),
+    ...sanitizeReportSections(savedState?.reportSections ?? null),
   };
+  // 0143 — saved length + custom focus so the panel opens the way it was left.
+  const initialReportLength = sanitizeReportLength(savedState?.reportLength);
+  const initialCustomPrompt = sanitizeCustomPrompt(savedState?.customPrompt) ?? "";
+
+  // Contributor → organization mapping (workspace OWNER only), moved here from
+  // workspace settings: it shapes the report, so it belongs with the run config.
+  // orgHints are org names already in the roadmap (the repeated "· Partner"
+  // suffix the plan import stamps on cards), offered as autocomplete; the ≥2
+  // filter drops stray one-off "·" task fragments. Fetched only for the owner.
+  let contributorOrgRows: Awaited<ReturnType<typeof listContributorOrgs>> = [];
+  let orgHints: string[] = [];
+  if (gate.isOwner) {
+    [contributorOrgRows, orgHints] = await Promise.all([
+      listContributorOrgs(token, workspaceId).catch(() => []),
+      dbAsUser(token, async (tx) => {
+        const rows = await tx
+          .select({ title: cards.title })
+          .from(cards)
+          .innerJoin(boards, eq(cards.boardId, boards.id))
+          .where(eq(boards.workspaceId, workspaceId));
+        const counts = new Map<string, number>();
+        for (const r of rows) {
+          const parts = r.title.split(" · ");
+          if (parts.length < 2) continue;
+          const owner = parts[parts.length - 1].trim();
+          if (owner) counts.set(owner, (counts.get(owner) ?? 0) + 1);
+        }
+        return Array.from(counts.entries())
+          .filter(([, n]) => n >= 2)
+          .map(([owner]) => owner);
+      }).catch(() => [] as string[]),
+    ]);
+  }
 
   const emptyHint = gate.canRun
     ? "Run one above to generate the first report."
@@ -176,7 +220,11 @@ export default async function AnalysisPage({
   return (
     <div className="mx-auto max-w-4xl px-3 py-6 sm:px-4 md:px-6 md:py-10 space-y-10">
       <header className="space-y-3 border-b border-hairline pb-6">
-        <ReportSectionsProvider initialSections={initialSections}>
+        <ReportSectionsProvider
+          initialSections={initialSections}
+          initialReportLength={initialReportLength}
+          initialCustomPrompt={initialCustomPrompt}
+        >
           <span className="chip">{ws.name.toUpperCase()} / ANALYSIS</span>
           <h1 className="serif-display text-5xl">Analysis</h1>
           <div className="flex items-end justify-between gap-3">
@@ -194,13 +242,35 @@ export default async function AnalysisPage({
             />
           </div>
           {gate.isOwnerAdmin && (
-            <AnalysisFolderControl
-              workspaceId={workspaceId}
-              currentFolderUrl={sourceRow?.url ?? null}
-            />
-          )}
-          {gate.isOwnerAdmin && (
-            <ReportSectionsFieldset canRun={gate.canRun} />
+            <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface)] p-4">
+              <div className="flex flex-wrap items-start gap-x-4 gap-y-1.5">
+                <span className="mono-meta-sm shrink-0 pt-1.5 tracking-[0.14em] text-fg-faint">
+                  Source
+                </span>
+                <div className="min-w-0 flex-1">
+                  <AnalysisFolderControl
+                    bare
+                    workspaceId={workspaceId}
+                    currentFolderUrl={sourceRow?.url ?? null}
+                  />
+                </div>
+              </div>
+              <div className="h-px bg-[color:var(--hairline)]" aria-hidden />
+              <ReportSectionsFieldset canRun={gate.canRun} />
+              <div className="h-px bg-[color:var(--hairline)]" aria-hidden />
+              <ReportSettingsControls canRun={gate.canRun} />
+              {gate.isOwner && (
+                <>
+                  <div className="h-px bg-[color:var(--hairline)]" aria-hidden />
+                  <ContributorOrgsSection
+                    workspaceId={workspaceId}
+                    initialRows={contributorOrgRows}
+                    canEdit={gate.isOwner}
+                    orgHints={orgHints}
+                  />
+                </>
+              )}
+            </div>
           )}
         </ReportSectionsProvider>
       </header>

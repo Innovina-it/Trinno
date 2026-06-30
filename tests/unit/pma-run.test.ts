@@ -25,6 +25,12 @@ vi.mock("@/lib/pma/synthesize", () => ({ synthesize: (...a: unknown[]) => synthe
 vi.mock("@/lib/pma/reconcile", () => ({ reconcile: (...a: unknown[]) => reconcile(...a) }));
 vi.mock("@/lib/pma/registry", () => ({
   findRunByWindow: (...a: unknown[]) => findRunByWindow(...a),
+  setWorkspaceReportSections: vi.fn(),
+  setWorkspaceReportSettings: vi.fn(),
+  getWorkspaceReportSettings: vi.fn(async () => ({
+    reportLength: "medium",
+    customPrompt: null,
+  })),
 }));
 vi.mock("@/lib/pma/context", () => ({
   getProjectBrief: (...a: unknown[]) => getProjectBrief(...a),

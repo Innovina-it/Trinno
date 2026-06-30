@@ -38,6 +38,11 @@ import {
   type ReportSectionKey,
   type ReportSections,
 } from "./report-sections";
+import {
+  lengthDirective,
+  customFocusDirective,
+  type ReportLength,
+} from "./report-settings";
 
 // PMA U7 — AGGREGATE + DEVIATION + REPORT (DESIGN §3 step E, §5.2).
 //
@@ -133,6 +138,10 @@ export type SynthesizeInput = {
   live: { entries: LiveEntry[]; milestones: LiveMilestone[] };
   // Per-workspace report-section selection (U3); null/absent → all sections on.
   sections?: ReportSections | null;
+  // 0143 — per-workspace synthesis settings: report length (absent → 'medium',
+  // the default) and a free-text focus appended to the prompt as emphasis only.
+  reportLength?: ReportLength;
+  customPrompt?: string | null;
 };
 
 export type SynthesizeResult = {
@@ -463,6 +472,10 @@ function buildPrompt(
         "Use the project context above only as background to interpret and frame " +
         "the report; it is not itself recent activity to report.\n"
       : "") +
+    // 0143 — verbosity directive ('medium' → "") + the owner's standing focus
+    // (emphasis-only, guarded so it can't override grounding/scope/attribution).
+    lengthDirective(input.reportLength ?? "medium") +
+    customFocusDirective(input.customPrompt) +
     `--- DATA START ---\n${JSON.stringify(payload, null, 2)}\n--- DATA END ---`
   );
 }

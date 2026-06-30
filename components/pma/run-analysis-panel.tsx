@@ -87,7 +87,10 @@ export function RunAnalysisPanel({
   const [range, setRange] = useState<DateRange>({ start: null, target: null });
   // U3 — the report-section selection, shared with the checkbox fieldset below
   // the Documents-folder control; posted with the run (which also persists it).
-  const { sections } = useReportSections();
+  // 0143 — report length + custom focus ride along the same way.
+  const { sections, reportLength, customPrompt } = useReportSections();
+  // A run with no sections produces an empty report, so block it.
+  const noneSelected = Object.values(sections).every((v) => !v);
   // Quick windows computed once per mount (relative to today).
   const presets = useMemo(() => buildPresets(new Date()), []);
 
@@ -105,7 +108,9 @@ export function RunAnalysisPanel({
     ? "Owner or admin only"
     : !foldersConfigured
       ? "Set a Source and an Output Drive folder in settings first"
-      : null;
+      : noneSelected
+        ? "Select at least one report section"
+        : null;
 
   const busy = running || refreshing;
 
@@ -124,6 +129,9 @@ export function RunAnalysisPanel({
           endDate: range.target ? range.target.toISOString() : undefined,
           // U3 — which sections to render; the run also persists this combination.
           sections,
+          // 0143 — verbosity + the workspace's standing custom focus.
+          reportLength,
+          customPrompt,
         }),
       });
       const json = (await res.json().catch(() => null)) as
@@ -191,7 +199,7 @@ export function RunAnalysisPanel({
         <Button
           size="sm"
           onClick={run}
-          disabled={!canRun || busy}
+          disabled={!canRun || busy || noneSelected}
           title={disabledReason ?? undefined}
           data-testid="pma-run"
         >

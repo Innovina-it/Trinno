@@ -468,6 +468,50 @@ describe("synthesize — aggregate + report", () => {
     expect(prompt).toContain('"modified_by": "Amir"'); // name, exactly as before
   });
 
+  it("injects the length directive (short/long) and omits it for medium (0143)", async () => {
+    const base = {
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [analyzed("A")],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    } as const;
+
+    await synthesize({ ...base, reportLength: "short" });
+    expect(generateStructured.mock.calls[0][0].prompt).toContain("REPORT LENGTH: SHORT");
+
+    generateStructured.mockClear();
+    await synthesize({ ...base, reportLength: "long" });
+    expect(generateStructured.mock.calls[0][0].prompt).toContain("REPORT LENGTH: LONG");
+
+    generateStructured.mockClear();
+    await synthesize({ ...base, reportLength: "medium" });
+    expect(generateStructured.mock.calls[0][0].prompt).not.toContain("REPORT LENGTH");
+
+    generateStructured.mockClear();
+    await synthesize(base); // absent → medium, no directive
+    expect(generateStructured.mock.calls[0][0].prompt).not.toContain("REPORT LENGTH");
+  });
+
+  it("injects the custom focus as an emphasis-only directive (0143)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [analyzed("A")],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+      customPrompt: "Focus on recent spine-keypoint changes",
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain("ADDITIONAL FOCUS");
+    expect(prompt).toContain("Focus on recent spine-keypoint changes");
+    expect(prompt).toContain("must NOT override"); // guard present
+  });
+
   it("feeds analyzed recaps (not skipped ones) to the model", async () => {
     await synthesize({
       workspaceId: WS,

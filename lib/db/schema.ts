@@ -829,6 +829,11 @@ export const pmaWorkspaceState = pgTable("pma_workspace_state", {
   // of which synthesis-report sections to render. null → all on. See
   // lib/pma/report-sections.ts.
   reportSections: jsonb("report_sections"),
+  // Per-workspace synthesis settings (migration 0143). report_length: 'short' |
+  // 'medium' | 'long' (null → 'medium'). custom_prompt: free-text focus appended
+  // to the synthesis prompt as an emphasis-only directive. See report-settings.ts.
+  reportLength: text("report_length"),
+  customPrompt: text("custom_prompt"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
