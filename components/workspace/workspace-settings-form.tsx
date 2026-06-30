@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,12 @@ export function WorkspaceSettingsForm({
   const [pending, start] = useTransition();
   const [linkOpen, setLinkOpen] = useState(false);
   const isGuest = useIsGuest();
+  // base-ui dialogs (the link Edit dialog + the delete AlertDialog) generate ids
+  // via React.useId(), which desync server↔client under React 19 + Next 15 and log
+  // a hydration mismatch. Defer them to after first paint, the same fix top-nav
+  // uses for its base-ui dropdowns.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   function rename(e: React.FormEvent) {
     e.preventDefault();
@@ -158,6 +164,7 @@ export function WorkspaceSettingsForm({
             </Button>
           )}
         </div>
+        {mounted && (
         <LinkEditDialog
           open={linkOpen}
           onOpenChange={setLinkOpen}
@@ -183,9 +190,10 @@ export function WorkspaceSettingsForm({
               : undefined
           }
         />
+        )}
       </section>
 
-      {canDelete && (
+      {canDelete && mounted && (
       <AlertDialog>
         <AlertDialogTrigger
           render={

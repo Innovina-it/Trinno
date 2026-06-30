@@ -61,6 +61,12 @@ export function InviteMemberForm({
   const [suggestions, setSuggestions] = useState<PickerProfile[]>([]);
   const [searching, setSearching] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
+  // base-ui's DropdownMenu trigger generates its id via React.useId(), which
+  // desyncs server↔client under React 19 + Next 15 (hydration mismatch). Render a
+  // static placeholder until after first paint, then the real menu (same fix as
+  // top-nav). Placeholder keeps the row's layout stable — no shift.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [justInvited, setJustInvited] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -355,25 +361,31 @@ export function InviteMemberForm({
             aria-describedby="invite-preview"
             className="flex-1"
           />
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button type="button" variant="outline">
-                  Role: {role}
-                </Button>
-              }
-            />
-            <DropdownMenuContent>
-              <DropdownMenuRadioGroup
-                value={role}
-                onValueChange={(v) => setRole(v as "admin" | "member" | "guest")}
-              >
-                <DropdownMenuRadioItem value="member">Member</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="admin">Admin</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="guest">Guest (read-only)</DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {mounted ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button type="button" variant="outline">
+                    Role: {role}
+                  </Button>
+                }
+              />
+              <DropdownMenuContent>
+                <DropdownMenuRadioGroup
+                  value={role}
+                  onValueChange={(v) => setRole(v as "admin" | "member" | "guest")}
+                >
+                  <DropdownMenuRadioItem value="member">Member</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="admin">Admin</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="guest">Guest (read-only)</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button type="button" variant="outline" disabled>
+              Role: {role}
+            </Button>
+          )}
           <Button
             type="submit"
             disabled={pending || !email}
