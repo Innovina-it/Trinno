@@ -172,22 +172,42 @@ export function AnalysisWorkbench({
     setError(null);
   }
 
-  async function doRun() {
+  // Re-run a past run's exact settings in one click: reflect them in compose,
+  // and fire the run directly with those values (not the not-yet-updated state).
+  function reRun(r: RunSummary) {
+    const s = r.settings ?? {};
+    loadFrom(r);
+    void doRun({
+      sections: s.sections ? { ...ALL_SECTIONS_ON, ...s.sections } : { ...ALL_SECTIONS_ON },
+      reportLength: sanitizeReportLength(s.length),
+      customPrompt: s.customPrompt ?? "",
+      startDate: r.windowStart ?? undefined,
+      endDate: r.windowEnd ?? undefined,
+    });
+  }
+
+  async function doRun(override?: {
+    sections: Record<string, boolean>;
+    reportLength: string;
+    customPrompt: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
     setError(null);
     setNotice(null);
     setRunning(true);
     try {
+      const payload = override ?? {
+        sections,
+        reportLength,
+        customPrompt,
+        startDate: range.start ? range.start.toISOString() : undefined,
+        endDate: range.target ? range.target.toISOString() : undefined,
+      };
       const res = await fetch("/api/pma/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          workspaceId,
-          startDate: range.start ? range.start.toISOString() : undefined,
-          endDate: range.target ? range.target.toISOString() : undefined,
-          sections,
-          reportLength,
-          customPrompt,
-        }),
+        body: JSON.stringify({ workspaceId, ...payload }),
       });
       const json = (await res.json().catch(() => null)) as
         | { result?: { status?: string }; error?: { message?: string } }
@@ -212,7 +232,7 @@ export function AnalysisWorkbench({
   return (
     <div className="grid min-h-[600px] grid-cols-1 overflow-hidden rounded-2xl border border-[color:var(--hairline)] bg-[#0d0d0e] md:grid-cols-[248px_1fr]">
       {/* ── ledger ── */}
-      <div className="overflow-y-auto border-b border-[color:var(--hairline)] p-4 md:border-b-0">
+      <div className="overflow-y-auto border-b border-[color:var(--hairline)] p-3 md:border-b-0">
         <div className="mono-meta-sm px-1.5 pb-2 text-fg-faint">Runs · {runs.length}</div>
         {canRun && (
           <button
@@ -269,10 +289,10 @@ export function AnalysisWorkbench({
       </div>
 
       {/* ── detail card (config + preview) floating on the history field ── */}
-      <div className="flex p-4 md:py-5 md:pl-2 md:pr-5">
+      <div className="flex p-3 md:py-4 md:pl-1.5 md:pr-4">
         <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-gradient-to-b from-[#0c0c0c] to-[#080808] md:grid md:grid-cols-[1.06fr_1fr]">
           {/* CONFIG */}
-          <div className="flex flex-col px-7 pb-5 pt-3">
+          <div className="flex flex-col px-5 pb-4 pt-1.5">
             {run ? (
               <ReadOnlyConfig run={run} onLoad={() => loadFrom(run)} />
             ) : (
@@ -318,9 +338,9 @@ export function AnalysisWorkbench({
           </div>
 
           {/* PREVIEW / REPORT */}
-          <div className="flex flex-col border-t border-[color:var(--hairline)] bg-[#0b0b0c] px-7 py-6 md:border-l md:border-t-0">
+          <div className="flex flex-col border-t border-[color:var(--hairline)] bg-[#0b0b0c] px-5 py-5 md:border-l md:border-t-0">
             {run ? (
-              <RunView run={run} />
+              <RunView run={run} canRun={canRun} running={running} onReRun={() => reRun(run)} />
             ) : (
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="mb-3 flex items-center justify-between gap-2">
@@ -429,8 +449,19 @@ function ReadOnlyConfig({ run, onLoad }: { run: RunSummary; onLoad: () => void }
   );
 }
 
-// The selected run's report summary + open link (the report body lives in Drive).
-function RunView({ run }: { run: RunSummary }) {
+// The selected run's report summary + open link (the report body lives in Drive),
+// plus a one-click re-run of its settings.
+function RunView({
+  run,
+  canRun,
+  running,
+  onReRun,
+}: {
+  run: RunSummary;
+  canRun: boolean;
+  running: boolean;
+  onReRun: () => void;
+}) {
   const ok = run.status === "success";
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -458,6 +489,11 @@ function RunView({ run }: { run: RunSummary }) {
           <a href={run.reportWebViewLink} target="_blank" rel="noopener noreferrer" className="mr-auto mono-meta-sm text-[color:var(--accent-cyan)] hover:underline">
             Open report ↗
           </a>
+        )}
+        {canRun && run.settings && (
+          <Button size="sm" variant="secondary" onClick={onReRun} disabled={running}>
+            {running ? "Running…" : "Re-run with these settings"}
+          </Button>
         )}
       </div>
     </div>
