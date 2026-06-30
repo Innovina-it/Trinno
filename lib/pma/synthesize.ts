@@ -292,7 +292,9 @@ export function looksSuperseded(
 // EN/IT/pptx copy of the same document.
 export function deliverableKey(name: string | null | undefined): string {
   const n = name ?? "";
-  const m = n.match(/T\d+\.\d+/i);
+  // Match a task (Tx.y) OR deliverable (Dx.y) code, so e.g. "D1.2 — … (with X)"
+  // and "D1.2 — … .docx" collapse to one document. No code → the full name.
+  const m = n.match(/[TD]\d+\.\d+/i);
   return m ? m[0].toUpperCase() : n;
 }
 
@@ -338,7 +340,7 @@ export function groupByDeliverable(
     groupRows.push({
       file:
         extra > 0
-          ? `${rep.rawName} (+${extra} more version${extra === 1 ? "" : "s"}: same deliverable)`
+          ? `${rep.rawName} (+${extra} more version${extra === 1 ? "" : "s"}: same document)`
           : rep.rawName,
       status: rep.status,
       quality: rep.quality,
@@ -347,6 +349,58 @@ export function groupByDeliverable(
   }
   const rows = [...groupRows, ...supersededRows];
   return { rows, deliverableCount: rows.length };
+}
+
+const IMPORTANCE_RANK = { low: 0, medium: 1, high: 2 } as const;
+const uniqStrings = (xs: string[]) => Array.from(new Set(xs.filter(Boolean)));
+
+// Collapse the format/language copies of one document (same deliverableKey) into
+// ONE payload entry, so the model's new_or_changed_files reports e.g. D1.2 once,
+// not once per .docx/.gdoc copy. Superseded (old-generation) files NEVER fold
+// into the current document — each stays its own entry, mirroring groupByDeliverable.
+function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
+  const groups = new Map<string, AnalyzeFileResult[]>();
+  const superseded: AnalyzeFileResult[] = [];
+  for (const r of analyzed) {
+    if (looksSuperseded(r.name, r.folderPath)) {
+      superseded.push(r);
+      continue;
+    }
+    const key = deliverableKey(r.name);
+    const g = groups.get(key);
+    if (g) g.push(r);
+    else groups.set(key, [r]);
+  }
+  const entry = (g: AnalyzeFileResult[], isSuperseded: boolean) => {
+    const rep = g.find((r) => !/\.pptx$/i.test(r.name ?? "")) ?? g[0];
+    const extra = g.length - 1;
+    const recaps = g.map((r) => r.recap!);
+    return {
+      // U12.8 — reference by human name, noting how many copies were folded.
+      file:
+        extra > 0
+          ? `${rep.name ?? rep.fileId} (+${extra} more version${extra === 1 ? "" : "s"}: same document)`
+          : (rep.name ?? rep.fileId),
+      summary: uniqStrings(recaps.map((r) => r.one_line_summary)).join(" "),
+      importance: recaps.reduce<"low" | "medium" | "high">(
+        (a, r) => (IMPORTANCE_RANK[r.importance] > IMPORTANCE_RANK[a] ? r.importance : a),
+        "low",
+      ),
+      is_deliverable: recaps.some((r) => r.is_deliverable),
+      additions: uniqStrings(recaps.flatMap((r) => r.additions)),
+      edits: uniqStrings(recaps.flatMap((r) => r.edits)),
+      structural_changes: uniqStrings(recaps.flatMap((r) => r.structural_changes)),
+      risk_flags: uniqStrings(recaps.flatMap((r) => r.risk_flags)),
+      // U12.9 — org (mapped) or name (unmapped) of every contributor across the
+      // folded copies, deduped. Never a raw person's name once mapped.
+      modified_by: uniqStrings(g.flatMap((r) => labelsFor(r, orgMap))).join(", ") || "unknown",
+      looks_superseded: isSuperseded,
+    };
+  };
+  return [
+    ...Array.from(groups.values()).map((g) => entry(g, false)),
+    ...superseded.map((r) => entry([r], true)),
+  ];
 }
 
 function buildPayload(
@@ -362,26 +416,7 @@ function buildPayload(
     run: input.runLabel,
     reporting_period: period,
     changed_since_last_report: input.changedSince ?? [],
-    changed_files: analyzed.map((r) => ({
-      // U12.8 — reference the file by its human name, not the raw Drive fileId.
-      file: r.name ?? r.fileId,
-      summary: r.recap!.one_line_summary,
-      importance: r.recap!.importance,
-      is_deliverable: r.recap!.is_deliverable,
-      additions: r.recap!.additions,
-      edits: r.recap!.edits,
-      structural_changes: r.recap!.structural_changes,
-      risk_flags: r.recap!.risk_flags,
-      // U12.9 — who to credit for the file's changes within the period: the
-      // contributors resolved to their ORGANIZATION (mapped) or name (unmapped),
-      // deduped per org. Empty map → names, as before. Never a raw person's name
-      // once mapped — the resolution happens here, not in the model.
-      modified_by: labelsFor(r, orgMap).join(", ") || "unknown",
-      // #4 — older/superseded generation (by name OR ancestor folder). The model
-      // is told not to blend its figures with the current deliverables; never
-      // used to drop the file.
-      looks_superseded: looksSuperseded(r.name, r.folderPath),
-    })),
+    changed_files: buildChangedFiles(analyzed, orgMap),
     missed_files: missed.map((r) => ({ file: r.name ?? r.fileId, error: r.error })),
     removed_files: input.removed.map((f) => ({
       file: f.fileId,
@@ -509,7 +544,8 @@ export function renderReportDoc(input: {
     // The count is SOURCE files consulted this run, not files we edited — so the
     // label says a neutral "N files", never "changed"/"analysed", which read as if
     // the analysis modified them (#3). #5b — when several files are copies of one
-    // deliverable, prefix the deliverable count: "6 deliverables · 18 files". Only
+    // document, prefix the distinct-document count: "33 documents · 41 files". Said
+    // "documents" not "deliverables" — most files aren't grant deliverables. Only
     // when grouping actually collapses something (D < N); absent/equal → just files.
     const showGroups =
       deliverableCount != null && deliverableCount < counts.changed;
@@ -517,7 +553,7 @@ export function renderReportDoc(input: {
     meta.push([
       "Changes",
       (showGroups
-        ? `${deliverableCount} deliverable${deliverableCount === 1 ? "" : "s"} · `
+        ? `${deliverableCount} document${deliverableCount === 1 ? "" : "s"} · `
         : "") +
         `${counts.changed} ${fileWord} · ${counts.missed} missed · ${counts.removed} removed`,
     ]);

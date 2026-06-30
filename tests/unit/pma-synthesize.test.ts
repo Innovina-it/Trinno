@@ -197,8 +197,8 @@ describe("synthesize — aggregate + report", () => {
       live: emptyLive,
     });
     const doc = createReport.mock.calls[0][1];
-    expect(doc.content).toContain("(+2 more versions: same deliverable)"); // one collapsed row
-    expect(doc.content).toContain("1 deliverable · 3 files"); // header reconciles 1 vs 3
+    expect(doc.content).toContain("(+2 more versions: same document)"); // one collapsed row
+    expect(doc.content).toContain("1 document · 3 files"); // header reconciles 1 vs 3
     // counts: 3 source files, but 1 deliverable — persisted so the UI can show it
     expect(res.counts.changed).toBe(3);
     expect(res.counts.deliverables).toBe(1);
@@ -419,6 +419,38 @@ describe("synthesize — aggregate + report", () => {
     expect(prompt).not.toContain("Amir Hosseini"); // name must NOT reach Gemini
     const body = createReport.mock.calls[0][1].content as string;
     expect(body).not.toContain("Amir Hosseini"); // nor the rendered report
+  });
+
+  it("collapses copies of one deliverable into a single changed_files entry (D-code)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      // same deliverable D1.2, two differently-named copies (.docx vs gdoc title)
+      fileResults: [
+        {
+          ...analyzed("a"),
+          name: "D1.2 — TRL6 Validation Protocol (with Studio Buccarella)",
+          recap: recap({ one_line_summary: "integrated market analysis" }),
+        },
+        {
+          ...analyzed("b"),
+          name: "D1.2 — TRL6 Validation Protocol .docx",
+          recap: recap({ one_line_summary: "detailed the clinical protocol" }),
+        },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    // one merged entry, both summaries folded in, marked as collapsed
+    expect(prompt).toContain("same document");
+    expect(prompt).toContain("integrated market analysis");
+    expect(prompt).toContain("detailed the clinical protocol");
+    // exactly one changed_files "file" key mentions D1.2 (not two)
+    const d12Count = (prompt.match(/"file": "D1\.2/g) ?? []).length;
+    expect(d12Count).toBe(1);
   });
 
   it("empty map → contributors resolve to their names (unchanged behaviour)", async () => {
@@ -772,14 +804,14 @@ describe("renderReportDoc", () => {
     }
   });
 
-  it("prefixes the deliverable count only when copies actually collapse (#5b)", () => {
+  it("prefixes the document count only when copies actually collapse (#5b)", () => {
     const grouped = renderReportDoc({
       report: REPORT,
       runLabel: LABEL,
       counts: { changed: 18, missed: 0, removed: 0 },
       deliverableCount: 6,
     });
-    expect(grouped).toContain("6 deliverables · 18 files"); // D < N → prefix
+    expect(grouped).toContain("6 documents · 18 files"); // D < N → prefix
 
     const noCollapse = renderReportDoc({
       report: REPORT,
@@ -788,14 +820,14 @@ describe("renderReportDoc", () => {
       deliverableCount: 6,
     });
     expect(noCollapse).toContain("6 files");
-    expect(noCollapse).not.toContain("deliverables · "); // D == N → no prefix
+    expect(noCollapse).not.toContain("documents · "); // D == N → no prefix
 
     const absent = renderReportDoc({
       report: REPORT,
       runLabel: LABEL,
       counts: { changed: 6, missed: 0, removed: 0 },
     });
-    expect(absent).not.toContain("deliverables · "); // absent → legacy label
+    expect(absent).not.toContain("documents · "); // absent → legacy label
   });
 
   it("substantiates an empty Deviations section when a baseline exists (#7)", () => {
@@ -911,7 +943,7 @@ describe("deliverableKey + groupByDeliverable (#5b)", () => {
     const { rows, deliverableCount } = groupByDeliverable(raw);
     expect(deliverableCount).toBe(2); // T2.1 + T3.2
     const t21 = rows.find((r) => r.file.includes("T2.1"))!;
-    expect(t21.file).toContain("(+2 more versions: same deliverable)");
+    expect(t21.file).toContain("(+2 more versions: same document)");
     expect(t21.file).toContain(".docx"); // representative = a non-pptx copy
     expect(t21.quality).toBe("qEN"); // and its quality, not the pptx's
   });
