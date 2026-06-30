@@ -14,7 +14,7 @@ import {
 } from "@/lib/pma/contributor-orgs-store";
 import { isServiceAccountEmail } from "@/lib/pma/contributor-orgs";
 import { extractDriveFileId } from "@/lib/pma/detect";
-import { listFolderTree } from "@/lib/pma/clients/drive";
+import { listFolderTree, listRevisions } from "@/lib/pma/clients/drive";
 
 // Server actions for the per-workspace contributor → organization map, used by
 // the "Organizations" section of workspace Settings. Reads are open to members
@@ -117,16 +117,27 @@ export async function scanContributorsAction(
     });
     const seen = new Set<string>();
     const contributors: ScannedContributor[] = [];
-    for (const f of files) {
-      const name = f.lastModifiedBy;
-      const email = f.lastModifiedByEmail;
-      if (!name && !email) continue;
-      // Drop the doc-generator service account — it's a bot, not a contributor.
-      if (isServiceAccountEmail(email)) continue;
+    const add = (name: string | null, email: string | null) => {
+      // Drop the doc-generator service account (a bot) and anonymous/unexposed
+      // editors; dedupe by email (preferred) else name.
+      if (isServiceAccountEmail(email)) return;
+      if (!name && !email) return;
       const key = (email ?? name ?? "").toLowerCase();
-      if (!key || seen.has(key)) continue;
+      if (!key || seen.has(key)) return;
       seen.add(key);
       contributors.push({ name, email });
+    };
+    for (const f of files) {
+      // Read the FULL revision history, not just the last modifier — reports
+      // credit every revision author, so the scan must surface them all (else a
+      // contributor who isn't the last editor of any file is unmappable). A
+      // revisions failure on one file falls back to its last modifier.
+      try {
+        for (const r of await listRevisions(f.id)) add(r.authorName, r.authorEmail);
+      } catch {
+        // revisions unavailable for this file — fall through to last modifier
+      }
+      add(f.lastModifiedBy, f.lastModifiedByEmail);
     }
     contributors.sort((a, b) =>
       (a.name ?? a.email ?? "").localeCompare(b.name ?? b.email ?? ""),
