@@ -16,6 +16,8 @@ type ReportSectionsValue = {
   sections: SectionsState;
   toggleSection: (key: ReportSectionKey) => void;
   setAll: (on: boolean) => void;
+  // Bulk replace — used to restore a past run's section snapshot into compose.
+  setSections: (next: SectionsState) => void;
   // 0143 — synthesis verbosity + the workspace's standing custom focus.
   reportLength: ReportLength;
   setReportLength: (length: ReportLength) => void;
@@ -36,25 +38,27 @@ export function ReportSectionsProvider({
   initialCustomPrompt?: string;
   children: React.ReactNode;
 }) {
-  const [sections, setSections] = useState<SectionsState>(initialSections);
+  const [sections, setSectionsState] = useState<SectionsState>(initialSections);
   const [reportLength, setReportLength] =
     useState<ReportLength>(initialReportLength);
   const [customPrompt, setCustomPrompt] = useState<string>(initialCustomPrompt);
   const toggleSection = (key: ReportSectionKey) =>
-    setSections((prev) => ({ ...prev, [key]: !prev[key] }));
+    setSectionsState((prev) => ({ ...prev, [key]: !prev[key] }));
   // All / None quick-set: flip every known key to the same value.
   const setAll = (on: boolean) =>
-    setSections((prev) => {
+    setSectionsState((prev) => {
       const next = { ...prev };
       for (const key of Object.keys(next) as ReportSectionKey[]) next[key] = on;
       return next;
     });
+  const setSections = (next: SectionsState) => setSectionsState(next);
   return (
     <ReportSectionsContext.Provider
       value={{
         sections,
         toggleSection,
         setAll,
+        setSections,
         reportLength,
         setReportLength,
         customPrompt,

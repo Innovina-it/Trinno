@@ -13,17 +13,15 @@ import {
   ALL_SECTIONS_ON,
   sanitizeReportSections,
 } from "@/lib/pma/report-sections";
-import { RunAnalysisPanel } from "@/components/pma/run-analysis-panel";
 import { ReportSectionsProvider } from "@/components/pma/report-sections-context";
-import { ReportSectionsFieldset } from "@/components/pma/report-sections-fieldset";
-import { ReportSettingsControls } from "@/components/pma/report-settings-controls";
-import { ConfigRow } from "@/components/pma/config-row";
+import {
+  AnalysisWorkbench,
+  type RunSummary,
+} from "@/components/pma/analysis-workbench";
 import {
   sanitizeReportLength,
   sanitizeCustomPrompt,
 } from "@/lib/pma/report-settings";
-import { ContributorOrgsSection } from "@/components/pma/contributor-orgs-section";
-import { AnalysisFolderControl } from "@/components/pma/analysis-folder-control";
 import type { PmaAnalysisRunRow } from "@/lib/db/schema";
 
 // PMA U10 — Analysis tab. Lists past "Run analysis" runs (readable by any
@@ -218,60 +216,50 @@ export default async function AnalysisPage({
       ? "Set a Source and an Output Drive folder in settings, then run one."
       : "An owner or admin can run the first analysis.";
 
+  // Serialize the run rows for the client workbench (dates → ISO strings).
+  const runSummaries: RunSummary[] = runs.map((r) => ({
+    id: r.id,
+    runAt: r.runAt ? new Date(r.runAt).toISOString() : null,
+    status: r.status ?? null,
+    counts: (r.counts as Record<string, number> | null) ?? null,
+    reportWebViewLink: r.reportWebViewLink ?? null,
+    windowStart: r.windowStart ? new Date(r.windowStart).toISOString() : null,
+    windowEnd: r.windowEnd ? new Date(r.windowEnd).toISOString() : null,
+    settings: (r.settings as RunSummary["settings"]) ?? null,
+  }));
+
   return (
-    <div className="mx-auto max-w-4xl px-3 py-6 sm:px-4 md:px-6 md:py-10 space-y-10">
-      <header className="space-y-3 border-b border-hairline pb-6">
+    <div className="mx-auto max-w-5xl space-y-6 px-3 py-6 sm:px-4 md:px-6 md:py-10">
+      <header className="space-y-2">
+        <Link
+          href={`/w/${workspaceId}`}
+          className="mono-meta-sm text-fg-muted hover:text-fg"
+        >
+          ← Back to workspace
+        </Link>
+        <span className="chip block w-fit">{ws.name.toUpperCase()} / ANALYSIS</span>
+        <h1 className="serif-display text-5xl">Analysis</h1>
+      </header>
+
+      {gate.isOwnerAdmin ? (
         <ReportSectionsProvider
           initialSections={initialSections}
           initialReportLength={initialReportLength}
           initialCustomPrompt={initialCustomPrompt}
         >
-          <span className="chip">{ws.name.toUpperCase()} / ANALYSIS</span>
-          <h1 className="serif-display text-5xl">Analysis</h1>
-          <div className="flex items-end justify-between gap-3">
-            <Link
-              href={`/w/${workspaceId}`}
-              className="mono-meta-sm text-fg-muted hover:text-fg"
-            >
-              ← Back to workspace
-            </Link>
-            <RunAnalysisPanel
-              workspaceId={workspaceId}
-              canRun={gate.canRun}
-              isOwnerAdmin={gate.isOwnerAdmin}
-              foldersConfigured={gate.foldersConfigured}
-            />
-          </div>
-          {gate.isOwnerAdmin && (
-            // The run "manifest": a flush, hairline-ruled spec of the report the
-            // run will generate. No card, one label-rail grammar per row.
-            <div className="mt-1 divide-y divide-[color:var(--hairline)] border-y border-[color:var(--hairline)]">
-              <ConfigRow label="Source" align="start">
-                <AnalysisFolderControl
-                  bare
-                  workspaceId={workspaceId}
-                  currentFolderUrl={sourceRow?.url ?? null}
-                />
-              </ConfigRow>
-              <ReportSectionsFieldset canRun={gate.canRun} />
-              <ReportSettingsControls canRun={gate.canRun} />
-              {gate.isOwner && (
-                <ContributorOrgsSection
-                  workspaceId={workspaceId}
-                  initialRows={contributorOrgRows}
-                  canEdit={gate.isOwner}
-                  orgHints={orgHints}
-                />
-              )}
-            </div>
-          )}
+          <AnalysisWorkbench
+            workspaceId={workspaceId}
+            runs={runSummaries}
+            canRun={gate.canRun}
+            foldersConfigured={gate.foldersConfigured}
+            isOwner={gate.isOwner}
+            sourceUrl={sourceRow?.url ?? null}
+            contributorOrgRows={contributorOrgRows}
+            orgHints={orgHints}
+          />
         </ReportSectionsProvider>
-      </header>
-
-      {runs.length === 0 ? (
-        <p className="font-serif italic text-fg-faint">
-          No analyses yet. {emptyHint}
-        </p>
+      ) : runs.length === 0 ? (
+        <p className="font-serif italic text-fg-faint">No analyses yet. {emptyHint}</p>
       ) : (
         <ol data-testid="pma-runs">
           {runs.map((run) => (
