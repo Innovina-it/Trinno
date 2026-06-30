@@ -239,12 +239,12 @@ export function ContributorOrgsPanel({
             </Button>
             {scanned && scanned.length > 0 && (
               <ul className="divide-y divide-hairline rounded-lg border border-hairline">
-                {scanned.map((c) => {
+                {scanned.map((c, i) => {
                   const { kind, key } = scanKey(c);
                   const already = mappedKeys.has(`${kind}:${key.toLowerCase()}`);
                   return (
                     <li
-                      key={key || c.name || Math.random()}
+                      key={key || c.name || `scan-${i}`}
                       className="flex items-center justify-between gap-3 px-3 py-2"
                     >
                       <span className="min-w-0 truncate text-sm text-fg">
