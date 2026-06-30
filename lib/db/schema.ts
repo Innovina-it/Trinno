@@ -10,6 +10,7 @@ import {
   pgEnum,
   check,
   date,
+  unique,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -834,3 +835,34 @@ export const pmaWorkspaceState = pgTable("pma_workspace_state", {
 });
 
 export type PmaWorkspaceStateRow = typeof pmaWorkspaceState.$inferSelect;
+
+// Per-workspace contributor → organization map (migration 0142). Lets the
+// analysis report credit the ORG that an editor belongs to instead of the
+// person. Match key is (identity_kind, identity_key): 'email' (lowercased Drive
+// emailAddress) preferred, else 'name' (trimmed displayName). Maintained by hand
+// in workspace Settings; an empty map → reports unchanged (name fallback). RLS:
+// member SELECT, owner/admin write (mirrors workspace_holidays, NOT the
+// service-role-only PMA tables — this one is user-edited).
+export const pmaContributorOrgs = pgTable(
+  "pma_contributor_orgs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id").notNull(),
+    // 'email' | 'name' (CHECK-enforced in SQL).
+    identityKind: text("identity_kind").notNull(),
+    identityKey: text("identity_key").notNull(),
+    displayName: text("display_name"),
+    org: text("org").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    uq: unique().on(t.workspaceId, t.identityKind, t.identityKey),
+  }),
+);
+
+export type PmaContributorOrgRow = typeof pmaContributorOrgs.$inferSelect;
