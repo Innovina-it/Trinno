@@ -141,8 +141,19 @@ export function ContributorOrgsPanel({
     rows.map((r) => `${r.identityKind}:${r.identityKey.toLowerCase()}`),
   );
 
+  // Distinct orgs already used in this workspace → autocomplete suggestions, so
+  // the same org is reused (not retyped with a different casing/typo).
+  const orgSuggestions = Array.from(
+    new Set(rows.map((r) => r.org.trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b));
+
   return (
     <div className="space-y-4">
+      <datalist id="org-suggestions">
+        {orgSuggestions.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
       <p className="text-xs text-fg-faint">
         Reports credit the organization a contributor belongs to instead of their
         name. Anyone not listed here keeps their name in the report. Editable by
@@ -205,6 +216,7 @@ export function ContributorOrgsPanel({
                 value={org}
                 onChange={(e) => setOrg(e.target.value)}
                 placeholder="Innovina"
+                list="org-suggestions"
                 className="w-44"
               />
             </div>
@@ -275,6 +287,7 @@ function ScanAssign({
         value={org}
         onChange={(e) => setOrg(e.target.value)}
         placeholder="Organization"
+        list="org-suggestions"
         className="w-36"
         aria-label="Organization"
       />
