@@ -16,7 +16,7 @@ import { WorkspaceCalendarPanel } from "@/components/workspace/workspace-calenda
 import { listWorkspaceCalendar } from "@/lib/queries/workspace-holidays";
 import { and, eq } from "drizzle-orm";
 import { dbAsUser } from "@/lib/db/client";
-import { links } from "@/lib/db/schema";
+import { links, cards, boards } from "@/lib/db/schema";
 
 export default async function WorkspaceSettingsPage({
   params,
@@ -28,8 +28,14 @@ export default async function WorkspaceSettingsPage({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
-  const [members, calendarRows, workspaceLinkRows, role, contributorOrgRows] =
-    await Promise.all([
+  const [
+    members,
+    calendarRows,
+    workspaceLinkRows,
+    role,
+    contributorOrgRows,
+    orgHints,
+  ] = await Promise.all([
       listMembers(token, workspaceId),
       listWorkspaceCalendar(token, workspaceId),
       dbAsUser(token, async (tx) => {
@@ -42,6 +48,24 @@ export default async function WorkspaceSettingsPage({
       }).catch(() => [] as { url: string; purpose: "source" | "reports" }[]),
       getWorkspaceRole(token, workspaceId, user.id),
       listContributorOrgs(token, workspaceId).catch(() => []),
+      // Org names already in the roadmap: the "· Partner" suffix the plan import
+      // stamps onto task-card titles. Offered as org autocomplete hints.
+      dbAsUser(token, async (tx) => {
+        const rows = await tx
+          .select({ title: cards.title })
+          .from(cards)
+          .innerJoin(boards, eq(cards.boardId, boards.id))
+          .where(eq(boards.workspaceId, workspaceId));
+        const set = new Set<string>();
+        for (const r of rows) {
+          const parts = r.title.split(" · ");
+          if (parts.length > 1) {
+            const owner = parts[parts.length - 1].trim();
+            if (owner) set.add(owner);
+          }
+        }
+        return Array.from(set);
+      }).catch(() => [] as string[]),
     ]);
   const workspaceLink =
     workspaceLinkRows.find((r) => r.purpose === "source") ?? null;
@@ -102,6 +126,7 @@ export default async function WorkspaceSettingsPage({
             workspaceId={workspaceId}
             initialRows={contributorOrgRows}
             canEdit={canDelete}
+            orgHints={orgHints}
           />
         </div>
       </section>

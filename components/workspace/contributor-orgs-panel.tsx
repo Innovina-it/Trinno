@@ -33,10 +33,15 @@ export function ContributorOrgsPanel({
   workspaceId,
   initialRows,
   canEdit,
+  orgHints = [],
 }: {
   workspaceId: string;
   initialRows: ContributorOrgRow[];
   canEdit: boolean;
+  // Org names already present in the workspace's roadmap (the "· Partner" suffix
+  // the plan import stamps onto task cards), offered as autocomplete suggestions
+  // even before any contributor is mapped.
+  orgHints?: string[];
 }) {
   const [rows, setRows] = useState<ContributorOrgRow[]>(initialRows);
   const [contributor, setContributor] = useState("");
@@ -141,10 +146,13 @@ export function ContributorOrgsPanel({
     rows.map((r) => `${r.identityKind}:${r.identityKey.toLowerCase()}`),
   );
 
-  // Distinct orgs already used in this workspace → autocomplete suggestions, so
-  // the same org is reused (not retyped with a different casing/typo).
+  // Autocomplete suggestions: orgs already mapped here PLUS orgs already named in
+  // the roadmap (the "· Partner" suffix on task cards), so the same org is reused
+  // instead of retyped with a different casing/typo — populated from day one.
   const orgSuggestions = Array.from(
-    new Set(rows.map((r) => r.org.trim()).filter(Boolean)),
+    new Set(
+      [...rows.map((r) => r.org), ...orgHints].map((o) => o.trim()).filter(Boolean),
+    ),
   ).sort((a, b) => a.localeCompare(b));
 
   return (
