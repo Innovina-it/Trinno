@@ -7,6 +7,8 @@ import {
   listMembers,
 } from "@/lib/queries/workspaces";
 import { WorkspaceSettingsForm } from "@/components/workspace/workspace-settings-form";
+import { ContributorOrgsPanel } from "@/components/workspace/contributor-orgs-panel";
+import { listContributorOrgs } from "@/lib/pma/contributor-orgs-store";
 import { MemberList } from "@/components/workspace/member-list";
 import { InviteMemberForm } from "@/components/workspace/invite-member-form";
 import { VersionsPanel } from "@/components/versions/versions-panel";
@@ -26,19 +28,21 @@ export default async function WorkspaceSettingsPage({
   const token = (await getSessionToken())!;
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
-  const [members, calendarRows, workspaceLinkRows, role] = await Promise.all([
-    listMembers(token, workspaceId),
-    listWorkspaceCalendar(token, workspaceId),
-    dbAsUser(token, async (tx) => {
-      return tx
-        .select({ url: links.url, purpose: links.purpose })
-        .from(links)
-        .where(
-          and(eq(links.workspaceId, workspaceId), eq(links.scope, "workspace")),
-        );
-    }).catch(() => [] as { url: string; purpose: "source" | "reports" }[]),
-    getWorkspaceRole(token, workspaceId, user.id),
-  ]);
+  const [members, calendarRows, workspaceLinkRows, role, contributorOrgRows] =
+    await Promise.all([
+      listMembers(token, workspaceId),
+      listWorkspaceCalendar(token, workspaceId),
+      dbAsUser(token, async (tx) => {
+        return tx
+          .select({ url: links.url, purpose: links.purpose })
+          .from(links)
+          .where(
+            and(eq(links.workspaceId, workspaceId), eq(links.scope, "workspace")),
+          );
+      }).catch(() => [] as { url: string; purpose: "source" | "reports" }[]),
+      getWorkspaceRole(token, workspaceId, user.id),
+      listContributorOrgs(token, workspaceId).catch(() => []),
+    ]);
   const workspaceLink =
     workspaceLinkRows.find((r) => r.purpose === "source") ?? null;
   const canDelete = role === "owner" || role === "admin";
@@ -87,6 +91,17 @@ export default async function WorkspaceSettingsPage({
           <WorkspaceCalendarPanel
             workspaceId={workspaceId}
             rows={calendarRows}
+          />
+        </div>
+      </section>
+
+      <section id="organizations" className="space-y-3 scroll-mt-20">
+        <h2 className="mono-meta-sm text-fg-faint">ORGANIZATIONS</h2>
+        <div className="rounded-xl border border-hairline bg-[color:var(--surface)] p-4">
+          <ContributorOrgsPanel
+            workspaceId={workspaceId}
+            initialRows={contributorOrgRows}
+            canEdit={canDelete}
           />
         </div>
       </section>
