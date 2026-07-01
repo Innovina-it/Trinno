@@ -381,7 +381,7 @@ export function AnalysisWorkbench({
                   <span className="mono-meta-sm mr-auto text-fg-faint">
                     {enabled} of {total} · {reportLength}{focus ? " · focus" : ""}
                   </span>
-                  <Button size="sm" onClick={doRun} disabled={!canRun || running || noneSelected} title={disabledReason ?? undefined} data-testid="pma-run">
+                  <Button size="sm" onClick={() => doRun()} disabled={!canRun || running || noneSelected} title={disabledReason ?? undefined} data-testid="pma-run">
                     {running ? "Running…" : "Run analysis"}
                   </Button>
                 </div>
