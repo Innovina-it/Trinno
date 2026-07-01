@@ -288,9 +288,10 @@ export function AnalysisWorkbench({
         })}
       </div>
 
-      {/* ── detail card (config + preview) floating on the history field ── */}
-      <div className="flex p-1 md:py-1.5 md:pl-1 md:pr-1.5">
-        <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-gradient-to-b from-[#0c0c0c] to-[#080808] md:grid md:grid-cols-[1.06fr_1fr]">
+      {/* ── detail: config flush on the history field; the preview is the only
+          padded element — an inset box nested inside. ── */}
+      <div className="flex">
+        <div className="flex flex-1 flex-col overflow-hidden md:grid md:grid-cols-[1.06fr_1fr] md:border-l md:border-[color:var(--hairline)]">
           {/* CONFIG */}
           <div className="flex flex-col px-5 pb-4 pt-1.5">
             {run ? (
@@ -337,12 +338,13 @@ export function AnalysisWorkbench({
             )}
           </div>
 
-          {/* PREVIEW / REPORT — the live outline is a warm-paper surface (it IS
-              the report doc); a viewed past run stays on the dark console. */}
-          <div className={cn(
-            "flex flex-col border-t border-[color:var(--hairline)] px-5 py-5 md:border-l md:border-t-0",
-            run ? "bg-[#0b0b0c]" : "bg-[#f7f5f0]",
-          )}>
+          {/* PREVIEW — the padded inset box. The live outline is warm paper (it
+              IS the report doc); a viewed past run stays on the dark console. */}
+          <div className="flex p-2.5 md:p-3">
+            <div className={cn(
+              "flex flex-1 flex-col overflow-hidden rounded-xl border border-[color:var(--hairline)] px-5 py-5",
+              run ? "bg-[#0b0b0c]" : "bg-[#f7f5f0]",
+            )}>
             {run ? (
               <RunView run={run} canRun={canRun} running={running} onReRun={() => reRun(run)} />
             ) : (
@@ -407,6 +409,7 @@ export function AnalysisWorkbench({
                 )}
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>
