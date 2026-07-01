@@ -4,6 +4,7 @@ import { getServiceSupabase } from "@/lib/supabase/service-role";
 import type {
   PmaFileRegistryRow,
   PmaAnalysisRunRow,
+  RunProgress,
 } from "@/lib/db/schema";
 import {
   sanitizeReportSections,
@@ -72,6 +73,10 @@ export function mapRunRow(raw: Record<string, unknown>): PmaAnalysisRunRow {
     windowEnd: raw.window_end ?? null,
     fingerprint: raw.fingerprint ?? null,
     settings: raw.settings ?? null,
+    startedAt: raw.started_at ?? null,
+    heartbeatAt: raw.heartbeat_at ?? null,
+    cancelRequested: raw.cancel_requested ?? false,
+    progress: raw.progress ?? null,
   } as unknown as PmaAnalysisRunRow;
 }
 
@@ -258,6 +263,156 @@ export async function listRuns(
     .order("run_at", { ascending: false });
   if (error) throw error;
   return ((data ?? []) as Record<string, unknown>[]).map(mapRunRow);
+}
+
+// ── 0145 run manager ─────────────────────────────────────────────────────────
+// A run is now a durable job: recorded 'running' at the start, heartbeated as it
+// works, finished in place. These are service-role only (the orchestrator drives
+// them from a background task).
+
+// The workspace's in-flight run, or null. Used as the concurrency guard and to
+// drive the live UI.
+export async function getActiveRun(
+  workspaceId: string,
+): Promise<PmaAnalysisRunRow | null> {
+  const sb = getServiceSupabase();
+  const { data, error } = await sb
+    .from("pma_analysis_runs")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .eq("status", "running")
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? mapRunRow(data as Record<string, unknown>) : null;
+}
+
+// Insert a 'running' row and return it. runAt is provisional (updated on finish).
+export async function startRun(input: {
+  workspaceId: string;
+  triggeredBy?: string | null;
+  runAt: string;
+  windowStart?: string | null;
+  windowEnd?: string | null;
+  settings?: Record<string, unknown> | null;
+}): Promise<PmaAnalysisRunRow> {
+  const sb = getServiceSupabase();
+  const now = new Date().toISOString();
+  const { data, error } = await sb
+    .from("pma_analysis_runs")
+    .insert({
+      workspace_id: input.workspaceId,
+      triggered_by: input.triggeredBy ?? null,
+      status: "running",
+      run_at: input.runAt,
+      started_at: now,
+      heartbeat_at: now,
+      cancel_requested: false,
+      progress: { stage: "detecting", done: 0, total: 0 },
+      window_start: input.windowStart ?? null,
+      window_end: input.windowEnd ?? null,
+      settings: input.settings ?? null,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return mapRunRow(data as Record<string, unknown>);
+}
+
+// Bump the heartbeat + progress. Called between stages and after each file.
+export async function heartbeatRun(
+  runId: string,
+  progress: RunProgress,
+): Promise<void> {
+  const sb = getServiceSupabase();
+  const { error } = await sb
+    .from("pma_analysis_runs")
+    .update({ heartbeat_at: new Date().toISOString(), progress })
+    .eq("id", runId);
+  if (error) throw error;
+}
+
+// Whether a cancel was requested for this run (checked cooperatively).
+export async function isCancelRequested(runId: string): Promise<boolean> {
+  const sb = getServiceSupabase();
+  const { data, error } = await sb
+    .from("pma_analysis_runs")
+    .select("cancel_requested")
+    .eq("id", runId)
+    .maybeSingle();
+  if (error) throw error;
+  return !!(data as { cancel_requested?: boolean } | null)?.cancel_requested;
+}
+
+// Request cancellation of a running run (only affects a still-running row).
+export async function requestCancel(
+  workspaceId: string,
+  runId: string,
+): Promise<void> {
+  const sb = getServiceSupabase();
+  const { error } = await sb
+    .from("pma_analysis_runs")
+    .update({ cancel_requested: true })
+    .eq("id", runId)
+    .eq("workspace_id", workspaceId)
+    .eq("status", "running");
+  if (error) throw error;
+}
+
+// Finish a run: write its terminal status + results onto the running row.
+export async function finishRun(
+  runId: string,
+  input: {
+    status: string;
+    counts?: Record<string, number> | null;
+    reportFileId?: string | null;
+    reportWebViewLink?: string | null;
+    fingerprint?: Record<string, string> | null;
+    settings?: Record<string, unknown> | null;
+    runAt?: string | null;
+    progressNote?: string | null;
+  },
+): Promise<void> {
+  const sb = getServiceSupabase();
+  const patch: Record<string, unknown> = {
+    status: input.status,
+    heartbeat_at: new Date().toISOString(),
+    progress: { stage: "done", done: 0, total: 0, note: input.progressNote ?? null },
+  };
+  if (input.counts !== undefined) patch.counts = input.counts;
+  if (input.reportFileId !== undefined) patch.report_file_id = input.reportFileId;
+  if (input.reportWebViewLink !== undefined)
+    patch.report_web_view_link = input.reportWebViewLink;
+  if (input.fingerprint !== undefined) patch.fingerprint = input.fingerprint;
+  if (input.settings !== undefined) patch.settings = input.settings;
+  if (input.runAt) patch.run_at = input.runAt;
+  const { error } = await sb
+    .from("pma_analysis_runs")
+    .update(patch)
+    .eq("id", runId);
+  if (error) throw error;
+}
+
+// Orphan reaper: any 'running' row whose heartbeat is older than the cutoff is
+// a dead process — mark it failed so it never hangs. Returns how many it reaped.
+export async function reapStaleRuns(
+  workspaceId: string,
+  staleBeforeIso: string,
+): Promise<number> {
+  const sb = getServiceSupabase();
+  const { data, error } = await sb
+    .from("pma_analysis_runs")
+    .update({
+      status: "error",
+      progress: { stage: "done", done: 0, total: 0, note: "timed out" },
+    })
+    .eq("workspace_id", workspaceId)
+    .eq("status", "running")
+    .lt("heartbeat_at", staleBeforeIso)
+    .select("id");
+  if (error) throw error;
+  return (data as unknown[] | null)?.length ?? 0;
 }
 
 // ── pma_workspace_state ──────────────────────────────────────────────────────

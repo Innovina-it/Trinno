@@ -818,9 +818,24 @@ export const pmaAnalysisRuns = pgTable("pma_analysis_runs", {
   // 0144 — the run's config snapshot: { sections, length, customPrompt }. Lets
   // the history restore the settings that produced a run. null → pre-0144 run.
   settings: jsonb("settings").$type<Record<string, unknown>>(),
+  // 0145 — run-manager fields. status gains 'running'/'cancelled'. started_at is
+  // when the run began; heartbeat_at is bumped as it works (stale → dead);
+  // cancel_requested is the cooperative cancel flag; progress drives the live UI.
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
+  cancelRequested: boolean("cancel_requested").notNull().default(false),
+  progress: jsonb("progress").$type<Record<string, unknown>>(),
 });
 
 export type PmaAnalysisRunRow = typeof pmaAnalysisRuns.$inferSelect;
+
+// 0145 — the live progress shape stored in pma_analysis_runs.progress.
+export type RunProgress = {
+  stage: "detecting" | "analyzing" | "synthesizing" | "reconciling" | "done";
+  done: number;
+  total: number;
+  note?: string;
+};
 
 // Per-workspace PMA operational state (DESIGN §4.5). Currently the Drive Changes
 // API checkpoint that makes a run incremental; one row per workspace. RLS:

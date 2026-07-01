@@ -90,6 +90,10 @@ describe("mapRunRow", () => {
       windowEnd: "2026-06-08T23:59:59Z",
       fingerprint: { A: "v9" },
       settings: null,
+      startedAt: null,
+      heartbeatAt: null,
+      cancelRequested: false,
+      progress: null,
     });
   });
 });
