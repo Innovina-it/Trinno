@@ -230,7 +230,7 @@ export function AnalysisWorkbench({
   }
 
   return (
-    <div className="grid min-h-[600px] grid-cols-1 overflow-hidden rounded-2xl border border-[color:var(--hairline)] bg-[#0d0d0e] md:grid-cols-[248px_1fr]">
+    <div className="grid min-h-[600px] grid-cols-1 overflow-hidden rounded-2xl border border-[color:var(--hairline)] bg-[#161619] md:grid-cols-[248px_1fr]">
       {/* ── ledger ── */}
       <div className="overflow-y-auto border-b border-[color:var(--hairline)] p-3 md:border-b-0">
         <div className="mono-meta-sm px-1.5 pb-2 text-fg-faint">Runs · {runs.length}</div>
