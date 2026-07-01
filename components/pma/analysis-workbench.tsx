@@ -289,7 +289,7 @@ export function AnalysisWorkbench({
       </div>
 
       {/* ── detail card (config + preview) floating on the history field ── */}
-      <div className="flex p-3 md:py-4 md:pl-1.5 md:pr-4">
+      <div className="flex p-1 md:py-1.5 md:pl-1 md:pr-1.5">
         <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-gradient-to-b from-[#0c0c0c] to-[#080808] md:grid md:grid-cols-[1.06fr_1fr]">
           {/* CONFIG */}
           <div className="flex flex-col px-5 pb-4 pt-1.5">
@@ -337,62 +337,73 @@ export function AnalysisWorkbench({
             )}
           </div>
 
-          {/* PREVIEW / REPORT */}
-          <div className="flex flex-col border-t border-[color:var(--hairline)] bg-[#0b0b0c] px-5 py-5 md:border-l md:border-t-0">
+          {/* PREVIEW / REPORT — the live outline is a warm-paper surface (it IS
+              the report doc); a viewed past run stays on the dark console. */}
+          <div className={cn(
+            "flex flex-col border-t border-[color:var(--hairline)] px-5 py-5 md:border-l md:border-t-0",
+            run ? "bg-[#0b0b0c]" : "bg-[#f7f5f0]",
+          )}>
             {run ? (
               <RunView run={run} canRun={canRun} running={running} onReRun={() => reRun(run)} />
             ) : (
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <span className="mono-meta-sm text-fg-faint">Preview</span>
+                  <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-[#8f897d]">Preview</span>
                   <span className="flex items-center gap-2">
                     {focus && (
-                      <span className="inline-flex max-w-[55%] items-center gap-1 truncate rounded-full border border-[color-mix(in_oklch,var(--accent-cyan)_40%,transparent)] px-2 py-0.5 font-mono text-[0.52rem] uppercase tracking-wider text-[color:var(--accent-cyan)]">
+                      <span className="inline-flex max-w-[55%] items-center gap-1 truncate rounded-full bg-[#17150f] px-2 py-0.5 font-mono text-[0.52rem] uppercase tracking-wider text-[#f7f5f0]">
                         ◈ {focus}
                       </span>
                     )}
-                    <span className="rounded-full border border-[color-mix(in_oklch,var(--accent-cyan)_35%,transparent)] px-2 py-0.5 font-mono text-[0.5rem] uppercase tracking-wider text-[color:var(--accent-cyan)]">
+                    <span className="rounded-full border border-[#17150f]/25 px-2 py-0.5 font-mono text-[0.5rem] uppercase tracking-wider text-[#6b6459]">
                       new
                     </span>
                   </span>
                 </div>
                 <div className="min-h-0 flex-1 overflow-hidden">
-                  <div className="text-[1.05rem] font-extrabold tracking-tight">Report outline</div>
-                  <div className="mono-meta-sm mb-4 text-fg-faint">{curPeriod} · {reportLength}</div>
+                  <div className="text-[1.05rem] font-extrabold tracking-tight text-[#17150f]">Report outline</div>
+                  <div className="mb-4 font-mono text-[0.6rem] uppercase tracking-[0.09em] text-[#8f897d]">{curPeriod} · {reportLength}</div>
                   {REPORT_SECTION_KEYS.map((k) => {
                     const on = sections[k];
                     const focused = !!focus && FOCUSABLE.has(k) && on;
                     const lines = (focused ? LEN_LINES[reportLength] + 1 : LEN_LINES[reportLength]);
                     return (
-                      <div key={k} className={cn("mb-3.5", !on && "opacity-[0.16]")}>
-                        <div className={cn("mb-1.5 flex items-center gap-1.5 text-[0.72rem]", focused ? "text-[color:var(--accent-cyan)]" : "text-fg-muted")}>
-                          <span className={cn("size-[5px] rounded-full", focused ? "bg-[color:var(--accent-cyan)]" : "bg-[color:var(--hairline-hi)]")} />
+                      <div key={k} className={cn("mb-3.5", !on && "opacity-40")}>
+                        <div className={cn("mb-1.5 flex items-center gap-1.5 text-[0.72rem]", focused ? "font-semibold text-[#17150f]" : "text-[#46423a]")}>
+                          <span className={cn("size-[5px] rounded-full", focused ? "bg-[#17150f]" : "bg-[#cfc9bd]")} />
                           {REPORT_SECTION_LABELS[k]}
-                          {!on && <span className="font-mono text-[0.46rem] uppercase tracking-wider text-fg-faint">excluded</span>}
+                          {!on && <span className="font-mono text-[0.46rem] uppercase tracking-wider text-[#a8a094]">excluded</span>}
                         </div>
                         {Array.from({ length: lines }).map((_, i) => (
-                          <div key={i} className="mb-1 h-1.5 rounded-sm bg-[color:var(--surface-strong)]" style={{ width: `${58 + ((k.length * 7 + i * 23) % 40)}%` }} />
+                          <div key={i} className="mb-1 h-1.5 rounded-sm bg-[#e5e0d6]" style={{ width: `${58 + ((k.length * 7 + i * 23) % 40)}%` }} />
                         ))}
                       </div>
                     );
                   })}
                 </div>
-                <div className="mt-2 flex items-center justify-end gap-3 border-t border-[color:var(--hairline)] pt-3">
-                  <span className="mono-meta-sm mr-auto text-fg-faint">
+                <div className="mt-2 flex items-center justify-end gap-3 border-t border-[#e5e0d6] pt-3">
+                  <span className="mr-auto font-mono text-[0.6rem] uppercase tracking-[0.06em] text-[#8f897d]">
                     {enabled} of {total} · {reportLength}{focus ? " · focus" : ""}
                   </span>
-                  <Button size="sm" onClick={() => doRun()} disabled={!canRun || running || noneSelected} title={disabledReason ?? undefined} data-testid="pma-run">
+                  <button
+                    type="button"
+                    onClick={() => doRun()}
+                    disabled={!canRun || running || noneSelected}
+                    title={disabledReason ?? undefined}
+                    data-testid="pma-run"
+                    className="h-9 rounded-full bg-[#17150f] px-4 text-[0.85rem] font-semibold text-[#f7f5f0] transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+                  >
                     {running ? "Running…" : "Run analysis"}
-                  </Button>
+                  </button>
                 </div>
               </div>
             )}
             {(error || notice) && (
               <div className="mt-2 text-right">
                 {error ? (
-                  <span className="mono-meta-sm text-[color:var(--accent-magenta)]" role="alert">{error}</span>
+                  <span className="font-mono text-[0.6rem] uppercase tracking-wider text-[#b42318]" role="alert">{error}</span>
                 ) : (
-                  <span className="mono-meta-sm text-fg-faint" role="status">{notice}</span>
+                  <span className="font-mono text-[0.6rem] uppercase tracking-wider text-[#8f897d]" role="status">{notice}</span>
                 )}
               </div>
             )}
