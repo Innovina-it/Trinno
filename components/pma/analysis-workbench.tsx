@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { DateRangePopover, type DateRange } from "@/components/ui/date-range-popover";
 import { cn } from "@/lib/utils";
 import {
@@ -408,7 +408,7 @@ export function AnalysisWorkbench({
       {/* ── detail: config flush on the history field; the preview is the only
           padded element — an inset box nested inside. ── */}
       <div className="flex">
-        <div className="flex flex-1 flex-col overflow-hidden md:grid md:grid-cols-[1.06fr_1fr] md:border-l md:border-[color:var(--hairline)]">
+        <div className="flex flex-1 flex-col overflow-hidden md:grid md:grid-cols-[1.06fr_1fr] md:rounded-l-2xl md:border-l md:border-[color:var(--hairline)]">
           {/* CONFIG */}
           <div className="flex flex-col px-5 pb-4 pt-1.5">
             {run ? (
@@ -653,7 +653,12 @@ function RunView({
       </div>
       <div className="mt-2 flex items-center justify-end gap-3 border-t border-[color:var(--hairline)] pt-3">
         {run.reportWebViewLink && (
-          <a href={run.reportWebViewLink} target="_blank" rel="noopener noreferrer" className="mr-auto mono-meta-sm text-[color:var(--accent-cyan)] hover:underline">
+          <a
+            href={run.reportWebViewLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "mr-auto")}
+          >
             Open report ↗
           </a>
         )}
