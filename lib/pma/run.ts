@@ -11,7 +11,14 @@ import {
   setWorkspaceReportSections,
   setWorkspaceReportSettings,
   getWorkspaceReportSettings,
+  getActiveRun,
+  startRun,
+  heartbeatRun,
+  isCancelRequested,
+  finishRun,
+  reapStaleRuns,
 } from "./registry";
+import { STALE_RUN_MS } from "./run-status";
 import type { ReportLength } from "./report-settings";
 import { getRunInputs } from "./inputs";
 import { getProjectBrief } from "./context";
@@ -63,8 +70,15 @@ export type RunAnalysisResult = {
   // U12.7 — "empty_period": no documents at all were modified in the window.
   // U12.12 — "already_reported": an identical-window run with the same content
   //   fingerprint already produced a report; we point at it, no new Doc.
-  // All three produce NO new report Doc (just a notice / a link).
-  status: "success" | "error" | "no_changes" | "empty_period" | "already_reported";
+  // 0145 — "cancelled": the user cancelled the run mid-flight (no report).
+  // All produce NO new report Doc (just a notice / a link).
+  status:
+    | "success"
+    | "error"
+    | "no_changes"
+    | "empty_period"
+    | "already_reported"
+    | "cancelled";
   reportFileId: string | null;
   reportWebViewLink: string | null;
   counts: {
@@ -116,19 +130,82 @@ function changedFiles(
   return names;
 }
 
-// Public entry: serialize runs per workspace so two concurrent runs can't both
-// produce a report (a second run is rejected with CONFLICT). The work itself is
-// runAnalysisInner.
+// 0145 (run manager) — a run is now a durable, observable job instead of a
+// synchronous call. Two entry points:
+//
+//   startAnalysis(input) → { runId }   — fast. Under the per-workspace lock it
+//     rejects a second concurrent run (CONFLICT), then inserts a 'running' row
+//     and returns its id immediately. No Drive/Gemini work happens here.
+//   executeAnalysis(runId, input)      — the A→G pipeline, run in the
+//     background (Vercel `after`). It heartbeats progress onto the row, polls
+//     the cancel flag between stages/files, and finishes the row in place with
+//     the terminal status. Never throws to the caller without first marking the
+//     row failed, so an in-flight run can never hang.
+//
+// runAnalysis(input) keeps the old synchronous shape (start + execute inline),
+// used by the unit tests and any caller that wants to await the whole thing.
+
+// Fast concurrency guard + running-row insert. The lock makes the
+// check-then-insert atomic per workspace; the row itself is the visible guard
+// (a refresh sees it, the reaper cleans a dead one).
+export async function startAnalysis(
+  input: RunAnalysisInput,
+): Promise<{ runId: string }> {
+  return withWorkspaceRunLock(input.workspaceId, async () => {
+    // Reap a dead in-flight run (killed function → stale heartbeat) first, so a
+    // wedged row can't block a new run even if no poll/page-load cleaned it.
+    await reapStaleRuns(
+      input.workspaceId,
+      new Date(Date.now() - STALE_RUN_MS).toISOString(),
+    ).catch(() => 0);
+    const active = await getActiveRun(input.workspaceId);
+    if (active) {
+      throw new StructuredError(
+        "CONFLICT",
+        "An analysis is already running for this workspace. Try again in a moment.",
+      );
+    }
+    const run = await startRun({
+      workspaceId: input.workspaceId,
+      triggeredBy: input.actorId,
+      runAt: input.now,
+      windowStart: input.window?.start ?? null,
+      windowEnd: input.window?.end ?? null,
+    });
+    return { runId: run.id };
+  });
+}
+
+// The background job. Wraps the pipeline so ANY failure marks the running row
+// failed (it never silently hangs), then re-throws for the caller's logging.
+export async function executeAnalysis(
+  runId: string,
+  input: RunAnalysisInput,
+): Promise<RunAnalysisResult> {
+  try {
+    return await executeAnalysisInner(runId, input);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await finishRun(runId, { status: "error", progressNote: message }).catch(
+      () => {},
+    );
+    throw err;
+  }
+}
+
+// Synchronous convenience: start + execute inline, awaiting the whole run.
 export async function runAnalysis(
   input: RunAnalysisInput,
 ): Promise<RunAnalysisResult> {
-  return withWorkspaceRunLock(input.workspaceId, () => runAnalysisInner(input));
+  const { runId } = await startAnalysis(input);
+  return executeAnalysis(runId, input);
 }
 
-async function runAnalysisInner(
+async function executeAnalysisInner(
+  runId: string,
   input: RunAnalysisInput,
 ): Promise<RunAnalysisResult> {
-  const { token, workspaceId, actorId, now, runLabel, window, sections } = input;
+  const { token, workspaceId, now, runLabel, window, sections } = input;
   const { reportLength, customPrompt } = input;
 
   // 1. Gather user-scoped inputs (links, deliverables, live roadmap, baseline).
@@ -193,12 +270,24 @@ async function runAnalysisInner(
   const fingerprint = fingerprintOf(added);
   const prior = await findRunByWindow(workspaceId, windowStart, windowEnd);
   if (prior?.reportWebViewLink && sameFingerprint(prior.fingerprint, fingerprint)) {
+    // Point this run's row at the prior report (no new Doc, no Gemini). The row
+    // finishes 'already_reported' carrying the same pointers + counts.
+    const counts = (prior.counts as RunAnalysisResult["counts"]) ?? null;
+    await finishRun(runId, {
+      status: "already_reported",
+      counts,
+      reportFileId: prior.reportFileId ?? null,
+      reportWebViewLink: prior.reportWebViewLink,
+      fingerprint,
+      settings: settingsSnapshot,
+      runAt: now,
+    });
     return {
-      runId: prior.id,
+      runId,
       status: "already_reported",
       reportFileId: prior.reportFileId ?? null,
       reportWebViewLink: prior.reportWebViewLink,
-      counts: (prior.counts as RunAnalysisResult["counts"]) ?? null,
+      counts,
       registered: 0,
       errored: 0,
       removedApplied: 0,
@@ -210,12 +299,39 @@ async function runAnalysisInner(
 
   // 4. Analyze the editable changes (Flash recap inside). windowed → version
   //    gate bypassed so the chosen period is always (re)reported (U12.9).
+  //    Heartbeat per file so the run row shows "analyzing N/M", and poll the
+  //    cancel flag between files so a Cancel takes effect promptly.
+  await heartbeatRun(runId, { stage: "analyzing", done: 0, total: added.length });
   const analysis = await analyze({
     workspaceId,
     outputFolderId,
     files: added,
     windowed: true,
+    onProgress: (doneN, totalN) =>
+      heartbeatRun(runId, { stage: "analyzing", done: doneN, total: totalN }),
+    shouldCancel: () => isCancelRequested(runId),
   });
+
+  // Cancel taking effect during analyze → finish the row 'cancelled', no report.
+  if (await isCancelRequested(runId)) {
+    await finishRun(runId, {
+      status: "cancelled",
+      counts: null,
+      runAt: now,
+      progressNote: "Cancelled",
+    });
+    return {
+      runId,
+      status: "cancelled",
+      reportFileId: null,
+      reportWebViewLink: null,
+      counts: null,
+      registered: 0,
+      errored: 0,
+      removedApplied: 0,
+      bootstrapped: detected.bootstrapped,
+    };
+  }
 
   // 4b. No-change short-circuit (U12.5). Nothing reportable in the window —
   //     every editable file was gated out as unchanged (skipped) and there are
@@ -233,20 +349,23 @@ async function runAnalysisInner(
       added.length === 0 && removed.length === 0 ? "empty_period" : "no_changes";
     const rec = await reconcile({
       workspaceId,
-      triggeredBy: actorId,
       detected: added,
       analysis,
       removed,
-      report: null,
       runStatus: settledStatus,
       now,
-      windowStart,
-      windowEnd,
+    });
+    await finishRun(runId, {
+      status: settledStatus,
+      counts: null,
+      reportFileId: null,
+      reportWebViewLink: null,
       fingerprint,
       settings: settingsSnapshot,
+      runAt: now,
     });
     return {
-      runId: rec.run.id,
+      runId,
       status: settledStatus,
       reportFileId: null,
       reportWebViewLink: null,
@@ -285,6 +404,12 @@ async function runAnalysisInner(
   }
 
   // 5. Synthesize — terminal on failure (the report is the whole-run product).
+  await heartbeatRun(runId, {
+    stage: "synthesizing",
+    done: 0,
+    total: 0,
+    note: "Writing the report",
+  });
   let report: Awaited<ReturnType<typeof synthesize>> | null = null;
   let runStatus: "success" | "error" = "success";
   try {
@@ -314,30 +439,29 @@ async function runAnalysisInner(
     runStatus = "error";
   }
 
-  // 6. Reconcile — syncs the registry and records the run either way.
+  // 6. Reconcile — sync the registry projection (no run record; step 7 owns it).
   const rec = await reconcile({
     workspaceId,
-    triggeredBy: actorId,
     detected: added,
     analysis,
     removed,
-    report: report
-      ? {
-          reportFileId: report.reportFileId,
-          reportWebViewLink: report.reportWebViewLink,
-          counts: report.counts,
-        }
-      : null,
     runStatus,
     now,
-    windowStart,
-    windowEnd,
+  });
+
+  // 7. Finish the running row in place with the terminal status + results.
+  await finishRun(runId, {
+    status: runStatus,
+    counts: report?.counts ?? null,
+    reportFileId: report?.reportFileId ?? null,
+    reportWebViewLink: report?.reportWebViewLink ?? null,
     fingerprint,
     settings: settingsSnapshot,
+    runAt: now,
   });
 
   return {
-    runId: rec.run.id,
+    runId,
     status: runStatus,
     reportFileId: report?.reportFileId ?? null,
     reportWebViewLink: report?.reportWebViewLink ?? null,

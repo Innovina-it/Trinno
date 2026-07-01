@@ -6,18 +6,16 @@ import { requireUser, getSessionToken } from "@/lib/auth";
 import { getWorkspace } from "@/lib/queries/workspaces";
 import { dbAsUser } from "@/lib/db/client";
 import { links, cards, boards, pmaWorkspaceState } from "@/lib/db/schema";
-import { listRuns } from "@/lib/pma/registry";
+import { listRuns, reapStaleRuns } from "@/lib/pma/registry";
 import { getAnalysisGate } from "@/lib/pma/gate";
+import { serializeRun, STALE_RUN_MS, type RunSummary } from "@/lib/pma/run-status";
 import { listContributorOrgs } from "@/lib/pma/contributor-orgs-store";
 import {
   ALL_SECTIONS_ON,
   sanitizeReportSections,
 } from "@/lib/pma/report-sections";
 import { ReportSectionsProvider } from "@/components/pma/report-sections-context";
-import {
-  AnalysisWorkbench,
-  type RunSummary,
-} from "@/components/pma/analysis-workbench";
+import { AnalysisWorkbench } from "@/components/pma/analysis-workbench";
 import {
   sanitizeReportLength,
   sanitizeCustomPrompt,
@@ -133,6 +131,13 @@ export default async function AnalysisPage({
   const ws = await getWorkspace(token, workspaceId);
   if (!ws) notFound();
 
+  // 0145 — reap a dead in-flight run (killed function, stale heartbeat) before
+  // listing, so a hung run never shows as perpetually "running" on first load.
+  await reapStaleRuns(
+    workspaceId,
+    new Date(Date.now() - STALE_RUN_MS).toISOString(),
+  ).catch(() => 0);
+
   const [runs, gate] = await Promise.all([
     listRuns(workspaceId),
     getAnalysisGate(token, workspaceId, user.id),
@@ -216,17 +221,9 @@ export default async function AnalysisPage({
       ? "Set a Source and an Output Drive folder in settings, then run one."
       : "An owner or admin can run the first analysis.";
 
-  // Serialize the run rows for the client workbench (dates → ISO strings).
-  const runSummaries: RunSummary[] = runs.map((r) => ({
-    id: r.id,
-    runAt: r.runAt ? new Date(r.runAt).toISOString() : null,
-    status: r.status ?? null,
-    counts: (r.counts as Record<string, number> | null) ?? null,
-    reportWebViewLink: r.reportWebViewLink ?? null,
-    windowStart: r.windowStart ? new Date(r.windowStart).toISOString() : null,
-    windowEnd: r.windowEnd ? new Date(r.windowEnd).toISOString() : null,
-    settings: (r.settings as RunSummary["settings"]) ?? null,
-  }));
+  // Serialize the run rows for the client workbench (dates → ISO strings, plus
+  // the 0145 live fields so an in-flight row renders with its progress).
+  const runSummaries: RunSummary[] = runs.map(serializeRun);
 
   return (
     <div className="mx-auto max-w-[1440px] space-y-7 px-4 py-6 sm:px-6 md:px-10 md:py-12">

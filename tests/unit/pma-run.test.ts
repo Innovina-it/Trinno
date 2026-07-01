@@ -12,6 +12,13 @@ const synthesize = vi.fn();
 const reconcile = vi.fn();
 const findRunByWindow = vi.fn();
 const getProjectBrief = vi.fn();
+// 0145 run manager — the run-row lifecycle. startRun mints the id, finishRun
+// writes the terminal status/results, and getActiveRun is the concurrency guard.
+const getActiveRun = vi.fn();
+const startRun = vi.fn();
+const heartbeatRun = vi.fn();
+const isCancelRequested = vi.fn();
+const finishRun = vi.fn();
 
 // The per-workspace run lock reserves a real DB connection; in this unit test it
 // passes straight through to the run body (no DB).
@@ -31,6 +38,12 @@ vi.mock("@/lib/pma/registry", () => ({
     reportLength: "medium",
     customPrompt: null,
   })),
+  getActiveRun: (...a: unknown[]) => getActiveRun(...a),
+  startRun: (...a: unknown[]) => startRun(...a),
+  heartbeatRun: (...a: unknown[]) => heartbeatRun(...a),
+  isCancelRequested: (...a: unknown[]) => isCancelRequested(...a),
+  finishRun: (...a: unknown[]) => finishRun(...a),
+  reapStaleRuns: vi.fn(async () => 0),
 }));
 vi.mock("@/lib/pma/context", () => ({
   getProjectBrief: (...a: unknown[]) => getProjectBrief(...a),
@@ -89,6 +102,18 @@ beforeEach(() => {
   getProjectBrief.mockReset();
   getProjectBrief.mockResolvedValue("PROJECT BACKGROUND"); // distilled context brief
 
+  // 0145 — run-row lifecycle defaults: no concurrent run, a fresh id, no cancel.
+  getActiveRun.mockReset();
+  getActiveRun.mockResolvedValue(null);
+  startRun.mockReset();
+  startRun.mockResolvedValue({ id: "run-1" });
+  heartbeatRun.mockReset();
+  heartbeatRun.mockResolvedValue(undefined);
+  isCancelRequested.mockReset();
+  isCancelRequested.mockResolvedValue(false);
+  finishRun.mockReset();
+  finishRun.mockResolvedValue(undefined);
+
   getRunInputs.mockResolvedValue({ ...okInputs });
   detect.mockResolvedValue({
     files: [addedFile("A"), removedFile("R")],
@@ -104,7 +129,7 @@ beforeEach(() => {
     reportWebViewLink: "https://docs/doc-1",
     counts: { changed: 1, missed: 0, removed: 1 },
   });
-  reconcile.mockResolvedValue({ registered: 1, errored: 0, removedApplied: 1, run: { id: "run-1" } });
+  reconcile.mockResolvedValue({ registered: 1, errored: 0, removedApplied: 1 });
 });
 
 describe("runAnalysis — precondition", () => {
@@ -126,13 +151,18 @@ describe("runAnalysis — happy path wiring", () => {
       window: WINDOW,
     });
 
-    // analyze gets only the added/edited files, in windowed mode (gate bypassed).
-    expect(analyze).toHaveBeenCalledWith({
-      workspaceId: WS,
-      outputFolderId: "out-folder",
-      files: [expect.objectContaining({ fileId: "A", changeType: "added_or_edited" })],
-      windowed: true,
-    });
+    // analyze gets only the added/edited files, in windowed mode (gate bypassed),
+    // plus the 0145 run-manager progress + cancel hooks.
+    expect(analyze).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: WS,
+        outputFolderId: "out-folder",
+        files: [expect.objectContaining({ fileId: "A", changeType: "added_or_edited" })],
+        windowed: true,
+        onProgress: expect.any(Function),
+        shouldCancel: expect.any(Function),
+      }),
+    );
 
     // synthesize gets the analysis results + removed files + baseline/live + the
     // distilled, cached project brief (read from the Context child, cached in Output).
@@ -148,16 +178,24 @@ describe("runAnalysis — happy path wiring", () => {
     expect(synthArg.context).toBe("PROJECT BACKGROUND");
     expect(synthArg.workspaceName).toBe("Test WS"); // masthead title source
 
-    // reconcile records the run with the report pointer + success status.
+    // reconcile syncs the registry only (0145 — it no longer records the run).
     const recArg = reconcile.mock.calls[0][0];
-    expect(recArg).toMatchObject({
-      workspaceId: WS,
-      triggeredBy: "user-1",
-      runStatus: "success",
-      now: NOW,
-      report: { reportFileId: "doc-1", reportWebViewLink: "https://docs/doc-1", counts: { changed: 1, missed: 0, removed: 1 } },
-    });
+    expect(recArg).toMatchObject({ workspaceId: WS, runStatus: "success", now: NOW });
     expect(recArg.detected).toEqual([expect.objectContaining({ fileId: "A" })]);
+    expect("report" in recArg).toBe(false);
+    expect("triggeredBy" in recArg).toBe(false);
+
+    // finishRun writes the terminal status + report pointers onto the running row.
+    expect(finishRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({
+        status: "success",
+        counts: { changed: 1, missed: 0, removed: 1 },
+        reportFileId: "doc-1",
+        reportWebViewLink: "https://docs/doc-1",
+        runAt: NOW,
+      }),
+    );
 
     expect(res).toMatchObject({
       runId: "run-1",
@@ -201,9 +239,11 @@ describe("runAnalysis — no changes (U12.5)", () => {
     const res = await run();
 
     expect(synthesize).not.toHaveBeenCalled();
-    const recArg = reconcile.mock.calls[0][0];
-    expect(recArg.runStatus).toBe("no_changes");
-    expect(recArg.report).toBeNull();
+    expect(reconcile.mock.calls[0][0].runStatus).toBe("no_changes");
+    expect(finishRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ status: "no_changes", counts: null }),
+    );
     expect(res.status).toBe("no_changes");
     expect(res.reportWebViewLink).toBeNull();
     expect(res.counts).toBeNull();
@@ -258,9 +298,18 @@ describe("runAnalysis — same-range dedup (U12.12)", () => {
     const res = await run();
 
     expect(synthesize).not.toHaveBeenCalled(); // no Gemini, no new Doc
-    expect(reconcile).not.toHaveBeenCalled(); // no new run recorded
+    expect(reconcile).not.toHaveBeenCalled(); // registry untouched
+    // 0145 — the run's own row finishes 'already_reported', pointed at the prior
+    // report; runId is this run's row (not the prior one).
+    expect(finishRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({
+        status: "already_reported",
+        reportWebViewLink: "https://docs/prior",
+      }),
+    );
     expect(res.status).toBe("already_reported");
-    expect(res.runId).toBe("prior-run");
+    expect(res.runId).toBe("run-1");
     expect(res.reportWebViewLink).toBe("https://docs/prior");
   });
 
@@ -289,12 +338,14 @@ describe("runAnalysis — synthesis is terminal", () => {
 
     const res = await run();
 
-    const recArg = reconcile.mock.calls[0][0];
-    expect(recArg.runStatus).toBe("error");
-    expect(recArg.report).toBeNull();
+    expect(reconcile.mock.calls[0][0].runStatus).toBe("error");
+    expect(finishRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ status: "error", reportFileId: null, reportWebViewLink: null }),
+    );
 
     expect(res.status).toBe("error");
-    expect(res.runId).toBe("run-1"); // a (failed) run is still recorded
+    expect(res.runId).toBe("run-1"); // the (failed) run's row is finished 'error'
     expect(res.reportWebViewLink).toBeNull();
   });
 });

@@ -1,12 +1,7 @@
 import "server-only";
 
-import {
-  listRegistry,
-  recordRun,
-  upsertRegistryEntry,
-} from "./registry";
+import { listRegistry, upsertRegistryEntry } from "./registry";
 import type { RegistryUpsert } from "./registry";
-import type { PmaAnalysisRunRow } from "@/lib/db/schema";
 import type { AnalyzeFileResult } from "./analyze";
 import type { DetectedFile } from "./detect";
 
@@ -14,8 +9,12 @@ import type { DetectedFile } from "./detect";
 //
 // The final step of a run: sync the Postgres registry (the rebuildable Drive
 // projection — keys/kind/pointers only) from this run's detect + analyze +
-// removed outputs, then record the run in pma_analysis_runs for the Analysis
-// tab. No bulk content is written — recap/report TEXT stays in Drive.
+// removed outputs. No bulk content is written — recap/report TEXT stays in Drive.
+//
+// 0145 (run manager) — reconcile no longer records the run row. The run's
+// lifecycle (insert 'running' → heartbeat → finish) is owned entirely by the
+// orchestrator (run.ts), which updates the one durable row in place. reconcile
+// is purely the Drive→registry projection now; it returns only registry counts.
 //
 // STATE RULES (DESIGN §4.3):
 //  - analyzed  → state=active, ADVANCE last_version to the analysed version,
@@ -39,7 +38,6 @@ import type { DetectedFile } from "./detect";
 
 export type ReconcileInput = {
   workspaceId: string;
-  triggeredBy: string | null;
   // Current source-folder files this run (detect output, changeType
   // "added_or_edited" — editable AND non_mod). Carries the metadata projection.
   detected: DetectedFile[];
@@ -47,34 +45,20 @@ export type ReconcileInput = {
   analysis: AnalyzeFileResult[];
   // Files detected as removed this run (changeType "removed").
   removed: DetectedFile[];
-  // synthesize() result, or null when synthesis failed (run still recorded).
-  report: {
-    reportFileId: string;
-    reportWebViewLink: string;
-    counts: { changed: number; missed: number; removed: number; deliverables?: number };
-  } | null;
   // U12.5/U12.7 — "no_changes" (files unchanged) and "empty_period" (no docs in
-  // the window) are recorded for runs that produce no report Doc. The
-  // version-advance branch keys off `=== "success"`, so neither advances
-  // last_version (and such runs have no analyzed files anyway).
+  // the window) settle runs that produce no report Doc. The version-advance
+  // branch keys off `=== "success"`, so neither advances last_version (and such
+  // runs have no analyzed files anyway).
   runStatus: "success" | "error" | "no_changes" | "empty_period";
-  // ISO timestamp for last_analyzed_at / run_at. Passed in for determinism
-  // (mirrors synthesize.runLabel) — the orchestrator stamps the run clock.
+  // ISO timestamp for last_analyzed_at. Passed in for determinism (mirrors
+  // synthesize.runLabel) — the orchestrator stamps the run clock.
   now: string;
-  // U12.12 — the run's date window (null = whole-document) + content fingerprint,
-  // recorded on the run row for same-range dedup.
-  windowStart?: string | null;
-  windowEnd?: string | null;
-  fingerprint?: Record<string, string> | null;
-  // 0144 — config snapshot { sections, length, customPrompt } for history restore.
-  settings?: Record<string, unknown> | null;
 };
 
 export type ReconcileResult = {
   registered: number; // active rows upserted (analyzed + skipped + non_mod)
   errored: number; // rows marked state=error
   removedApplied: number; // removed rows actually applied (intersected)
-  run: PmaAnalysisRunRow;
 };
 
 export async function reconcile(input: ReconcileInput): Promise<ReconcileResult> {
@@ -152,20 +136,7 @@ export async function reconcile(input: ReconcileInput): Promise<ReconcileResult>
     }
   }
 
-  // ── Record the run for the Analysis tab (DESIGN §4.4) ──────────────────────
-  const run = await recordRun({
-    workspaceId: input.workspaceId,
-    triggeredBy: input.triggeredBy,
-    status: input.runStatus,
-    counts: input.report?.counts ?? null,
-    reportFileId: input.report?.reportFileId ?? null,
-    reportWebViewLink: input.report?.reportWebViewLink ?? null,
-    runAt: input.now,
-    windowStart: input.windowStart ?? null,
-    windowEnd: input.windowEnd ?? null,
-    fingerprint: input.fingerprint ?? null,
-    settings: input.settings ?? null,
-  });
-
-  return { registered, errored, removedApplied, run };
+  // The run row itself is written by the orchestrator (run.ts) — reconcile only
+  // reports the registry projection counts back.
+  return { registered, errored, removedApplied };
 }

@@ -1,19 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // U8 reconcile — step G: sync the registry projection from a run's detect +
-// analyze + removed outputs, then record the run. The registry data layer is
-// mocked so this verifies the state/version rules and the removed-id
-// intersection with no DB.
+// analyze + removed outputs. As of 0145 (run manager) reconcile NO LONGER
+// records the run row — the orchestrator (run.ts) owns the run's lifecycle — so
+// this verifies only the state/version rules and the removed-id intersection.
+// The registry data layer is mocked so there is no DB.
 vi.mock("server-only", () => ({}));
 
 const upsertRegistryEntry = vi.fn();
 const listRegistry = vi.fn();
-const recordRun = vi.fn();
 
 vi.mock("@/lib/pma/registry", () => ({
   upsertRegistryEntry: (...a: unknown[]) => upsertRegistryEntry(...a),
   listRegistry: (...a: unknown[]) => listRegistry(...a),
-  recordRun: (...a: unknown[]) => recordRun(...a),
 }));
 
 import { reconcile } from "@/lib/pma/reconcile";
@@ -71,17 +70,14 @@ const payloadFor = (id: string) =>
 beforeEach(() => {
   upsertRegistryEntry.mockReset();
   listRegistry.mockReset();
-  recordRun.mockReset();
   upsertRegistryEntry.mockResolvedValue({});
   listRegistry.mockResolvedValue([]);
-  recordRun.mockResolvedValue({ id: "run-1" });
 });
 
 describe("reconcile — registry state rules", () => {
   it("analyzed → active, advances last_version, stamps last_analyzed_at + recap json", async () => {
     await reconcile({
       workspaceId: WS,
-      triggeredBy: "u1",
       detected: [editable("A", "v9")],
       analysis: [
         outcome("A", "analyzed", {
@@ -90,7 +86,6 @@ describe("reconcile — registry state rules", () => {
         }),
       ],
       removed: [],
-      report: null,
       runStatus: "success",
       now: NOW,
     });
@@ -106,7 +101,6 @@ describe("reconcile — registry state rules", () => {
   it("on a FAILED run, an analyzed file does NOT advance last_version (re-analyzes on retry)", async () => {
     await reconcile({
       workspaceId: WS,
-      triggeredBy: "u1",
       detected: [editable("A", "v9")],
       analysis: [
         outcome("A", "analyzed", {
@@ -115,7 +109,6 @@ describe("reconcile — registry state rules", () => {
         }),
       ],
       removed: [],
-      report: null,
       runStatus: "error",
       now: NOW,
     });
@@ -128,11 +121,9 @@ describe("reconcile — registry state rules", () => {
   it("error → state=error and last_version is LEFT UNTOUCHED (retries next run)", async () => {
     await reconcile({
       workspaceId: WS,
-      triggeredBy: "u1",
       detected: [editable("A", "v9")],
       analysis: [outcome("A", "error")],
       removed: [],
-      report: null,
       runStatus: "success",
       now: NOW,
     });
@@ -144,11 +135,9 @@ describe("reconcile — registry state rules", () => {
   it("skipped editable → active with current version, no recap/analyzed-at churn", async () => {
     await reconcile({
       workspaceId: WS,
-      triggeredBy: "u1",
       detected: [editable("A", "v9")],
       analysis: [outcome("A", "skipped")],
       removed: [],
-      report: null,
       runStatus: "success",
       now: NOW,
     });
@@ -161,11 +150,9 @@ describe("reconcile — registry state rules", () => {
   it("non_mod (never analysed) → tracked as active metadata only", async () => {
     await reconcile({
       workspaceId: WS,
-      triggeredBy: "u1",
       detected: [nonMod("P", "v3")],
       analysis: [], // non_mod files never reach analyze
       removed: [],
-      report: null,
       runStatus: "success",
       now: NOW,
     });
@@ -182,11 +169,9 @@ describe("reconcile — removed intersection (source files only)", () => {
 
     const res = await reconcile({
       workspaceId: WS,
-      triggeredBy: "u1",
       detected: [],
       analysis: [],
       removed: [removedFile("KNOWN"), removedFile("PHANTOM")],
-      report: null,
       runStatus: "success",
       now: NOW,
     });
@@ -199,11 +184,9 @@ describe("reconcile — removed intersection (source files only)", () => {
   it("does not query the registry when there are no removed files", async () => {
     await reconcile({
       workspaceId: WS,
-      triggeredBy: "u1",
       detected: [editable("A", "v1")],
       analysis: [outcome("A", "analyzed", { version: "v1" })],
       removed: [],
-      report: null,
       runStatus: "success",
       now: NOW,
     });
@@ -211,57 +194,17 @@ describe("reconcile — removed intersection (source files only)", () => {
   });
 });
 
-describe("reconcile — run record", () => {
-  it("records the run with status, counts, report pointers and run_at", async () => {
-    recordRun.mockResolvedValue({ id: "run-9" });
+describe("reconcile — result counts", () => {
+  it("counts active rows upserted (analyzed + non_mod) and returns no run row", async () => {
     const res = await reconcile({
       workspaceId: WS,
-      triggeredBy: "u1",
       detected: [editable("A", "v1"), nonMod("P", "v1")],
       analysis: [outcome("A", "analyzed", { version: "v1" })],
       removed: [],
-      report: {
-        reportFileId: "doc-1",
-        reportWebViewLink: "https://docs/doc-1",
-        counts: { changed: 1, missed: 0, removed: 0 },
-      },
       runStatus: "success",
       now: NOW,
-      windowStart: "2026-06-07T00:00:00.000Z",
-      windowEnd: "2026-06-08T23:59:59.999Z",
-      fingerprint: { A: "v1" },
     });
-
-    expect(recordRun).toHaveBeenCalledWith({
-      workspaceId: WS,
-      triggeredBy: "u1",
-      status: "success",
-      counts: { changed: 1, missed: 0, removed: 0 },
-      reportFileId: "doc-1",
-      reportWebViewLink: "https://docs/doc-1",
-      runAt: NOW,
-      windowStart: "2026-06-07T00:00:00.000Z",
-      windowEnd: "2026-06-08T23:59:59.999Z",
-      fingerprint: { A: "v1" },
-      settings: null,
-    });
-    expect(res.run).toEqual({ id: "run-9" });
-    expect(res.registered).toBe(2); // analyzed A + non_mod P
-  });
-
-  it("still records a (failed) run when synthesis produced no report", async () => {
-    await reconcile({
-      workspaceId: WS,
-      triggeredBy: null,
-      detected: [],
-      analysis: [],
-      removed: [],
-      report: null,
-      runStatus: "error",
-      now: NOW,
-    });
-    expect(recordRun).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "error", counts: null, reportFileId: null }),
-    );
+    expect(res).toEqual({ registered: 2, errored: 0, removedApplied: 0 });
+    expect("run" in res).toBe(false); // 0145 — reconcile no longer records the run
   });
 });

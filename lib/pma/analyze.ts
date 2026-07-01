@@ -81,6 +81,13 @@ export type AnalyzeInput = {
   // (re)reported, regardless of whether the file's current version was analysed
   // before. detect's revision-based membership already scoped the file set.
   windowed?: boolean;
+  // 0145 (run manager) — optional cooperative hooks. onProgress is called after
+  // each editable file settles, with 1-based done / total, so the run row can
+  // show "analyzing N/M". shouldCancel is polled before each file; returning true
+  // stops the loop early (partial results returned; the orchestrator finalizes as
+  // 'cancelled'). Both absent → today's behaviour, no DB traffic.
+  onProgress?: (done: number, total: number) => void | Promise<void>;
+  shouldCancel?: () => boolean | Promise<boolean>;
 };
 
 // U12.9 — who to attribute a file's changes to: the window's revision authors if
@@ -168,7 +175,12 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
   );
 
   const results: AnalyzeFileResult[] = [];
+  const total = editable.length;
+  let done = 0;
   for (const file of editable) {
+    // 0145 — cooperative cancel: stop before starting another file's work. The
+    // orchestrator re-checks the flag and finalizes the run as 'cancelled'.
+    if (input.shouldCancel && (await input.shouldCancel())) break;
     // Drive `version` is the gate key — headRevisionId is null for Google docs.
     const version = file.version;
     try {
@@ -192,6 +204,8 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
           contributors: contributorsOf(file),
           folderPath: file.folderPath,
         });
+        done += 1;
+        await input.onProgress?.(done, total);
         continue;
       }
 
@@ -242,6 +256,8 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         folderPath: file.folderPath,
       });
     }
+    done += 1;
+    await input.onProgress?.(done, total);
   }
   return results;
 }

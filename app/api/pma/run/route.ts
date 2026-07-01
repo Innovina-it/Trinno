@@ -1,11 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 
 import { requireUser, getSessionToken } from "@/lib/auth";
 import { dbAsUser } from "@/lib/db/client";
+import { getWorkspace } from "@/lib/queries/workspaces";
 import { getWorkspaceRole } from "@/lib/permissions/guest-guard";
 import { assertWorkspaceWriter } from "@/lib/permissions/workspace-writer";
 import { StructuredError } from "@/lib/errors/structured-error";
-import { runAnalysis } from "@/lib/pma/run";
+import { startAnalysis, executeAnalysis } from "@/lib/pma/run";
+import { listRuns, getActiveRun, reapStaleRuns } from "@/lib/pma/registry";
+import { serializeRun, STALE_RUN_MS } from "@/lib/pma/run-status";
 import { sanitizeReportSections } from "@/lib/pma/report-sections";
 import {
   sanitizeReportLength,
@@ -14,8 +17,8 @@ import {
 } from "@/lib/pma/report-settings";
 
 // PMA U9 — "Run analysis" route (DESIGN §3, §6). Owner/admin only. Thin: auth +
-// role gate + parse → delegate to runAnalysis (the A→G pipeline). A run can take
-// tens of seconds (Gemini Flash synthesis), so allow the platform max duration.
+// role gate + parse → start the run and hand the A→G pipeline to a background
+// task (0145 run manager), returning the run id immediately. GET polls status.
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
@@ -123,7 +126,7 @@ export async function POST(req: Request) {
         .toLocaleString("en-GB", { timeZone: "Europe/Rome", hour12: false })
         .replace(",", "") + " (UTC+1)";
 
-    const result = await runAnalysis({
+    const runInput = {
       token,
       workspaceId,
       actorId: user.id,
@@ -133,8 +136,56 @@ export async function POST(req: Request) {
       sections,
       reportLength,
       customPrompt,
+    };
+
+    // 0145 — insert the 'running' row (rejects a concurrent run with CONFLICT),
+    // then hand the A→G pipeline to a background task so the response returns
+    // immediately. The run survives refresh; the client polls GET for progress.
+    const { runId } = await startAnalysis(runInput);
+    after(() =>
+      executeAnalysis(runId, runInput).catch((err) => {
+        console.error("[pma] background run failed", runId, err);
+      }),
+    );
+    return NextResponse.json({ runId, status: "running" }, { status: 202 });
+  } catch (err) {
+    const e = StructuredError.fromUnknown(err);
+    return NextResponse.json({ error: e.toJSON() }, { status: statusFor(e.code) });
+  }
+}
+
+// 0145 — poll a workspace's run state. Any member may read (RLS-enforced via
+// getWorkspace). Reaps a dead in-flight run first (its function was killed and
+// the heartbeat went stale), so a hung run self-heals to 'error' on the next
+// poll. Returns the active run (if any) plus the full history.
+export async function GET(req: Request) {
+  await requireUser();
+  const token = (await getSessionToken())!;
+  const workspaceId = new URL(req.url).searchParams.get("workspaceId");
+  if (!workspaceId) {
+    return NextResponse.json(
+      { error: { code: "BAD_REQUEST", message: "workspaceId is required." } },
+      { status: 400 },
+    );
+  }
+  try {
+    const ws = await getWorkspace(token, workspaceId);
+    if (!ws) {
+      return NextResponse.json(
+        { error: { code: "NOT_FOUND", message: "Workspace not found." } },
+        { status: 404 },
+      );
+    }
+    const staleBefore = new Date(Date.now() - STALE_RUN_MS).toISOString();
+    await reapStaleRuns(workspaceId, staleBefore).catch(() => 0);
+    const [active, runs] = await Promise.all([
+      getActiveRun(workspaceId),
+      listRuns(workspaceId),
+    ]);
+    return NextResponse.json({
+      active: active ? serializeRun(active) : null,
+      runs: runs.map(serializeRun),
     });
-    return NextResponse.json({ result });
   } catch (err) {
     const e = StructuredError.fromUnknown(err);
     return NextResponse.json({ error: e.toJSON() }, { status: statusFor(e.code) });
