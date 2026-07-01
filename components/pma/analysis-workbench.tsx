@@ -657,13 +657,13 @@ function RunView({
             href={run.reportWebViewLink}
             target="_blank"
             rel="noopener noreferrer"
-            className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "mr-auto")}
+            className={buttonVariants({ variant: "secondary", size: "sm" })}
           >
             Open report ↗
           </a>
         )}
         {canRun && run.settings && (
-          <Button size="sm" variant="secondary" onClick={onReRun} disabled={running}>
+          <Button size="sm" variant="ghost" onClick={onReRun} disabled={running}>
             {running ? "Running…" : "Re-run with these settings"}
           </Button>
         )}
