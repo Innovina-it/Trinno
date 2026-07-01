@@ -140,6 +140,20 @@ describe("runAnalysis — precondition", () => {
   });
 });
 
+describe("runAnalysis — running row carries its settings (0145)", () => {
+  it("snapshots the chosen length/focus onto the row at start (not just at finish)", async () => {
+    await run({ reportLength: "short", customPrompt: "budget risks" });
+    // The running row is minted with its config snapshot so the live UI shows the
+    // real settings instead of falling back to defaults.
+    expect(startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: WS,
+        settings: expect.objectContaining({ length: "short", customPrompt: "budget risks" }),
+      }),
+    );
+  });
+});
+
 describe("runAnalysis — happy path wiring", () => {
   it("detects in-window, analyzes added, synthesizes (with the window), reconciles", async () => {
     const res = await run();

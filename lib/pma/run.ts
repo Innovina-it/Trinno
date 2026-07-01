@@ -130,6 +130,40 @@ function changedFiles(
   return names;
 }
 
+// The effective report config for a run + the snapshot recorded on its row.
+// input values win over the workspace's saved settings; sections null → all on.
+// Read-only (no persistence) so it can run inside startAnalysis under the lock;
+// executeAnalysis persists the choice separately and recomputes the same result.
+type ResolvedRunSettings = {
+  effReportLength: ReportLength;
+  effCustomPrompt: string | null;
+  snapshot: {
+    sections: ReportSections | null;
+    length: ReportLength;
+    customPrompt: string | null;
+  };
+};
+async function resolveRunSettings(
+  input: RunAnalysisInput,
+): Promise<ResolvedRunSettings> {
+  const saved = await getWorkspaceReportSettings(input.workspaceId).catch(() => ({
+    reportLength: "medium" as ReportLength,
+    customPrompt: null as string | null,
+  }));
+  const effReportLength = input.reportLength ?? saved.reportLength;
+  const effCustomPrompt =
+    input.customPrompt !== undefined ? input.customPrompt : saved.customPrompt;
+  return {
+    effReportLength,
+    effCustomPrompt,
+    snapshot: {
+      sections: input.sections ?? null,
+      length: effReportLength,
+      customPrompt: effCustomPrompt ?? null,
+    },
+  };
+}
+
 // 0145 (run manager) — a run is now a durable, observable job instead of a
 // synchronous call. Two entry points:
 //
@@ -165,12 +199,17 @@ export async function startAnalysis(
         "An analysis is already running for this workspace. Try again in a moment.",
       );
     }
+    // Snapshot the chosen config onto the running row NOW, so the live run shows
+    // its real length/sections/focus immediately (not the defaults it would fall
+    // back to when settings is null). finishRun rewrites the same snapshot.
+    const { snapshot } = await resolveRunSettings(input);
     const run = await startRun({
       workspaceId: input.workspaceId,
       triggeredBy: input.actorId,
       runAt: input.now,
       windowStart: input.window?.start ?? null,
       windowEnd: input.window?.end ?? null,
+      settings: snapshot,
     });
     return { runId: run.id };
   });
@@ -228,26 +267,19 @@ async function executeAnalysisInner(
     await setWorkspaceReportSections(workspaceId, sections);
   }
 
-  // 0143 — effective report length + custom focus. The panel passes the current
-  // values (saved here so they persist + apply to non-panel runs); when absent we
-  // fall back to the workspace's saved settings ('medium' / no focus by default).
-  const savedSettings = await getWorkspaceReportSettings(workspaceId).catch(() => ({
-    reportLength: "medium" as ReportLength,
-    customPrompt: null as string | null,
-  }));
+  // 0143 — persist the chosen length + custom focus so they stick for next time
+  // and apply to non-panel runs. Then resolve the effective values + the config
+  // snapshot (0144) recorded on the run row for history/restore. resolveRunSettings
+  // reads back the just-saved values, so this matches the snapshot startAnalysis
+  // already wrote onto the running row.
   if (reportLength !== undefined || customPrompt !== undefined) {
     await setWorkspaceReportSettings(workspaceId, { reportLength, customPrompt });
   }
-  const effReportLength = reportLength ?? savedSettings.reportLength;
-  const effCustomPrompt =
-    customPrompt !== undefined ? customPrompt : savedSettings.customPrompt;
-  // 0144 — the config snapshot recorded on every run row, so the history can show
-  // and restore what produced it. sections null → all on; period is on the row.
-  const settingsSnapshot = {
-    sections: sections ?? null,
-    length: effReportLength,
-    customPrompt: effCustomPrompt ?? null,
-  };
+  const {
+    effReportLength,
+    effCustomPrompt,
+    snapshot: settingsSnapshot,
+  } = await resolveRunSettings(input);
 
   // 3. Detect (WINDOW mode) → files modified in [start,end]; split added vs
   //    removed (window mode yields no removed — there is no change feed).
