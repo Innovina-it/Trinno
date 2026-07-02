@@ -303,6 +303,9 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
             ) + deltaBlock,
           responseSchema: RECAP_SCHEMA,
           temperature: 0,
+          // U6d — recaps are extraction, not reasoning: thinking off halves the
+          // per-file latency and trims the billed thought tokens (measured live).
+          thinkingBudget: 0,
           ...("file" in analyzable ? { files: [analyzable.file] } : {}),
         }),
         150_000,

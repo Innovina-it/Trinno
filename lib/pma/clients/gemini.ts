@@ -36,6 +36,12 @@ export type StructuredInput = {
   // the request becomes multimodal; when absent behaviour is unchanged, so the
   // existing text-only PMA callers are not affected. `data` is base64.
   files?: { mimeType: string; data: string }[];
+  // U6d — thinking-token budget. 0 disables the model's thinking phase — right
+  // for extraction work like the per-file recaps (measured live 02/07/2026:
+  // ~2× faster and ~500 fewer billed tokens per call, same output quality
+  // contract). Absent → the model's default (keep for the synthesis, which
+  // benefits from reasoning).
+  thinkingBudget?: number;
 };
 
 // Pure: build the genai `contents` argument. Text-only (no files) → the bare
@@ -87,6 +93,9 @@ export async function generateStructured<T>(input: StructuredInput): Promise<T> 
       responseSchema: input.responseSchema,
       ...(input.temperature !== undefined
         ? { temperature: input.temperature }
+        : {}),
+      ...(input.thinkingBudget !== undefined
+        ? { thinkingConfig: { thinkingBudget: input.thinkingBudget } }
         : {}),
     },
   });

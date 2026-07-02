@@ -125,6 +125,7 @@ describe("analyze — recap (D)", () => {
 
     const gen = generateStructured.mock.calls[0][0];
     expect(gen.model).toBe("gemini-3.5-flash");
+    expect(gen.thinkingBudget).toBe(0); // U6d — recaps run with thinking off
     expect(gen.responseSchema).toBeTruthy();
     expect(typeof gen.prompt).toBe("string");
     expect(gen.prompt).toContain("document body text"); // content fed to the model
