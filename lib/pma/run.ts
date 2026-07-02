@@ -101,8 +101,15 @@ export type RunAnalysisResult = {
 
 // U12.12 — content fingerprint of the in-window files: {fileId: driveVersion}.
 // Equal fingerprint for the same window ⇒ nothing changed since the last report.
+//
+// U6 — the fingerprint also carries the PIPELINE version: after a prompt/code
+// change the same window would produce a materially different report, so
+// "already reported" must not fire even though no document changed. Bump this
+// whenever report generation changes meaningfully.
+export const PIPELINE_VERSION = "2026-07-02.u6";
+
 function fingerprintOf(files: DetectedFile[]): Record<string, string> {
-  const fp: Record<string, string> = {};
+  const fp: Record<string, string> = { __pipeline: PIPELINE_VERSION };
   for (const f of files) fp[f.fileId] = f.version ?? "";
   return fp;
 }

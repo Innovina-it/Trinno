@@ -49,7 +49,7 @@ vi.mock("@/lib/pma/context", () => ({
   getProjectBrief: (...a: unknown[]) => getProjectBrief(...a),
 }));
 
-import { runAnalysis } from "@/lib/pma/run";
+import { runAnalysis, PIPELINE_VERSION } from "@/lib/pma/run";
 import type { DetectedFile } from "@/lib/pma/detect";
 
 const WS = "ws-1";
@@ -308,7 +308,9 @@ describe("runAnalysis — same-range dedup (U12.12)", () => {
       reportFileId: "doc-prior",
       reportWebViewLink: "https://docs/prior",
       counts: { changed: 1, missed: 0, removed: 0 },
-      fingerprint: { A: "v1" }, // addedFile("A").version is "v1"
+      // addedFile("A").version is "v1"; __pipeline must match too (U6) — a prior
+      // run from an older pipeline no longer counts as "already reported".
+      fingerprint: { A: "v1", __pipeline: PIPELINE_VERSION },
     });
 
     const res = await run();
