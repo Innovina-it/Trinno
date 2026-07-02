@@ -1221,6 +1221,29 @@ describe("attribution & timeline (U4)", () => {
     expect(prompt).toContain("kick-off — 12/06/2026"); // recap key_dates ride along
   });
 
+  // U5 (revision delta) — verified-vs-current-state entries reach the model.
+  it("payload carries changes_verified_since (newest across copies) and the prompt explains it", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [
+        { ...analyzed("a"), name: "AIWEPI_T2.1_EN.docx", deltaBaseDate: "2026-05-30T09:00:00Z" },
+        { ...analyzed("b"), name: "AIWEPI_T2.1_IT.docx", deltaBaseDate: "2026-06-01T08:00:00Z" },
+        { ...analyzed("c"), name: "NoHistory.gdoc" }, // no delta basis
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"changes_verified_since": "2026-06-01T08:00:00Z"'); // newest copy wins
+    expect(prompt).toContain('"changes_verified_since": null'); // ungrounded entry marked
+    const sys = generateStructured.mock.calls[0][0].systemInstruction as string;
+    expect(sys).toContain("changes_verified_since");
+    expect(sys).toContain("never as something added or changed during");
+  });
+
   it("prompt demands {claim, file, date} citations and date anchoring", async () => {
     await synthesize({
       workspaceId: WS,

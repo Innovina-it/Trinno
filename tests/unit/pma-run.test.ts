@@ -173,6 +173,8 @@ describe("runAnalysis — happy path wiring", () => {
         outputFolderId: "out-folder",
         files: [expect.objectContaining({ fileId: "A", changeType: "added_or_edited" })],
         windowed: true,
+        // U5 — the window start rides into analyze for the revision delta.
+        windowStart: WINDOW.start,
         onProgress: expect.any(Function),
         shouldCancel: expect.any(Function),
       }),

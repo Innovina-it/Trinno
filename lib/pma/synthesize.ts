@@ -303,6 +303,14 @@ const SYNTHESIS_SYSTEM =
   "{claim, file, date}: `file` = the document the claim comes from, `date` = " +
   "that entry's `last_modified` (or a `key_dates` date when the event itself " +
   "is dated); \"\" when unknown — never invent a date. " +
+  // U5 (revision delta) — verified vs current-state entries are narrated
+  // differently: only verified ones may be reported as changes of the period.
+  "A changed-file entry with a non-null `changes_verified_since` carries " +
+  "additions/edits VERIFIED by a computed diff since that date — report those " +
+  "as actual changes of the period. An entry with `changes_verified_since` " +
+  "null describes CURRENT content only: present it as current state ('the " +
+  "document contains/covers …'), never as something added or changed during " +
+  "the period. " +
   // U4 (eval #2/#15) — anchor events; reconcile the window with the project.
   "Anchor key events (kick-off, submissions, signatures) to explicit dates " +
   "drawn from `key_dates`, `last_modified` or `filename_date` — e.g. 'kicked " +
@@ -600,6 +608,15 @@ function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
         "low",
       ),
       is_deliverable: isDeliverable,
+      // U5 (revision delta) — when non-null, this entry's additions/edits come
+      // from a COMPUTED DIFF against the file's revision at this date (verified
+      // changes); null → the recap describes current content only.
+      changes_verified_since:
+        g
+          .map((r) => r.deltaBaseDate)
+          .filter((d): d is string => !!d)
+          .sort()
+          .pop() ?? null,
       // U4 (eval #6/R2) — the grounded dates for {claim, file, date} citations:
       // newest Drive modifiedTime across the folded copies (date only), a leading
       // YYYYMMDD in the filename (the kick-off deck case), and the documents' own

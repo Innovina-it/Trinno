@@ -339,6 +339,9 @@ async function executeAnalysisInner(
     outputFolderId,
     files: added,
     windowed: true,
+    // U5 (revision delta) — ground each native doc's recap in a computed diff
+    // against its newest revision at-or-before the window start (best-effort).
+    windowStart: window?.start ?? null,
     onProgress: (doneN, totalN) =>
       heartbeatRun(runId, { stage: "analyzing", done: doneN, total: totalN }),
     shouldCancel: () => isCancelRequested(runId),

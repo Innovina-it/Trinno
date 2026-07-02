@@ -8,10 +8,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const getAnalyzableContent = vi.fn();
+const getAnalyzableTextBefore = vi.fn();
 const generateStructured = vi.fn();
 const getRegistryEntry = vi.fn();
 
-vi.mock("@/lib/pma/content", () => ({ getAnalyzableContent: (...a: unknown[]) => getAnalyzableContent(...a) }));
+vi.mock("@/lib/pma/content", () => ({
+  getAnalyzableContent: (...a: unknown[]) => getAnalyzableContent(...a),
+  getAnalyzableTextBefore: (...a: unknown[]) => getAnalyzableTextBefore(...a),
+}));
 vi.mock("@/lib/pma/clients/gemini", () => ({ generateStructured: (...a: unknown[]) => generateStructured(...a) }));
 vi.mock("@/lib/pma/registry", () => ({ getRegistryEntry: (...a: unknown[]) => getRegistryEntry(...a) }));
 
@@ -53,6 +57,8 @@ const RECAP = {
 
 beforeEach(() => {
   getAnalyzableContent.mockReset();
+  getAnalyzableTextBefore.mockReset();
+  getAnalyzableTextBefore.mockResolvedValue(null); // no old revision by default
   generateStructured.mockReset();
   getRegistryEntry.mockReset();
   getRegistryEntry.mockResolvedValue(null);
@@ -167,6 +173,70 @@ describe("analyze — recap (D)", () => {
       files: [editable("A", "rev1", { folderPath: ["First Output (old)"] })],
     });
     expect(res[0].folderPath).toEqual(["First Output (old)"]);
+  });
+});
+
+// U5 (revision delta) — windowed runs ground "what changed" in a computed diff
+// against the newest revision at-or-before the window start.
+describe("analyze — revision delta (U5)", () => {
+  it("appends a VERIFIED CHANGES diff block and sets deltaBaseDate when an old revision exists", async () => {
+    getAnalyzableContent.mockResolvedValue({ text: "title\nbudget: 40k\nend" });
+    getAnalyzableTextBefore.mockResolvedValue({
+      text: "title\nbudget: 10k\nend",
+      revisionDate: "2026-05-30T09:00:00Z",
+    });
+    const res = await analyze({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      files: [editable("A", "rev1")],
+      windowed: true,
+      windowStart: "2026-06-01T00:00:00.000Z",
+    });
+    expect(getAnalyzableTextBefore).toHaveBeenCalledWith(
+      "A",
+      "application/vnd.google-apps.document",
+      "2026-06-01T00:00:00.000Z",
+    );
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain("VERIFIED CHANGES SINCE 2026-05-30T09:00:00Z");
+    expect(prompt).toContain("- budget: 10k"); // the real diff, not an inference
+    expect(prompt).toContain("+ budget: 40k");
+    expect(res[0].deltaBaseDate).toBe("2026-05-30T09:00:00Z");
+  });
+
+  it("says 'none — content is identical' when the old revision matches current", async () => {
+    getAnalyzableContent.mockResolvedValue({ text: "same body" });
+    getAnalyzableTextBefore.mockResolvedValue({ text: "same body", revisionDate: "2026-05-30T09:00:00Z" });
+    const res = await analyze({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      files: [editable("A", "rev1")],
+      windowed: true,
+      windowStart: "2026-06-01T00:00:00.000Z",
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain("none — content is identical");
+    expect(res[0].deltaBaseDate).toBe("2026-05-30T09:00:00Z");
+  });
+
+  it("falls back silently when no old revision is available (best-effort)", async () => {
+    getAnalyzableTextBefore.mockResolvedValue(null);
+    const res = await analyze({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      files: [editable("A", "rev1")],
+      windowed: true,
+      windowStart: "2026-06-01T00:00:00.000Z",
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).not.toContain("VERIFIED CHANGES");
+    expect(res[0].deltaBaseDate).toBeNull();
+    expect(res[0].status).toBe("analyzed"); // never fails the file
+  });
+
+  it("does not fetch revisions at all without a windowStart (unchanged behaviour)", async () => {
+    await analyze({ workspaceId: WS, outputFolderId: OUT, files: [editable("A", "rev1")] });
+    expect(getAnalyzableTextBefore).not.toHaveBeenCalled();
   });
 });
 

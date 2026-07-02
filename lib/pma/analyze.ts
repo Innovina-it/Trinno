@@ -3,8 +3,9 @@ import "server-only";
 import { Type } from "@google/genai";
 import type { Schema } from "@google/genai";
 
-import { getAnalyzableContent } from "./content";
+import { getAnalyzableContent, getAnalyzableTextBefore } from "./content";
 import { generateStructured } from "./clients/gemini";
+import { diffLines } from "./text-diff";
 import { getRegistryEntry } from "./registry";
 import type { DetectedFile } from "./detect";
 import type { ContributorIdentity } from "./contributor-orgs";
@@ -61,6 +62,10 @@ export type AnalyzeFileResult = {
   // U4 (eval #6/R2) — the file's Drive modifiedTime, carried from detect so the
   // synthesis payload can date every change claim ({claim, file, date}).
   modifiedTime?: string | null;
+  // U5 (revision delta) — when the recap was grounded in a computed diff, the
+  // date of the old revision it was diffed against; null/absent → the recap
+  // describes current content only (no verified change basis).
+  deltaBaseDate?: string | null;
   // U12.4 — displayName of the file's last modifier (or null/"unknown"); surfaced
   // in the report for attribution. Not persisted in recap_json.
   modifiedBy?: string | null;
@@ -88,6 +93,11 @@ export type AnalyzeInput = {
   // (re)reported, regardless of whether the file's current version was analysed
   // before. detect's revision-based membership already scoped the file set.
   windowed?: boolean;
+  // U5 (revision delta) — the window's start (ISO). When present, each native
+  // Google Doc's recap is grounded in a COMPUTED DIFF between the newest
+  // revision at-or-before this instant and the current text, so "what changed"
+  // is verified instead of inferred. Best-effort per file; absent → unchanged.
+  windowStart?: string | null;
   // 0145 (run manager) — optional cooperative hooks. onProgress is called after
   // each editable file settles, with 1-based done / total, so the run row can
   // show "analyzing N/M". shouldCancel is polled before each file; returning true
@@ -174,6 +184,14 @@ const RECAP_SYSTEM =
   "partner list, section placeholders, instructions) is NOT authored progress: " +
   "describe such a document as an unfilled template rather than narrating its " +
   "scaffolding as additions. " +
+  // U5 (revision delta) — when a real diff is supplied, changes are VERIFIED;
+  // without one, never claim to know what changed.
+  "When the input includes a VERIFIED CHANGES block (a computed diff against an " +
+  "earlier revision), ground `additions`, `edits` and `structural_changes` " +
+  "EXCLUSIVELY in that diff — those are the real changes since the stated date; " +
+  "the full text above it is context for understanding the diff. When no such " +
+  "block is present, you cannot know what changed: describe the CURRENT content " +
+  "and do not phrase anything as having been added or changed. " +
   "Respond only as JSON matching the provided schema.";
 
 function buildPrompt(file: DetectedFile, content: string): string {
@@ -238,13 +256,37 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
       // ── Step D: fetch content (text export, or a binary file part for
       //    PDF/images/Office) → Flash recap. The recap body rides back in-memory.
       const analyzable = await getAnalyzableContent(file.fileId, file.mimeType ?? "");
+
+      // U5 (revision delta) — for a windowed run, ground "what changed" in a
+      // computed diff against the newest revision at-or-before the window start.
+      // Best-effort: any miss leaves deltaBlock empty and the recap describes
+      // current content (the prompt tells the model which mode it is in).
+      let deltaBlock = "";
+      let deltaBaseDate: string | null = null;
+      if (input.windowStart && "text" in analyzable) {
+        const before = await getAnalyzableTextBefore(
+          file.fileId,
+          file.mimeType ?? "",
+          input.windowStart,
+        );
+        if (before) {
+          deltaBaseDate = before.revisionDate;
+          const d = diffLines(before.text, analyzable.text);
+          deltaBlock =
+            d.added + d.removed > 0
+              ? `\n--- VERIFIED CHANGES SINCE ${before.revisionDate} (computed diff vs that revision: +${d.added}/-${d.removed} lines${d.truncated ? ", truncated" : ""}) ---\n${d.text}\n--- END VERIFIED CHANGES ---`
+              : `\n--- VERIFIED CHANGES SINCE ${before.revisionDate}: none — content is identical to that revision ---`;
+        }
+      }
+
       const recap = await generateStructured<FileRecap>({
         model: "gemini-3.5-flash",
         systemInstruction: RECAP_SYSTEM,
-        prompt: buildPrompt(
-          file,
-          "text" in analyzable ? analyzable.text : "(binary document attached below)",
-        ),
+        prompt:
+          buildPrompt(
+            file,
+            "text" in analyzable ? analyzable.text : "(binary document attached below)",
+          ) + deltaBlock,
         responseSchema: RECAP_SCHEMA,
         temperature: 0,
         ...("file" in analyzable ? { files: [analyzable.file] } : {}),
@@ -261,6 +303,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         recapFileId: null,
         recap,
         error: null,
+        deltaBaseDate,
         modifiedBy: file.lastModifiedBy,
         modifiedTime: file.modifiedTime,
         name: file.name,

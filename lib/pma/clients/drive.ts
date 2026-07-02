@@ -190,16 +190,27 @@ async function loadCredentials(): Promise<ServiceAccountCredentials> {
 // Build (or return the cached) authenticated Drive v3 client. Auth uses the
 // service-account JSON referenced by GOOGLE_APPLICATION_CREDENTIALS with the
 // full `drive` scope.
+let cachedAuth: InstanceType<typeof google.auth.JWT> | null = null;
+
 export async function getDriveClient(): Promise<drive_v3.Drive> {
   if (cachedDrive) return cachedDrive;
   const { client_email, private_key } = await loadCredentials();
-  const auth = new google.auth.JWT({
+  cachedAuth = new google.auth.JWT({
     email: client_email,
     key: private_key,
     scopes: [DRIVE_SCOPE],
   });
-  cachedDrive = google.drive({ version: "v3", auth });
+  cachedDrive = google.drive({ version: "v3", auth: cachedAuth });
   return cachedDrive;
+}
+
+// Bearer token for raw fetches the googleapis client can't do (a revision's
+// exportLinks URL is a plain authenticated GET, not a drive.* method).
+async function getAccessToken(): Promise<string> {
+  await getDriveClient(); // ensures cachedAuth
+  const { token } = await cachedAuth!.getAccessToken();
+  if (!token) throw new Error("Drive auth returned no access token.");
+  return token;
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +318,36 @@ export async function listRevisions(fileId: string): Promise<DriveRevision[]> {
     pageToken = res.data.nextPageToken ?? undefined;
   } while (pageToken);
   return out;
+}
+
+// U5 (revision delta) — the newest revision of a NATIVE Google Doc at-or-before
+// `beforeIso`, exported as plain text via the revision's exportLinks (probed
+// working on the live corpus 02/07/2026: old revisions of Docs Editors files
+// export fine; granularity is Google's coarse merged revisions). Returns null
+// when the file has no revision that old, the revision carries no text export
+// link, or the export fails — callers treat null as "no verified delta
+// available" and fall back to current-content behaviour. Read-only.
+export async function getNativeRevisionTextBefore(
+  fileId: string,
+  beforeIso: string,
+): Promise<{ text: string; revisionDate: string } | null> {
+  const drive = await getDriveClient();
+  const res = await drive.revisions.list({
+    fileId,
+    fields: "revisions(id, modifiedTime, exportLinks)",
+    pageSize: 1000,
+  });
+  // revisions.list returns chronological order — take the last one ≤ cutoff.
+  const revs = (res.data.revisions ?? []).filter(
+    (r) => r.modifiedTime && r.modifiedTime <= beforeIso,
+  );
+  const rev = revs[revs.length - 1];
+  const url = rev?.exportLinks?.["text/plain"];
+  if (!rev?.modifiedTime || !url) return null;
+  const token = await getAccessToken();
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!resp.ok) return null;
+  return { text: await resp.text(), revisionDate: rev.modifiedTime };
 }
 
 // Get the Changes-API start page token for the SOURCE folder's drive. Used to

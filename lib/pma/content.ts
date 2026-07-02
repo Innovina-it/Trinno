@@ -4,6 +4,7 @@ import {
   exportText,
   getFileBytes,
   copyAsGoogleAndExportText,
+  getNativeRevisionTextBefore,
 } from "@/lib/pma/clients/drive";
 
 // Which Drive mime types the analyzer can read, and how. Three families:
@@ -52,4 +53,24 @@ export async function getAnalyzableContent(
     return { file: { mimeType: f.mimeType, data: f.data } };
   }
   throw new Error(`getAnalyzableContent: ${mimeType} is not analyzable`);
+}
+
+// U5 (revision delta) — the file's text as it stood at the newest revision
+// at-or-before `beforeIso`, so analyze can diff it against the current text and
+// feed the recap a VERIFIED change instead of an inferred one. v1 covers native
+// Google Docs only (their revisions export directly; an old Office/PDF revision
+// would need a convert-upload round-trip — deferred). Best-effort by contract:
+// any miss (no old revision, no export link, Drive error) returns null and the
+// caller falls back to current-content behaviour.
+export async function getAnalyzableTextBefore(
+  fileId: string,
+  mimeType: string,
+  beforeIso: string,
+): Promise<{ text: string; revisionDate: string } | null> {
+  if (!GOOGLE_NATIVE.has(mimeType)) return null;
+  try {
+    return await getNativeRevisionTextBefore(fileId, beforeIso);
+  } catch {
+    return null;
+  }
 }
