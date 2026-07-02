@@ -215,6 +215,31 @@ export default async function AnalysisPage({
     ]);
   }
 
+  // U4 (eval #1) — the roadmap's date span, so the run panel can offer a
+  // "Project" period preset (project start → today) instead of only calendar
+  // arithmetic. Best-effort: no dated cards / any failure → null (no preset).
+  const projectRange = gate.isOwnerAdmin
+    ? await dbAsUser(token, async (tx) => {
+        const rows = await tx
+          .select({ start: cards.startDate, target: cards.targetDate })
+          .from(cards)
+          .innerJoin(boards, eq(cards.boardId, boards.id))
+          .where(eq(boards.workspaceId, workspaceId));
+        let min: Date | null = null;
+        let max: Date | null = null;
+        for (const r of rows) {
+          for (const d of [r.start, r.target]) {
+            if (!d) continue;
+            if (!min || d < min) min = d;
+            if (!max || d > max) max = d;
+          }
+        }
+        return min
+          ? { start: min.toISOString(), end: max ? max.toISOString() : null }
+          : null;
+      }).catch(() => null)
+    : null;
+
   const emptyHint = gate.canRun
     ? "Run one above to generate the first report."
     : gate.isOwnerAdmin
@@ -253,6 +278,7 @@ export default async function AnalysisPage({
             sourceUrl={sourceRow?.url ?? null}
             contributorOrgRows={contributorOrgRows}
             orgHints={orgHints}
+            projectRange={projectRange}
           />
         </ReportSectionsProvider>
       ) : runs.length === 0 ? (

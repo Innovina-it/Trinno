@@ -45,6 +45,10 @@ export type FileRecap = {
   // Maturity of the document, inferred from its own content/labels (never the
   // model's guess): "unknown" when the document does not state it.
   file_status: "draft" | "final" | "approved" | "unknown";
+  // U4 (eval #2/#15) — explicit dates of key events the document itself states
+  // (kick-off, submission, signature, deadline), each "event — date" verbatim.
+  // Optional in the type so pre-U4 recaps stored in recap_json stay valid.
+  key_dates?: string[];
 };
 
 export type AnalyzeFileResult = {
@@ -54,6 +58,9 @@ export type AnalyzeFileResult = {
   recapFileId: string | null;
   recap: FileRecap | null;
   error: string | null;
+  // U4 (eval #6/R2) — the file's Drive modifiedTime, carried from detect so the
+  // synthesis payload can date every change claim ({claim, file, date}).
+  modifiedTime?: string | null;
   // U12.4 — displayName of the file's last modifier (or null/"unknown"); surfaced
   // in the report for attribution. Not persisted in recap_json.
   modifiedBy?: string | null;
@@ -121,6 +128,7 @@ const RECAP_SCHEMA: Schema = {
       type: Type.STRING,
       enum: ["draft", "final", "approved", "unknown"],
     },
+    key_dates: { type: Type.ARRAY, items: { type: Type.STRING } },
   },
   required: [
     "additions",
@@ -133,6 +141,7 @@ const RECAP_SCHEMA: Schema = {
     "risk_flags",
     "is_deliverable",
     "file_status",
+    "key_dates",
   ],
 };
 
@@ -149,6 +158,22 @@ const RECAP_SYSTEM =
   "Set `file_status` to the document's own declared maturity — draft, final or " +
   "approved — read from its content or labels; use \"unknown\" when the document " +
   "does not state it. Never guess the status. " +
+  // U4 (eval #2/#15) — dates become machine-usable so the report can anchor
+  // events ("kicked off on 12/06/2026") instead of leaving them unplaced.
+  "Extract `key_dates`: the explicit dates of key events the document itself " +
+  "states (kick-off, submission, signature, approval, deadline, project " +
+  "start/end), each item as 'event — date' quoting the date verbatim; [] when " +
+  "the document states none. " +
+  // U4 (eval #24/S4) — risk flags must be live concerns, not chapter topics.
+  "`risk_flags` are the current, open concerns THIS document raises about the " +
+  "project's own execution; never list risk TOPICS merely discussed in a " +
+  "market-analysis or business-plan chapter, and never content that reads as " +
+  "boilerplate pasted from another document. " +
+  // U4 (eval #5/I2) — pre-printed template scaffolding is not authored work.
+  "Standard template scaffolding (pre-printed header fields like task lead or " +
+  "partner list, section placeholders, instructions) is NOT authored progress: " +
+  "describe such a document as an unfilled template rather than narrating its " +
+  "scaffolding as additions. " +
   "Respond only as JSON matching the provided schema.";
 
 function buildPrompt(file: DetectedFile, content: string): string {
@@ -199,6 +224,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
           recap: null,
           error: null,
           modifiedBy: file.lastModifiedBy,
+          modifiedTime: file.modifiedTime,
           name: file.name,
           authors: authorsOf(file),
           contributors: contributorsOf(file),
@@ -236,6 +262,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         recap,
         error: null,
         modifiedBy: file.lastModifiedBy,
+        modifiedTime: file.modifiedTime,
         name: file.name,
         authors: authorsOf(file),
         contributors: contributorsOf(file),
@@ -250,6 +277,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         recap: null,
         error: err instanceof Error ? err.message : String(err),
         modifiedBy: file.lastModifiedBy,
+        modifiedTime: file.modifiedTime,
         name: file.name,
         authors: authorsOf(file),
         contributors: contributorsOf(file),

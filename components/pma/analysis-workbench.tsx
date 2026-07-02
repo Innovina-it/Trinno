@@ -13,6 +13,12 @@ import {
   type ReportSectionKey,
 } from "@/lib/pma/report-sections";
 import { sanitizeReportLength } from "@/lib/pma/report-settings";
+import {
+  buildPresets,
+  rangeMatches,
+  type Preset,
+  type ProjectRange,
+} from "@/lib/pma/analysis-presets";
 import type { RunSummary } from "@/lib/pma/run-status";
 import { useReportSections } from "./report-sections-context";
 import { ConfigRow } from "./config-row";
@@ -47,24 +53,8 @@ const FOCUSABLE = new Set<ReportSectionKey>([
 const LEN_LINES = { short: 1, medium: 2, long: 3 } as const;
 const LCHIP = { short: "S", medium: "M", long: "L" } as const;
 
-function startOfDayUTC(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-type Preset = { label: string; start: Date; target: Date };
-function buildPresets(now: Date): Preset[] {
-  const t = startOfDayUTC(now);
-  const y = t.getUTCFullYear();
-  const m = t.getUTCMonth();
-  return [
-    { label: "This month", start: new Date(Date.UTC(y, m, 1)), target: t },
-    { label: "Last month", start: new Date(Date.UTC(y, m - 1, 1)), target: new Date(Date.UTC(y, m, 0)) },
-    { label: "Quarter", start: new Date(Date.UTC(y, Math.floor(m / 3) * 3, 1)), target: t },
-    { label: "YTD", start: new Date(Date.UTC(y, 0, 1)), target: t },
-  ];
-}
-function rangeMatches(v: DateRange, p: Preset): boolean {
-  return !!v.start && !!v.target && v.start.getTime() === p.start.getTime() && v.target.getTime() === p.target.getTime();
-}
+// U4 (eval #1) — preset logic lives in lib/pma/analysis-presets (pure, tested);
+// when the workspace roadmap carries dates a "Project" preset renders first.
 function fmtDay(v: string | Date | null): string | null {
   if (v == null) return null;
   const d = typeof v === "string" ? new Date(v) : v;
@@ -128,6 +118,7 @@ export function AnalysisWorkbench({
   sourceUrl,
   contributorOrgRows,
   orgHints,
+  projectRange,
 }: {
   workspaceId: string;
   runs: RunSummary[];
@@ -137,6 +128,8 @@ export function AnalysisWorkbench({
   sourceUrl: string | null;
   contributorOrgRows: ContributorOrgRow[];
   orgHints: string[];
+  // U4 (eval #1) — the workspace roadmap's date span, for the "Project" preset.
+  projectRange?: ProjectRange | null;
 }) {
   const router = useRouter();
   const { sections, reportLength, customPrompt, setSections, setReportLength, setCustomPrompt } =
@@ -155,7 +148,10 @@ export function AnalysisWorkbench({
   const [, startRefresh] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const presets = useMemo(() => buildPresets(new Date()), []);
+  const presets = useMemo(
+    () => buildPresets(new Date(), projectRange),
+    [projectRange],
+  );
 
   // Any run in flight (a running row, or the brief window while POST is starting
   // one) blocks a second run and drives the "Running…" affordance.
@@ -311,7 +307,7 @@ export function AnalysisWorkbench({
   return (
     <div className="grid min-h-[600px] grid-cols-1 overflow-hidden rounded-2xl border border-[color:var(--hairline)] bg-[#161619] md:grid-cols-[248px_1fr]">
       {/* ── ledger ── */}
-      <div className="overflow-y-auto border-b border-[color:var(--hairline)] p-3 md:border-b-0">
+      <div className="overflow-y-auto border-b border-[color:var(--hairline)] bg-[#101013] p-3 md:border-b-0">
         <div className="mono-meta-sm px-1.5 pb-2 text-fg-faint">Runs · {liveRuns.length}</div>
         {canRun && (
           <button
@@ -407,8 +403,8 @@ export function AnalysisWorkbench({
 
       {/* ── detail: config flush on the history field; the preview is the only
           padded element — an inset box nested inside. ── */}
-      <div className="flex">
-        <div className="flex flex-1 flex-col overflow-hidden md:grid md:grid-cols-[1.06fr_1fr] md:rounded-l-2xl md:border-l md:border-[color:var(--hairline)]">
+      <div className="flex bg-[#101013]">
+        <div className="flex flex-1 flex-col overflow-hidden bg-[#161619] md:grid md:grid-cols-[1.06fr_1fr] md:rounded-l-2xl md:border-l md:border-[color:var(--hairline)]">
           {/* CONFIG */}
           <div className="flex flex-col px-5 pb-4 pt-1.5">
             {run ? (
@@ -488,26 +484,39 @@ export function AnalysisWorkbench({
                     </span>
                   </span>
                 </div>
-                <div className="min-h-0 flex-1 overflow-hidden">
+                <div className="min-h-0 flex-1 overflow-y-auto">
                   <div className="text-[1.05rem] font-extrabold tracking-tight text-[#17150f]">Report outline</div>
-                  <div className="mb-4 font-mono text-[0.6rem] uppercase tracking-[0.09em] text-[#8f897d]">{curPeriod} · {reportLength}</div>
-                  {REPORT_SECTION_KEYS.map((k) => {
-                    const on = sections[k];
-                    const focused = !!focus && FOCUSABLE.has(k) && on;
-                    const lines = (focused ? LEN_LINES[reportLength] + 1 : LEN_LINES[reportLength]);
-                    return (
-                      <div key={k} className={cn("mb-3.5", !on && "opacity-40")}>
-                        <div className={cn("mb-1.5 flex items-center gap-1.5 text-[0.72rem]", focused ? "font-semibold text-[#17150f]" : "text-[#46423a]")}>
-                          <span className={cn("size-[5px] rounded-full", focused ? "bg-[#17150f]" : "bg-[#cfc9bd]")} />
-                          {REPORT_SECTION_LABELS[k]}
-                          {!on && <span className="font-mono text-[0.46rem] uppercase tracking-wider text-[#a8a094]">excluded</span>}
-                        </div>
-                        {Array.from({ length: lines }).map((_, i) => (
-                          <div key={i} className="mb-1 h-1.5 rounded-sm bg-[#e5e0d6]" style={{ width: `${58 + ((k.length * 7 + i * 23) % 40)}%` }} />
-                        ))}
-                      </div>
-                    );
-                  })}
+                  <div className="mb-4 font-mono text-[0.6rem] uppercase tracking-[0.09em] text-[#8f897d]">{curPeriod} · {reportLength} · pips = length</div>
+                  <ul className="m-0 list-none p-0">
+                    {REPORT_SECTION_KEYS.map((k) => {
+                      const on = sections[k];
+                      const focused = !!focus && FOCUSABLE.has(k) && on;
+                      const pips = LEN_LINES[reportLength];
+                      return (
+                        <li key={k} className="flex items-center gap-2.5 border-b border-[#e5e0d6] py-[7px]">
+                          <span className={cn(
+                            "flex-1 text-[0.82rem]",
+                            !on ? "text-[#b8b0a1] line-through" : focused ? "font-semibold text-[#17150f]" : "text-[#46423a]",
+                          )}>
+                            {REPORT_SECTION_LABELS[k]}
+                          </span>
+                          {on && (
+                            <span className="flex gap-[3px]">
+                              {[0, 1, 2].map((i) => (
+                                <span
+                                  key={i}
+                                  className={cn(
+                                    "size-[6px] rounded-full border",
+                                    i < pips ? "border-[#17150f] bg-[#17150f]" : "border-[#c9bfa6]",
+                                  )}
+                                />
+                              ))}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
                 <div className="mt-2 flex items-center justify-end gap-3 border-t border-[#e5e0d6] pt-3">
                   <span className="mr-auto font-mono text-[0.6rem] uppercase tracking-[0.06em] text-[#8f897d]">

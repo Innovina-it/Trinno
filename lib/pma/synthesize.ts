@@ -75,10 +75,21 @@ export type Deviation = {
 };
 
 // One difficulty, with a severity grounded in how the source frames its impact
-// (#8) — never the model's own weighting.
+// (#8) — never the model's own weighting. U4 (eval #18) — source_file names the
+// document the difficulty comes from, so every line is traceable.
 export type Difficulty = {
   description: string;
   severity: "low" | "medium" | "high";
+  source_file?: string;
+};
+
+// U4 (eval #6/R2) — a notable change is a cited claim: what changed, in which
+// document, when. The date comes from the payload's last_modified/key_dates
+// ("" when unknown), never invented.
+export type NotableChange = {
+  claim: string;
+  file: string;
+  date: string;
 };
 
 // Structured workspace synthesis (DESIGN §5.2).
@@ -86,7 +97,7 @@ export type SynthesisReport = {
   executive_summary: string;
   // Dedicated paragraph on deliverable files (DESIGN §1, §6).
   deliverables_focus: string;
-  notable_changes: string[];
+  notable_changes: NotableChange[];
   new_or_changed_files: string[];
   missed_updates: string[];
   deviations: Deviation[];
@@ -176,8 +187,22 @@ const DIFFICULTY_SCHEMA: Schema = {
   properties: {
     description: { type: Type.STRING },
     severity: { type: Type.STRING, enum: ["low", "medium", "high"] },
+    // U4 (eval #18) — the document this difficulty comes from ("" when it is a
+    // cross-document observation).
+    source_file: { type: Type.STRING },
   },
-  required: ["description", "severity"],
+  required: ["description", "severity", "source_file"],
+};
+
+// U4 (eval #6/R2) — every notable change carries its document + date.
+const NOTABLE_CHANGE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    claim: { type: Type.STRING },
+    file: { type: Type.STRING },
+    date: { type: Type.STRING },
+  },
+  required: ["claim", "file", "date"],
 };
 
 const REPORT_SCHEMA: Schema = {
@@ -185,7 +210,7 @@ const REPORT_SCHEMA: Schema = {
   properties: {
     executive_summary: { type: Type.STRING },
     deliverables_focus: { type: Type.STRING },
-    notable_changes: { type: Type.ARRAY, items: { type: Type.STRING } },
+    notable_changes: { type: Type.ARRAY, items: NOTABLE_CHANGE_SCHEMA },
     new_or_changed_files: { type: Type.ARRAY, items: { type: Type.STRING } },
     missed_updates: { type: Type.ARRAY, items: { type: Type.STRING } },
     deviations: { type: Type.ARRAY, items: DEVIATION_SCHEMA },
@@ -274,7 +299,19 @@ const SYNTHESIS_SYSTEM =
   // in putting notable changes nd then this ?").
   "`notable_changes` is a digest, not a file list: the 3-5 MOST significant " +
   "substantive changes of the period and why they matter, cross-cutting the " +
-  "files; it must never restate a `new_or_changed_files` entry. " +
+  "files; it must never restate a `new_or_changed_files` entry. Each item is " +
+  "{claim, file, date}: `file` = the document the claim comes from, `date` = " +
+  "that entry's `last_modified` (or a `key_dates` date when the event itself " +
+  "is dated); \"\" when unknown — never invent a date. " +
+  // U4 (eval #2/#15) — anchor events; reconcile the window with the project.
+  "Anchor key events (kick-off, submissions, signatures) to explicit dates " +
+  "drawn from `key_dates`, `last_modified` or `filename_date` — e.g. 'kicked " +
+  "off on 12/06/2026' — never leave a key event undated when a date exists. " +
+  "When the documents state the project's own timeline, note it in the " +
+  "executive summary; if the reporting period largely predates the project's " +
+  "first documented activity, say so there in one sentence. Each `difficulties` " +
+  "item carries `source_file` naming the document it comes from (\"\" only for " +
+  "a cross-document observation). " +
   "`progress_notes` are status-versus-plan observations (what is ahead, behind " +
   "or on track and why), never a restatement of the file list. " +
   // U2 (eval #25) — one fact, one home: kills the same risk printing in the
@@ -563,6 +600,22 @@ function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
         "low",
       ),
       is_deliverable: isDeliverable,
+      // U4 (eval #6/R2) — the grounded dates for {claim, file, date} citations:
+      // newest Drive modifiedTime across the folded copies (date only), a leading
+      // YYYYMMDD in the filename (the kick-off deck case), and the documents' own
+      // stated event dates from the recaps.
+      last_modified:
+        g
+          .map((r) => r.modifiedTime)
+          .filter((t): t is string => !!t)
+          .sort()
+          .pop()
+          ?.slice(0, 10) ?? null,
+      ...(() => {
+        const m = (rep.name ?? "").match(/^(\d{4})(\d{2})(\d{2})\b/);
+        return m ? { filename_date: `${m[1]}-${m[2]}-${m[3]}` } : {};
+      })(),
+      key_dates: uniqStrings(recaps.flatMap((r) => r.key_dates ?? [])),
       additions: capped(uniqStrings(recaps.flatMap((r) => r.additions))),
       edits: capped(uniqStrings(recaps.flatMap((r) => r.edits))),
       structural_changes: capped(
@@ -812,13 +865,27 @@ export function renderReportDoc(input: {
 
   // Difficulties as a table carrying a grounded severity badge (#8). Empty →
   // "(none)", byte-identical to the previous bullet rendering when there are none.
+  // U4 (eval #18) — each row shows the document it comes from when the model
+  // supplied one, so every difficulty is traceable to a source.
   const difficulties =
     report.difficulties.length === 0
       ? paragraph("(none)")
       : table(
           ["Difficulty", "Severity"],
-          report.difficulties.map((d) => [fmt(d.description), monoCell(d.severity)]),
+          report.difficulties.map((d) => [
+            fmt(d.description) +
+              (d.source_file ? ` <i>(${fmt(d.source_file)})</i>` : ""),
+            monoCell(d.severity),
+          ]),
         );
+
+  // U4 (eval #6/R2) — notable changes render as cited claims: "claim (file, date)".
+  const notableChanges = report.notable_changes.map((n) =>
+    fmt(n.claim) +
+    (n.file
+      ? ` <i>(${fmt(n.file)}${n.date ? `, ${escapeHtml(n.date)}` : ""})</i>`
+      : ""),
+  );
 
   // Per-file quality + risk table (deterministic — straight from each file's
   // recap, never re-narrated). Empty risks → "—"; no analyzed files → "(none)".
@@ -883,8 +950,7 @@ export function renderReportDoc(input: {
       section("Executive summary") + paragraph(fmt(report.executive_summary)),
     deliverables:
       section("Deliverables") + paragraph(fmt(report.deliverables_focus)),
-    notable_changes:
-      section("Notable changes") + bullets(report.notable_changes.map(fmt)),
+    notable_changes: section("Notable changes") + bullets(notableChanges),
     new_or_changed_files:
       section("New or changed files") + bullets(report.new_or_changed_files.map(fmt)),
     missed_updates: section("Missed updates") + missedUpdates,

@@ -98,7 +98,8 @@ const removedFile = (id: string, over: Partial<DetectedFile> = {}): DetectedFile
 const REPORT: SynthesisReport = {
   executive_summary: "Steady progress; one deliverable slipped.",
   deliverables_focus: "The spec deliverable was revised.",
-  notable_changes: ["scope tightened"],
+  // U4 — notable changes are cited claims {claim, file, date}.
+  notable_changes: [{ claim: "scope tightened", file: "spec.gdoc", date: "2026-06-05" }],
   new_or_changed_files: ["spec.gdoc"],
   missed_updates: [],
   deviations: [],
@@ -1181,6 +1182,85 @@ describe("grounding bundle (U3)", () => {
     expect(refsEntry).not.toContain('"a3"');
     const d11Entry = prompt.slice(prompt.indexOf('"file": "D1.1'));
     expect(d11Entry).toContain('"a5"'); // deliverable keeps everything
+  });
+});
+
+// U4 — attribution & timeline (eval #6/#2/#18/#1).
+describe("attribution & timeline (U4)", () => {
+  it("payload carries last_modified (newest copy, date-only), filename_date and key_dates", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [
+        {
+          ...analyzed("a"),
+          name: "AIWEPI_T2.1_EN.docx",
+          modifiedTime: "2026-06-20T10:00:00Z",
+          recap: recap({ key_dates: ["kick-off — 12/06/2026"] }),
+        },
+        {
+          ...analyzed("b"),
+          name: "AIWEPI_T2.1_IT.docx",
+          modifiedTime: "2026-06-28T09:30:00Z", // newer copy wins
+          recap: recap({}),
+        },
+        {
+          ...analyzed("deck"),
+          name: "20260612 - ARISE - Kick-Off presentation.pptx",
+          modifiedTime: null,
+        },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain('"last_modified": "2026-06-28"'); // max across folded copies
+    expect(prompt).toContain('"filename_date": "2026-06-12"'); // parsed from the deck name
+    expect(prompt).toContain("kick-off — 12/06/2026"); // recap key_dates ride along
+  });
+
+  it("prompt demands {claim, file, date} citations and date anchoring", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [analyzed("A")],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const sys = generateStructured.mock.calls[0][0].systemInstruction as string;
+    expect(sys).toContain("{claim, file, date}");
+    expect(sys).toContain("never invent a date");
+    expect(sys).toContain("Anchor key events");
+    expect(sys).toContain("`source_file`"); // difficulties traceability
+  });
+
+  it("renders a notable change as a cited claim and a difficulty with its source file", () => {
+    const body = renderReportDoc({
+      report: {
+        ...REPORT,
+        notable_changes: [
+          { claim: "STS decomposition extended to six phases", file: "T1.3 — Clinical Protocol", date: "2026-06-30" },
+          { claim: "cross-cutting observation", file: "", date: "" }, // file unknown → bare claim
+        ],
+        difficulties: [
+          { description: "DPA still being formalized", severity: "low", source_file: "ARISE Informativa Privacy.pdf" },
+          { description: "cross-document inconsistency", severity: "low", source_file: "" },
+        ],
+      },
+      runLabel: LABEL,
+    });
+    expect(body).toContain("STS decomposition extended to six phases");
+    expect(body).toContain("T1.3 — Clinical Protocol");
+    expect(body).toContain("2026-06-30");
+    expect(body).toContain("DPA still being formalized");
+    expect(body).toContain("ARISE Informativa Privacy.pdf");
+    // unknown file/date → no dangling separators
+    expect(body).toContain("cross-cutting observation");
+    expect(body).not.toContain("cross-cutting observation <i>(");
   });
 });
 
