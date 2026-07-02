@@ -1020,6 +1020,41 @@ describe("collapseTemplateRows + hoistSharedRisks (U2)", () => {
     expect(rows[2].risks).toEqual(["unique to D1.3"]);
   });
 
+  // U6 — polish from run-3 review.
+  it("dedupes identical file names in the not-started list", () => {
+    const tpl = (file: string) => ({
+      file,
+      status: "unknown",
+      quality: "The document is a blank template of placeholders.",
+      risks: [],
+    });
+    const { notStarted } = collapseTemplateRows([
+      tpl("ARISE Dichiarazione Conflitto Interessi.docx (unfilled template copy)"),
+      tpl("ARISE Dichiarazione Conflitto Interessi.docx (unfilled template copy)"),
+      tpl("D2.1 — Market Analysis"),
+    ]);
+    expect(notStarted).toEqual([
+      "ARISE Dichiarazione Conflitto Interessi.docx (unfilled template copy)",
+      "D2.1 — Market Analysis",
+    ]);
+  });
+
+  it("prompt bans category labels in prose, enforces English, and splits next_steps vs recommendations (U6)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [analyzed("A")],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const sys = generateStructured.mock.calls[0][0].systemInstruction as string;
+    expect(sys).toContain("never write the words 'supporting file'");
+    expect(sys).toContain("entire report in English");
+    expect(sys).toContain("must not overlap");
+  });
+
   it("no shared risks → rows returned untouched", () => {
     const rows = [
       { file: "A", status: "draft", quality: "q", risks: ["r1"] },

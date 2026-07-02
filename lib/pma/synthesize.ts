@@ -290,10 +290,23 @@ const SYNTHESIS_SYSTEM =
   "documents use, noting the variant at most once; never treat variants as " +
   "different entities. " +
   // U3 (eval #7) — supporting files are context, not deliverable progress.
-  "A changed-file entry with `is_deliverable` false is a supporting file " +
-  "(references, contacts, presentations): give it at most one short clause in " +
-  "`new_or_changed_files` and never a dedicated paragraph or a detailed " +
-  "enumeration of its contents. " +
+  // U6 — the flag steers EMPHASIS only; naming the category in prose leaked
+  // ("The supporting file D1.2 …") and mislabels deliverables whose linked flag
+  // sits on another copy.
+  "A changed-file entry with `is_deliverable` false gets at most one short " +
+  "clause in `new_or_changed_files` and never a dedicated paragraph or a " +
+  "detailed enumeration of its contents; never write the words 'supporting " +
+  "file' (or any category label) in the report text — refer to every file by " +
+  "its name only. " +
+  // U6 — one language; recap cells drifted into the source doc's language.
+  "Write the entire report in English, regardless of the source documents' " +
+  "language (quote non-English titles/phrases verbatim only where exactness " +
+  "matters). " +
+  // U6 — the forward sections must not echo one another.
+  "`next_steps` and `recommendations` must not overlap: a given action or " +
+  "topic appears in exactly one of them (next_steps = concrete pending work; " +
+  "recommendations = analyst advice beyond the obvious pending work), and " +
+  "neither may restate a difficulty verbatim. " +
   // U2 (eval #8/#17) — the two digest sections are DEFINED, so they stop being
   // restatements of new_or_changed_files (the reviewer: "whats the consistency
   // in putting notable changes nd then this ?").
@@ -526,9 +539,11 @@ export function collapseTemplateRows(rows: QualityRiskRow[]): {
   rows: QualityRiskRow[];
   notStarted: string[];
 } {
-  const notStarted = rows
-    .filter((r) => looksUnfilledTemplate(r.quality))
-    .map((r) => r.file);
+  // U6 — dedupe display names: two distinct Drive files can share one name
+  // (the doubled "Dichiarazione Conflitto Interessi (unfilled template copy)").
+  const notStarted = uniqStrings(
+    rows.filter((r) => looksUnfilledTemplate(r.quality)).map((r) => r.file),
+  );
   return {
     rows: rows.filter((r) => !looksUnfilledTemplate(r.quality)),
     notStarted,

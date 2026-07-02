@@ -168,6 +168,9 @@ const RECAP_SYSTEM =
   "Set `file_status` to the document's own declared maturity — draft, final or " +
   "approved — read from its content or labels; use \"unknown\" when the document " +
   "does not state it. Never guess the status. " +
+  // U6 — one language: recap fields drifted into the source document's language.
+  "Write every field in English regardless of the document's language, quoting " +
+  "non-English titles or phrases verbatim only where exactness matters. " +
   // U4 (eval #2/#15) — dates become machine-usable so the report can anchor
   // events ("kicked off on 12/06/2026") instead of leaving them unplaced.
   "Extract `key_dates`: the explicit dates of key events the document itself " +
