@@ -296,15 +296,52 @@ export function looksSuperseded(
 }
 
 // #5b — the deliverable a file belongs to: its task code (T2.1, T3.2, …) when the
-// name carries one, else the file's own name (so files without a code never merge
-// with anything). Lets the report show one row per deliverable instead of one per
-// EN/IT/pptx copy of the same document.
+// name carries one, else the file's NORMALIZED name. Lets the report show one row
+// per deliverable instead of one per EN/IT/pptx copy of the same document.
+//
+// U1 (eval #16) — no-code names are normalized before keying so the trivial
+// variants of one document fold: ".docx" vs "_signed.pdf", trailing spaces,
+// case, underscores and accents. 22 CERA-family files rendered as 19 separate
+// rows because the key was the raw filename; normalization folds the
+// ".pdf/_signed/spacing" variants while leaving genuinely different names
+// (e.g. the blank UniGe templates, other projects' files) unmerged.
+const FILE_EXT_RX = /\.(g?docx?|pdf|pptx?|xlsx?|gslides?|gsheets?|csv|txt)\s*$/i;
+const SIGNED_SUFFIX_RX = /[\s_-]*\(?(signed|firmato)\)?\s*$/i;
+
 export function deliverableKey(name: string | null | undefined): string {
   const n = name ?? "";
   // Match a task (Tx.y) OR deliverable (Dx.y) code, so e.g. "D1.2 — … (with X)"
-  // and "D1.2 — … .docx" collapse to one document. No code → the full name.
+  // and "D1.2 — … .docx" collapse to one document.
   const m = n.match(/[TD]\d+\.\d+/i);
-  return m ? m[0].toUpperCase() : n;
+  if (m) return m[0].toUpperCase();
+  const k = n
+    .replace(FILE_EXT_RX, "")
+    .replace(SIGNED_SUFFIX_RX, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // fold diacritics (e-grave -> e)
+    .toLowerCase()
+    .replace(/[\s_]+/g, " ")
+    .trim();
+  return k || n;
+}
+
+// U1 (eval #10) — a copy whose recap describes an UNFILLED TEMPLATE (skeleton /
+// placeholders only). Used as the divergence guard: such a copy must never be
+// blended with a substantive copy of the same deliverable into one narrative
+// (the D1.3 case: a blank skeleton + an edited copy were unioned into a story
+// neither file supports). The substantive override keeps a filled document that
+// merely MENTIONS its remaining placeholders (e.g. "fully drafted sections
+// alongside template placeholders") out of the template bucket.
+const TEMPLATE_RX = /\b(template|placeholder|skeleton|scaffold|blank)\b/i;
+const SUBSTANTIVE_RX =
+  /\b(fully drafted|highly detailed|highly specific|highly structured|comprehensive|well-structured|detailed)\b/i;
+
+export function looksUnfilledTemplate(
+  quality: string | null | undefined,
+  summary?: string | null,
+): boolean {
+  const t = `${quality ?? ""} ${summary ?? ""}`;
+  return TEMPLATE_RX.test(t) && !SUBSTANTIVE_RX.test(t);
 }
 
 type QualityRiskRow = { file: string; status: string; quality: string; risks: string[] };
@@ -343,18 +380,33 @@ export function groupByDeliverable(
     g.push(e);
   }
   const groupRows: QualityRiskRow[] = [];
-  for (const g of groups.values()) {
-    const rep = g.find((e) => !/\.pptx$/i.test(e.rawName)) ?? g[0];
-    const extra = g.length - 1;
+  // One folded row from a set of copies. Representative = a non-pptx copy when
+  // available; risks = the UNION across the copies (deduped), so a folded copy's
+  // verbatim inconsistency catches are never silently dropped (eval M2b/#20 —
+  // previously only the representative's risks survived and the others vanished).
+  const emit = (set: RawQualityRisk[], suffix: string) => {
+    const rep = set.find((e) => !/\.pptx$/i.test(e.rawName)) ?? set[0];
     groupRows.push({
-      file:
-        extra > 0
-          ? `${rep.rawName} (+${extra} more version${extra === 1 ? "" : "s"}: same document)`
-          : rep.rawName,
+      file: `${rep.rawName}${suffix}`,
       status: rep.status,
       quality: rep.quality,
-      risks: rep.risks,
+      risks: uniqStrings(set.flatMap((e) => e.risks)),
     });
+  };
+  const foldSuffix = (extra: number) =>
+    extra > 0 ? ` (+${extra} more version${extra === 1 ? "" : "s"}: same document)` : "";
+  for (const g of groups.values()) {
+    // U1 (eval #10) — divergence guard: never fold an unfilled-template copy with
+    // a substantive copy into one row; the template copy stays its own, labeled
+    // row (U2 collapses template rows into one "not started" line downstream).
+    const templates = g.filter((e) => looksUnfilledTemplate(e.quality));
+    const filled = g.filter((e) => !templates.includes(e));
+    if (templates.length > 0 && filled.length > 0) {
+      emit(filled, foldSuffix(filled.length - 1));
+      for (const t of templates) emit([t], " (unfilled template copy)");
+    } else {
+      emit(g, foldSuffix(g.length - 1));
+    }
   }
   const rows = [...groupRows, ...supersededRows];
   return { rows, deliverableCount: rows.length };
@@ -380,16 +432,18 @@ function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
     if (g) g.push(r);
     else groups.set(key, [r]);
   }
-  const entry = (g: AnalyzeFileResult[], isSuperseded: boolean) => {
+  const entry = (g: AnalyzeFileResult[], isSuperseded: boolean, suffix?: string) => {
     const rep = g.find((r) => !/\.pptx$/i.test(r.name ?? "")) ?? g[0];
     const extra = g.length - 1;
     const recaps = g.map((r) => r.recap!);
     return {
       // U12.8 — reference by human name, noting how many copies were folded.
       file:
-        extra > 0
-          ? `${rep.name ?? rep.fileId} (+${extra} more version${extra === 1 ? "" : "s"}: same document)`
-          : (rep.name ?? rep.fileId),
+        suffix !== undefined
+          ? `${rep.name ?? rep.fileId}${suffix}`
+          : extra > 0
+            ? `${rep.name ?? rep.fileId} (+${extra} more version${extra === 1 ? "" : "s"}: same document)`
+            : (rep.name ?? rep.fileId),
       summary: uniqStrings(recaps.map((r) => r.one_line_summary)).join(" "),
       importance: recaps.reduce<"low" | "medium" | "high">(
         (a, r) => (IMPORTANCE_RANK[r.importance] > IMPORTANCE_RANK[a] ? r.importance : a),
@@ -406,10 +460,28 @@ function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
       looks_superseded: isSuperseded,
     };
   };
-  return [
-    ...Array.from(groups.values()).map((g) => entry(g, false)),
-    ...superseded.map((r) => entry([r], true)),
-  ];
+  const foldSuffix = (extra: number) =>
+    extra > 0 ? ` (+${extra} more version${extra === 1 ? "" : "s"}: same document)` : "";
+  const out: ReturnType<typeof entry>[] = [];
+  for (const g of groups.values()) {
+    // U1 (eval #10/R1) — divergence guard, mirroring groupByDeliverable: when a
+    // deliverable's copies split into unfilled templates and substantive content
+    // (the D1.3 case: a blank skeleton + a test-edited copy), do NOT union them
+    // into one confident narrative neither copy supports. The substantive copies
+    // fold together; each template copy stays a separate, labeled entry so the
+    // model reports it as an unfilled template, not as authored progress.
+    const templates = g.filter((r) =>
+      looksUnfilledTemplate(r.recap?.quality_judgment, r.recap?.one_line_summary),
+    );
+    const filled = g.filter((r) => !templates.includes(r));
+    if (templates.length > 0 && filled.length > 0) {
+      out.push(entry(filled, false, foldSuffix(filled.length - 1)));
+      for (const t of templates) out.push(entry([t], false, " (unfilled template copy)"));
+    } else {
+      out.push(entry(g, false));
+    }
+  }
+  return [...out, ...superseded.map((r) => entry([r], true))];
 }
 
 function buildPayload(

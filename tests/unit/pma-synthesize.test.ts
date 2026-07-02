@@ -453,6 +453,49 @@ describe("synthesize — aggregate + report", () => {
     expect(d12Count).toBe(1);
   });
 
+  // U1 (eval #10/R1) — payload divergence guard: a blank-template copy of a
+  // deliverable is reported as its own "(unfilled template copy)" entry, never
+  // blended with the substantive copy's narrative.
+  it("does not blend an unfilled-template copy into the substantive copy's payload entry", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [
+        {
+          ...analyzed("skeleton"),
+          name: "D1.3 — Final Report .docx",
+          recap: recap({
+            one_line_summary: "Blank template with placeholder sections only.",
+            quality_judgment: "The document is a blank template consisting entirely of placeholders.",
+            additions: ["Established document structure and partner list."],
+          }),
+        },
+        {
+          ...analyzed("edited"),
+          name: "D1.3 — Final Report and Dissemination Plan",
+          recap: recap({
+            one_line_summary: "Added market analysis and regulatory strategy.",
+            quality_judgment: "Contains fully drafted, highly specific sections alongside placeholders.",
+            additions: ["Added market analysis, regulatory strategy, risk assessment."],
+          }),
+        },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    expect(prompt).toContain("(unfilled template copy)"); // template copy labeled, separate
+    expect(prompt).not.toContain("more version"); // NOT folded as "same document"
+    // the substantive entry's additions must not contain the template's scaffold line
+    const payload = prompt.slice(prompt.indexOf("--- DATA START ---"));
+    const editedEntry = payload.slice(payload.indexOf("Dissemination Plan"));
+    const templateStart = editedEntry.indexOf("(unfilled template copy)");
+    const editedOnly = templateStart === -1 ? editedEntry : editedEntry.slice(0, templateStart);
+    expect(editedOnly).toContain("Added market analysis");
+  });
+
   it("empty map → contributors resolve to their names (unchanged behaviour)", async () => {
     await synthesize({
       workspaceId: WS,
@@ -971,10 +1014,27 @@ describe("deliverableKey + groupByDeliverable (#5b)", () => {
     expect(deliverableKey("AIWEPI_T2.1_Requirements_Engineering.docx")).toBe("T2.1");
     expect(deliverableKey("AIWEPI_T2.1_Ingegneria_dei_Requisiti.docx")).toBe("T2.1");
     expect(deliverableKey("AIWEPI T2.1 Requirements Engineering.pptx")).toBe("T2.1");
-    // no task code → its own key, so unrelated files never merge
+    // no task code → its own (normalized) key, so unrelated files never merge
     expect(deliverableKey("Existing Resources for AIWEPI.docx")).toBe(
-      "Existing Resources for AIWEPI.docx",
+      "existing resources for aiwepi",
     );
+  });
+
+  // U1 (eval #16) — trivial variants of one no-code document fold to one key:
+  // extension, "_signed", trailing spaces, case, underscores, diacritics.
+  it("folds .docx/_signed.pdf/spacing/case variants of one document to one key", () => {
+    const base = deliverableKey("ARISE CERA Richiesta Parere.docx");
+    expect(deliverableKey("ARISE CERA Richiesta Parere_signed.pdf")).toBe(base);
+    expect(deliverableKey("ARISE CERA Richiesta Parere .docx")).toBe(base);
+    expect(deliverableKey("ARISE_CERA_Richiesta_Parere.pdf")).toBe(base);
+    expect(deliverableKey("arise cera richiesta parere.DOCX")).toBe(base);
+  });
+
+  it("keeps genuinely different names apart (blank templates, other projects)", () => {
+    const arise = deliverableKey("ARISE CERA Richiesta Parere.docx");
+    expect(deliverableKey("RichiestaparereCERA.docx")).not.toBe(arise); // UniGe blank template
+    expect(deliverableKey("1. SEOL_RichiestaparereCERA.docx")).not.toBe(arise); // other project
+    expect(deliverableKey("ARISE Informativa Privacy.docx")).not.toBe(arise);
   });
 
   it("collapses the copies into one row and counts deliverables", () => {
@@ -1001,5 +1061,36 @@ describe("deliverableKey + groupByDeliverable (#5b)", () => {
     expect(deliverableCount).toBe(2); // current T2.1 + the superseded copy, separate
     expect(rows.some((r) => r.file.includes("(likely superseded draft)"))).toBe(true);
     expect(rows.some((r) => r.quality === "current" && !r.file.includes("superseded"))).toBe(true);
+  });
+
+  // U1 (eval M2b/#20) — a folded row carries the UNION of its copies' risks, so a
+  // copy's verbatim inconsistency catch is never dropped with its copy.
+  it("unions risks across folded copies (no catch dropped)", () => {
+    const raw = [
+      { rawName: "AIWEPI_T2.1_EN.docx", superseded: false, status: "draft", quality: "qEN", risks: ["scope creep"] },
+      { rawName: "AIWEPI_T2.1_IT.docx", superseded: false, status: "draft", quality: "qIT", risks: ["'Innovina S.r.l.' vs 'Innovia S.R.L' naming inconsistency", "scope creep"] },
+    ];
+    const { rows } = groupByDeliverable(raw);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].risks).toEqual([
+      "scope creep",
+      "'Innovina S.r.l.' vs 'Innovia S.R.L' naming inconsistency",
+    ]); // union, deduped, verbatim
+  });
+
+  // U1 (eval #10/R1, the D1.3 case) — an unfilled-template copy never folds into
+  // a substantive copy's row; it stays its own labeled row.
+  it("keeps an unfilled-template copy separate from a substantive copy (divergence guard)", () => {
+    const raw = [
+      { rawName: "D1.3 — Final Report .docx", superseded: false, status: "unknown", quality: "The document is a blank template consisting entirely of placeholders.", risks: ["only placeholder text"] },
+      { rawName: "D1.3 — Final Report and Dissemination Plan", superseded: false, status: "unknown", quality: "Contains fully drafted, highly specific sections on market analysis alongside template placeholders.", risks: ["regulatory timing"] },
+    ];
+    const { rows } = groupByDeliverable(raw);
+    expect(rows).toHaveLength(2); // NOT folded into one
+    const tpl = rows.find((r) => r.file.includes("(unfilled template copy)"))!;
+    expect(tpl.quality).toContain("blank template");
+    const filled = rows.find((r) => !r.file.includes("template copy"))!;
+    expect(filled.quality).toContain("fully drafted");
+    expect(filled.risks).toEqual(["regulatory timing"]); // template's noise not unioned in
   });
 });
