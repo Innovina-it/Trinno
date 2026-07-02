@@ -255,6 +255,25 @@ const SYNTHESIS_SYSTEM =
   "(budget/effort observations ONLY if the documents or PROJECT CONTEXT " +
   "actually mention them — never fabricate figures or estimates). Leave any of " +
   "these empty ([] or \"\") when nothing in the inputs supports it. " +
+  // U2 (eval #8/#17) — the two digest sections are DEFINED, so they stop being
+  // restatements of new_or_changed_files (the reviewer: "whats the consistency
+  // in putting notable changes nd then this ?").
+  "`notable_changes` is a digest, not a file list: the 3-5 MOST significant " +
+  "substantive changes of the period and why they matter, cross-cutting the " +
+  "files; it must never restate a `new_or_changed_files` entry. " +
+  "`progress_notes` are status-versus-plan observations (what is ahead, behind " +
+  "or on track and why), never a restatement of the file list. " +
+  // U2 (eval #25) — one fact, one home: kills the same risk printing in the
+  // difficulties table AND the risk outlook AND per-file rows.
+  "Each distinct risk or difficulty must be named in exactly ONE section: " +
+  "present, factual problems go in `difficulties`; forward-looking exposure " +
+  "goes in `risk_outlook`; never repeat the same risk across sections — later " +
+  "sections may build on it but must not restate it. " +
+  // U2 (eval #7 partial / S2) — unfilled templates are inventory, not progress.
+  "A changed-file entry with `is_empty_template` true is an unfilled template: " +
+  "never narrate it as authored progress or give it its own bullet; mention " +
+  "such files only inside ONE collective sentence (e.g. 'Not started: D2.1, " +
+  "D2.2, ...') in `new_or_changed_files`. " +
   "Respond only as JSON matching the provided schema.";
 
 // The compact, model-facing payload. Kept small and structured: only the signal
@@ -415,6 +434,54 @@ export function groupByDeliverable(
 const IMPORTANCE_RANK = { low: 0, medium: 1, high: 2 } as const;
 const uniqStrings = (xs: string[]) => Array.from(new Set(xs.filter(Boolean)));
 
+// U2 (eval S2) — pull the unfilled-template rows out of the quality table into a
+// single "Not started" list: 7-11 near-identical "blank template / placeholder"
+// rows were drowning the real signal. Deterministic, runs after grouping.
+export function collapseTemplateRows(rows: QualityRiskRow[]): {
+  rows: QualityRiskRow[];
+  notStarted: string[];
+} {
+  const notStarted = rows
+    .filter((r) => looksUnfilledTemplate(r.quality))
+    .map((r) => r.file);
+  return {
+    rows: rows.filter((r) => !looksUnfilledTemplate(r.quality)),
+    notStarted,
+  };
+}
+
+// U2 (eval #11/#13/#14/#25) — a risk that recurs VERBATIM on 2+ distinct rows is
+// one pasted/shared block, not N independent findings: hoist it to a single
+// project-level list (naming the files it appears in) and strip it from the
+// per-file cells. Matching is normalized (case/whitespace/trailing period) but
+// the surfaced text stays the first occurrence verbatim — a genuinely distinct
+// catch (the reviewer's "good point") never matches and is never dropped.
+export function hoistSharedRisks(rows: QualityRiskRow[]): {
+  rows: QualityRiskRow[];
+  shared: Array<{ risk: string; files: string[] }>;
+} {
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ").replace(/\.$/, "");
+  const byRisk = new Map<string, { risk: string; files: string[] }>();
+  for (const r of rows) {
+    for (const risk of r.risks) {
+      const k = norm(risk);
+      const e = byRisk.get(k);
+      if (e) e.files.push(r.file);
+      else byRisk.set(k, { risk, files: [r.file] });
+    }
+  }
+  const shared = Array.from(byRisk.values()).filter((e) => e.files.length >= 2);
+  if (shared.length === 0) return { rows, shared: [] };
+  const sharedKeys = new Set(shared.map((e) => norm(e.risk)));
+  return {
+    rows: rows.map((r) => ({
+      ...r,
+      risks: r.risks.filter((risk) => !sharedKeys.has(norm(risk))),
+    })),
+    shared,
+  };
+}
+
 // Collapse the format/language copies of one document (same deliverableKey) into
 // ONE payload entry, so the model's new_or_changed_files reports e.g. D1.2 once,
 // not once per .docx/.gdoc copy. Superseded (old-generation) files NEVER fold
@@ -458,6 +525,11 @@ function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
       // folded copies, deduped. Never a raw person's name once mapped.
       modified_by: uniqStrings(g.flatMap((r) => labelsFor(r, orgMap))).join(", ") || "unknown",
       looks_superseded: isSuperseded,
+      // U2 (eval S2) — every copy behind this entry is an unfilled template →
+      // the model is told to report it only inside one collective sentence.
+      is_empty_template: g.every((r) =>
+        looksUnfilledTemplate(r.recap?.quality_judgment, r.recap?.one_line_summary),
+      ),
     };
   };
   const foldSuffix = (extra: number) =>
@@ -593,6 +665,13 @@ export function renderReportDoc(input: {
     quality: string;
     risks: string[];
   }> | null;
+  // U2 — risks found verbatim in 2+ documents, hoisted to one project-level list
+  // (likely one pasted/shared block, not N independent findings). Absent/empty →
+  // byte-identical to before this field existed.
+  sharedRisks?: Array<{ risk: string; files: string[] }> | null;
+  // U2 — unfilled-template files pulled out of the table into one "Not started"
+  // line. Absent/empty → byte-identical to before this field existed.
+  notStartedFiles?: string[] | null;
   // Grounded substantiation for an EMPTY Deviations section (#7): the approved
   // baseline's name (or null when none is set) and how many roadmap items were
   // compared against it. Provided by synthesize() from input.baseline + variance.
@@ -695,19 +774,44 @@ export function renderReportDoc(input: {
 
   // Per-file quality + risk table (deterministic — straight from each file's
   // recap, never re-narrated). Empty risks → "—"; no analyzed files → "(none)".
+  // U2 — shared risks render once above the table; template files render as one
+  // "Not started" line below it instead of one near-identical row each.
   const qr = input.qualityRisks ?? [];
+  const shared = input.sharedRisks ?? [];
+  const notStarted = input.notStartedFiles ?? [];
+  const sharedBlock =
+    shared.length > 0
+      ? paragraph(
+          "Shared risks — found verbatim in several documents (likely one copied block, not independent findings):",
+        ) +
+        bullets(
+          shared.map(
+            (s) => `${fmt(s.risk)} <i>(in: ${s.files.map(fmt).join("; ")})</i>`,
+          ),
+        )
+      : "";
+  const notStartedBlock =
+    notStarted.length > 0
+      ? paragraph(
+          `Not started (unfilled templates): ${notStarted.map(fmt).join(" · ")}`,
+        )
+      : "";
   const qualityRisks =
-    qr.length === 0
+    qr.length === 0 && shared.length === 0 && notStarted.length === 0
       ? paragraph("(none)")
-      : table(
-          ["File", "Status", "Quality", "Risks"],
-          qr.map((r) => [
-            fmt(r.file),
-            monoCell(r.status || "unknown"),
-            r.quality ? escapeHtml(r.quality) : "—",
-            r.risks.length > 0 ? r.risks.map(escapeHtml).join("<br>") : "—",
-          ]),
-        );
+      : sharedBlock +
+        (qr.length > 0
+          ? table(
+              ["File", "Status", "Quality", "Risks"],
+              qr.map((r) => [
+                fmt(r.file),
+                monoCell(r.status || "unknown"),
+                r.quality ? escapeHtml(r.quality) : "—",
+                r.risks.length > 0 ? r.risks.map(escapeHtml).join("<br>") : "—",
+              ]),
+            )
+          : "") +
+        notStartedBlock;
 
   // Deterministic disclosure (NOT model-generated, so it can't be omitted or
   // reworded): when revisions for some files could not be read, say so at the top
@@ -815,8 +919,13 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
       quality: r.recap!.quality_judgment,
       risks: r.recap!.risk_flags,
     }));
-  const { rows: qualityRisks, deliverableCount } =
+  const { rows: groupedRows, deliverableCount } =
     groupByDeliverable(rawQualityRisks);
+  // U2 (eval S2 + #25) — deterministic noise reduction on the grouped rows:
+  // template skeletons collapse to one "Not started" line, then risks recurring
+  // verbatim across documents hoist to one project-level list.
+  const { rows: activeRows, notStarted } = collapseTemplateRows(groupedRows);
+  const { rows: qualityRisks, shared: sharedRisks } = hoistSharedRisks(activeRows);
   const content = renderReportDoc({
     report,
     runLabel: input.runLabel,
@@ -827,6 +936,8 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
     revisionErrorCount: input.revisionErrorCount,
     sections: input.sections,
     qualityRisks,
+    sharedRisks,
+    notStartedFiles: notStarted,
     // Grounded substantiation for an empty Deviations section (#7).
     baselineName: input.baseline ? input.baseline.meta.name : null,
     comparedCount: variance

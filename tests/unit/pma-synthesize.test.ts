@@ -23,6 +23,8 @@ import {
   looksSuperseded,
   deliverableKey,
   groupByDeliverable,
+  collapseTemplateRows,
+  hoistSharedRisks,
 } from "@/lib/pma/synthesize";
 import type { SynthesisReport } from "@/lib/pma/synthesize";
 import { ALL_SECTIONS_ON } from "@/lib/pma/report-sections";
@@ -985,6 +987,117 @@ describe("renderReportDoc", () => {
     const body = renderReportDoc({ report: REPORT, runLabel: LABEL }); // difficulties: []
     expect(body).toContain("DIFFICULTIES");
     expect(body).toContain("(none)");
+  });
+});
+
+// U2 — deterministic noise reduction on the quality table (eval S2 + #25).
+describe("collapseTemplateRows + hoistSharedRisks (U2)", () => {
+  it("pulls unfilled-template rows into a 'not started' list", () => {
+    const { rows, notStarted } = collapseTemplateRows([
+      { file: "D2.1 — Market Analysis", status: "unknown", quality: "The document is an empty template consisting entirely of placeholders.", risks: ["no content"] },
+      { file: "D1.1 — Clinical Requirements", status: "unknown", quality: "Highly detailed clinical requirements with precise thresholds.", risks: ["scope creep"] },
+    ]);
+    expect(notStarted).toEqual(["D2.1 — Market Analysis"]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].file).toBe("D1.1 — Clinical Requirements");
+  });
+
+  it("hoists a risk that recurs verbatim across rows; keeps unique catches per-row", () => {
+    const sharedRisk = "Regulatory timing risks due to Notified Body queue under Class IIa pathway";
+    const { rows, shared } = hoistSharedRisks([
+      { file: "D1.1", status: "unknown", quality: "q", risks: [sharedRisk, "'Innovina S.r.l.' vs 'Innovia S.R.L' naming inconsistency"] },
+      { file: "D1.2", status: "unknown", quality: "q", risks: [`${sharedRisk}.`] }, // trailing period → still matches
+      { file: "D1.3", status: "unknown", quality: "q", risks: ["unique to D1.3"] },
+    ]);
+    expect(shared).toHaveLength(1);
+    expect(shared[0].risk).toBe(sharedRisk); // first occurrence, verbatim
+    expect(shared[0].files).toEqual(["D1.1", "D1.2"]);
+    // per-row cells keep ONLY their unique risks — the good-point catch survives
+    expect(rows[0].risks).toEqual(["'Innovina S.r.l.' vs 'Innovia S.R.L' naming inconsistency"]);
+    expect(rows[1].risks).toEqual([]);
+    expect(rows[2].risks).toEqual(["unique to D1.3"]);
+  });
+
+  it("no shared risks → rows returned untouched", () => {
+    const rows = [
+      { file: "A", status: "draft", quality: "q", risks: ["r1"] },
+      { file: "B", status: "draft", quality: "q", risks: ["r2"] },
+    ];
+    expect(hoistSharedRisks(rows)).toEqual({ rows, shared: [] });
+  });
+
+  it("renders shared risks once above the table and 'Not started' below it", () => {
+    const body = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      qualityRisks: [{ file: "D1.1", status: "unknown", quality: "detailed", risks: ["unique risk"] }],
+      sharedRisks: [{ risk: "Notified Body queue", files: ["D1.1", "D1.2"] }],
+      notStartedFiles: ["D2.1 — Market Analysis", "D3.1 — Sensor Study"],
+    });
+    expect(body).toContain("Shared risks");
+    expect(body).toContain("likely one copied block");
+    expect(body).toContain("Notified Body queue");
+    expect(body).toContain("Not started (unfilled templates): D2.1 — Market Analysis · D3.1 — Sensor Study");
+    expect(body).toContain("unique risk");
+  });
+
+  it("renders byte-identically to before when sharedRisks/notStartedFiles are absent", () => {
+    const qualityRisks = [{ file: "spec.gdoc", status: "draft", quality: "good", risks: ["late"] }];
+    const legacy = renderReportDoc({ report: REPORT, runLabel: LABEL, qualityRisks });
+    const explicit = renderReportDoc({
+      report: REPORT,
+      runLabel: LABEL,
+      qualityRisks,
+      sharedRisks: [],
+      notStartedFiles: [],
+    });
+    expect(explicit).toEqual(legacy);
+    expect(legacy).not.toContain("Shared risks");
+    expect(legacy).not.toContain("Not started");
+  });
+
+  it("prompt defines the digest sections, the risk-once rule and the template rule (U2)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [analyzed("A")],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const sys = generateStructured.mock.calls[0][0].systemInstruction as string;
+    expect(sys).toContain("must never restate a `new_or_changed_files` entry"); // notable_changes defined
+    expect(sys).toContain("status-versus-plan"); // progress_notes defined
+    expect(sys).toContain("exactly ONE section"); // risk-once rule
+    expect(sys).toContain("is_empty_template"); // template rule
+  });
+
+  it("marks an all-template payload entry is_empty_template (and not a filled one)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [
+        {
+          ...analyzed("tpl"),
+          name: "D2.1 — Market Analysis",
+          recap: recap({
+            one_line_summary: "Blank template outline.",
+            quality_judgment: "The document is an empty template of placeholders.",
+          }),
+        },
+        { ...analyzed("filled"), name: "D1.1 — Clinical Requirements" },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    const tplEntry = prompt.slice(prompt.indexOf('"file": "D2.1'), prompt.indexOf('"file": "D1.1'));
+    expect(tplEntry).toContain('"is_empty_template": true');
+    const filledEntry = prompt.slice(prompt.indexOf('"file": "D1.1'));
+    expect(filledEntry).toContain('"is_empty_template": false');
   });
 });
 
