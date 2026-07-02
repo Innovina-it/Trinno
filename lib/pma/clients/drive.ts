@@ -332,11 +332,16 @@ export async function getNativeRevisionTextBefore(
   beforeIso: string,
 ): Promise<{ text: string; revisionDate: string } | null> {
   const drive = await getDriveClient();
-  const res = await drive.revisions.list({
-    fileId,
-    fields: "revisions(id, modifiedTime, exportLinks)",
-    pageSize: 1000,
-  });
+  const res = await drive.revisions.list(
+    {
+      fileId,
+      fields: "revisions(id, modifiedTime, exportLinks)",
+      pageSize: 1000,
+    },
+    // U6c — a hung revisions read must fail fast (callers degrade to
+    // "no verified delta"), never freeze the analysis loop.
+    { timeout: 20_000 },
+  );
   // revisions.list returns chronological order — take the last one ≤ cutoff.
   const revs = (res.data.revisions ?? []).filter(
     (r) => r.modifiedTime && r.modifiedTime <= beforeIso,
@@ -345,7 +350,10 @@ export async function getNativeRevisionTextBefore(
   const url = rev?.exportLinks?.["text/plain"];
   if (!rev?.modifiedTime || !url) return null;
   const token = await getAccessToken();
-  const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const resp = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(20_000), // U6c — never hang on the export GET
+  });
   if (!resp.ok) return null;
   return { text: await resp.text(), revisionDate: rev.modifiedTime };
 }

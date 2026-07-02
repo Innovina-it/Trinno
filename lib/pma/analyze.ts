@@ -6,6 +6,7 @@ import type { Schema } from "@google/genai";
 import { getAnalyzableContent, getAnalyzableTextBefore } from "./content";
 import { generateStructured } from "./clients/gemini";
 import { diffLines } from "./text-diff";
+import { withTimeout } from "./with-timeout";
 import { getRegistryEntry } from "./registry";
 import type { DetectedFile } from "./detect";
 import type { ContributorIdentity } from "./contributor-orgs";
@@ -258,7 +259,14 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
 
       // ── Step D: fetch content (text export, or a binary file part for
       //    PDF/images/Office) → Flash recap. The recap body rides back in-memory.
-      const analyzable = await getAnalyzableContent(file.fileId, file.mimeType ?? "");
+      //    U6c — every await is timeout-guarded: a hung call becomes THIS file's
+      //    error (a missed update), never a frozen run.
+      const label = file.name ?? file.fileId;
+      const analyzable = await withTimeout(
+        getAnalyzableContent(file.fileId, file.mimeType ?? ""),
+        90_000,
+        `content export for "${label}"`,
+      );
 
       // U5 (revision delta) — for a windowed run, ground "what changed" in a
       // computed diff against the newest revision at-or-before the window start.
@@ -267,11 +275,13 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
       let deltaBlock = "";
       let deltaBaseDate: string | null = null;
       if (input.windowStart && "text" in analyzable) {
-        const before = await getAnalyzableTextBefore(
-          file.fileId,
-          file.mimeType ?? "",
-          input.windowStart,
-        );
+        // Best-effort stays best-effort under a timeout too: a slow revision
+        // read degrades to "no verified delta", never an error.
+        const before = await withTimeout(
+          getAnalyzableTextBefore(file.fileId, file.mimeType ?? "", input.windowStart),
+          30_000,
+          `revision history for "${label}"`,
+        ).catch(() => null);
         if (before) {
           deltaBaseDate = before.revisionDate;
           const d = diffLines(before.text, analyzable.text);
@@ -282,18 +292,22 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeFileResult[]>
         }
       }
 
-      const recap = await generateStructured<FileRecap>({
-        model: "gemini-3.5-flash",
-        systemInstruction: RECAP_SYSTEM,
-        prompt:
-          buildPrompt(
-            file,
-            "text" in analyzable ? analyzable.text : "(binary document attached below)",
-          ) + deltaBlock,
-        responseSchema: RECAP_SCHEMA,
-        temperature: 0,
-        ...("file" in analyzable ? { files: [analyzable.file] } : {}),
-      });
+      const recap = await withTimeout(
+        generateStructured<FileRecap>({
+          model: "gemini-3.5-flash",
+          systemInstruction: RECAP_SYSTEM,
+          prompt:
+            buildPrompt(
+              file,
+              "text" in analyzable ? analyzable.text : "(binary document attached below)",
+            ) + deltaBlock,
+          responseSchema: RECAP_SCHEMA,
+          temperature: 0,
+          ...("file" in analyzable ? { files: [analyzable.file] } : {}),
+        }),
+        150_000,
+        `recap generation for "${label}"`,
+      );
       // detect()'s links cross-ref is authoritative — not the model's guess.
       recap.is_deliverable = file.isDeliverable;
 
