@@ -252,9 +252,23 @@ const SYNTHESIS_SYSTEM =
   "`recommendations` (analyst advice to the team), `risk_outlook` (a short " +
   "forward-looking paragraph on where the project is exposed, based on the " +
   "deviations, risk flags and missed updates), and `budget_notes` " +
-  "(budget/effort observations ONLY if the documents or PROJECT CONTEXT " +
-  "actually mention them — never fabricate figures or estimates). Leave any of " +
+  // U3 (eval #26) — budget ≠ market: TAM/ARR/pricing leaked into budget_notes
+  // because 'mentions budget-shaped money' was the only test.
+  "(observations about the PROJECT'S OWN budget, spending or effort ONLY. " +
+  "Market sizing, revenue projections, TAM/ARR figures and product pricing " +
+  "(e.g. subscription or EaaS fees) are NOT budget and must never appear " +
+  "here; when the documents mention no project budget, return []). Leave any of " +
   "these empty ([] or \"\") when nothing in the inputs supports it. " +
+  // U3 (eval #19) — one entity, one name: 'CER' vs 'CERA' class of drift.
+  "When the inputs use variant names or acronyms for the same entity (a " +
+  "committee, company or partner), use the form the official/submission " +
+  "documents use, noting the variant at most once; never treat variants as " +
+  "different entities. " +
+  // U3 (eval #7) — supporting files are context, not deliverable progress.
+  "A changed-file entry with `is_deliverable` false is a supporting file " +
+  "(references, contacts, presentations): give it at most one short clause in " +
+  "`new_or_changed_files` and never a dedicated paragraph or a detailed " +
+  "enumeration of its contents. " +
   // U2 (eval #8/#17) — the two digest sections are DEFINED, so they stop being
   // restatements of new_or_changed_files (the reviewer: "whats the consistency
   // in putting notable changes nd then this ?").
@@ -434,6 +448,32 @@ export function groupByDeliverable(
 const IMPORTANCE_RANK = { low: 0, medium: 1, high: 2 } as const;
 const uniqStrings = (xs: string[]) => Array.from(new Set(xs.filter(Boolean)));
 
+// U3 (eval B2) — gemini-3.5-flash deterministically transcribes '€' in its INPUT
+// as U+2012 (figure dash) in its OUTPUT ("€4-8 million" → "‒4-8 million", which
+// reads as negative money). The recaps and the prompt carry a real '€' and the
+// HTML/Drive rendering is proven lossless, so the repair happens right after
+// generation: a U+2012 immediately followed by a digit can only be the mangled
+// euro (real ranges are spaced or use hyphen/en dash). Deep-walks the report.
+export function repairCurrency<T>(value: T): T {
+  if (typeof value === "string")
+    return value.replace(/‒(?=\d)/g, "€") as unknown as T;
+  if (Array.isArray(value))
+    return value.map((v) => repairCurrency(v)) as unknown as T;
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [
+        k,
+        repairCurrency(v),
+      ]),
+    ) as unknown as T;
+  return value;
+}
+
+// U3 (eval #7) — cap a supporting file's change enumeration in the payload; the
+// dropped tail is summarized so the model knows it exists without narrating it.
+const capList = (xs: string[], n: number): string[] =>
+  xs.length > n ? [...xs.slice(0, n), `(+${xs.length - n} more)`] : xs;
+
 // U2 (eval S2) — pull the unfilled-template rows out of the quality table into a
 // single "Not started" list: 7-11 near-identical "blank template / placeholder"
 // rows were drowning the real signal. Deterministic, runs after grouping.
@@ -503,6 +543,12 @@ function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
     const rep = g.find((r) => !/\.pptx$/i.test(r.name ?? "")) ?? g[0];
     const extra = g.length - 1;
     const recaps = g.map((r) => r.recap!);
+    const isDeliverable = recaps.some((r) => r.is_deliverable);
+    // U3 (eval #7) — a supporting file's change lists are capped (the model gets
+    // the gist + a "+N more" marker), so References/Contatti-class files stop
+    // getting deliverable-level enumeration. Deliverables keep the full lists;
+    // risk_flags are NEVER capped (they carry the verbatim inconsistency catches).
+    const capped = (xs: string[]) => (isDeliverable ? xs : capList(xs, 2));
     return {
       // U12.8 — reference by human name, noting how many copies were folded.
       file:
@@ -516,10 +562,12 @@ function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
         (a, r) => (IMPORTANCE_RANK[r.importance] > IMPORTANCE_RANK[a] ? r.importance : a),
         "low",
       ),
-      is_deliverable: recaps.some((r) => r.is_deliverable),
-      additions: uniqStrings(recaps.flatMap((r) => r.additions)),
-      edits: uniqStrings(recaps.flatMap((r) => r.edits)),
-      structural_changes: uniqStrings(recaps.flatMap((r) => r.structural_changes)),
+      is_deliverable: isDeliverable,
+      additions: capped(uniqStrings(recaps.flatMap((r) => r.additions))),
+      edits: capped(uniqStrings(recaps.flatMap((r) => r.edits))),
+      structural_changes: capped(
+        uniqStrings(recaps.flatMap((r) => r.structural_changes)),
+      ),
       risk_flags: uniqStrings(recaps.flatMap((r) => r.risk_flags)),
       // U12.9 — org (mapped) or name (unmapped) of every contributor across the
       // folded copies, deduped. Never a raw person's name once mapped.
@@ -881,13 +929,18 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
   // every contributor resolves to their own name (pre-feature behaviour).
   const orgMap = buildOrgMap(input.contributorOrgs ?? []);
 
-  const report = await generateStructured<SynthesisReport>({
-    model: "gemini-3.5-flash",
-    systemInstruction: SYNTHESIS_SYSTEM,
-    prompt: buildPrompt(input, variance, period, orgMap),
-    responseSchema: REPORT_SCHEMA,
-    temperature: 0,
-  });
+  // U3 (eval B2) — repair the model's deterministic '€'→U+2012 transcription
+  // right at the source, so both the rendered Doc and the returned report carry
+  // the real euro sign.
+  const report = repairCurrency(
+    await generateStructured<SynthesisReport>({
+      model: "gemini-3.5-flash",
+      systemInstruction: SYNTHESIS_SYSTEM,
+      prompt: buildPrompt(input, variance, period, orgMap),
+      responseSchema: REPORT_SCHEMA,
+      temperature: 0,
+    }),
+  );
 
   // U12.6/U12.9 — the grounded set of labels to bold in the rendered report:
   // every contributor to an analyzed file, resolved to their org (mapped) or name

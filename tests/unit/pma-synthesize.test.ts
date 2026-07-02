@@ -25,6 +25,7 @@ import {
   groupByDeliverable,
   collapseTemplateRows,
   hoistSharedRisks,
+  repairCurrency,
 } from "@/lib/pma/synthesize";
 import type { SynthesisReport } from "@/lib/pma/synthesize";
 import { ALL_SECTIONS_ON } from "@/lib/pma/report-sections";
@@ -1098,6 +1099,88 @@ describe("collapseTemplateRows + hoistSharedRisks (U2)", () => {
     expect(tplEntry).toContain('"is_empty_template": true');
     const filledEntry = prompt.slice(prompt.indexOf('"file": "D1.1'));
     expect(filledEntry).toContain('"is_empty_template": false');
+  });
+});
+
+// U3 — grounding bundle (eval #26/#19/#7/B2).
+describe("grounding bundle (U3)", () => {
+  it("repairCurrency fixes the mangled euro (U+2012 before a digit) everywhere in the report", () => {
+    const mangled = {
+      executive_summary: "TAM of ‒4-8 million and fees of ‒199-899.",
+      budget_notes: ["ARR of ‒1.2-3.2 million"],
+      nested: { deep: ["‒42"] },
+      deviations: [],
+    };
+    const fixed = repairCurrency(mangled);
+    expect(fixed.executive_summary).toBe("TAM of €4-8 million and fees of €199-899.");
+    expect(fixed.budget_notes).toEqual(["ARR of €1.2-3.2 million"]);
+    expect(fixed.nested.deep).toEqual(["€42"]);
+  });
+
+  it("repairCurrency leaves real dashes and date ranges untouched", () => {
+    expect(repairCurrency("01/01/2026 – 01/07/2026")).toBe("01/01/2026 – 01/07/2026"); // en dash + spaces
+    expect(repairCurrency("Mid-June 2026 — Mid-December 2027")).toBe("Mid-June 2026 — Mid-December 2027"); // em dash
+    expect(repairCurrency("a ‒ b")).toBe("a ‒ b"); // figure dash NOT followed by digit
+    expect(repairCurrency("4-8 million")).toBe("4-8 million"); // plain hyphen range
+  });
+
+  it("synthesize repairs the euro in both the returned report and the rendered Doc", async () => {
+    generateStructured.mockResolvedValue({
+      ...REPORT,
+      budget_notes: ["Project budget of ‒40k committed"],
+    });
+    const res = await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [analyzed("A")],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    expect(res.report.budget_notes[0]).toBe("Project budget of €40k committed");
+    expect(createReport.mock.calls[0][1].content).toContain("€40k");
+  });
+
+  it("prompt carries budget≠market, entity-reconciliation and support-file rules", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [analyzed("A")],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const sys = generateStructured.mock.calls[0][0].systemInstruction as string;
+    expect(sys).toContain("are NOT budget"); // TAM/ARR/pricing excluded
+    expect(sys).toContain("variant names or acronyms for the same entity"); // CERA/CER rule
+    expect(sys).toContain("supporting file"); // is_deliverable=false compression
+  });
+
+  it("caps a supporting file's change lists in the payload; deliverables keep full lists", async () => {
+    const manyChanges = {
+      additions: ["a1", "a2", "a3", "a4", "a5"],
+      edits: ["e1", "e2", "e3"],
+    };
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [
+        { ...analyzed("refs"), name: "References.docx", recap: recap({ ...manyChanges, is_deliverable: false }) },
+        { ...analyzed("d11"), name: "D1.1 — Clinical.docx", recap: recap({ ...manyChanges, is_deliverable: true }) },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    const refsEntry = prompt.slice(prompt.indexOf('"file": "References'), prompt.indexOf('"file": "D1.1'));
+    expect(refsEntry).toContain("(+3 more)"); // additions capped at 2
+    expect(refsEntry).not.toContain('"a3"');
+    const d11Entry = prompt.slice(prompt.indexOf('"file": "D1.1'));
+    expect(d11Entry).toContain('"a5"'); // deliverable keeps everything
   });
 });
 
