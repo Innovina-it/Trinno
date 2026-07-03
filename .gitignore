@@ -71,6 +71,13 @@ docs/features/collabora-innova-seed/
 docs/features/filse-spazio-wildfire-seed/
 docs/features/path-b-live-freshness/
 
+# PMA report-quality planning docs + local scratch — never push
+docs/features/pma-report-quality/
+/analysis-*.html
+/trinno-doc-*.html
+/trinno-doc-*.png
+/Attività Consulenziali/
+
 # DB backups + local artifacts
 backup-*.sql
 error.log
