@@ -43,6 +43,34 @@ export const REPORT_SECTION_LABELS: Record<ReportSectionKey, string> = {
   budget_notes: "Budget notes",
 };
 
+// UI grouping for the Run-analysis outline: the toggles read as the outline of
+// the document the run will produce, four named parts mirroring the report's
+// arc. Flattening the groups in order reproduces REPORT_SECTION_KEYS exactly, so
+// render order and grouping stay in sync (guarded by a unit test).
+export const REPORT_SECTION_GROUPS = [
+  { label: "Overview", keys: ["executive_summary", "deliverables"] },
+  {
+    label: "What changed",
+    keys: [
+      "notable_changes",
+      "new_or_changed_files",
+      "missed_updates",
+      "deviations",
+    ],
+  },
+  {
+    label: "Progress & quality",
+    keys: ["quality_risks", "progress_notes", "difficulties"],
+  },
+  {
+    label: "Looking ahead",
+    keys: ["next_steps", "recommendations", "risk_outlook", "budget_notes"],
+  },
+] as const satisfies ReadonlyArray<{
+  label: string;
+  keys: ReadonlyArray<ReportSectionKey>;
+}>;
+
 // The stored shape: a partial map of section → enabled. Absent/null → all on.
 export type ReportSections = Partial<Record<ReportSectionKey, boolean>>;
 
