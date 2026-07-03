@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +34,7 @@ export function ContributorOrgsPanel({
   initialRows,
   canEdit,
   orgHints = [],
+  onCount,
 }: {
   workspaceId: string;
   initialRows: ContributorOrgRow[];
@@ -42,8 +43,14 @@ export function ContributorOrgsPanel({
   // the plan import stamps onto task cards), offered as autocomplete suggestions
   // even before any contributor is mapped.
   orgHints?: string[];
+  // Optional: report the current mapped-row count up to a collapsible host (the
+  // Analysis Setup panel) so a collapsed header can show a live summary.
+  onCount?: (n: number) => void;
 }) {
   const [rows, setRows] = useState<ContributorOrgRow[]>(initialRows);
+  useEffect(() => {
+    onCount?.(rows.length);
+  }, [rows.length, onCount]);
   const [contributor, setContributor] = useState("");
   const [org, setOrg] = useState("");
   const [scanned, setScanned] = useState<ScannedContributor[] | null>(null);
@@ -213,7 +220,7 @@ export function ContributorOrgsPanel({
                 id="org-contributor"
                 value={contributor}
                 onChange={(e) => setContributor(e.target.value)}
-                placeholder="amir@innovina.it"
+                placeholder="name@company.com"
                 className="w-56"
               />
             </div>
@@ -223,7 +230,7 @@ export function ContributorOrgsPanel({
                 id="org-name"
                 value={org}
                 onChange={(e) => setOrg(e.target.value)}
-                placeholder="Innovina"
+                placeholder="Acme"
                 list="org-suggestions"
                 className="w-44"
               />

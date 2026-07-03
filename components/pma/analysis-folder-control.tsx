@@ -14,9 +14,14 @@ import { setWorkspaceDriveFolderAction } from "@/actions/pma-folders";
 export function AnalysisFolderControl({
   workspaceId,
   currentFolderUrl,
+  bare = false,
 }: {
   workspaceId: string;
   currentFolderUrl: string | null;
+  // `bare` drops the control's own border/background so it reads as inline
+  // content inside the Analysis "Setup" panel (which already provides the
+  // boundary), avoiding a nested-border surface.
+  bare?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -59,10 +64,18 @@ export function AnalysisFolderControl({
       );
 
     return (
-      <div className="w-full max-w-md space-y-3 rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface)] p-3.5">
-        <span className="mono-meta-sm tracking-[0.14em] text-fg-faint">
-          DOCUMENTS FOLDER
-        </span>
+      <div
+        className={cn(
+          "w-full space-y-3",
+          !bare &&
+            "max-w-md rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface)] p-3.5",
+        )}
+      >
+        {!bare && (
+          <span className="mono-meta-sm tracking-[0.14em] text-fg-faint">
+            DOCUMENTS FOLDER
+          </span>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <div
             role="radiogroup"
@@ -151,7 +164,13 @@ export function AnalysisFolderControl({
 
   // ── Connected: status chip (no raw id) ─────────────────────────────────────
   return (
-    <div className="inline-flex items-center gap-2.5 rounded-lg border border-[color:var(--hairline-hi)] bg-[color:var(--surface)] py-1 pl-3 pr-1">
+    <div
+      className={cn(
+        "inline-flex items-center gap-2.5",
+        !bare &&
+          "rounded-lg border border-[color:var(--hairline-hi)] bg-[color:var(--surface)] py-1 pl-3 pr-1",
+      )}
+    >
       <Cloud className="size-3.5 text-fg-muted" />
       <span className="text-sm text-fg">Documents folder</span>
       <span className="inline-flex items-center gap-1 mono-meta-sm text-[color:var(--accent-cyan)]">

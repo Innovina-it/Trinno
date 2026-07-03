@@ -13,6 +13,7 @@ import { extractDriveFileId } from "./detect";
 // the acting user so RLS scopes the role + link lookups.
 
 export type AnalysisGate = {
+  isOwner: boolean;
   isOwnerAdmin: boolean;
   foldersConfigured: boolean;
   canRun: boolean;
@@ -38,6 +39,7 @@ export async function getAnalysisGate(
       !!(reportsUrl && extractDriveFileId(reportsUrl));
 
     return {
+      isOwner: role === "owner",
       isOwnerAdmin,
       foldersConfigured,
       canRun: isOwnerAdmin && foldersConfigured,
