@@ -1174,6 +1174,47 @@ describe("collapseTemplateRows + hoistSharedRisks (U2)", () => {
     expect(hoistSharedRisks(rows)).toEqual({ rows, shared: [] });
   });
 
+  // U8a — the same note reworded across documents (the DPA "in corso di
+  // formalizzazione" case) merges into ONE shared entry, though no two wordings
+  // are byte-identical.
+  it("fuzzily merges a reworded shared note across documents (U8a)", () => {
+    const { rows, shared } = hoistSharedRisks([
+      {
+        file: "Privacy", status: "unknown", quality: "q",
+        risks: ["The Data Processing Agreement (DPA) with the external processor Innovina S.r.l. under Art. 28 GDPR is currently in the process of being formalized ('in corso di formalizzazione')."],
+      },
+      {
+        file: "Ricerca", status: "draft", quality: "q",
+        risks: ["The Data Processing Agreement (DPA) with the technical partner Innovina S.r.l. is currently in the process of being finalized ('in corso di formalizzazione')."],
+      },
+      {
+        file: "CERA", status: "approved", quality: "q",
+        risks: ["The Data Processing Agreement (DPA) with the external processor Innovina S.r.l. is noted as currently being formalized ('attualmente in corso di formalizzazione')."],
+      },
+    ]);
+    expect(shared).toHaveLength(1);
+    expect(shared[0].files).toEqual(["Privacy", "Ricerca", "CERA"]);
+    expect(rows.every((r) => r.risks.length === 0)).toBe(true); // note prints once
+  });
+
+  it("does NOT merge distinct catches that share only a word or two (U8a dual gate)", () => {
+    const { shared } = hoistSharedRisks([
+      { file: "A", status: "unknown", quality: "q", risks: ["'Innovina S.r.l.' vs 'Innovia S.R.L' naming inconsistency"] },
+      { file: "B", status: "unknown", quality: "q", risks: ["The Data Processing Agreement with Innovina S.r.l. is being formalized"] },
+    ]);
+    expect(shared).toHaveLength(0);
+  });
+
+  it("prompt: document_issues must not restate not-started templates and needs a real owner (U8b)", async () => {
+    await synthesize({
+      workspaceId: WS, outputFolderId: OUT, runLabel: LABEL,
+      fileResults: [analyzed("A")], removed: [], baseline: null, live: emptyLive,
+    });
+    const sys = generateStructured.mock.calls[0][0].systemInstruction as string;
+    expect(sys).toContain("already summarised in the not-started list");
+    expect(sys).toContain("omit the row rather than writing 'unknown'");
+  });
+
   // U7g — shared verbatim blocks are Document-issues rows now (routed to owners),
   // not a banner over the quality table.
   it("renders shared blocks as Document-issues rows with owners; 'Not started' stays in quality", () => {

@@ -384,6 +384,13 @@ const SYNTHESIS_SYSTEM =
   "`files` (the document name(s)), `owner` (those files' `modified_by`, " +
   "verbatim), `severity`. Do NOT list identical text blocks copied across " +
   "documents — the system detects and reports those automatically. " +
+  // U8b — the not-started list already names every unfilled template; a
+  // template being empty is not a per-file defect worth a routed row.
+  "Do NOT add a row merely because a deliverable is an unfilled/empty template " +
+  "— those are already summarised in the not-started list; only flag a template " +
+  "for a SPECIFIC defect (e.g. it belongs to another project, or its filename " +
+  "contradicts a sibling). Every row MUST carry a real `owner`; if a file has " +
+  "no `modified_by`, omit the row rather than writing 'unknown'. " +
   "`progress_notes` are status-versus-plan observations (what is ahead, behind " +
   "or on track and why), never a restatement of the file list. " +
   // U2 (eval #25) — one fact, one home: kills the same risk printing in the
@@ -644,39 +651,87 @@ export function collapseTemplateRows(rows: QualityRiskRow[]): {
   };
 }
 
-// U2 (eval #11/#13/#14/#25) — a risk that recurs VERBATIM on 2+ distinct rows is
-// one pasted/shared block, not N independent findings: hoist it to a single
+// U2 (eval #11/#13/#14/#25) — a risk that recurs across 2+ distinct rows is one
+// pasted/shared block, not N independent findings: hoist it to a single
 // project-level list (naming the files it appears in) and strip it from the
-// per-file cells. Matching is normalized (case/whitespace/trailing period) but
-// the surfaced text stays the first occurrence verbatim — a genuinely distinct
-// catch (the reviewer's "good point") never matches and is never dropped.
+// per-file cells. The surfaced text stays the first occurrence verbatim.
+//
+// U8a (eval R4, DPA note) — matching is now FUZZY, not verbatim: the same note
+// reworded across documents ("the DPA ... is in corso di formalizzazione",
+// phrased three different ways) printed once per copy because exact/whitespace
+// matching missed the paraphrases. Two risks merge only when they clear BOTH
+// gates — high token overlap (Jaccard) AND several shared significant tokens —
+// so a genuinely distinct catch (the reviewer's "good point"), which shares few
+// tokens with anything, never merges and is never dropped.
+const HOIST_STOP = new Set([
+  "the", "a", "an", "of", "to", "and", "or", "is", "are", "in", "on", "for",
+  "with", "by", "as", "at", "its", "it", "that", "this", "be", "been", "being",
+  "under", "from", "not", "currently", "process", "noted", "which", "was",
+  "were", "has", "have", "may", "due",
+]);
+function hoistTokens(s: string): Set<string> {
+  return new Set(
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9àèéìòù]+/gi, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !HOIST_STOP.has(w)),
+  );
+}
+function hoistSimilar(a: Set<string>, b: Set<string>): boolean {
+  let inter = 0;
+  for (const x of a) if (b.has(x)) inter++;
+  const smaller = Math.min(a.size, b.size);
+  // Overlap coefficient (inter / smaller set) — length-tolerant, so a terse
+  // rewording of a longer note still matches. Dual gate: most of the shorter
+  // risk's vocabulary shared AND at least 4 real tokens in common. Reworded
+  // copies of one note clear both; short distinct risks that happen to share a
+  // word or two never reach 4 shared tokens.
+  const overlap = smaller === 0 ? 0 : inter / smaller;
+  return overlap >= 0.6 && inter >= 4;
+}
 export function hoistSharedRisks(rows: QualityRiskRow[]): {
   rows: QualityRiskRow[];
   shared: Array<{ risk: string; files: string[]; owners: string[] }>;
 } {
-  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ").replace(/\.$/, "");
-  const byRisk = new Map<string, { risk: string; files: string[]; owners: string[] }>();
+  type Group = {
+    risk: string;
+    files: string[];
+    owners: string[];
+    members: Set<string>;
+    tokens: Set<string>;
+  };
+  const groups: Group[] = [];
   for (const r of rows) {
     for (const risk of r.risks) {
-      const k = norm(risk);
-      const e = byRisk.get(k);
-      if (e) {
-        e.files.push(r.file);
-        if (r.owner) e.owners.push(r.owner);
+      const t = hoistTokens(risk);
+      const g = groups.find(
+        (gr) => risk === gr.risk || hoistSimilar(gr.tokens, t),
+      );
+      if (g) {
+        if (!g.files.includes(r.file)) g.files.push(r.file);
+        if (r.owner && !g.owners.includes(r.owner)) g.owners.push(r.owner);
+        g.members.add(risk);
       } else {
-        byRisk.set(k, { risk, files: [r.file], owners: r.owner ? [r.owner] : [] });
+        groups.push({
+          risk,
+          files: [r.file],
+          owners: r.owner ? [r.owner] : [],
+          members: new Set([risk]),
+          tokens: t,
+        });
       }
     }
   }
-  const shared = Array.from(byRisk.values()).filter((e) => e.files.length >= 2);
+  const shared = groups.filter((g) => g.files.length >= 2);
   if (shared.length === 0) return { rows, shared: [] };
-  const sharedKeys = new Set(shared.map((e) => norm(e.risk)));
+  const sharedStrings = new Set(shared.flatMap((g) => Array.from(g.members)));
   return {
     rows: rows.map((r) => ({
       ...r,
-      risks: r.risks.filter((risk) => !sharedKeys.has(norm(risk))),
+      risks: r.risks.filter((risk) => !sharedStrings.has(risk)),
     })),
-    shared,
+    shared: shared.map(({ risk, files, owners }) => ({ risk, files, owners })),
   };
 }
 
