@@ -346,6 +346,13 @@ const SYNTHESIS_SYSTEM =
   "never narrate it as authored progress or give it its own bullet; mention " +
   "such files only inside ONE collective sentence (e.g. 'Not started: D2.1, " +
   "D2.2, ...') in `new_or_changed_files`. " +
+  // U7d (eval R4-4) — signed beats draft: 'in the files presented this is done'.
+  "A changed-file entry with `has_signed_final` true is a FINALIZED document " +
+  "family (a signed or final/approved copy exists): unresolved placeholders, " +
+  "internal comments and open questions in its draft copies are HISTORICAL — " +
+  "already settled by the final version. Never derive next_steps or " +
+  "difficulties from them; at most record one `document_issues` item noting " +
+  "that a draft copy retains outdated comments. " +
   "Respond only as JSON matching the provided schema.";
 
 // The compact, model-facing payload. Kept small and structured: only the signal
@@ -476,7 +483,16 @@ export function groupByDeliverable(
   // verbatim inconsistency catches are never silently dropped (eval M2b/#20 —
   // previously only the representative's risks survived and the others vanished).
   const emit = (set: RawQualityRisk[], suffix: string) => {
-    const rep = set.find((e) => !/\.pptx$/i.test(e.rawName)) ?? set[0];
+    // U7d — a signed/final copy is the best witness for the family's row;
+    // fall back to any non-pptx copy, then to whatever is first.
+    const rep =
+      set.find(
+        (e) =>
+          (e.status === "final" || e.status === "approved") &&
+          !/\.pptx$/i.test(e.rawName),
+      ) ??
+      set.find((e) => !/\.pptx$/i.test(e.rawName)) ??
+      set[0];
     groupRows.push({
       file: `${rep.rawName}${suffix}`,
       status: rep.status,
@@ -531,6 +547,21 @@ export function repairCurrency<T>(value: T): T {
 // dropped tail is summarized so the model knows it exists without narrating it.
 const capList = (xs: string[], n: number): string[] =>
   xs.length > n ? [...xs.slice(0, n), `(+${xs.length - n} more)`] : xs;
+
+// U7d (eval R4-4) — a document family is "finalized" when any copy is signed
+// (by name) or declares itself final/approved (by its own content). Draft
+// copies' unresolved placeholders then stop generating next steps: the signed
+// version superseded them (the reviewer: "in the files presented this is done").
+const SIGNED_NAME_RX = /signed|firmato/i;
+
+export function hasSignedFinal(g: AnalyzeFileResult[]): boolean {
+  return g.some(
+    (r) =>
+      SIGNED_NAME_RX.test(r.name ?? "") ||
+      r.recap?.file_status === "final" ||
+      r.recap?.file_status === "approved",
+  );
+}
 
 // U2 (eval S2) — pull the unfilled-template rows out of the quality table into a
 // single "Not started" list: 7-11 near-identical "blank template / placeholder"
@@ -599,11 +630,23 @@ function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
     if (g) g.push(r);
     else groups.set(key, [r]);
   }
-  const entry = (g: AnalyzeFileResult[], isSuperseded: boolean, suffix?: string) => {
+  const entry = (
+    g: AnalyzeFileResult[],
+    isSuperseded: boolean,
+    suffix?: string,
+    familyDeliverable?: boolean,
+    familySignedFinal?: boolean,
+  ) => {
     const rep = g.find((r) => !/\.pptx$/i.test(r.name ?? "")) ?? g[0];
     const extra = g.length - 1;
     const recaps = g.map((r) => r.recap!);
-    const isDeliverable = recaps.some((r) => r.is_deliverable);
+    // U7f — the deliverable flag belongs to the FAMILY, not the copy: the linked
+    // gdoc shell carries it while the content lives in the .docx sibling, so a
+    // divergence split used to strip the flag off the content entry (making the
+    // report claim "all deliverables are empty templates"). The caller passes
+    // the whole-group flag when splitting.
+    const isDeliverable =
+      familyDeliverable ?? recaps.some((r) => r.is_deliverable);
     // U3 (eval #7) — a supporting file's change lists are capped (the model gets
     // the gist + a "+N more" marker), so References/Contatti-class files stop
     // getting deliverable-level enumeration. Deliverables keep the full lists;
@@ -663,6 +706,10 @@ function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
       is_empty_template: g.every((r) =>
         looksUnfilledTemplate(r.recap?.quality_judgment, r.recap?.one_line_summary),
       ),
+      // U7d (eval R4-4) — the family contains a signed or final/approved copy:
+      // draft copies' placeholders and open comments are HISTORY, not work. The
+      // model is told never to derive next steps or difficulties from them.
+      has_signed_final: familySignedFinal ?? hasSignedFinal(g),
     };
   };
   const foldSuffix = (extra: number) =>
@@ -680,8 +727,16 @@ function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
     );
     const filled = g.filter((r) => !templates.includes(r));
     if (templates.length > 0 && filled.length > 0) {
-      out.push(entry(filled, false, foldSuffix(filled.length - 1)));
-      for (const t of templates) out.push(entry([t], false, " (unfilled template copy)"));
+      // U7f/U7d — split entries inherit the whole family's flags.
+      const familyDeliverable = g.some((r) => r.recap!.is_deliverable);
+      const familySigned = hasSignedFinal(g);
+      out.push(
+        entry(filled, false, foldSuffix(filled.length - 1), familyDeliverable, familySigned),
+      );
+      for (const t of templates)
+        out.push(
+          entry([t], false, " (unfilled template copy)", familyDeliverable, familySigned),
+        );
     } else {
       out.push(entry(g, false));
     }

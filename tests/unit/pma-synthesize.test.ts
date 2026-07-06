@@ -500,6 +500,84 @@ describe("synthesize — aggregate + report", () => {
     expect(editedOnly).toContain("Added market analysis");
   });
 
+  // U7f (eval — "all deliverables are templates" overstatement) — the deliverable
+  // flag belongs to the family: a divergence split must not strip it off the
+  // content-bearing copy when the linked gdoc shell carries it.
+  it("split entries inherit the family's is_deliverable flag (and stay uncapped)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [
+        {
+          ...analyzed("shell"),
+          name: "D1.2 — TRL6 Validation Protocol (with Studio Buccarella)",
+          recap: recap({
+            one_line_summary: "Blank template outline.",
+            quality_judgment: "The document is a blank template of placeholders.",
+            is_deliverable: true, // the LINKED shell carries the flag
+          }),
+        },
+        {
+          ...analyzed("content"),
+          name: "D1.2 — TRL6 Validation Protocol .docx",
+          recap: recap({
+            one_line_summary: "Drafted the full Clinical Investigation Plan.",
+            quality_judgment: "Highly detailed and structurally complete.",
+            is_deliverable: false, // the content copy is not linked
+            additions: ["a1", "a2", "a3", "a4"],
+          }),
+        },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    const contentEntry = prompt.slice(
+      prompt.indexOf('"file": "D1.2 — TRL6 Validation Protocol .docx"'),
+      prompt.indexOf("(unfilled template copy)"),
+    );
+    expect(contentEntry).toContain('"is_deliverable": true'); // inherited from family
+    expect(contentEntry).toContain('"a4"'); // deliverable → additions NOT capped
+  });
+
+  // U7d (eval R4-4) — a signed copy marks the family finalized.
+  it("marks a family has_signed_final when a signed copy exists, and the prompt carries the rule", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [
+        { ...analyzed("draft"), name: "ARISE CERA Richiesta Parere.docx" },
+        { ...analyzed("signed"), name: "ARISE CERA Richiesta Parere_signed.pdf" },
+        { ...analyzed("other"), name: "Unrelated Notes" },
+      ],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const prompt = generateStructured.mock.calls[0][0].prompt as string;
+    const cera = prompt.slice(prompt.indexOf('"file": "ARISE CERA'));
+    expect(cera).toContain('"has_signed_final": true');
+    const other = prompt.slice(prompt.indexOf('"file": "Unrelated Notes"'));
+    expect(other.slice(0, other.indexOf("}"))).toContain('"has_signed_final": false');
+    const sys = generateStructured.mock.calls[0][0].systemInstruction as string;
+    expect(sys).toContain("has_signed_final");
+    expect(sys).toContain("HISTORICAL");
+  });
+
+  it("quality-table representative prefers a final/approved copy (U7d)", () => {
+    const raw = [
+      { rawName: "AIWEPI_T2.1_draft.docx", superseded: false, status: "draft", quality: "the draft view", risks: ["open item"] },
+      { rawName: "AIWEPI_T2.1_signed.pdf", superseded: false, status: "final", quality: "the signed view", risks: [] },
+    ];
+    const { rows } = groupByDeliverable(raw);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].quality).toBe("the signed view"); // final copy is the witness
+    expect(rows[0].risks).toEqual(["open item"]); // union still keeps the catches
+  });
+
   it("empty map → contributors resolve to their names (unchanged behaviour)", async () => {
     await synthesize({
       workspaceId: WS,
