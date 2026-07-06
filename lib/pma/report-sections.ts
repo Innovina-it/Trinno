@@ -18,6 +18,7 @@ export const REPORT_SECTION_KEYS = [
   "quality_risks",
   "progress_notes",
   "difficulties",
+  "document_issues",
   "next_steps",
   "recommendations",
   "risk_outlook",
@@ -37,6 +38,7 @@ export const REPORT_SECTION_LABELS: Record<ReportSectionKey, string> = {
   quality_risks: "Quality and risks",
   progress_notes: "Progress notes",
   difficulties: "Difficulties",
+  document_issues: "Document issues",
   next_steps: "Next steps",
   recommendations: "Recommendations",
   risk_outlook: "Risk outlook",
@@ -60,7 +62,7 @@ export const REPORT_SECTION_GROUPS = [
   },
   {
     label: "Progress & quality",
-    keys: ["quality_risks", "progress_notes", "difficulties"],
+    keys: ["quality_risks", "progress_notes", "difficulties", "document_issues"],
   },
   {
     label: "Looking ahead",
@@ -94,6 +96,7 @@ export const ALL_SECTIONS_ON: Record<ReportSectionKey, boolean> = {
   quality_risks: true,
   progress_notes: true,
   difficulties: true,
+  document_issues: true,
   next_steps: true,
   recommendations: true,
   risk_outlook: true,

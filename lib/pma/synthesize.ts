@@ -92,6 +92,18 @@ export type NotableChange = {
   date: string;
 };
 
+// U7g — a defect OF a document (not a project problem the document describes),
+// routed to whoever maintains it: internal contradictions, stale sentences,
+// unresolved placeholders in content-bearing docs, naming inconsistencies,
+// conflicting dates across documents. Self-clearing by construction: a fixed
+// document simply stops producing its row on the next run.
+export type DocumentIssue = {
+  issue: string;
+  files: string;
+  owner: string;
+  severity: "low" | "medium" | "high";
+};
+
 // Structured workspace synthesis (DESIGN §5.2).
 export type SynthesisReport = {
   executive_summary: string;
@@ -110,6 +122,8 @@ export type SynthesisReport = {
   recommendations: string[];
   risk_outlook: string;
   budget_notes: string[];
+  // U7g — defects of the documents themselves, for their owners.
+  document_issues: DocumentIssue[];
 };
 
 export type SynthesizeInput = {
@@ -205,6 +219,18 @@ const NOTABLE_CHANGE_SCHEMA: Schema = {
   required: ["claim", "file", "date"],
 };
 
+// U7g — one document defect, routed to its owner.
+const DOCUMENT_ISSUE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    issue: { type: Type.STRING },
+    files: { type: Type.STRING },
+    owner: { type: Type.STRING },
+    severity: { type: Type.STRING, enum: ["low", "medium", "high"] },
+  },
+  required: ["issue", "files", "owner", "severity"],
+};
+
 const REPORT_SCHEMA: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -220,6 +246,7 @@ const REPORT_SCHEMA: Schema = {
     recommendations: { type: Type.ARRAY, items: { type: Type.STRING } },
     risk_outlook: { type: Type.STRING },
     budget_notes: { type: Type.ARRAY, items: { type: Type.STRING } },
+    document_issues: { type: Type.ARRAY, items: DOCUMENT_ISSUE_SCHEMA },
   },
   required: [
     "executive_summary",
@@ -234,6 +261,7 @@ const REPORT_SCHEMA: Schema = {
     "recommendations",
     "risk_outlook",
     "budget_notes",
+    "document_issues",
   ],
 };
 
@@ -333,6 +361,18 @@ const SYNTHESIS_SYSTEM =
   "first documented activity, say so there in one sentence. Each `difficulties` " +
   "item carries `source_file` naming the document it comes from (\"\" only for " +
   "a cross-document observation). " +
+  // U7g — the routing section: defects OF the documents, for their owners.
+  "`document_issues` lists defects OF the documents themselves — problems for " +
+  "whoever maintains the file, NOT project problems the documents describe " +
+  "(those are `difficulties`; never put an item in both). Include: internal " +
+  "contradictions (a statement its own table or a sibling section disproves), " +
+  "stale sentences left from earlier versions, unresolved placeholders in " +
+  "CONTENT-BEARING documents, entity/naming inconsistencies, dates or " +
+  "timelines that disagree across documents, and files that appear to belong " +
+  "to another project. Each item: `issue` (specific, quoting the evidence), " +
+  "`files` (the document name(s)), `owner` (those files' `modified_by`, " +
+  "verbatim), `severity`. Do NOT list identical text blocks copied across " +
+  "documents — the system detects and reports those automatically. " +
   "`progress_notes` are status-versus-plan observations (what is ahead, behind " +
   "or on track and why), never a restatement of the file list. " +
   // U2 (eval #25) — one fact, one home: kills the same risk printing in the
@@ -442,7 +482,15 @@ export function looksUnfilledTemplate(
   return TEMPLATE_RX.test(t) && !SUBSTANTIVE_RX.test(t);
 }
 
-type QualityRiskRow = { file: string; status: string; quality: string; risks: string[] };
+// U7g — `owner` (the file's modified_by label: org or name) rides along so the
+// shared-risk hoist can route copied blocks to whoever maintains the files.
+type QualityRiskRow = {
+  file: string;
+  status: string;
+  quality: string;
+  risks: string[];
+  owner?: string;
+};
 type RawQualityRisk = Omit<QualityRiskRow, "file"> & {
   rawName: string;
   superseded: boolean;
@@ -498,6 +546,10 @@ export function groupByDeliverable(
       status: rep.status,
       quality: rep.quality,
       risks: uniqStrings(set.flatMap((e) => e.risks)),
+      // U7g — union the copies' owners so a hoisted shared block can be routed.
+      owner:
+        uniqStrings(set.map((e) => e.owner ?? "").filter(Boolean)).join(", ") ||
+        undefined,
     });
   };
   const foldSuffix = (extra: number) =>
@@ -589,16 +641,20 @@ export function collapseTemplateRows(rows: QualityRiskRow[]): {
 // catch (the reviewer's "good point") never matches and is never dropped.
 export function hoistSharedRisks(rows: QualityRiskRow[]): {
   rows: QualityRiskRow[];
-  shared: Array<{ risk: string; files: string[] }>;
+  shared: Array<{ risk: string; files: string[]; owners: string[] }>;
 } {
   const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ").replace(/\.$/, "");
-  const byRisk = new Map<string, { risk: string; files: string[] }>();
+  const byRisk = new Map<string, { risk: string; files: string[]; owners: string[] }>();
   for (const r of rows) {
     for (const risk of r.risks) {
       const k = norm(risk);
       const e = byRisk.get(k);
-      if (e) e.files.push(r.file);
-      else byRisk.set(k, { risk, files: [r.file] });
+      if (e) {
+        e.files.push(r.file);
+        if (r.owner) e.owners.push(r.owner);
+      } else {
+        byRisk.set(k, { risk, files: [r.file], owners: r.owner ? [r.owner] : [] });
+      }
     }
   }
   const shared = Array.from(byRisk.values()).filter((e) => e.files.length >= 2);
@@ -853,13 +909,16 @@ export function renderReportDoc(input: {
     quality: string;
     risks: string[];
   }> | null;
-  // U2 — risks found verbatim in 2+ documents, hoisted to one project-level list
-  // (likely one pasted/shared block, not N independent findings). Absent/empty →
-  // byte-identical to before this field existed.
-  sharedRisks?: Array<{ risk: string; files: string[] }> | null;
+  // U2 — risks found verbatim in 2+ documents, hoisted out of the per-file rows
+  // (likely one pasted/shared block, not N independent findings). U7g — they now
+  // render as Document-issues rows, routed to the copies' owners.
+  sharedRisks?: Array<{ risk: string; files: string[]; owners?: string[] }> | null;
   // U2 — unfilled-template files pulled out of the table into one "Not started"
   // line. Absent/empty → byte-identical to before this field existed.
   notStartedFiles?: string[] | null;
+  // U7g — deterministic document defects computed by the pipeline (unreadable
+  // files etc.), merged into the Document-issues section ahead of the model's.
+  fileDefects?: DocumentIssue[] | null;
   // Grounded substantiation for an EMPTY Deviations section (#7): the approved
   // baseline's name (or null when none is set) and how many roadmap items were
   // compared against it. Provided by synthesize() from input.baseline + variance.
@@ -981,17 +1040,6 @@ export function renderReportDoc(input: {
   const qr = input.qualityRisks ?? [];
   const shared = input.sharedRisks ?? [];
   const notStarted = input.notStartedFiles ?? [];
-  const sharedBlock =
-    shared.length > 0
-      ? paragraph(
-          "Shared risks — found verbatim in several documents (likely one copied block, not independent findings):",
-        ) +
-        bullets(
-          shared.map(
-            (s) => `${fmt(s.risk)} <i>(in: ${s.files.map(fmt).join("; ")})</i>`,
-          ),
-        )
-      : "";
   const notStartedBlock =
     notStarted.length > 0
       ? paragraph(
@@ -999,10 +1047,9 @@ export function renderReportDoc(input: {
         )
       : "";
   const qualityRisks =
-    qr.length === 0 && shared.length === 0 && notStarted.length === 0
+    qr.length === 0 && notStarted.length === 0
       ? paragraph("(none)")
-      : sharedBlock +
-        (qr.length > 0
+      : (qr.length > 0
           ? table(
               ["File", "Status", "Quality", "Risks"],
               qr.map((r) => [
@@ -1012,8 +1059,38 @@ export function renderReportDoc(input: {
                 r.risks.length > 0 ? r.risks.map(escapeHtml).join("<br>") : "—",
               ]),
             )
-          : "") +
-        notStartedBlock;
+          : "") + notStartedBlock;
+
+  // U7g — the routing section: one table of document defects, each row aimed at
+  // whoever maintains the file. Deterministic rows first (copied blocks found by
+  // the verbatim hoist, unreadable files), then the model's findings. The
+  // section is self-clearing: a fixed document stops producing its row on the
+  // next run.
+  const issueRows: DocumentIssue[] = [
+    ...shared.map((s) => ({
+      issue: `Identical text found verbatim in several documents (likely one copied block, not independent content): ${s.risk}`,
+      files: s.files.join("; "),
+      owner: uniqStrings(s.owners ?? []).join(", ") || "unknown",
+      severity: "medium" as const,
+    })),
+    ...(input.fileDefects ?? []),
+    ...report.document_issues,
+  ];
+  const documentIssues =
+    issueRows.length === 0
+      ? paragraph("(none — no document defects detected this run)")
+      : paragraph(
+          "Defects of the documents themselves, for their owners to fix — distinct from project difficulties. A fixed document drops off this list automatically on the next run.",
+        ) +
+        table(
+          ["Issue", "Document(s)", "Owner", "Severity"],
+          issueRows.map((i) => [
+            fmt(i.issue),
+            fmt(i.files),
+            fmt(i.owner || "unknown"),
+            monoCell(i.severity),
+          ]),
+        );
 
   // Deterministic disclosure (NOT model-generated, so it can't be omitted or
   // reworded): when revisions for some files could not be read, say so at the top
@@ -1046,6 +1123,7 @@ export function renderReportDoc(input: {
     progress_notes:
       section("Progress notes") + bullets(report.progress_notes.map(fmt)),
     difficulties: section("Difficulties") + difficulties,
+    document_issues: section("Document issues") + documentIssues,
     next_steps: section("Next steps") + bullets(report.next_steps.map(fmt)),
     recommendations:
       section("Recommendations") + bullets(report.recommendations.map(fmt)),
@@ -1124,6 +1202,8 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
       status: r.recap!.file_status,
       quality: r.recap!.quality_judgment,
       risks: r.recap!.risk_flags,
+      // U7g — the owner label (org or name) rides along for issue routing.
+      owner: labelsFor(r, orgMap).join(", ") || undefined,
     }));
   const { rows: groupedRows, deliverableCount } =
     groupByDeliverable(rawQualityRisks);
@@ -1132,6 +1212,20 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
   // verbatim across documents hoist to one project-level list.
   const { rows: activeRows, notStarted } = collapseTemplateRows(groupedRows);
   const { rows: qualityRisks, shared: sharedRisks } = hoistSharedRisks(activeRows);
+
+  // U7g — deterministic document defects: a file whose CONTENT is broken (not a
+  // transient read error) is the owner's problem, routed via Document issues.
+  // Transient failures (timeouts, rate limits) stay in Missed updates only.
+  const FILE_DEFECT_RX = /not supported|not a zip|corrupt|password|encrypted/i;
+  const fileDefects: DocumentIssue[] = input.fileResults
+    .filter((r) => r.status === "error" && FILE_DEFECT_RX.test(r.error ?? ""))
+    .map((r) => ({
+      issue:
+        "File cannot be read by the analysis (its format/content appears broken) — fix or remove it.",
+      files: r.name ?? r.fileId,
+      owner: labelsFor(r, orgMap).join(", ") || "unknown",
+      severity: "medium" as const,
+    }));
   const content = renderReportDoc({
     report,
     runLabel: input.runLabel,
@@ -1144,6 +1238,7 @@ export async function synthesize(input: SynthesizeInput): Promise<SynthesizeResu
     qualityRisks,
     sharedRisks,
     notStartedFiles: notStarted,
+    fileDefects,
     // Grounded substantiation for an empty Deviations section (#7).
     baselineName: input.baseline ? input.baseline.meta.name : null,
     comparedCount: variance

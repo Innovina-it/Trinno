@@ -109,6 +109,7 @@ const REPORT: SynthesisReport = {
   recommendations: ["lock the baseline before prototyping"],
   risk_outlook: "Schedule risk is moderate; the spec slip could cascade.",
   budget_notes: [],
+  document_issues: [],
 };
 
 const emptyLive = { entries: [], milestones: [] };
@@ -825,6 +826,7 @@ describe("renderReportDoc", () => {
         recommendations: [],
         risk_outlook: "",
         budget_notes: [],
+        document_issues: [],
       },
       runLabel: LABEL,
     });
@@ -853,6 +855,7 @@ describe("renderReportDoc", () => {
       "RECOMMENDATIONS",
       "RISK OUTLOOK",
       "BUDGET NOTES",
+      "DOCUMENT ISSUES",
     ]) {
       expect(absent).toContain(heading);
     }
@@ -1092,6 +1095,7 @@ describe("collapseTemplateRows + hoistSharedRisks (U2)", () => {
     expect(shared).toHaveLength(1);
     expect(shared[0].risk).toBe(sharedRisk); // first occurrence, verbatim
     expect(shared[0].files).toEqual(["D1.1", "D1.2"]);
+    expect(shared[0].owners).toEqual([]); // no owners on these rows → empty union
     // per-row cells keep ONLY their unique risks — the good-point catch survives
     expect(rows[0].risks).toEqual(["'Innovina S.r.l.' vs 'Innovia S.R.L' naming inconsistency"]);
     expect(rows[1].risks).toEqual([]);
@@ -1141,22 +1145,52 @@ describe("collapseTemplateRows + hoistSharedRisks (U2)", () => {
     expect(hoistSharedRisks(rows)).toEqual({ rows, shared: [] });
   });
 
-  it("renders shared risks once above the table and 'Not started' below it", () => {
+  // U7g — shared verbatim blocks are Document-issues rows now (routed to owners),
+  // not a banner over the quality table.
+  it("renders shared blocks as Document-issues rows with owners; 'Not started' stays in quality", () => {
     const body = renderReportDoc({
       report: REPORT,
       runLabel: LABEL,
       qualityRisks: [{ file: "D1.1", status: "unknown", quality: "detailed", risks: ["unique risk"] }],
-      sharedRisks: [{ risk: "Notified Body queue", files: ["D1.1", "D1.2"] }],
+      sharedRisks: [{ risk: "Notified Body queue", files: ["D1.1", "D1.2"], owners: ["Innovina"] }],
       notStartedFiles: ["D2.1 — Market Analysis", "D3.1 — Sensor Study"],
     });
-    expect(body).toContain("Shared risks");
+    expect(body).toContain("DOCUMENT ISSUES");
     expect(body).toContain("likely one copied block");
     expect(body).toContain("Notified Body queue");
+    expect(body).toContain("D1.1; D1.2"); // files column
+    expect(body).toContain("Innovina"); // owner routed
+    expect(body).toContain("drops off this list automatically"); // self-clearing explainer
     expect(body).toContain("Not started (unfilled templates): D2.1 — Market Analysis · D3.1 — Sensor Study");
     expect(body).toContain("unique risk");
   });
 
-  it("renders byte-identically to before when sharedRisks/notStartedFiles are absent", () => {
+  it("renders deterministic fileDefects and the model's document_issues in one table (U7g)", () => {
+    const body = renderReportDoc({
+      report: {
+        ...REPORT,
+        document_issues: [
+          { issue: "Summary says 'eighteen KPIs' but sections enumerate 19", files: "T1.3", owner: "Innovina", severity: "medium" },
+        ],
+      },
+      runLabel: LABEL,
+      fileDefects: [
+        { issue: "File cannot be read by the analysis (its format/content appears broken) — fix or remove it.", files: "SEOL_Nota informativa dello studio_CAMPO.docx", owner: "unige", severity: "medium" },
+      ],
+    });
+    expect(body).toContain("cannot be read by the analysis");
+    expect(body).toContain("SEOL_Nota informativa dello studio_CAMPO.docx");
+    expect(body).toContain("eighteen KPIs");
+    expect(body).toContain("unige");
+  });
+
+  it("Document issues renders '(none…)' when nothing is detected", () => {
+    const body = renderReportDoc({ report: REPORT, runLabel: LABEL });
+    expect(body).toContain("DOCUMENT ISSUES");
+    expect(body).toContain("(none — no document defects detected this run)");
+  });
+
+  it("renders identically with explicit empty sharedRisks/notStartedFiles vs absent", () => {
     const qualityRisks = [{ file: "spec.gdoc", status: "draft", quality: "good", risks: ["late"] }];
     const legacy = renderReportDoc({ report: REPORT, runLabel: LABEL, qualityRisks });
     const explicit = renderReportDoc({
@@ -1165,9 +1199,9 @@ describe("collapseTemplateRows + hoistSharedRisks (U2)", () => {
       qualityRisks,
       sharedRisks: [],
       notStartedFiles: [],
+      fileDefects: [],
     });
     expect(explicit).toEqual(legacy);
-    expect(legacy).not.toContain("Shared risks");
     expect(legacy).not.toContain("Not started");
   });
 
