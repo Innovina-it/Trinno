@@ -335,6 +335,12 @@ const SYNTHESIS_SYSTEM =
   "topic appears in exactly one of them (next_steps = concrete pending work; " +
   "recommendations = analyst advice beyond the obvious pending work), and " +
   "neither may restate a difficulty verbatim. " +
+  // U7e (eval R4-5) — 'out of line, as if they dont know the context'.
+  "`recommendations` carries AT MOST 3 items. Each must trace directly to a " +
+  "difficulty or risk the DOCUMENTS state — never generic business or market " +
+  "advice the documents do not discuss as project work. Phrase them humbly " +
+  "('consider …', 'it may help to …'), as suggestions to people who know the " +
+  "project better than you do; when nothing clears this bar, return []. " +
   // U2 (eval #8/#17) — the two digest sections are DEFINED, so they stop being
   // restatements of new_or_changed_files (the reviewer: "whats the consistency
   // in putting notable changes nd then this ?").
@@ -344,6 +350,11 @@ const SYNTHESIS_SYSTEM =
   "{claim, file, date}: `file` = the document the claim comes from, `date` = " +
   "that entry's `last_modified` (or a `key_dates` date when the event itself " +
   "is dated); \"\" when unknown — never invent a date. " +
+  // U7b (eval R4-2) — "2 +1 are the same": one event, one bullet.
+  "Bullets describing the SAME real-world event or package (e.g. several " +
+  "documents signed together as one submission on the same date) must merge " +
+  "into ONE item naming all the files involved — never one bullet per file " +
+  "of a single event. " +
   // U5 (revision delta) — verified vs current-state entries are narrated
   // differently: only verified ones may be reported as changes of the period.
   "A changed-file entry with a non-null `changes_verified_since` carries " +
@@ -998,9 +1009,13 @@ export function renderReportDoc(input: {
   // Substantiate an empty Missed-updates section (#7): every analysed file parsed
   // cleanly, so say so (with the count) rather than "(none)". Uses the already-
   // passed `counts`; absent → bullets([]) keeps the legacy "(none)".
+  // U7c (eval R4-3, "what do you mean missed updates") — the section opens with
+  // a plain-language explainer so a non-engineer knows what the list means.
   const missedUpdates =
     report.missed_updates.length > 0
-      ? bullets(report.missed_updates.map(fmt))
+      ? paragraph(
+          "These files could not be read or analysed on this run, so their content is NOT reflected in this report. Temporary failures usually resolve on the next run; a file that appears here repeatedly is listed under Document issues for its owner.",
+        ) + bullets(report.missed_updates.map(fmt))
       : counts
         ? paragraph(
             counts.changed === 0

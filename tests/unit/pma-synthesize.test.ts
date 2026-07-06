@@ -1121,6 +1121,35 @@ describe("collapseTemplateRows + hoistSharedRisks (U2)", () => {
     ]);
   });
 
+  // U7b/U7e/U7g — the run-4 review rules reach the model.
+  it("prompt carries same-event merge, humble capped recommendations, and the document_issues contract (U7)", async () => {
+    await synthesize({
+      workspaceId: WS,
+      outputFolderId: OUT,
+      runLabel: LABEL,
+      fileResults: [analyzed("A")],
+      removed: [],
+      baseline: null,
+      live: emptyLive,
+    });
+    const sys = generateStructured.mock.calls[0][0].systemInstruction as string;
+    expect(sys).toContain("SAME real-world event"); // U7b — one event, one bullet
+    expect(sys).toContain("AT MOST 3 items"); // U7e — capped
+    expect(sys).toContain("Phrase them humbly"); // U7e — tone
+    expect(sys).toContain("`document_issues` lists defects OF the documents"); // U7g
+    expect(sys).toContain("never put an item in both"); // U7g vs difficulties
+  });
+
+  it("non-empty Missed updates opens with the plain-language explainer (U7c)", () => {
+    const body = renderReportDoc({
+      report: { ...REPORT, missed_updates: ["D1.3 — Final Report (recap timed out)"] },
+      runLabel: LABEL,
+    });
+    expect(body).toContain("could not be read or analysed on this run");
+    expect(body).toContain("NOT reflected in this report");
+    expect(body).toContain("D1.3 — Final Report");
+  });
+
   it("prompt bans category labels in prose, enforces English, and splits next_steps vs recommendations (U6)", async () => {
     await synthesize({
       workspaceId: WS,

@@ -5,6 +5,7 @@ import { describe, it, expect } from "vitest";
 // "Project" preset (project start → today) is offered first.
 import {
   buildPresets,
+  defaultRange,
   rangeMatches,
   startOfDayUTC,
 } from "@/lib/pma/analysis-presets";
@@ -30,6 +31,23 @@ describe("buildPresets", () => {
     expect(buildPresets(NOW, null).map((p) => p.label)).not.toContain("Project");
     expect(buildPresets(NOW, { start: null, end: null }).map((p) => p.label)).not.toContain("Project");
     expect(buildPresets(NOW, { start: "not-a-date", end: null }).map((p) => p.label)).not.toContain("Project");
+  });
+});
+
+// U7a — the default window follows the project timeline when one exists.
+describe("defaultRange", () => {
+  it("defaults to the Project window (roadmap start → today) when available", () => {
+    const r = defaultRange({ start: "2026-05-18T00:00:00Z", end: null }, NOW);
+    expect(r.start?.toISOString()).toBe("2026-05-18T00:00:00.000Z");
+    expect(r.target?.toISOString()).toBe("2026-07-02T00:00:00.000Z");
+  });
+
+  it("falls back to whole-document (nulls) without a usable project start", () => {
+    expect(defaultRange(null, NOW)).toEqual({ start: null, target: null });
+    expect(defaultRange({ start: "2026-09-01T00:00:00Z", end: null }, NOW)).toEqual({
+      start: null,
+      target: null,
+    }); // future start → no Project preset → whole document
   });
 });
 

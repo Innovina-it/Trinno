@@ -44,6 +44,20 @@ export function buildPresets(
   return presets;
 }
 
+// U7a (eval R4-1, "it should follow the starting and ending time of project") —
+// the panel's DEFAULT window is the project's own timeline (roadmap start →
+// today) whenever the roadmap carries a usable past start date; otherwise the
+// previous default (whole document — both bounds null) is preserved.
+export function defaultRange(
+  projectRange: ProjectRange | null | undefined,
+  now: Date,
+): PresetRange {
+  const project = buildPresets(now, projectRange).find((p) => p.label === "Project");
+  return project
+    ? { start: project.start, target: project.target }
+    : { start: null, target: null };
+}
+
 export function rangeMatches(v: PresetRange, p: Preset): boolean {
   return (
     !!v.start &&

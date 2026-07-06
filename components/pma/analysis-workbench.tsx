@@ -15,6 +15,7 @@ import {
 import { sanitizeReportLength } from "@/lib/pma/report-settings";
 import {
   buildPresets,
+  defaultRange,
   rangeMatches,
   type Preset,
   type ProjectRange,
@@ -142,7 +143,11 @@ export function AnalysisWorkbench({
   const activeRun = liveRuns.find((r) => r.status === "running") ?? null;
 
   const [selected, setSelected] = useState<string>(activeRun ? activeRun.id : "new");
-  const [range, setRange] = useState<DateRange>({ start: null, target: null });
+  // U7a — default window = the project's own timeline (roadmap start → today)
+  // when the roadmap has dates; otherwise whole-document, as before.
+  const [range, setRange] = useState<DateRange>(() =>
+    defaultRange(projectRange, new Date()),
+  );
   const [starting, setStarting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [, startRefresh] = useTransition();
