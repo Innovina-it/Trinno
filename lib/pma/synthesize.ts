@@ -411,6 +411,27 @@ const SYNTHESIS_SYSTEM =
   "already settled by the final version. Never derive next_steps or " +
   "difficulties from them; at most record one `document_issues` item noting " +
   "that a draft copy retains outdated comments. " +
+  // U9b (eval R3-B) — phase awareness, confirmed by the project lead: a project
+  // seeking Ethics-Committee (CERA) approval for a FEASIBILITY STUDY is
+  // pre-commercialization. Notified Bodies, CE-marking and reimbursement do not
+  // legally apply until the company decides to SELL the device.
+  "This project is a research feasibility study under Ethics-Committee (CERA) " +
+  "approval — NOT a commercialization stage. Regulatory-certification and market " +
+  "topics — Notified Body / CE-marking / conformity assessment, product " +
+  "reimbursement or SSN billing codes, and market/TAM sizing — are FUTURE, " +
+  "sale-stage concerns that do not apply now. Never present them as current " +
+  "risks, next_steps or recommendations, even if a forward-looking slide " +
+  "mentions them, unless a document explicitly states the project has entered " +
+  "commercialization. " +
+  // U9c (eval R3-C) — be CONSISTENT about project membership: the lead noted the
+  // model flags an off-project file sometimes and misses it other times.
+  "Decide project membership consistently: a document about a DIFFERENT study " +
+  "(a different acronym, topic or year — e.g. an S.E.O.L. exoskeleton request, a " +
+  "pelvic-floor study, or any file the folder marks as an example/template from " +
+  "another project) is NOT part of this project. List each such file exactly " +
+  "once, in `document_issues`, as a misfiled/example document, and EXCLUDE it " +
+  "from every other section (deliverables, notable_changes, difficulties, " +
+  "next_steps). Do not let its content colour the project's status. " +
   "Respond only as JSON matching the provided schema.";
 
 // The compact, model-facing payload. Kept small and structured: only the signal
@@ -624,6 +645,27 @@ const capList = (xs: string[], n: number): string[] =>
 // version superseded them (the reviewer: "in the files presented this is done").
 const SIGNED_NAME_RX = /signed|firmato/i;
 
+// U9a (eval R3-A) — the project lead confirmed the CERA request went draft →
+// corrected → signed-and-sent, and the report kept surfacing the DRAFT's open
+// items (Mirko's blank role, sample size, committee) as live difficulties. U7d
+// already suppresses a draft when a signed copy sits in its OWN family, but the
+// token "CERA" splits `arise richiesta parere` (draft) from `arise cera
+// richiesta parere` (signed) into different families, so the signal never
+// reaches the draft. This detects that cross-family case: a draft family is
+// superseded when some SIGNED family's title tokens are a STRICT superset of the
+// draft's (the signed doc is the same request, named more fully). Strict-subset
+// + a ≥2-token floor keeps it from folding a merely-prefixed neighbour.
+export function supersededBySignedKey(
+  key: string,
+  signedKeys: Set<string>[],
+): boolean {
+  const kt = key.split(" ").filter(Boolean);
+  if (kt.length < 2) return false;
+  return signedKeys.some(
+    (st) => st.size > kt.length && kt.every((t) => st.has(t)),
+  );
+}
+
 export function hasSignedFinal(g: AnalyzeFileResult[]): boolean {
   return g.some(
     (r) =>
@@ -836,8 +878,17 @@ function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
   };
   const foldSuffix = (extra: number) =>
     extra > 0 ? ` (+${extra} more version${extra === 1 ? "" : "s"}: same document)` : "";
+  // U9a — token sets of every family that already holds a signed/final copy, so a
+  // draft family split off by a stray title word (the "CERA" case) can still learn
+  // that its final exists and mark its open items as history.
+  const signedKeys: Set<string>[] = [];
+  for (const [key, g] of groups) {
+    if (hasSignedFinal(g)) signedKeys.push(new Set(key.split(" ").filter(Boolean)));
+  }
   const out: ReturnType<typeof entry>[] = [];
-  for (const g of groups.values()) {
+  for (const [key, g] of groups) {
+    // A signed final in a differently-named family supersedes this draft too.
+    const crossSigned = hasSignedFinal(g) || supersededBySignedKey(key, signedKeys);
     // U1 (eval #10/R1) — divergence guard, mirroring groupByDeliverable: when a
     // deliverable's copies split into unfilled templates and substantive content
     // (the D1.3 case: a blank skeleton + a test-edited copy), do NOT union them
@@ -849,18 +900,19 @@ function buildChangedFiles(analyzed: AnalyzeFileResult[], orgMap: OrgMap) {
     );
     const filled = g.filter((r) => !templates.includes(r));
     if (templates.length > 0 && filled.length > 0) {
-      // U7f/U7d — split entries inherit the whole family's flags.
+      // U7f/U7d/U9a — split entries inherit the whole family's flags.
       const familyDeliverable = g.some((r) => r.recap!.is_deliverable);
-      const familySigned = hasSignedFinal(g);
       out.push(
-        entry(filled, false, foldSuffix(filled.length - 1), familyDeliverable, familySigned),
+        entry(filled, false, foldSuffix(filled.length - 1), familyDeliverable, crossSigned),
       );
       for (const t of templates)
         out.push(
-          entry([t], false, " (unfilled template copy)", familyDeliverable, familySigned),
+          entry([t], false, " (unfilled template copy)", familyDeliverable, crossSigned),
         );
     } else {
-      out.push(entry(g, false));
+      // U9a — pass the cross-family signed flag (default path used hasSignedFinal(g)
+      // only, which the CERA split defeated).
+      out.push(entry(g, false, undefined, undefined, crossSigned));
     }
   }
   return [...out, ...superseded.map((r) => entry([r], true))];

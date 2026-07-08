@@ -26,6 +26,7 @@ import {
   collapseTemplateRows,
   hoistSharedRisks,
   repairCurrency,
+  supersededBySignedKey,
 } from "@/lib/pma/synthesize";
 import type { SynthesisReport } from "@/lib/pma/synthesize";
 import { ALL_SECTIONS_ON } from "@/lib/pma/report-sections";
@@ -1203,6 +1204,37 @@ describe("collapseTemplateRows + hoistSharedRisks (U2)", () => {
       { file: "B", status: "unknown", quality: "q", risks: ["The Data Processing Agreement with Innovina S.r.l. is being formalized"] },
     ]);
     expect(shared).toHaveLength(0);
+  });
+
+  // U9a — a draft family split off by a stray title word ("CERA") still learns
+  // its signed final exists, via strict-superset token match.
+  it("marks a draft superseded when a signed family's tokens strictly superset it (U9a)", () => {
+    const signed = [new Set(["arise", "cera", "richiesta", "parere"])];
+    expect(supersededBySignedKey("arise richiesta parere", signed)).toBe(true);
+  });
+
+  it("does NOT supersede an unrelated or merely-prefixed draft (U9a guards)", () => {
+    const signed = [new Set(["arise", "cera", "richiesta", "parere"])];
+    // different topic — not a subset
+    expect(supersededBySignedKey("arise informativa privacy", signed)).toBe(false);
+    // one distinctive token is missing → not a subset
+    expect(supersededBySignedKey("arise richiesta modulo", signed)).toBe(false);
+    // sub-2-token floor: the bare project prefix must not fold under everything
+    expect(supersededBySignedKey("arise", signed)).toBe(false);
+    // equal set is not a STRICT superset (that's the same family, handled elsewhere)
+    expect(supersededBySignedKey("arise cera richiesta parere", signed)).toBe(false);
+  });
+
+  it("prompt: pre-commercialization phase suppresses NB/CE/reimbursement, and off-project files are excluded (U9b/U9c)", async () => {
+    await synthesize({
+      workspaceId: WS, outputFolderId: OUT, runLabel: LABEL,
+      fileResults: [analyzed("A")], removed: [], baseline: null, live: emptyLive,
+    });
+    const sys = generateStructured.mock.calls[0][0].systemInstruction as string;
+    expect(sys).toContain("research feasibility study under Ethics-Committee");
+    expect(sys).toContain("Notified Body");
+    expect(sys).toContain("Decide project membership consistently");
+    expect(sys).toContain("EXCLUDE it");
   });
 
   it("prompt: document_issues must not restate not-started templates and needs a real owner (U8b)", async () => {
